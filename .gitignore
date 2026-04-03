@@ -1,0 +1,15 @@
+.DS_Store
+.worktrees/
+*.test
+coverage.out
+officecli
+!cmd/officecli/
+!cmd/officecli/main.go
+!skills/officecli/
+!skills/officecli/SKILL.md
+dist/
+output/
+.omx/
+.playwright-cli/
+platform/web/*/vite.config.js
+platform/web/*/vite.config.d.ts

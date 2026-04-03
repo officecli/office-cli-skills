@@ -1,0 +1,54 @@
+version: 2
+
+project_name: officecli
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: officecli
+    main: ./cmd/officecli
+    binary: officecli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/officecli/officecli/internal/cli.Version={{ .Version }}
+      - -X github.com/officecli/officecli/internal/cli.Commit={{ .Commit }}
+      - -X github.com/officecli/officecli/internal/cli.BuildDate={{ .Date }}
+
+archives:
+  - id: officecli
+    ids:
+      - officecli
+    formats:
+      - tar.gz
+    name_template: >-
+      officecli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: "{{ .Env.PUBLIC_DIST_REPO_OWNER }}"
+    name: "{{ .Env.PUBLIC_DIST_REPO_NAME }}"
+  draft: false
+  prerelease: auto
+  replace_existing_draft: true
+
+changelog:
+  disable: false
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

@@ -1,0 +1,5 @@
+{
+  "name": "OfficeCLI",
+  "description": "Automate document production with AI-orchestrated CLI tools. Generate PPTX, DOCX, and XLSX assets directly from your terminal or workflows.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,137 @@
+name: Production Inspection
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: production-inspection-${{ github.workflow }}-${{ github.event.schedule || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  readonly_checks:
+    name: Readonly Production Checks
+    runs-on: ubuntu-latest
+    env:
+      REPORT_DIR: ${{ github.workspace }}/.tmp/production-inspection/readonly
+      SITE_BASE_URL: ${{ vars.INSPECTION_SITE_BASE_URL || 'https://officecli.io' }}
+      PLATFORM_BASE_URL: ${{ vars.INSPECTION_PLATFORM_BASE_URL || 'https://platform.officecli.io' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run readonly checks
+        id: readonly
+        run: |
+          set +e
+          bash ./scripts/run-production-inspection.sh readonly
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          echo "report_dir=${REPORT_DIR}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Append readonly summary
+        if: always()
+        run: |
+          if [ -f "${REPORT_DIR}/summary.md" ]; then
+            cat "${REPORT_DIR}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "readonly summary missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload readonly artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-inspection-readonly
+          path: ${{ env.REPORT_DIR }}
+          if-no-files-found: warn
+
+      - name: Fail job when readonly checks failed
+        if: steps.readonly.outputs.exit_code != '0'
+        run: exit 1
+
+  isolated_write_checks:
+    name: Isolated Write Checks
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') }}
+    env:
+      REPORT_DIR: ${{ github.workspace }}/.tmp/production-inspection/isolated-write
+      PLATFORM_BASE_URL: ${{ vars.INSPECTION_PLATFORM_BASE_URL || 'https://platform.officecli.io' }}
+      INSPECTION_FINGERPRINT_HASH: ${{ secrets.INSPECTION_FINGERPRINT_HASH }}
+      INSPECTION_API_KEY: ${{ secrets.INSPECTION_API_KEY }}
+      INSPECTION_BLOCKED_API_KEY: ${{ secrets.INSPECTION_BLOCKED_API_KEY }}
+      INSPECTION_USER_ID: ${{ secrets.INSPECTION_USER_ID }}
+      INSPECTION_REQUEST_PREFIX: inspection
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run isolated write checks
+        id: isolated
+        run: |
+          set +e
+          bash ./scripts/run-production-inspection.sh isolated
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          echo "report_dir=${REPORT_DIR}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Append isolated summary
+        if: always()
+        run: |
+          if [ -f "${REPORT_DIR}/summary.md" ]; then
+            cat "${REPORT_DIR}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "isolated summary missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload isolated artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-inspection-isolated-write
+          path: ${{ env.REPORT_DIR }}
+          if-no-files-found: warn
+
+      - name: Fail job when isolated checks failed
+        if: steps.isolated.outputs.exit_code != '0'
+        run: exit 1
+
+  notify_dingtalk:
+    name: Notify DingTalk On Failure
+    runs-on: ubuntu-latest
+    needs:
+      - readonly_checks
+      - isolated_write_checks
+    if: ${{ always() && (needs.readonly_checks.result == 'failure' || needs.isolated_write_checks.result == 'failure') }}
+    env:
+      DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download readonly artifact
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: production-inspection-readonly
+          path: ${{ runner.temp }}/production-inspection/read
+        continue-on-error: true
+
+      - name: Download isolated artifact
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: production-inspection-isolated-write
+          path: ${{ runner.temp }}/production-inspection/write
+        continue-on-error: true
+
+      - name: Notify DingTalk
+        if: ${{ env.DINGTALK_WEBHOOK != '' }}
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          bash ./scripts/notify-dingtalk.sh "${RUNNER_TEMP}/production-inspection"

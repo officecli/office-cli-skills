@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "output_dir": "./output",
+    "mode": "fast",
+    "publish": true
+  },
+  "llm": {
+    "provider": "openai",
+    "base_url": "https://your-generation-service.example.com/v1",
+    "api_key": "YOUR_GENERATION_SERVICE_KEY",
+    "model": "gpt-4.1",
+    "timeout_sec": 60
+  },
+  "license": {
+    "base_url": "https://platform.officecli.io",
+    "api_key": "",
+    "enabled": true,
+    "timeout_sec": 30
+  },
+  "publish": {
+    "provider": "http",
+    "base_url": "https://your-publish-service.example.com/api",
+    "api_key": "YOUR_PUBLISH_SERVICE_KEY",
+    "enabled": true,
+    "timeout_sec": 60
+  }
+}

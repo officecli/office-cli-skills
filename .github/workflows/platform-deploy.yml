@@ -1,0 +1,97 @@
+name: Platform Deploy
+
+on:
+  push:
+    tags:
+      - 'v*-prod-*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '要发布的 tag，例如 v0.2.0-prod-20260402-1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-deploy-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy officecli-platform
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      SERVER_HOST: ${{ vars.PLATFORM_SERVER_HOST || '18.141.191.80' }}
+      SERVER_USER: ${{ vars.PLATFORM_SERVER_USER || 'ubuntu' }}
+      SSH_PORT: ${{ vars.PLATFORM_SSH_PORT || '22' }}
+      REMOTE_WORKDIR: ${{ vars.PLATFORM_REMOTE_WORKDIR || '/opt/officecli-platform' }}
+      REMOTE_SITE_DIR: ${{ vars.PLATFORM_REMOTE_SITE_DIR || '/var/www/officecli.io/dist' }}
+      REMOTE_APP_DIR: ${{ vars.PLATFORM_REMOTE_APP_DIR || '/var/www/platform.officecli.io/app' }}
+      REMOTE_ADMIN_DIR: ${{ vars.PLATFORM_REMOTE_ADMIN_DIR || '/var/www/platform.officecli.io/admin' }}
+      KUBE_NAMESPACE: ${{ vars.PLATFORM_KUBE_NAMESPACE || 'officecli' }}
+      DEPLOYMENT_NAME: ${{ vars.PLATFORM_DEPLOYMENT_NAME || 'officecli-platform' }}
+      CONTAINER_NAME: ${{ vars.PLATFORM_CONTAINER_NAME || 'platform' }}
+      IMAGE_REPO: ${{ vars.PLATFORM_IMAGE_REPO || 'docker.io/library/officecli-platform' }}
+    steps:
+      - name: Checkout target ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/go.mod
+          cache: true
+          cache-dependency-path: platform/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            platform/web/app/package-lock.json
+            platform/web/admin/package-lock.json
+            platform/web/site/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: platform/web/app
+        run: npm ci
+
+      - name: Install admin dependencies
+        working-directory: platform/web/admin
+        run: npm ci
+
+      - name: Install site dependencies
+        working-directory: platform/web/site
+        run: npm ci
+
+      - name: Prepare SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PLATFORM_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PLATFORM_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "${SSH_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${SSH_PORT}" "${SERVER_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Validate tag exists for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags --force
+          git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1
+
+      - name: Deploy platform production
+        run: ./scripts/deploy-platform-prod.sh "${RELEASE_TAG}"

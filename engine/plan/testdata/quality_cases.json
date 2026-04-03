@@ -1,0 +1,51 @@
+[
+  {
+    "id": "ppt_project_report",
+    "document_type": "pptx",
+    "generation_mode": "best",
+    "prompt": "做一份季度项目复盘汇报 PPT",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "ppt_industry_analysis",
+    "document_type": "pptx",
+    "generation_mode": "best",
+    "prompt": "做一份 AI 办公行业分析 PPT",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "ppt_pitch",
+    "document_type": "pptx",
+    "generation_mode": "best",
+    "prompt": "做一份面向投资人的融资路演 PPT",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "docx_proposal",
+    "document_type": "docx",
+    "generation_mode": "best",
+    "prompt": "写一份企业知识库建设方案文档",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "docx_report",
+    "document_type": "docx",
+    "generation_mode": "best",
+    "prompt": "写一份 AI 办公产品市场分析报告",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "xlsx_operations",
+    "document_type": "xlsx",
+    "generation_mode": "best",
+    "prompt": "做一份销售经营分析表",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  },
+  {
+    "id": "xlsx_budget_tracking",
+    "document_type": "xlsx",
+    "generation_mode": "best",
+    "prompt": "做一份部门预算跟踪表",
+    "dimensions": ["问题有效性", "蓝图完整性", "执行计划可执行性", "最终生成契合度"]
+  }
+]

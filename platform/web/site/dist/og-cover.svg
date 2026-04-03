@@ -1,0 +1,16 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#131313"/>
+  <circle cx="930" cy="132" r="180" fill="#4F8EFF" fill-opacity="0.14"/>
+  <circle cx="1060" cy="246" r="132" fill="#00DCE5" fill-opacity="0.12"/>
+  <rect x="76" y="76" width="1048" height="478" rx="32" fill="#17191F" stroke="#2A3140"/>
+  <rect x="132" y="138" width="168" height="14" rx="7" fill="#00DCE5"/>
+  <rect x="132" y="178" width="488" height="78" rx="16" fill="#AEC6FF" fill-opacity="0.08"/>
+  <text x="132" y="238" fill="#FFFFFF" font-size="64" font-family="Avenir Next, Inter, sans-serif" font-weight="700">OfficeCLI</text>
+  <text x="132" y="298" fill="#AEC6FF" font-size="28" font-family="Avenir Next, Inter, sans-serif">Terminal-first document infrastructure</text>
+  <text x="132" y="344" fill="#8B90A0" font-size="24" font-family="Avenir Next, Inter, sans-serif">Generate PPTX, DOCX, and XLSX assets for workflows, billing-backed automation, and production pipelines.</text>
+  <rect x="132" y="410" width="320" height="84" rx="18" fill="#0F141A" stroke="#2A3140"/>
+  <text x="164" y="458" fill="#00DCE5" font-size="26" font-family="SFMono-Regular, Menlo, monospace">officecli generate ./brief.md</text>
+  <rect x="724" y="176" width="288" height="240" rx="24" fill="#10161C" stroke="#2A3140"/>
+  <path d="M776 354L832 304L888 324L944 262" stroke="#00DCE5" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="944" cy="262" r="10" fill="#AEC6FF"/>
+</svg>

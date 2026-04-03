@@ -1,0 +1,120 @@
+name: CLI Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '!v*-prod-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release, e.g. v1.2.3'
+        required: true
+        type: string
+
+concurrency:
+  group: cli-release-${{ github.ref || inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify Release Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+  release:
+    name: Build And Publish Public Assets
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+      PUBLIC_DIST_REPO_OWNER: ${{ vars.PUBLIC_DIST_REPO_OWNER }}
+      PUBLIC_DIST_REPO_NAME: ${{ vars.PUBLIC_DIST_REPO_NAME }}
+      PUBLIC_DIST_REPO: ${{ vars.PUBLIC_DIST_REPO }}
+      PUBLIC_DIST_DEFAULT_BRANCH: ${{ vars.PUBLIC_DIST_DEFAULT_BRANCH || 'main' }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_DEFAULT_BRANCH: ${{ vars.HOMEBREW_TAP_DEFAULT_BRANCH || 'main' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+
+      - name: Checkout release tooling from main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+          path: .release-tooling-src
+
+      - name: Prepare release tooling outside source tree
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-tooling/.github/workflows" "$RUNNER_TEMP/release-tooling/scripts"
+          cp .release-tooling-src/.goreleaser.dist.yml "$RUNNER_TEMP/release-tooling/.goreleaser.dist.yml"
+          cp .release-tooling-src/scripts/install-officecli.sh "$RUNNER_TEMP/release-tooling/scripts/install-officecli.sh"
+          cp .release-tooling-src/scripts/sync-public-dist-repo.sh "$RUNNER_TEMP/release-tooling/scripts/sync-public-dist-repo.sh"
+          cp .release-tooling-src/scripts/sync-homebrew-tap.sh "$RUNNER_TEMP/release-tooling/scripts/sync-homebrew-tap.sh"
+          chmod +x "$RUNNER_TEMP/release-tooling/scripts/install-officecli.sh" "$RUNNER_TEMP/release-tooling/scripts/sync-public-dist-repo.sh" "$RUNNER_TEMP/release-tooling/scripts/sync-homebrew-tap.sh"
+          rm -rf .release-tooling-src
+          git checkout -- dist || true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          install-only: true
+
+      - name: Ensure release tag exists for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags --force
+          git rev-parse "${RELEASE_TAG}^{tag}" >/dev/null 2>&1
+
+      - name: Delete existing public dist release for reruns
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_DIST_REPO_TOKEN }}
+        run: |
+          gh release delete "${RELEASE_TAG}" -R "${PUBLIC_DIST_REPO}" --yes --cleanup-tag || true
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_DIST_REPO}.git" "refs/tags/${RELEASE_TAG}" || true
+
+      - name: Publish binaries to public dist repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_DIST_REPO_TOKEN }}
+        run: goreleaser release --clean --config "$RUNNER_TEMP/release-tooling/.goreleaser.dist.yml"
+
+      - name: Sync public dist repository docs and install script
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_DIST_REPO_TOKEN }}
+          DIST_REPO: ${{ env.PUBLIC_DIST_REPO }}
+          DIST_DEFAULT_BRANCH: ${{ env.PUBLIC_DIST_DEFAULT_BRANCH }}
+          HOMEBREW_TAP_REPO: ${{ env.HOMEBREW_TAP_REPO }}
+        run: bash "$RUNNER_TEMP/release-tooling/scripts/sync-public-dist-repo.sh"
+
+      - name: Sync Homebrew tap formula
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_REPO: ${{ env.HOMEBREW_TAP_REPO }}
+          TAP_DEFAULT_BRANCH: ${{ env.HOMEBREW_TAP_DEFAULT_BRANCH }}
+          DIST_REPO: ${{ env.PUBLIC_DIST_REPO }}
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: bash "$RUNNER_TEMP/release-tooling/scripts/sync-homebrew-tap.sh"

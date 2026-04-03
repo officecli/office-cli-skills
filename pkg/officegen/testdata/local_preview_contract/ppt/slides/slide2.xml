@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" 
+    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" 
+    xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+    xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+    <p:cSld>
+        <p:bg>
+            <p:bgPr>
+                <a:gradFill>
+                    <a:gsLst>
+                        <a:gs pos="0"><a:srgbClr val="F0F4FF"/></a:gs>
+                        <a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs>
+                    </a:gsLst>
+                    <a:lin ang="5400000" scaled="1"/>
+                </a:gradFill>
+                <a:effectLst/>
+            </p:bgPr>
+        </p:bg>
+        <p:spTree>
+            <p:nvGrpSpPr>
+                <p:cNvPr id="1" name=""/>
+                <p:cNvGrpSpPr/>
+                <p:nvPr/>
+            </p:nvGrpSpPr>
+            <p:grpSpPr>
+                <a:xfrm>
+                    <a:off x="0" y="0"/>
+                    <a:ext cx="0" cy="0"/>
+                    <a:chOff x="0" y="0"/>
+                    <a:chExt cx="0" cy="0"/>
+                </a:xfrm>
+            </p:grpSpPr>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="2" name="Title"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="700000" y="300000"/>
+                        <a:ext cx="10800000" cy="700000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="b"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="l"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="3200" b="1">
+                                <a:solidFill><a:srgbClr val="1A73E8"/></a:solidFill>
+                                <a:latin typeface="Helvetica Neue"/>
+                                <a:ea typeface="PingFang SC"/>
+                            </a:rPr>
+                            <a:t>图表页</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>
+            <p:graphicFrame>
+                <p:nvGraphicFramePr>
+                    <p:cNvPr id="5" name="Chart 1"/>
+                    <p:cNvGraphicFramePr>
+                        <a:graphicFrameLocks noGrp="1"/>
+                    </p:cNvGraphicFramePr>
+                    <p:nvPr/>
+                </p:nvGraphicFramePr>
+                <p:xfrm>
+                    <a:off x="1000000" y="1500000"/>
+                    <a:ext cx="10200000" cy="4800000"/>
+                </p:xfrm>
+                <a:graphic>
+                    <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                        <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>
+                    </a:graphicData>
+                </a:graphic>
+            </p:graphicFrame>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="11" name="PageNum"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="10500000" y="6500000"/>
+                        <a:ext cx="1400000" cy="280000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="b"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="r"/>
+                        <a:r>
+                            <a:rPr lang="en-US" sz="900">
+                                <a:solidFill><a:srgbClr val="333333"><a:alpha val="60000"/></a:srgbClr></a:solidFill>
+                            </a:rPr>
+                            <a:t>Page 02</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>
+        </p:spTree>
+    </p:cSld>
+</p:sld>

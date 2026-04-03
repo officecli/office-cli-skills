@@ -1,0 +1,15 @@
+{
+  "stitchProject": {
+    "projectUrl": "https://stitch.withgoogle.com/projects/24832296914447158",
+    "projectId": "24832296914447158",
+    "sourceZip": "/Users/luyang/Downloads/stitch-officecli.zip"
+  },
+  "screens": {
+    "home": {
+      "sourceHtml": ".stitch/designs/home.stitch-source.html",
+      "sourceScreenshot": ".stitch/designs/home.stitch-source.png",
+      "route": "/",
+      "status": "imported"
+    }
+  }
+}

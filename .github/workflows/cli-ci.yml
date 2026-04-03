@@ -1,0 +1,60 @@
+name: CLI CI
+
+on:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'engine/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - 'scripts/**'
+      - 'go.mod'
+      - 'Makefile'
+      - '.goreleaser.dist.yml'
+      - '.github/workflows/cli-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'cmd/**'
+      - 'engine/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'examples/**'
+      - 'scripts/**'
+      - 'go.mod'
+      - 'Makefile'
+      - '.goreleaser.dist.yml'
+      - '.github/workflows/cli-ci.yml'
+
+concurrency:
+  group: cli-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    name: Go Test And Build CLI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run CLI tests
+        run: go test ./...
+
+      - name: Build CLI binary
+        run: make build
+
+      - name: Validate release scripts
+        run: |
+          bash -n scripts/install-officecli.sh
+          bash -n scripts/install-openclaw-skill.sh
+          bash -n scripts/sync-public-dist-repo.sh
+          bash -n scripts/sync-homebrew-tap.sh
+          bash -n scripts/sync-public-skills-repo.sh

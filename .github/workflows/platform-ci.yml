@@ -1,0 +1,73 @@
+name: Platform CI
+
+on:
+  pull_request:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+
+concurrency:
+  group: platform-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go Test And Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/go.mod
+          cache-dependency-path: platform/go.sum
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build platform binary
+        run: make build
+
+  web:
+    name: Web ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - admin
+          - app
+          - site
+    defaults:
+      run:
+        working-directory: platform/web/${{ matrix.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/${{ matrix.app }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run web tests
+        run: npm test -- --run
+
+      - name: Build web app
+        run: npm run build

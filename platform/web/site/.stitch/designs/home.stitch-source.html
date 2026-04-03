@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OfficeCLI | Plug Document Production Into Your Workflows</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#ffb1c0",
+              "on-primary-fixed": "#001a42",
+              "on-tertiary": "#003739",
+              "secondary-fixed-dim": "#ffb1c0",
+              "tertiary": "#00dce5",
+              "on-primary": "#002e6b",
+              "surface-variant": "#353534",
+              "on-background": "#e5e2e1",
+              "surface-container-high": "#2a2a2a",
+              "surface": "#131313",
+              "error-container": "#93000a",
+              "inverse-on-surface": "#313030",
+              "on-secondary-fixed": "#3f0016",
+              "on-primary-container": "#00275e",
+              "inverse-primary": "#005ac4",
+              "on-tertiary-container": "#002f32",
+              "surface-container-lowest": "#0e0e0e",
+              "on-surface-variant": "#c1c6d7",
+              "outline-variant": "#414754",
+              "primary-container": "#4f8eff",
+              "on-secondary-fixed-variant": "#90003b",
+              "surface-tint": "#aec6ff",
+              "on-secondary-container": "#ff9cb0",
+              "surface-container": "#201f1f",
+              "secondary-fixed": "#ffd9de",
+              "on-tertiary-fixed-variant": "#004f53",
+              "surface-dim": "#131313",
+              "primary": "#aec6ff",
+              "inverse-surface": "#e5e2e1",
+              "primary-fixed-dim": "#aec6ff",
+              "on-secondary": "#660028",
+              "on-error-container": "#ffdad6",
+              "on-surface": "#e5e2e1",
+              "on-error": "#690005",
+              "tertiary-fixed": "#63f7ff",
+              "surface-bright": "#393939",
+              "tertiary-container": "#00a1a7",
+              "background": "#131313",
+              "secondary-container": "#94003d",
+              "surface-container-highest": "#353534",
+              "surface-container-low": "#1c1b1b",
+              "error": "#ffb4ab",
+              "on-primary-fixed-variant": "#004396",
+              "outline": "#8b90a0",
+              "primary-fixed": "#d8e2ff",
+              "tertiary-fixed-dim": "#00dce5",
+              "on-tertiary-fixed": "#002021"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-panel {
+        backdrop-filter: blur(20px);
+        background: rgba(28, 27, 27, 0.7);
+      }
+      .terminal-pulse {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#131313]/80 backdrop-blur-xl">
+<div class="flex justify-between items-center px-8 py-4 max-w-[1440px] mx-auto font-['Space_Grotesk'] tracking-tight">
+<div class="text-2xl font-bold tracking-tighter text-white">OfficeCLI</div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="text-[#0F75F8] font-bold border-b-2 border-[#0F75F8] pb-1" href="#">Home</a>
+<a class="text-gray-400 hover:text-white transition-colors" href="#">Pricing</a>
+<a class="text-gray-400 hover:text-white transition-colors" href="#">Download CLI</a>
+<a class="text-gray-400 hover:text-white transition-colors" href="#">Docs</a>
+<a class="text-gray-400 hover:text-white transition-colors" href="#">FAQ</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-gray-400 hover:text-white transition-colors px-4 py-2">Login</button>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary-container px-6 py-2 rounded-md font-bold hover:scale-95 duration-100 transition-all">Console</button>
+</div>
+</div>
+</nav>
+<main class="pt-24 overflow-x-hidden">
+<!-- Hero Section -->
+<section class="relative min-h-[921px] flex items-center px-8 md:px-16 max-w-[1440px] mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center w-full">
+<div class="z-10">
+<span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-xs font-label uppercase tracking-widest mb-6">
+<span class="w-2 h-2 rounded-full bg-tertiary terminal-pulse shadow-[0_0_8px_#00dce5]"></span>
+                        Live Infrastructure v4.2
+                    </span>
+<h1 class="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
+                        Plug <span class="text-primary italic">Document</span> Production Into Your Workflows
+                    </h1>
+<p class="text-xl text-on-surface-variant max-w-xl mb-10 leading-relaxed font-light">
+                        Automate the creation of production-grade PPTX, DOCX, and XLSX assets with AI-orchestrated CLI tools. Built for high-frequency infrastructure and headless pipelines.
+                    </p>
+<div class="flex flex-wrap gap-4">
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary-container px-8 py-4 rounded-md font-bold text-lg hover:scale-95 transition-all">Get Started</button>
+<button class="border border-outline-variant/30 text-on-surface px-8 py-4 rounded-md font-bold text-lg hover:bg-white/5 transition-all">View Docs</button>
+</div>
+</div>
+<!-- Hero Visual: Kinetic Terminal -->
+<div class="relative group">
+<div class="absolute -inset-4 bg-primary/10 blur-3xl rounded-full opacity-30 group-hover:opacity-50 transition-opacity"></div>
+<div class="relative bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden shadow-2xl">
+<div class="flex items-center gap-2 px-4 py-3 bg-surface-container-high border-b border-outline-variant/10">
+<div class="flex gap-1.5">
+<div class="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
+<div class="w-3 h-3 rounded-full bg-[#ffbd2e]"></div>
+<div class="w-3 h-3 rounded-full bg-[#27c93f]"></div>
+</div>
+<div class="ml-4 text-[10px] font-label text-outline uppercase tracking-[0.2em]">production_terminal_v1</div>
+</div>
+<div class="p-6 font-mono text-sm leading-relaxed">
+<div class="flex gap-3 mb-4">
+<span class="text-tertiary">$</span>
+<span class="text-on-surface">officecli generate --prompt "Quarterly report for Q3 with revenue charts" --format pptx</span>
+</div>
+<div class="text-outline-variant mb-2">/ Analyzing context... [OK]</div>
+<div class="text-outline-variant mb-2">/ Generating 12 slides... [OK]</div>
+<div class="text-outline-variant mb-6">/ Exporting to production-ready PPTX... [OK]</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-highest p-4 rounded-lg border border-primary/20">
+<div class="h-24 w-full bg-surface-container-lowest rounded mb-3 overflow-hidden flex items-center justify-center">
+<img class="w-full h-full object-cover opacity-50 grayscale hover:grayscale-0 transition-all" data-alt="clean minimal data visualization chart with blue gradients on a dark background showing revenue growth" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzymByguBH770FFDWqjfM5n11_GlKR_iA-GLmzxRKoG_6eJaLu_tO-FUYjGThV7aJsIGSDsFPY0ydzBw3SMUtL_d7vMRa8dQH6i4uH3nFR8wt0f6CRNupkw2r3OgqjDOIIK4GVPJdACsNvXdx8HzJ14yCGLY3V7qR67YS5iBC3Sfa_r4RbHnke259kYF7a8azeUwRgigsjnXQvVb-Iqs_VazP63v_H2jrsnV4o_TA1rW47Sw4v1YCdkZWJMgiVNnqxmLZCqynp"/>
+</div>
+<div class="text-[10px] font-label text-primary">REPORT_Q3.PPTX</div>
+</div>
+<div class="bg-surface-container-highest p-4 rounded-lg border border-outline-variant/10">
+<div class="h-24 w-full bg-surface-container-lowest rounded mb-3 flex items-center justify-center">
+<span class="material-symbols-outlined text-4xl text-outline-variant">description</span>
+</div>
+<div class="text-[10px] font-label text-outline-variant">SUMMARY.DOCX</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Bento Grid Core Values -->
+<section class="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<!-- Large Card -->
+<div class="md:col-span-2 bg-surface-container-low p-10 rounded-xl flex flex-col justify-between group hover:bg-surface-container-high transition-all">
+<div>
+<span class="material-symbols-outlined text-tertiary text-4xl mb-6">bolt</span>
+<h3 class="font-headline text-3xl font-bold text-white mb-4">Prompt Generation</h3>
+<p class="text-on-surface-variant leading-relaxed">Describe your document in plain natural language. Our engine interprets layout, hierarchy, and data requirements automatically.</p>
+</div>
+<div class="mt-8 border-t border-outline-variant/10 pt-6">
+<span class="text-xs font-label uppercase text-tertiary tracking-widest">Available in CLI &amp; API</span>
+</div>
+</div>
+<!-- Standard Card -->
+<div class="bg-surface-container-low p-10 rounded-xl group hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined text-primary text-4xl mb-6">hub</span>
+<h3 class="font-headline text-xl font-bold text-white mb-4">Workflow Integration</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed">Connect to GitHub Actions, CI/CD, or internal tools via our high-performance REST API.</p>
+</div>
+<!-- Standard Card -->
+<div class="bg-surface-container-low p-10 rounded-xl group hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined text-secondary text-4xl mb-6">data_usage</span>
+<h3 class="font-headline text-xl font-bold text-white mb-4">Free Starter Quota</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed">Get 100 generations per month free. No credit card required to start your integration.</p>
+</div>
+<!-- Wide Card -->
+<div class="md:col-span-4 bg-surface-container-low p-10 rounded-xl flex items-center gap-12 group hover:bg-surface-container-high transition-all">
+<div class="flex-1">
+<h3 class="font-headline text-3xl font-bold text-white mb-4">Unified Infrastructure Management</h3>
+<p class="text-on-surface-variant max-w-2xl">Monitor usage, manage API keys, and track generation success rates through a centralized dashboard or direct terminal readouts.</p>
+</div>
+<div class="hidden lg:block w-48 h-24 bg-surface-container-highest rounded border border-outline-variant/10 flex items-center justify-center">
+<div class="flex gap-2">
+<div class="w-1 bg-tertiary h-8"></div>
+<div class="w-1 bg-tertiary h-12"></div>
+<div class="w-1 bg-tertiary h-6"></div>
+<div class="w-1 bg-tertiary h-10"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Workflow Visualization -->
+<section class="py-24 bg-surface-container-lowest">
+<div class="max-w-[1440px] mx-auto px-8 md:px-16 text-center">
+<h2 class="font-headline text-4xl md:text-5xl font-bold text-white mb-16 tracking-tight">The Kinetic Cycle</h2>
+<div class="flex flex-col md:flex-row items-center justify-between gap-8 relative">
+<!-- Connector line -->
+<div class="hidden md:block absolute top-1/2 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-outline-variant/30 to-transparent -translate-y-1/2 z-0"></div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center group w-full max-w-[280px]">
+<div class="w-16 h-16 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center mb-6 group-hover:border-primary transition-all">
+<span class="material-symbols-outlined text-primary text-2xl">terminal</span>
+</div>
+<h4 class="font-headline text-lg font-bold text-white mb-2">Input</h4>
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest">JSON / Prompt / Webhook</p>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center group w-full max-w-[280px]">
+<div class="w-16 h-16 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center mb-6 group-hover:border-tertiary transition-all">
+<span class="material-symbols-outlined text-tertiary text-2xl">memory</span>
+</div>
+<h4 class="font-headline text-lg font-bold text-white mb-2">Process</h4>
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest">Cloud Orchestration</p>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center group w-full max-w-[280px]">
+<div class="w-16 h-16 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center mb-6 group-hover:border-secondary transition-all">
+<span class="material-symbols-outlined text-secondary text-2xl">description</span>
+</div>
+<h4 class="font-headline text-lg font-bold text-white mb-2">Generate</h4>
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest">High-Res Assets</p>
+</div>
+<!-- Step 4 -->
+<div class="relative z-10 flex flex-col items-center group w-full max-w-[280px]">
+<div class="w-16 h-16 rounded-full bg-surface-container-high border border-outline-variant/20 flex items-center justify-center mb-6 group-hover:border-on-primary-container transition-all">
+<span class="material-symbols-outlined text-on-primary-container text-2xl">monitoring</span>
+</div>
+<h4 class="font-headline text-lg font-bold text-white mb-2">Track</h4>
+<p class="text-xs text-on-surface-variant font-label uppercase tracking-widest">Usage &amp; Logs</p>
+</div>
+</div>
+</div>
+</section>
+<!-- CLI Showcase -->
+<section class="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
+<div>
+<h2 class="font-headline text-4xl font-bold text-white mb-6">Engineered for the Terminal</h2>
+<p class="text-on-surface-variant text-lg mb-8 leading-relaxed">Don't break your focus. OfficeCLI lives where you do. Integrated flags for styling, data sourcing, and output destinations make automation seamless.</p>
+<ul class="space-y-6">
+<li class="flex items-start gap-4">
+<span class="material-symbols-outlined text-tertiary mt-1">check_circle</span>
+<div>
+<h5 class="font-bold text-white">Headless First</h5>
+<p class="text-sm text-on-surface-variant">Runs perfectly in Docker, Lambda, or your local shell.</p>
+</div>
+</li>
+<li class="flex items-start gap-4">
+<span class="material-symbols-outlined text-tertiary mt-1">check_circle</span>
+<div>
+<h5 class="font-bold text-white">Style Templates</h5>
+<p class="text-sm text-on-surface-variant">Apply consistent branding via CSS-like theme files.</p>
+</div>
+</li>
+</ul>
+</div>
+<div class="bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden font-mono text-sm">
+<div class="bg-surface-container-high px-4 py-2 border-b border-outline-variant/10 flex justify-between items-center">
+<span class="text-[10px] text-outline font-label uppercase tracking-widest">Bash — officecli-v1.0.4</span>
+<div class="flex gap-2">
+<div class="w-2 h-2 rounded-full bg-outline-variant/30"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant/30"></div>
+</div>
+</div>
+<div class="p-8 space-y-4">
+<div class="flex gap-4">
+<span class="text-tertiary italic"># Install CLI</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary">$</span>
+<span class="text-on-surface">curl -sL officecli.io/install | sh</span>
+</div>
+<div class="pt-4 flex gap-4">
+<span class="text-tertiary italic"># Generate production deck</span>
+</div>
+<div class="flex gap-4">
+<span class="text-primary">$</span>
+<span class="text-on-surface">officecli build deck.pptx --from data.json --theme brand.json</span>
+</div>
+<div class="text-on-tertiary-container animate-pulse mt-4">Building output/deck.pptx [##########] 100%</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Use Cases -->
+<section class="py-24 bg-[#1C1B1B]">
+<div class="max-w-[1440px] mx-auto px-8 md:px-16">
+<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
+<div class="max-w-2xl">
+<h2 class="font-headline text-4xl font-bold text-white mb-4">Scalable For Every Tier</h2>
+<p class="text-on-surface-variant">Whether you're shipping a side project or managing global report generation for an enterprise, we have the infrastructure to support you.</p>
+</div>
+<a class="text-primary font-bold hover:underline flex items-center gap-2" href="#">Explore Enterprise solutions <span class="material-symbols-outlined">arrow_forward</span></a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Case 1 -->
+<div class="group bg-surface-container p-8 rounded-xl border border-transparent hover:border-primary/20 transition-all">
+<div class="h-40 bg-surface-container-low rounded-lg mb-8 overflow-hidden">
+<img class="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-all" data-alt="close-up of a developer working on a laptop at night with high-contrast screen light reflecting on the keyboard" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRLIcyForuqBTBmZgmn3ZLnc6Mxi5FGnukNUnBBqi_9R4ETncPb3ASnHcqssuhg-WPEoKcsUdYhkVjI9mlYQfxrCLj6iFbTVPBbT8688CPGpiCziukgKHuJNjI7JSuUnaj3T4YX9uIaT6RYN_xVYHvU87k2xgQmsA5vWJiHMD8SH3QiqTrK6f9N7F5SqPIIpUQutUTMIoEyZDNpIJt6_HJBGlifcJXPGGCClbGdnKA28EXpInzsfKPqRjnOLzhFyGF1iJrS3HE"/>
+</div>
+<h4 class="font-headline text-2xl font-bold text-white mb-4">Indie Devs</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">Automate user reports and exportable summaries for your SaaS without building complex PDF/DOCX engines from scratch.</p>
+</div>
+<!-- Case 2 -->
+<div class="group bg-surface-container p-8 rounded-xl border border-transparent hover:border-tertiary/20 transition-all">
+<div class="h-40 bg-surface-container-low rounded-lg mb-8 overflow-hidden">
+<img class="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-all" data-alt="a collaborative workspace with multiple monitors showing code and creative assets in a high-end modern studio" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1l-dRpav9IDze-1SoVicEX720RIAIV9j7xEmGx1Yzwb1XXD9bfnB9ZYSiKvXuK5FhyXtZa5f5NTIlS_FnWbdDwTFb1zWviZLqT9XOvOy830eNNlfM00B0pBM9kPKBFSwLjvOueq_iIPiWQCbvFPN2k2i08FqLbY9itAPBVBrE7d14AzXxsdyQduxrSl3mqmHarE7oR2VmKR0fr_mkktBuKaDRL1p2T0qRihFCrGOS1PVyFLbwyGloxegakWhglk-VSA2uZlmc"/>
+</div>
+<h4 class="font-headline text-2xl font-bold text-white mb-4">Small Teams</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">Integrate document production into internal Slack bots or customer portals to provide value-added report downloads instantly.</p>
+</div>
+<!-- Case 3 -->
+<div class="group bg-surface-container p-8 rounded-xl border border-transparent hover:border-secondary/20 transition-all">
+<div class="h-40 bg-surface-container-low rounded-lg mb-8 overflow-hidden">
+<img class="w-full h-full object-cover opacity-30 group-hover:opacity-60 transition-all" data-alt="wide shot of a futuristic dark office building facade with glass and steel reflections at twilight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuALGomkkiPnVq8wXBdnyIl5VIbOlQ2A-WfmxauaVkwSl56dsbjVtjNet7Jd_xq30RBSVy9BOatvlxAb5MuMxaiZDF-iBzdLaHTeShV5RldIctSLDTAcgl8NSpaLlXO5rnay59Gxg3qbJS6aZYMTmC6Ge5L_cK0L9qbX2zwP6-K-fh4R_-29IgIUOZH-m11YCA6pz7DCb4EHopzt6vC3FiG4qvLieGfr4ZJ4UqSg2qux5tley6JalpDL-zb2cTgPs19U-qIeUUwj"/>
+</div>
+<h4 class="font-headline text-2xl font-bold text-white mb-4">Enterprise</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">High-availability API nodes, dedicated support, and custom templating engines for massive multi-format batch production.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Pricing/Conversion -->
+<section class="py-32 px-8 md:px-16 max-w-[1440px] mx-auto text-center">
+<div class="max-w-3xl mx-auto">
+<span class="text-primary font-label text-xs uppercase tracking-widest mb-4 block">Pricing Architecture</span>
+<h2 class="font-headline text-5xl md:text-6xl font-bold text-white mb-8 tracking-tighter">Simple Kinetic Billing</h2>
+<p class="text-xl text-on-surface-variant mb-12">Start for free. Scale by the thousand. No monthly lock-ins for infrastructure users.</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto mb-16">
+<div class="p-10 bg-surface-container-low rounded-2xl border border-outline-variant/10">
+<h3 class="font-headline text-2xl font-bold text-white mb-2">Starter Shell</h3>
+<div class="text-4xl font-headline font-black text-primary mb-6">$0 <span class="text-sm font-normal text-on-surface-variant">/ mo</span></div>
+<ul class="space-y-4 mb-10 text-on-surface-variant text-sm">
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> 100 generations per month</li>
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> Basic templating</li>
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> CLI Access</li>
+</ul>
+<button class="w-full py-4 rounded-md border border-outline-variant/30 font-bold hover:bg-white/5 transition-all">Current Plan</button>
+</div>
+<div class="p-10 bg-surface-container-high rounded-2xl border-2 border-primary shadow-[0_0_40px_rgba(174,198,255,0.1)] relative overflow-hidden">
+<div class="absolute top-5 right-5 bg-primary text-on-primary-container text-[10px] font-bold px-2 py-1 rounded">POPULAR</div>
+<h3 class="font-headline text-2xl font-bold text-white mb-2">Production Pack</h3>
+<div class="text-4xl font-headline font-black text-primary mb-6">$49 <span class="text-sm font-normal text-on-surface-variant">/ 1k credits</span></div>
+<ul class="space-y-4 mb-10 text-on-surface-variant text-sm">
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> High-priority queue</li>
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> Custom brand themes</li>
+<li class="flex gap-3"><span class="material-symbols-outlined text-tertiary text-lg">check</span> API Webhook support</li>
+</ul>
+<button class="w-full py-4 rounded-md bg-gradient-to-br from-primary to-primary-container text-on-primary-container font-bold hover:scale-95 transition-all">Buy Pack</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10 inline-flex flex-col items-center">
+<p class="text-on-surface-variant text-sm mb-4">Enterprise scale or custom requirements?</p>
+<a class="text-tertiary font-bold hover:underline" href="#">Contact Infrastructure Support</a>
+</div>
+</div>
+</section>
+<!-- Trust/FAQ -->
+<section class="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
+<h2 class="font-headline text-4xl font-bold text-white mb-16 text-center">Platform Assurance</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-5xl mx-auto">
+<div class="space-y-4">
+<h4 class="font-bold text-white text-lg">How is data handled?</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">OfficeCLI operates on a "Zero-Persistence" architecture. Once a document is generated and delivered to your specified output, the raw data is purged from our processing nodes immediately.</p>
+</div>
+<div class="space-y-4">
+<h4 class="font-bold text-white text-lg">Does it support my custom fonts?</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">Yes. You can upload custom TTF/OTF files to your account or reference them via URL in your styling JSON to ensure perfect brand alignment.</p>
+</div>
+<div class="space-y-4">
+<h4 class="font-bold text-white text-lg">API or CLI?</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">Both. Our CLI is a wrapper around the core API. Use the CLI for dev workflows and local automation, and the API for production applications.</p>
+</div>
+<div class="space-y-4">
+<h4 class="font-bold text-white text-lg">What about bulk generation?</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">Our infrastructure is designed for massive parallelization. We support concurrent generation requests with automated queue management.</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#1C1B1B] w-full border-t border-white/5">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 px-12 py-16 w-full max-w-[1440px] mx-auto">
+<div class="col-span-2 md:col-span-1">
+<div class="text-lg font-black text-white mb-6">OfficeCLI</div>
+<p class="text-gray-500 font-['Space_Grotesk'] text-sm uppercase tracking-widest leading-relaxed">
+                    © 2024 OfficeCLI.<br/>Kinetic Infrastructure.
+                </p>
+</div>
+<div>
+<h5 class="text-white font-bold mb-6">Product</h5>
+<ul class="space-y-4 text-gray-500 font-['Space_Grotesk'] text-sm uppercase tracking-widest">
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">CLI</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Docs</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Status</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-white font-bold mb-6">Company</h5>
+<ul class="space-y-4 text-gray-500 font-['Space_Grotesk'] text-sm uppercase tracking-widest">
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">About</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Careers</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Security</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-white font-bold mb-6">Legal</h5>
+<ul class="space-y-4 text-gray-500 font-['Space_Grotesk'] text-sm uppercase tracking-widest">
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Privacy</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">Terms</a></li>
+<li><a class="hover:text-[#0F75F8] transition-colors" href="#">DPA</a></li>
+</ul>
+</div>
+</div>
+</footer>
+</body></html>

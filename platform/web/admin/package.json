@@ -1,0 +1,39 @@
+{
+  "name": "officecli-platform-admin",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts --host=0.0.0.0 --port=3001",
+    "build": "vite build --config vite.config.ts && node ../scripts/verify-tailwind-build.mjs admin",
+    "test": "vitest run --config vite.config.ts",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview --config vite.config.ts"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.6",
+    "@fontsource/jetbrains-mono": "^5.2.6",
+    "@fontsource/space-grotesk": "^5.2.6",
+    "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/react-query": "^5.66.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.5.1",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^4.1.14"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^5.0.4",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.1",
+    "vitest": "^3.2.4"
+  }
+}

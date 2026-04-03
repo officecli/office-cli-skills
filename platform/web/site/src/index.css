@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-background: #131313;
+  --color-surface: #201f1f;
+  --color-surface-low: #1c1b1b;
+  --color-surface-high: #2a2a2a;
+  --color-primary: #aec6ff;
+  --color-primary-container: #4f8eff;
+  --color-tertiary: #00dce5;
+  --color-secondary: #ffb1c0;
+  --color-outline: #8b90a0;
+  --color-outline-variant: #414754;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-white font-sans selection:bg-primary/30;
+    background-image:
+      radial-gradient(circle at top, rgba(79, 142, 255, 0.14), transparent 36%),
+      radial-gradient(circle at 85% 18%, rgba(0, 220, 229, 0.12), transparent 20%);
+  }
+
+  button:not(:disabled),
+  a[href],
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+@keyframes terminal-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.terminal-pulse {
+  animation: terminal-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.glass-panel {
+  backdrop-filter: blur(20px);
+  background: rgba(28, 27, 27, 0.7);
+}

@@ -1,0 +1,27 @@
+app_env: "development"
+http_addr: ":8080"
+mysql_dsn: "root:root@tcp(127.0.0.1:3306)/cli_office_platform?parseTime=true&multiStatements=true&charset=utf8mb4"
+redis_addr: "127.0.0.1:6379"
+admin_login_rate_limit_per_minute: 60
+license_rate_limit_per_minute: 300
+rate_limit_visitor_ttl: "1m"
+default_free_limit: 10
+# 仅用于本地开发；APP_ENV=production 时必须替换为真实值
+admin_password: "admin123"
+session_secret: "change-me-change-me-change-me-123456"
+api_key_hash_salt: "change-me-salt"
+usage_idempotency_ttl: "24h"
+admin_session_ttl: "24h"
+site_base_url: "https://officecli.io"
+platform_base_url: "https://platform.officecli.io"
+# 仅用于本地开发；APP_ENV=production 时必须替换为真实值
+app_session_secret: "change-me-app-session-secret-123456"
+app_session_ttl: "24h"
+google_redirect_url: "https://platform.officecli.io/api/auth/google/callback"
+admin_google_redirect_url: "https://platform.officecli.io/api/admin/auth/google/callback"
+admin_google_allowlist: "luyang950@gmail.com"
+stripe_success_url: "https://platform.officecli.io/app/billing?status=success"
+stripe_cancel_url: "https://platform.officecli.io/app/billing?status=cancel"
+admin_static_dir: "web/admin/dist"
+app_static_dir: "web/app/dist"
+site_static_dir: "web/site/dist"
