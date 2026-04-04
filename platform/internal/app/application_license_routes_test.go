@@ -3,9 +3,13 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -150,6 +154,59 @@ func (testIdemStore) ReleaseConsumeLock(_ context.Context, _ string) error {
 	return nil
 }
 
+const routeTestProofSeed = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
+
+func issueRouteCommitToken(t *testing.T, _ *licensesvc.Service, fingerprint string, accessMode model.AccessMode, extras func(*licensesvc.CheckRequest)) *licensesvc.CommitToken {
+	t.Helper()
+	req := licensesvc.CheckRequest{
+		FingerprintHash: fingerprint,
+		RequestNonce:    "nonce-" + fingerprint + "-" + string(accessMode),
+		Action:          string(model.UsageActionGenerate),
+	}
+	if extras != nil {
+		extras(&req)
+	}
+	seed, err := base64.RawURLEncoding.DecodeString(routeTestProofSeed)
+	if err != nil {
+		t.Fatalf("DecodeString() error = %v", err)
+	}
+	privateKey := ed25519.NewKeyFromSeed(seed)
+	now := time.Now().UTC()
+	token := &licensesvc.CommitToken{
+		FingerprintHash: req.FingerprintHash,
+		UserID:          req.UserID,
+		RequestID:       "req-" + fingerprint + "-" + string(accessMode),
+		AccessMode:      accessMode,
+		Action:          req.Action,
+		DocumentType:    req.DocumentType,
+		RuntimeMode:     req.RuntimeMode,
+		RequestNonce:    req.RequestNonce,
+		ProofVersion:    "v1",
+		IssuedAt:        now,
+		ExpiresAt:       now.Add(2 * time.Minute),
+	}
+	token.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, []byte(routeCommitTokenPayload(*token))))
+	return token
+}
+
+func routeCommitTokenPayload(token licensesvc.CommitToken) string {
+	parts := []string{
+		"version=" + strings.TrimSpace(token.ProofVersion),
+		"fingerprint_hash=" + strings.TrimSpace(token.FingerprintHash),
+		"user_id=" + strconv.FormatUint(token.UserID, 10),
+		"request_id=" + strings.TrimSpace(token.RequestID),
+		"access_mode=" + strings.TrimSpace(string(token.AccessMode)),
+		"api_key_hint=" + strings.TrimSpace(token.APIKeyHint),
+		"action=" + strings.TrimSpace(token.Action),
+		"document_type=" + strings.TrimSpace(token.DocumentType),
+		"runtime_mode=" + strings.TrimSpace(token.RuntimeMode),
+		"request_nonce=" + strings.TrimSpace(token.RequestNonce),
+		"issued_at=" + token.IssuedAt.UTC().Format(time.RFC3339Nano),
+		"expires_at=" + token.ExpiresAt.UTC().Format(time.RFC3339Nano),
+	}
+	return strings.Join(parts, "\n")
+}
+
 func TestRegisterLicenseRoutesCheckReturnsBadRequestOnInvalidBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -177,12 +234,14 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnFreeQuotaExhausted(t *test
 	quotas.quotas["fp-1|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-1", UsageDate: today, DailyLimit: 1, DailyUsed: 1}
 	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
 	registerLicenseRoutes(api, lic)
+	token := issueRouteCommitToken(t, lic, "fp-1", model.AccessModeFree, nil)
 
 	body, _ := json.Marshal(licensesvc.ConsumeRequest{
 		FingerprintHash: "fp-1",
-		RequestID:       "req-1",
+		RequestID:       token.RequestID,
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
+		CommitToken:     token,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/consume", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -201,12 +260,14 @@ func TestRegisterLicenseRoutesConsumeReturnsBadRequestOnPaidConsumeWithoutAPIKey
 	api := router.Group("/api")
 	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
 	registerLicenseRoutes(api, lic)
+	token := issueRouteCommitToken(t, lic, "fp-paid", model.AccessModePaid, nil)
 
 	body, _ := json.Marshal(licensesvc.ConsumeRequest{
 		FingerprintHash: "fp-paid",
-		RequestID:       "req-paid",
+		RequestID:       token.RequestID,
 		UsageType:       "generate",
 		AccessMode:      model.AccessModePaid,
+		CommitToken:     token,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/consume", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -258,7 +319,7 @@ func TestRegisterLicenseRoutesCheckSuccessIncludesRequestID(t *testing.T) {
 	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
 	registerLicenseRoutes(api, lic)
 
-	bodyBytes, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", Action: "generate"})
+	bodyBytes, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", RequestNonce: "nonce-fp-1-generate", Action: "generate"})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -291,6 +352,7 @@ func TestRegisterLicenseRoutesCheckReturnsRewardResponse(t *testing.T) {
 	body, _ := json.Marshal(licensesvc.CheckRequest{
 		FingerprintHash: "fp-reward-check",
 		UserID:          42,
+		RequestNonce:    "nonce-fp-reward-check-generate",
 		Action:          string(model.UsageActionGenerate),
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewReader(body))
@@ -324,13 +386,17 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnRewardQuotaExhausted(t *te
 	rewards := newTestRewardManager()
 	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, rewards, nil, "salt", 10, time.Hour)
 	registerLicenseRoutes(api, lic)
+	token := issueRouteCommitToken(t, lic, "fp-reward-consume", model.AccessModeReward, func(req *licensesvc.CheckRequest) {
+		req.UserID = 42
+	})
 
 	body, _ := json.Marshal(licensesvc.ConsumeRequest{
 		FingerprintHash: "fp-reward-consume",
 		UserID:          42,
-		RequestID:       "req-reward-consume",
+		RequestID:       token.RequestID,
 		UsageType:       string(model.UsageActionGenerate),
 		AccessMode:      model.AccessModeReward,
+		CommitToken:     token,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/consume", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

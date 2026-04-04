@@ -50,7 +50,7 @@ func TestRegisterLicenseRoutesRateLimitsCheck(t *testing.T) {
 	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 100, time.Hour)
 	registerLicenseRoutes(api, lic)
 
-	body, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", Action: "generate"})
+	body, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", RequestNonce: "nonce-fp-1-generate", Action: "generate"})
 	for i := 0; i < 30; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -82,11 +82,15 @@ func TestRegisterLicenseRoutesRateLimitsConsume(t *testing.T) {
 	registerLicenseRoutes(api, lic)
 
 	for i := 0; i < 30; i++ {
+		token := issueRouteCommitToken(t, lic, "fp-1", model.AccessModeFree, func(req *licensesvc.CheckRequest) {
+			req.RequestNonce = fmt.Sprintf("nonce-fp-1-generate-%d", i)
+		})
 		body, _ := json.Marshal(licensesvc.ConsumeRequest{
 			FingerprintHash: "fp-1",
-			RequestID:       fmt.Sprintf("req-%d", i),
+			RequestID:       token.RequestID,
 			UsageType:       "generate",
 			AccessMode:      model.AccessModeFree,
+			CommitToken:     token,
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/license/consume", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -97,11 +101,15 @@ func TestRegisterLicenseRoutesRateLimitsConsume(t *testing.T) {
 		}
 	}
 
+	token := issueRouteCommitToken(t, lic, "fp-1", model.AccessModeFree, func(req *licensesvc.CheckRequest) {
+		req.RequestNonce = "nonce-fp-1-generate-final"
+	})
 	body, _ := json.Marshal(licensesvc.ConsumeRequest{
 		FingerprintHash: "fp-1",
-		RequestID:       "req-final",
+		RequestID:       token.RequestID,
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
+		CommitToken:     token,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/license/consume", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

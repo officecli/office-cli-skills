@@ -51,14 +51,6 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResult, er
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decode license check response: %w", err)
 	}
-	if result.CommitToken.RequestID == "" {
-		result.CommitToken = CommitToken{
-			FingerprintHash: req.FingerprintHash,
-			UserID:          req.UserID,
-			RequestID:       buildRequestID(req),
-			AccessMode:      result.AccessMode,
-		}
-	}
 	return &result, nil
 }
 
@@ -73,6 +65,7 @@ func (s *Service) Consume(ctx context.Context, token CommitToken) (*ConsumeResul
 		UsageType:       "generate",
 		AccessMode:      token.AccessMode,
 		APIKey:          s.apiKey,
+		CommitToken:     token,
 	})
 	if err != nil {
 		return nil, err
@@ -82,11 +75,6 @@ func (s *Service) Consume(ctx context.Context, token CommitToken) (*ConsumeResul
 		return nil, fmt.Errorf("decode license consume response: %w", err)
 	}
 	return &result, nil
-}
-
-func buildRequestID(req CheckRequest) string {
-	raw := strings.TrimSpace(req.FingerprintHash) + "|" + strings.TrimSpace(req.DocumentType) + "|" + strings.TrimSpace(req.Action) + "|" + time.Now().UTC().Format(time.RFC3339Nano)
-	return raw
 }
 
 func (s *Service) post(ctx context.Context, path string, payload any) ([]byte, error) {

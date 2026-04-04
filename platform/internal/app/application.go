@@ -123,7 +123,21 @@ func New() (*Application, error) {
 
 	rewardService := rewardsvc.NewService(mysqlDB)
 	growthService := growthsvc.NewService(mysqlDB, mysqlDB, mysqlDB, mysqlDB)
-	lic := licensesvc.NewService(apiKeyRepo{store: mysqlDB}, freeQuotaRepo{store: mysqlDB}, usageEventRepo{store: mysqlDB}, redisLicenseAdapter{store: redisRepo}, rewardService, growthService, cfg.APIKeyHashSalt, cfg.DefaultFreeLimit, cfg.UsageIdempotencyTTL)
+	lic := licensesvc.NewService(
+		apiKeyRepo{store: mysqlDB},
+		freeQuotaRepo{store: mysqlDB},
+		usageEventRepo{store: mysqlDB},
+		redisLicenseAdapter{store: redisRepo},
+		rewardService,
+		growthService,
+		cfg.APIKeyHashSalt,
+		cfg.DefaultFreeLimit,
+		cfg.UsageIdempotencyTTL,
+		licensesvc.ProofConfig{
+			Seed: cfg.LicenseProofSeed,
+			TTL:  cfg.LicenseProofTTL,
+		},
+	)
 	hostedLLMSvc := hostedllm.NewService(mysqlDB, hostedllm.Config{
 		BaseURL:    cfg.HostedLLMBaseURL,
 		APIKey:     cfg.HostedLLMAPIKey,

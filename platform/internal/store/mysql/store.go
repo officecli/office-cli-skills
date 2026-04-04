@@ -327,6 +327,15 @@ func (s *Store) AddCreditBalanceToAPIKey(ctx context.Context, apiKeyID uint64, c
 		return nil, err
 	}
 	key.CreditBalance += creditAmount
+	key.HostedEnabled = true
+	switch key.AllowedModes {
+	case "", "external_only":
+		key.AllowedModes = "hybrid"
+	}
+	if key.DefaultRuntimeMode == nil || strings.TrimSpace(*key.DefaultRuntimeMode) == "" || strings.TrimSpace(*key.DefaultRuntimeMode) == "external" {
+		defaultRuntimeMode := "hosted"
+		key.DefaultRuntimeMode = &defaultRuntimeMode
+	}
 	if err := tx.Save(&key).Error; err != nil {
 		tx.Rollback()
 		return nil, err
@@ -1004,15 +1013,15 @@ func (s *Store) SeedDemoData(ctx context.Context, defaultFreeLimit int) error {
 }
 
 func (s *Store) AdminCreateAPIKey(ctx context.Context, ownerUserID *uint64, planName string, expiresAt *time.Time, note *string, planCode *string, hash, prefix string, quotaTotal *int) (*model.APIKey, error) {
-	defaultRuntimeMode := "hosted"
+	defaultRuntimeMode := "external"
 	key := &model.APIKey{
 		OwnerUserID:        ownerUserID,
 		KeyHash:            hash,
 		KeyPrefix:          prefix,
 		Status:             model.APIKeyStatusActive,
 		PlanName:           planName,
-		AllowedModes:       "hybrid",
-		HostedEnabled:      true,
+		AllowedModes:       "external_only",
+		HostedEnabled:      false,
 		DefaultRuntimeMode: &defaultRuntimeMode,
 		ExpiresAt:          expiresAt,
 		Note:               note,
@@ -1023,15 +1032,15 @@ func (s *Store) AdminCreateAPIKey(ctx context.Context, ownerUserID *uint64, plan
 }
 
 func (s *Store) AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix string) (*model.APIKey, error) {
-	defaultRuntimeMode := "hosted"
+	defaultRuntimeMode := "external"
 	key := &model.APIKey{
 		OwnerUserID:        &userID,
 		KeyHash:            hash,
 		KeyPrefix:          prefix,
 		Status:             model.APIKeyStatusActive,
 		PlanName:           planName,
-		AllowedModes:       "hybrid",
-		HostedEnabled:      true,
+		AllowedModes:       "external_only",
+		HostedEnabled:      false,
 		DefaultRuntimeMode: &defaultRuntimeMode,
 	}
 	return key, s.CreateAPIKey(ctx, key)

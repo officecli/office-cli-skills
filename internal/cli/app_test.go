@@ -3,9 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,18 +23,88 @@ type stubLicenseManager struct {
 	checkErr    error
 }
 
+type dynamicLicenseManager struct {
+	check func(req LicenseCheckRequest) (*LicenseCheckResult, error)
+}
+
 func (s stubLicenseManager) Check(_ context.Context, req LicenseCheckRequest) (*LicenseCheckResult, error) {
 	if s.checkErr != nil {
 		return nil, s.checkErr
 	}
 	if s.checkResult != nil {
-		return s.checkResult, nil
+		cloned := *s.checkResult
+		if cloned.Allowed {
+			cloned.CommitToken = signTestCommitToken(req, cloned.AccessMode, cloned.CommitToken)
+		}
+		return &cloned, nil
 	}
-	return &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}, nil
+	return &LicenseCheckResult{
+		Allowed:     true,
+		AccessMode:  LicenseAccessModePaid,
+		CommitToken: signTestCommitToken(req, LicenseAccessModePaid, UsageCommitToken{}),
+	}, nil
 }
 
 func (s stubLicenseManager) Consume(_ context.Context, token UsageCommitToken) (*UsageConsumeResult, error) {
 	return &UsageConsumeResult{}, nil
+}
+
+func (d dynamicLicenseManager) Check(_ context.Context, req LicenseCheckRequest) (*LicenseCheckResult, error) {
+	return d.check(req)
+}
+
+func (d dynamicLicenseManager) Consume(_ context.Context, token UsageCommitToken) (*UsageConsumeResult, error) {
+	return &UsageConsumeResult{}, nil
+}
+
+const testLicenseProofSeed = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
+
+func signTestCommitToken(req LicenseCheckRequest, accessMode LicenseAccessMode, existing UsageCommitToken) UsageCommitToken {
+	seed, err := base64.RawURLEncoding.DecodeString(testLicenseProofSeed)
+	if err != nil {
+		panic(err)
+	}
+	privateKey := ed25519.NewKeyFromSeed(seed)
+	token := existing
+	if token.FingerprintHash == "" {
+		token.FingerprintHash = req.FingerprintHash
+	}
+	token.UserID = req.UserID
+	if token.RequestID == "" {
+		token.RequestID = "req-test-" + strings.ReplaceAll(req.RequestNonce, "-", "")
+	}
+	token.AccessMode = accessMode
+	token.Action = req.Action
+	token.DocumentType = req.DocumentType
+	token.RuntimeMode = req.RuntimeMode
+	token.RequestNonce = req.RequestNonce
+	token.ProofVersion = "v1"
+	if token.IssuedAt.IsZero() {
+		token.IssuedAt = time.Now().UTC()
+	}
+	if token.ExpiresAt.IsZero() {
+		token.ExpiresAt = token.IssuedAt.Add(2 * time.Minute)
+	}
+	token.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, []byte(testCommitTokenPayload(token))))
+	return token
+}
+
+func testCommitTokenPayload(token UsageCommitToken) string {
+	parts := []string{
+		"version=" + strings.TrimSpace(token.ProofVersion),
+		"fingerprint_hash=" + strings.TrimSpace(token.FingerprintHash),
+		"user_id=" + strconv.FormatUint(token.UserID, 10),
+		"request_id=" + strings.TrimSpace(token.RequestID),
+		"access_mode=" + strings.TrimSpace(string(token.AccessMode)),
+		"api_key_hint=" + strings.TrimSpace(token.APIKeyHint),
+		"action=" + strings.TrimSpace(token.Action),
+		"document_type=" + strings.TrimSpace(token.DocumentType),
+		"runtime_mode=" + strings.TrimSpace(token.RuntimeMode),
+		"request_nonce=" + strings.TrimSpace(token.RequestNonce),
+		"issued_at=" + token.IssuedAt.UTC().Format(time.RFC3339Nano),
+		"expires_at=" + token.ExpiresAt.UTC().Format(time.RFC3339Nano),
+	}
+	return strings.Join(parts, "\n")
 }
 
 type fakeAppLLMClient struct {
@@ -969,6 +1042,58 @@ func TestCheckLicensePaidQuotaExhaustedShowsPaidMessage(t *testing.T) {
 	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
 	if err == nil || !strings.Contains(err.Error(), "次数已耗尽") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCheckLicenseRejectsTamperedReplayProof(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				token := signTestCommitToken(req, LicenseAccessModePaid, UsageCommitToken{})
+				token.DocumentType = "docx"
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModePaid,
+					CommitToken: token,
+				}, nil
+			},
+		}, nil
+	}
+
+	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "license proof 校验失败") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCheckLicenseRejectsExpiredProof(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				token := signTestCommitToken(req, LicenseAccessModePaid, UsageCommitToken{
+					IssuedAt:  time.Now().UTC().Add(-10 * time.Minute),
+					ExpiresAt: time.Now().UTC().Add(-8 * time.Minute),
+				})
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModePaid,
+					CommitToken: token,
+				}, nil
+			},
+		}, nil
+	}
+
+	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "license proof 校验失败") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

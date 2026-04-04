@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrFingerprintRequired  = errors.New("fingerprint_hash is required")
+	ErrRequestNonceRequired = errors.New("request_nonce is required")
 	ErrInvalidAction        = errors.New("action must be generate or status")
 	ErrInvalidUsageType     = errors.New("usage_type must be generate")
 	ErrQuotaExhausted       = errors.New("free quota exhausted")
@@ -24,6 +25,7 @@ type CheckRequest struct {
 	CLIVersion      string `json:"cli_version,omitempty"`
 	DocumentType    string `json:"document_type,omitempty"`
 	RuntimeMode     string `json:"runtime_mode,omitempty"`
+	RequestNonce    string `json:"request_nonce,omitempty"`
 	Action          string `json:"action"`
 }
 
@@ -33,6 +35,14 @@ type CommitToken struct {
 	RequestID       string           `json:"request_id"`
 	AccessMode      model.AccessMode `json:"access_mode,omitempty"`
 	APIKeyHint      string           `json:"api_key_hint,omitempty"`
+	Action          string           `json:"action,omitempty"`
+	DocumentType    string           `json:"document_type,omitempty"`
+	RuntimeMode     string           `json:"runtime_mode,omitempty"`
+	RequestNonce    string           `json:"request_nonce,omitempty"`
+	ProofVersion    string           `json:"proof_version,omitempty"`
+	IssuedAt        time.Time        `json:"issued_at,omitempty"`
+	ExpiresAt       time.Time        `json:"expires_at,omitempty"`
+	Signature       string           `json:"signature,omitempty"`
 }
 
 type CheckResponse struct {
@@ -64,6 +74,7 @@ type ConsumeRequest struct {
 	UsageType       string           `json:"usage_type"`
 	AccessMode      model.AccessMode `json:"access_mode,omitempty"`
 	APIKey          string           `json:"api_key,omitempty"`
+	CommitToken     *CommitToken     `json:"commit_token,omitempty"`
 }
 
 type ConsumeResponse struct {

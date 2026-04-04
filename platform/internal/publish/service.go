@@ -121,9 +121,27 @@ func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, 
 		return nil, fmt.Errorf("api key is disabled")
 	case key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now().UTC()):
 		return nil, fmt.Errorf("api key is expired")
+	case !hasPublishEntitlement(key):
+		return nil, fmt.Errorf("publish entitlement is required")
 	default:
 		return key, nil
 	}
+}
+
+func hasPublishEntitlement(key *model.APIKey) bool {
+	if key == nil {
+		return false
+	}
+	if key.QuotaTotal != nil && *key.QuotaTotal > 0 {
+		return true
+	}
+	if key.QuotaUsed > 0 {
+		return true
+	}
+	if key.CreditBalance > 0 || key.CreditReserved > 0 {
+		return true
+	}
+	return false
 }
 
 func validateRequest(req Request) error {

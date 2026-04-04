@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -32,6 +33,8 @@ type Config struct {
 	PlatformBaseURL              string
 	AppSessionSecret             string
 	AppSessionTTL                time.Duration
+	LicenseProofSeed             string
+	LicenseProofTTL              time.Duration
 	GoogleClientID               string
 	GoogleClientSecret           string
 	GoogleRedirectURL            string
@@ -82,6 +85,8 @@ func LoadConfig() (Config, error) {
 		PlatformBaseURL:              mustEnvDefault("PLATFORM_BASE_URL", "https://platform.officecli.io"),
 		AppSessionSecret:             mustEnvDefault("APP_SESSION_SECRET", "change-me-app-session-secret-123456"),
 		AppSessionTTL:                mustEnvDuration("APP_SESSION_TTL", 24*time.Hour),
+		LicenseProofSeed:             mustEnvDefault("LICENSE_PROOF_SEED", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"),
+		LicenseProofTTL:              mustEnvDuration("LICENSE_PROOF_TTL", 2*time.Minute),
 		GoogleClientID:               os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),
@@ -259,6 +264,23 @@ func validateProductionSecrets(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.APIKeyHashSalt) == "" || cfg.APIKeyHashSalt == "change-me-salt" {
 		return fmt.Errorf("API_KEY_HASH_SALT must be explicitly configured in production")
+	}
+	if strings.TrimSpace(cfg.LicenseProofSeed) == "" || cfg.LicenseProofSeed == "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" {
+		return fmt.Errorf("LICENSE_PROOF_SEED must be explicitly configured in production")
+	}
+	if err := validateLicenseProofSeed(cfg.LicenseProofSeed); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateLicenseProofSeed(raw string) error {
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("LICENSE_PROOF_SEED must be base64url encoded: %w", err)
+	}
+	if len(decoded) != 32 {
+		return fmt.Errorf("LICENSE_PROOF_SEED must decode to 32 bytes")
 	}
 	return nil
 }

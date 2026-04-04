@@ -11,6 +11,7 @@ func TestLoadConfigDefaultsToDevelopment(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "")
 	t.Setenv("APP_SESSION_SECRET", "")
 	t.Setenv("API_KEY_HASH_SALT", "")
+	t.Setenv("LICENSE_PROOF_SEED", "")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -27,6 +28,7 @@ func TestLoadConfigProductionRejectsDefaultAdminPassword(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "prod-session-secret-123456")
 	t.Setenv("APP_SESSION_SECRET", "prod-app-session-secret-123456")
 	t.Setenv("API_KEY_HASH_SALT", "prod-salt")
+	t.Setenv("LICENSE_PROOF_SEED", "prod-license-proof-seed-ignored")
 
 	_, err := LoadConfig()
 	if err == nil {
@@ -40,6 +42,7 @@ func TestLoadConfigProductionRejectsPlaceholderSecrets(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "change-me-change-me-change-me-123456")
 	t.Setenv("APP_SESSION_SECRET", "change-me-app-session-secret-123456")
 	t.Setenv("API_KEY_HASH_SALT", "change-me-salt")
+	t.Setenv("LICENSE_PROOF_SEED", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA")
 
 	_, err := LoadConfig()
 	if err == nil {
@@ -53,6 +56,7 @@ func TestLoadConfigProductionAcceptsExplicitValues(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "prod-session-secret-123456")
 	t.Setenv("APP_SESSION_SECRET", "prod-app-session-secret-123456")
 	t.Setenv("API_KEY_HASH_SALT", "prod-salt")
+	t.Setenv("LICENSE_PROOF_SEED", "cHJvZC1saWNlbnNlLXByb29mLXNlZWQtMTIzNDU2Nzg")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -90,6 +94,7 @@ func TestLoadConfigProductionUsesStrictRateLimitDefaults(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "prod-session-secret-123456")
 	t.Setenv("APP_SESSION_SECRET", "prod-app-session-secret-123456")
 	t.Setenv("API_KEY_HASH_SALT", "prod-salt")
+	t.Setenv("LICENSE_PROOF_SEED", "cHJvZC1saWNlbnNlLXByb29mLXNlZWQtMTIzNDU2Nzg")
 	t.Setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "")
 	t.Setenv("LICENSE_RATE_LIMIT_PER_MINUTE", "")
 	t.Setenv("RATE_LIMIT_VISITOR_TTL", "")
@@ -115,6 +120,7 @@ func TestLoadConfigAllowsRateLimitOverrides(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "prod-session-secret-123456")
 	t.Setenv("APP_SESSION_SECRET", "prod-app-session-secret-123456")
 	t.Setenv("API_KEY_HASH_SALT", "prod-salt")
+	t.Setenv("LICENSE_PROOF_SEED", "cHJvZC1saWNlbnNlLXByb29mLXNlZWQtMTIzNDU2Nzg")
 	t.Setenv("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", "9")
 	t.Setenv("LICENSE_RATE_LIMIT_PER_MINUTE", "44")
 	t.Setenv("RATE_LIMIT_VISITOR_TTL", "2m")

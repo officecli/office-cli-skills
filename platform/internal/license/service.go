@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
@@ -60,10 +58,19 @@ type Service struct {
 	defaultFreeLimit int
 	idemTTL          time.Duration
 	clock            func() time.Time
+	proof            *proofSigner
 }
 
-func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration) *Service {
-	return &Service{
+func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
+	proofCfg := ProofConfig{}
+	if len(proofConfigs) > 0 {
+		proofCfg = proofConfigs[0]
+	}
+	signer, err := newProofSigner(proofCfg)
+	if err != nil {
+		panic(err)
+	}
+	service := &Service{
 		apiKeys:          apiKeys,
 		freeQuotas:       freeQuotas,
 		usage:            usage,
@@ -74,12 +81,23 @@ func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEvent
 		defaultFreeLimit: defaultFreeLimit,
 		idemTTL:          idemTTL,
 		clock:            time.Now,
+		proof:            signer,
 	}
+	service.proof.clock = func() time.Time {
+		if service.clock != nil {
+			return service.clock()
+		}
+		return time.Now()
+	}
+	return service
 }
 
 func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
 	if strings.TrimSpace(req.FingerprintHash) == "" {
 		return nil, ErrFingerprintRequired
+	}
+	if strings.TrimSpace(req.RequestNonce) == "" {
+		return nil, ErrRequestNonceRequired
 	}
 	if req.Action != string(model.UsageActionGenerate) && req.Action != string(model.UsageActionStatus) {
 		return nil, ErrInvalidAction
@@ -158,12 +176,9 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 			response.PaidQuotaUsed = key.QuotaUsed
 			response.PaidQuotaRemaining = key.PaidQuotaRemaining()
 		}
-		response.CommitToken = &CommitToken{
-			FingerprintHash: req.FingerprintHash,
-			UserID:          req.UserID,
-			RequestID:       uuid.NewString(),
-			AccessMode:      response.AccessMode,
-			APIKeyHint:      key.KeyPrefix,
+		response.CommitToken, err = s.issueCommitToken(req, response.AccessMode, key.KeyPrefix)
+		if err != nil {
+			return nil, err
 		}
 		_ = s.apiKeys.TouchLastUsedAt(ctx, key.ID, now)
 	}
@@ -194,12 +209,10 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 		SelectedRuntimeMode: "external",
 		RewardRemaining:     balance.Remaining,
 		Message:             fmt.Sprintf("当前为奖励模式，剩余 %d 次生成额度。", balance.Remaining),
-		CommitToken: &CommitToken{
-			FingerprintHash: req.FingerprintHash,
-			UserID:          req.UserID,
-			RequestID:       uuid.NewString(),
-			AccessMode:      model.AccessModeReward,
-		},
+	}
+	response.CommitToken, err = s.issueCommitToken(req, model.AccessModeReward, "")
+	if err != nil {
+		return nil, false, err
 	}
 	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeReward, response, nil)); err != nil {
 		return nil, false, err
@@ -220,11 +233,9 @@ func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckRespon
 	if quota.DailyUsed < quota.DailyLimit {
 		response.Allowed = true
 		response.AccessMode = model.AccessModeFree
-		response.CommitToken = &CommitToken{
-			FingerprintHash: req.FingerprintHash,
-			UserID:          req.UserID,
-			RequestID:       uuid.NewString(),
-			AccessMode:      model.AccessModeFree,
+		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeFree, "")
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		response.Allowed = false
@@ -252,6 +263,14 @@ func (s *Service) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResp
 	}
 	if req.AccessMode == "" {
 		req.AccessMode = model.AccessModeFree
+	}
+	if req.AccessMode != model.AccessModeHosted {
+		if req.CommitToken == nil {
+			return nil, fmt.Errorf("commit_token is required")
+		}
+		if err := s.proof.verifyCommitToken(*req.CommitToken, req, req.AccessMode); err != nil {
+			return nil, fmt.Errorf("invalid commit_token: %w", err)
+		}
 	}
 
 	if cached, err := s.idem.GetConsumeResult(ctx, req.RequestID); err != nil {
@@ -491,6 +510,13 @@ func (s *Service) currentUsageDate() string {
 		now = s.clock().UTC()
 	}
 	return now.Format("2006-01-02")
+}
+
+func (s *Service) issueCommitToken(req CheckRequest, accessMode model.AccessMode, apiKeyHint string) (*CommitToken, error) {
+	if s.proof == nil {
+		return nil, fmt.Errorf("license proof signer is unavailable")
+	}
+	return s.proof.issueCommitToken(req, accessMode, apiKeyHint)
 }
 
 func buildUsageEvent(req CheckRequest, mode model.UsageMode, resp *CheckResponse, key *model.APIKey) *model.UsageEvent {

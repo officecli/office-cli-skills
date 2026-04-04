@@ -805,14 +805,29 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		}, nil
 	}
 	fingerprintHash := licenseprovider.ComputeFingerprintHash()
-	result, err := manager.Check(ctx, LicenseCheckRequest{
+	requestNonce, err := licenseprovider.NewRequestNonce()
+	if err != nil {
+		return nil, err
+	}
+	checkReq := LicenseCheckRequest{
 		FingerprintHash: fingerprintHash,
 		UserID:          cfg.UserID,
 		APIKey:          strings.TrimSpace(cfg.APIKey),
 		CLIVersion:      Version,
 		DocumentType:    documentType,
 		RuntimeMode:     runtimeModeLabel(runtimeMode),
+		RequestNonce:    requestNonce,
 		Action:          action,
+	}
+	result, err := manager.Check(ctx, LicenseCheckRequest{
+		FingerprintHash: checkReq.FingerprintHash,
+		UserID:          checkReq.UserID,
+		APIKey:          checkReq.APIKey,
+		CLIVersion:      checkReq.CLIVersion,
+		DocumentType:    checkReq.DocumentType,
+		RuntimeMode:     checkReq.RuntimeMode,
+		RequestNonce:    checkReq.RequestNonce,
+		Action:          checkReq.Action,
 	})
 	if err != nil {
 		_ = licenseprovider.SaveState(licenseprovider.State{
@@ -832,6 +847,9 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		LastDecision:    boolLabel(result.Allowed),
 		LastMode:        string(result.AccessMode),
 	})
+	if err := licenseprovider.ValidateCheckResult(result, checkReq); err != nil {
+		return nil, fmt.Errorf("license proof 校验失败：%w", err)
+	}
 	if !result.Allowed {
 		fallback := "免费额度已用完，请在配置文件中填写 license.api_key 后重试。"
 		if result.ReasonCode == "hosted_credit_exhausted" {

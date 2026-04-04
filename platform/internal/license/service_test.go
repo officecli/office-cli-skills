@@ -2,6 +2,8 @@ package license
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"sync"
 	"testing"
 	"time"
@@ -215,12 +217,32 @@ func (f *fakeReferralActivator) ActivateReferral(_ context.Context, invitedUserI
 	return &growthsvc.RewardGrantResult{Created: true}, nil
 }
 
+func testCheckRequest(fingerprint, action string) CheckRequest {
+	return CheckRequest{
+		FingerprintHash: fingerprint,
+		RequestNonce:    "nonce-" + fingerprint + "-" + action,
+		Action:          action,
+	}
+}
+
+func issueTestCommitToken(t *testing.T, svc *Service, req CheckRequest, accessMode model.AccessMode, apiKeyHint string) *CommitToken {
+	t.Helper()
+	token, err := svc.issueCommitToken(req, accessMode, apiKeyHint)
+	require.NoError(t, err)
+	return token
+}
+
+func resignTestCommitToken(t *testing.T, svc *Service, token *CommitToken) {
+	t.Helper()
+	token.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(svc.proof.privateKey, []byte(commitTokenPayload(*token))))
+}
+
 func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	usage := newFakeUsageStore()
 	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 
-	resp, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-1", Action: "generate"})
+	resp, err := svc.Check(context.Background(), testCheckRequest("fp-1", "generate"))
 	require.NoError(t, err)
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
@@ -235,7 +257,7 @@ func TestCheckBlocksWhenFreeQuotaExhausted(t *testing.T) {
 	quotas.quotas["fp-2|"+time.Now().UTC().Format("2006-01-02")] = &model.DailyFreeQuota{FingerprintHash: "fp-2", UsageDate: time.Now().UTC().Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 
-	resp, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-2", Action: "generate"})
+	resp, err := svc.Check(context.Background(), testCheckRequest("fp-2", "generate"))
 	require.NoError(t, err)
 	require.False(t, resp.Allowed)
 	require.Equal(t, model.AccessModeBlocked, resp.AccessMode)
@@ -267,7 +289,9 @@ func TestCheckPaidKeyStatuses(t *testing.T) {
 				past := now.Add(-time.Hour)
 				tc.key.ExpiresAt = &past
 			}
-			resp, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp", APIKey: "demo", Action: "status"})
+			req := testCheckRequest("fp", "status")
+			req.APIKey = "demo"
+			resp, err := svc.Check(context.Background(), req)
 			require.NoError(t, err)
 			require.Equal(t, tc.allowed, resp.Allowed)
 			if tc.allowed {
@@ -290,11 +314,9 @@ func TestCheckPrefersRewardBeforeFree(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), rewards, nil, "salt", 10, time.Hour)
 
-	resp, err := svc.Check(context.Background(), CheckRequest{
-		FingerprintHash: "fp-reward",
-		UserID:          88,
-		Action:          "generate",
-	})
+	req := testCheckRequest("fp-reward", "generate")
+	req.UserID = 88
+	resp, err := svc.Check(context.Background(), req)
 	require.NoError(t, err)
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeReward, resp.AccessMode)
@@ -310,6 +332,11 @@ func TestConsumeRewardIsIdempotent(t *testing.T) {
 	rewards.balances[77] = 2
 	referrals := &fakeReferralActivator{}
 	svc := NewService(&fakeAPIKeyStore{}, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), rewards, referrals, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-reward", "generate")
+	checkReq.UserID = 77
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeReward, "")
+	token.RequestID = "req-reward"
+	resignTestCommitToken(t, svc, token)
 
 	first, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-reward",
@@ -317,6 +344,7 @@ func TestConsumeRewardIsIdempotent(t *testing.T) {
 		RequestID:       "req-reward",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeReward,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeReward, first.AccessMode)
@@ -329,6 +357,7 @@ func TestConsumeRewardIsIdempotent(t *testing.T) {
 		RequestID:       "req-reward",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeReward,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, first, second)
@@ -343,14 +372,18 @@ func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
 	usage := newFakeUsageStore()
 	idem := newFakeIdemStore()
 	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, idem, nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-3", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
+	token.RequestID = "req-1"
+	resignTestCommitToken(t, svc, token)
 
-	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree})
+	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
 	require.NoError(t, err)
 	require.Equal(t, 1, first.FreeUsed)
 	require.Equal(t, 0, first.FreeRemaining)
 	require.Equal(t, 0, first.Remaining)
 
-	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree})
+	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 
@@ -363,7 +396,12 @@ func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, err := svc2.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-4", RequestID: string(rune('a' + i)), UsageType: "generate", AccessMode: model.AccessModeFree})
+			concurrentReq := testCheckRequest("fp-4", "generate")
+			concurrentReq.RequestNonce = "nonce-fp-4-" + string(rune('a'+i))
+			token := issueTestCommitToken(t, svc2, concurrentReq, model.AccessModeFree, "")
+			token.RequestID = string(rune('a' + i))
+			resignTestCommitToken(t, svc2, token)
+			_, err := svc2.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-4", RequestID: string(rune('a' + i)), UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
 			if err == nil {
 				mu.Lock()
 				successCount++
@@ -380,8 +418,12 @@ func TestConsumePaidIsIdempotent(t *testing.T) {
 	quotaTotal := 3
 	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
 	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-paid", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
+	token.RequestID = "req-paid"
+	resignTestCommitToken(t, svc, token)
 
-	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo"})
+	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo", CommitToken: token})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModePaid, first.AccessMode)
 	require.Equal(t, 3, first.PaidQuotaTotal)
@@ -389,7 +431,7 @@ func TestConsumePaidIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, first.PaidQuotaRemaining)
 	require.Equal(t, 1, first.Remaining)
 
-	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo"})
+	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo", CommitToken: token})
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 	require.Equal(t, 2, apiStore.key.QuotaUsed)
@@ -401,6 +443,11 @@ func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
 	quotas.quotas["fp-ref|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
 	referrals := &fakeReferralActivator{}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-ref", "generate")
+	checkReq.UserID = 123
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
+	token.RequestID = "req-ref"
+	resignTestCommitToken(t, svc, token)
 
 	resp, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-ref",
@@ -408,6 +455,7 @@ func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
 		RequestID:       "req-ref",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
@@ -421,6 +469,11 @@ func TestConsumeIgnoresMissingReferral(t *testing.T) {
 	quotas.quotas["fp-no-ref|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-no-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
 	referrals := &fakeReferralActivator{err: growthsvc.ErrReferralNotFound}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-no-ref", "generate")
+	checkReq.UserID = 456
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
+	token.RequestID = "req-no-ref"
+	resignTestCommitToken(t, svc, token)
 
 	resp, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-no-ref",
@@ -428,6 +481,7 @@ func TestConsumeIgnoresMissingReferral(t *testing.T) {
 		RequestID:       "req-no-ref",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
@@ -439,7 +493,7 @@ func TestAdjustQuotaAffectsCheckRemaining(t *testing.T) {
 	quotas.quotas["fp-5|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-5", UsageDate: today, DailyLimit: 2, DailyUsed: 1}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 
-	resp, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-5", Action: "generate"})
+	resp, err := svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.FreeRemaining)
 
@@ -447,7 +501,7 @@ func TestAdjustQuotaAffectsCheckRemaining(t *testing.T) {
 	quotas.quotas["fp-5|"+today].DailyLimit = 5
 	quotas.mu.Unlock()
 
-	resp, err = svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-5", Action: "generate"})
+	resp, err = svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
 	require.NoError(t, err)
 	require.Equal(t, 4, resp.FreeRemaining)
 }
@@ -456,12 +510,17 @@ func TestConsumePaidRequiresAPIKey(t *testing.T) {
 	quotaTotal := 3
 	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
 	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-paid", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
+	token.RequestID = "req-missing-key"
+	resignTestCommitToken(t, svc, token)
 
 	_, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-paid",
 		RequestID:       "req-missing-key",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModePaid,
+		CommitToken:     token,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "api_key is required")
@@ -476,12 +535,17 @@ func TestConsumeRestoreExistingPaidUsageWithoutAPIKey(t *testing.T) {
 		Mode:      model.UsageModePaid,
 	}
 	svc := NewService(&fakeAPIKeyStore{}, newFakeFreeQuotaStore(), usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-paid", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "")
+	token.RequestID = requestID
+	resignTestCommitToken(t, svc, token)
 
 	resp, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-paid",
 		RequestID:       requestID,
 		UsageType:       "generate",
 		AccessMode:      model.AccessModePaid,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModePaid, resp.AccessMode)
@@ -501,12 +565,17 @@ func TestConsumeRestoreExistingFreeUsageReturnsCurrentQuota(t *testing.T) {
 		CreatedAt:       time.Now().UTC(),
 	}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-restore", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
+	token.RequestID = requestID
+	resignTestCommitToken(t, svc, token)
 
 	resp, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: "fp-restore",
 		RequestID:       requestID,
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
+		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
@@ -522,23 +591,29 @@ func TestFreeQuotaResetsAcrossDays(t *testing.T) {
 	svc.clock = func() time.Time { return dayOne }
 
 	for i := 0; i < 10; i++ {
+		checkReq := testCheckRequest("fp-day-reset", "generate")
+		checkReq.RequestNonce = "nonce-day-reset-" + string(rune('a'+i))
+		token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
+		token.RequestID = "req-day-1-" + string(rune('a'+i))
+		resignTestCommitToken(t, svc, token)
 		resp, err := svc.Consume(context.Background(), ConsumeRequest{
 			FingerprintHash: "fp-day-reset",
 			RequestID:       "req-day-1-" + string(rune('a'+i)),
 			UsageType:       "generate",
 			AccessMode:      model.AccessModeFree,
+			CommitToken:     token,
 		})
 		require.NoError(t, err)
 		require.Equal(t, 9-i, resp.FreeRemaining)
 	}
 
-	checkResp, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-day-reset", Action: "generate"})
+	checkResp, err := svc.Check(context.Background(), testCheckRequest("fp-day-reset", "generate"))
 	require.NoError(t, err)
 	require.False(t, checkResp.Allowed)
 	require.Equal(t, "free_quota_exhausted", checkResp.ReasonCode)
 
 	svc.clock = func() time.Time { return dayOne.Add(24 * time.Hour) }
-	nextDay, err := svc.Check(context.Background(), CheckRequest{FingerprintHash: "fp-day-reset", Action: "generate"})
+	nextDay, err := svc.Check(context.Background(), testCheckRequest("fp-day-reset", "generate"))
 	require.NoError(t, err)
 	require.True(t, nextDay.Allowed)
 	require.Equal(t, 10, nextDay.FreeRemaining)

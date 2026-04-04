@@ -28,6 +28,7 @@ type CheckRequest struct {
 	CLIVersion      string `json:"cli_version,omitempty"`
 	DocumentType    string `json:"document_type,omitempty"`
 	RuntimeMode     string `json:"runtime_mode,omitempty"`
+	RequestNonce    string `json:"request_nonce,omitempty"`
 	Action          string `json:"action"`
 }
 
@@ -37,6 +38,14 @@ type CommitToken struct {
 	RequestID       string     `json:"request_id"`
 	AccessMode      AccessMode `json:"access_mode,omitempty"`
 	APIKeyHint      string     `json:"api_key_hint,omitempty"`
+	Action          string     `json:"action,omitempty"`
+	DocumentType    string     `json:"document_type,omitempty"`
+	RuntimeMode     string     `json:"runtime_mode,omitempty"`
+	RequestNonce    string     `json:"request_nonce,omitempty"`
+	ProofVersion    string     `json:"proof_version,omitempty"`
+	IssuedAt        time.Time  `json:"issued_at,omitempty"`
+	ExpiresAt       time.Time  `json:"expires_at,omitempty"`
+	Signature       string     `json:"signature,omitempty"`
 }
 
 type CheckResult struct {
@@ -62,12 +71,13 @@ type CheckResult struct {
 }
 
 type ConsumeRequest struct {
-	FingerprintHash string     `json:"fingerprint_hash"`
-	UserID          uint64     `json:"user_id,omitempty"`
-	RequestID       string     `json:"request_id"`
-	UsageType       string     `json:"usage_type"`
-	AccessMode      AccessMode `json:"access_mode,omitempty"`
-	APIKey          string     `json:"api_key,omitempty"`
+	FingerprintHash string      `json:"fingerprint_hash"`
+	UserID          uint64      `json:"user_id,omitempty"`
+	RequestID       string      `json:"request_id"`
+	UsageType       string      `json:"usage_type"`
+	AccessMode      AccessMode  `json:"access_mode,omitempty"`
+	APIKey          string      `json:"api_key,omitempty"`
+	CommitToken     CommitToken `json:"commit_token,omitempty"`
 }
 
 type ConsumeResult struct {

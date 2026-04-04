@@ -103,3 +103,59 @@ func TestRegisterReferralWithinLimitHonorsCapAndIdempotency(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 5, count)
 }
+
+func TestAppCreateAPIKeyUsesLeastPrivilegeDefaults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:app_create_api_key_defaults?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}))
+
+	store := NewWithDB(db)
+	key, err := store.AppCreateAPIKey(context.Background(), 42, "Starter", "hash-1", "cop_test")
+	require.NoError(t, err)
+	require.Equal(t, "external_only", key.AllowedModes)
+	require.False(t, key.HostedEnabled)
+	require.NotNil(t, key.DefaultRuntimeMode)
+	require.Equal(t, "external", *key.DefaultRuntimeMode)
+}
+
+func TestAdminCreateAPIKeyUsesLeastPrivilegeDefaults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:admin_create_api_key_defaults?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}))
+
+	store := NewWithDB(db)
+	key, err := store.AdminCreateAPIKey(context.Background(), nil, "Ops", nil, nil, nil, "hash-2", "cop_admin", nil)
+	require.NoError(t, err)
+	require.Equal(t, "external_only", key.AllowedModes)
+	require.False(t, key.HostedEnabled)
+	require.NotNil(t, key.DefaultRuntimeMode)
+	require.Equal(t, "external", *key.DefaultRuntimeMode)
+}
+
+func TestAddCreditBalanceToAPIKeyEnablesHostedEntitlement(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:add_credit_balance_enables_hosted?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}))
+
+	store := NewWithDB(db)
+	defaultRuntimeMode := "external"
+	key := &model.APIKey{
+		KeyHash:            "hash-3",
+		KeyPrefix:          "cop_credit",
+		Status:             model.APIKeyStatusActive,
+		PlanName:           "Starter",
+		AllowedModes:       "external_only",
+		HostedEnabled:      false,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+		CreditBalance:      0,
+	}
+	require.NoError(t, store.CreateAPIKey(context.Background(), key))
+
+	updated, err := store.AddCreditBalanceToAPIKey(context.Background(), key.ID, 300)
+	require.NoError(t, err)
+	require.Equal(t, 300, updated.CreditBalance)
+	require.True(t, updated.HostedEnabled)
+	require.Equal(t, "hybrid", updated.AllowedModes)
+	require.NotNil(t, updated.DefaultRuntimeMode)
+	require.Equal(t, "hosted", *updated.DefaultRuntimeMode)
+}

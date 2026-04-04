@@ -176,12 +176,12 @@ func TestExecutorEmitsProgressEvents(t *testing.T) {
 	}
 }
 
-func TestExecutorKeepsSuccessWhenConsumeFails(t *testing.T) {
+func TestExecutorFailsWhenConsumeFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	manager := &fakeLicenseManager{consumeErr: context.DeadlineExceeded}
 	executor := NewExecutor(fakeGenerator{}, fakePublisher{}, manager)
 
-	result, err := executor.Run(context.Background(), GenerateJob{
+	_, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
 		Topic:        "企业协作平台介绍",
 		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
@@ -196,21 +196,16 @@ func TestExecutorKeepsSuccessWhenConsumeFails(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
+	if err == nil {
+		t.Fatal("expected error")
 	}
-
-	if result.Status != "success" {
-		t.Fatalf("status = %s", result.Status)
+	if !strings.Contains(err.Error(), "额度同步失败") {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.AccessMode != string(LicenseAccessModePaid) {
-		t.Fatalf("accessMode = %s", result.AccessMode)
-	}
-	if _, err := os.Stat(result.FilePath); err != nil {
-		t.Fatalf("stat file: %v", err)
-	}
-	if len(result.Warnings) == 0 || !strings.Contains(strings.Join(result.Warnings, "\n"), "额度同步失败") {
-		t.Fatalf("warnings = %#v", result.Warnings)
+	if entries, statErr := os.ReadDir(tmpDir); statErr != nil {
+		t.Fatalf("ReadDir: %v", statErr)
+	} else if len(entries) != 0 {
+		t.Fatalf("expected no output files, got %d", len(entries))
 	}
 }
 
@@ -415,7 +410,7 @@ func TestExecutorDoesNotConsumeWhenPublishFails(t *testing.T) {
 	if !strings.Contains(err.Error(), "发布阶段失败") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if manager.consumeCalls != 0 {
-		t.Fatalf("consumeCalls = %d, want 0", manager.consumeCalls)
+	if manager.consumeCalls != 1 {
+		t.Fatalf("consumeCalls = %d, want 1", manager.consumeCalls)
 	}
 }

@@ -5,7 +5,7 @@ import { api } from '../api'
 import type { ApiKey } from '../types'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
-const blankForm = { plan_name: '', owner_user_id: '', plan_code: '', allowed_modes: 'hybrid', hosted_enabled: true, default_runtime_mode: 'hosted', expires_at: '', quota_total: '', credit_balance: '', note: '' }
+const blankForm = { plan_name: '', owner_user_id: '', plan_code: '', allowed_modes: 'external_only', hosted_enabled: false, default_runtime_mode: 'external', expires_at: '', quota_total: '', credit_balance: '', note: '' }
 
 export default function ApiKeysPage() {
   const queryClient = useQueryClient()
@@ -37,7 +37,7 @@ export default function ApiKeysPage() {
     plan_name: key.plan_name,
     owner_user_id: String(key.owner_user_id ?? ''),
     plan_code: key.plan_code ?? '',
-    allowed_modes: key.allowed_modes ?? 'hybrid',
+    allowed_modes: key.allowed_modes ?? 'external_only',
     hosted_enabled: key.hosted_enabled ?? false,
     default_runtime_mode: key.default_runtime_mode ?? 'external',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
@@ -51,7 +51,7 @@ export default function ApiKeysPage() {
     plan_name: key.plan_name,
     owner_user_id: String(key.owner_user_id ?? ''),
     plan_code: key.plan_code ?? '',
-    allowed_modes: key.allowed_modes ?? 'hybrid',
+    allowed_modes: key.allowed_modes ?? 'external_only',
     hosted_enabled: key.hosted_enabled ?? false,
     default_runtime_mode: key.default_runtime_mode ?? 'external',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
