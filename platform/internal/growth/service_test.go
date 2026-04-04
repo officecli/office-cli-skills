@@ -39,6 +39,16 @@ func (f *fakeReferrals) FindReferralByInvitedUserID(_ context.Context, invitedUs
 	return nil, nil
 }
 
+func (f *fakeReferrals) CountReferralsByInviterUserID(_ context.Context, inviterUserID uint64) (int64, error) {
+	var count int64
+	for _, referral := range f.byInvited {
+		if referral.InviterUserID == inviterUserID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (f *fakeReferrals) SaveReferral(_ context.Context, referral *model.UserReferral) error {
 	copied := *referral
 	f.byInvited[referral.InvitedUserID] = &copied
@@ -136,6 +146,28 @@ func TestRegisterReferralRejectsSelfReferral(t *testing.T) {
 
 	_, err := svc.RegisterReferral(context.Background(), "invite-self", 8)
 	require.ErrorIs(t, err, ErrSelfReferral)
+}
+
+func TestRegisterReferralRejectsInviteLimit(t *testing.T) {
+	referrals := newFakeReferrals()
+	for i := uint64(0); i < MaxReferralsPerInviter; i++ {
+		referrals.byInvited[100+i] = &model.UserReferral{
+			InviterUserID: 11,
+			InvitedUserID: 100 + i,
+			InviteCode:    "invite-abc",
+			RegisteredAt:  time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
+		}
+	}
+	svc := NewService(
+		&fakeUsers{byCode: map[string]*model.User{"invite-abc": {ID: 11, InviteCode: "invite-abc"}}},
+		referrals,
+		newFakeDiscord(),
+		newFakeGrants(),
+	)
+
+	_, err := svc.RegisterReferral(context.Background(), "invite-abc", 999)
+	require.ErrorIs(t, err, ErrInviteLimitReached)
+	require.Len(t, referrals.byInvited, MaxReferralsPerInviter)
 }
 
 func TestActivateReferralCreatesSingleGrant(t *testing.T) {

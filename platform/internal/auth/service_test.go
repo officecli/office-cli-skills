@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -151,4 +152,31 @@ func TestHandleCallbackRegistersReferralFromOAuthState(t *testing.T) {
 	require.Contains(t, rawCookie, "cookie:")
 	require.Equal(t, "invite-xyz", referrals.inviteCode)
 	require.Equal(t, uint64(42), referrals.userID)
+}
+
+func TestHandleCallbackIgnoresInviteLimitError(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to":   "/app",
+		"invite_code": "invite-xyz",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042"}}
+	referrals := &fakeReferralRegistrar{err: growthsvc.ErrInviteLimitReached}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "demo@example.com", Name: "Demo"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		referrals,
+	)
+
+	user, rawCookie, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+	require.Equal(t, uint64(42), user.ID)
+	require.Equal(t, "/app", returnTo)
+	require.Contains(t, rawCookie, "cookie:")
 }

@@ -45,7 +45,7 @@ describe('platform app shell', () => {
         return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
       }
       if (url === '/api/app/overview') {
-        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, reward_remaining: 6, invite_code: 'invite-abc', referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
+        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, reward_remaining: 6, invite_code: 'invite-abc', invite_limit: 5, invite_remaining: 2, reward_per_invite: 2, referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
       }
       if (url === '/api/app/growth') {
         return {
@@ -54,8 +54,11 @@ describe('platform app shell', () => {
           json: async () => ({
             data: {
               invite_code: 'invite-abc',
+              invite_limit: 5,
+              invite_remaining: 4,
+              reward_per_invite: 2,
               reward_remaining: 6,
-              reward_grants: [{ source_type: 'invite_activation_reward', amount_total: 8, amount_used: 2, remaining: 6, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
+              reward_grants: [{ source_type: 'invite_activation_reward', amount_total: 2, amount_used: 0, remaining: 2, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
               referrals: [{ invite_code: 'invite-abc', registered_at: '2026-04-01T00:00:00Z' }],
               discord_connection: { username: 'officecli-user', guild_member: false, connected_at: '2026-04-02T00:00:00Z', verification_status: 'verification_blocked', verification_blocked_reason: 'discord guild verification is not configured in this build yet' },
             },
@@ -72,7 +75,7 @@ describe('platform app shell', () => {
     renderApp('/')
 
     expect(await screen.findByRole('heading', { name: /Remaining Credits/i })).toBeInTheDocument()
-    expect(screen.getByText(/Reward Credits/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Reward Credits/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Referral Progress/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Discord Status/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /Reward grants and referral progress/i })).toBeInTheDocument()

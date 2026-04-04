@@ -62,8 +62,6 @@ type Service struct {
 	clock            func() time.Time
 }
 
-const inviteActivationRewardAmount = 10
-
 func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration) *Service {
 	return &Service{
 		apiKeys:          apiKeys,
@@ -591,7 +589,7 @@ func (s *Service) activateReferralOnSuccess(ctx context.Context, userID uint64) 
 	if s.referrals == nil || userID == 0 {
 		return nil
 	}
-	_, err := s.referrals.ActivateReferral(ctx, userID, inviteActivationRewardAmount)
+	_, err := s.referrals.ActivateReferral(ctx, userID, growthsvc.InviteActivationRewardAmount)
 	if err == nil || errors.Is(err, growthsvc.ErrReferralNotFound) {
 		return nil
 	}

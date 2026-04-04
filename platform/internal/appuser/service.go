@@ -48,6 +48,9 @@ type Overview struct {
 	HostedCreditBalance    int                 `json:"hosted_credit_balance"`
 	RewardRemaining        int                 `json:"reward_remaining"`
 	InviteCode             string              `json:"invite_code,omitempty"`
+	InviteLimit            int                 `json:"invite_limit"`
+	InviteRemaining        int                 `json:"invite_remaining"`
+	RewardPerInvite        int                 `json:"reward_per_invite"`
 	ReferralCount          int                 `json:"referral_count"`
 	ActivatedReferralCount int                 `json:"activated_referral_count"`
 	DiscordConnected       bool                `json:"discord_connected"`
@@ -59,6 +62,9 @@ type Overview struct {
 
 type GrowthSnapshot struct {
 	InviteCode        string                 `json:"invite_code,omitempty"`
+	InviteLimit       int                    `json:"invite_limit"`
+	InviteRemaining   int                    `json:"invite_remaining"`
+	RewardPerInvite   int                    `json:"reward_per_invite"`
 	RewardRemaining   int                    `json:"reward_remaining"`
 	RewardGrants      []RewardGrantView      `json:"reward_grants"`
 	Referrals         []ReferralView         `json:"referrals"`
@@ -190,6 +196,7 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 			activatedReferralCount++
 		}
 	}
+	inviteCount := len(referrals)
 	inviteCode := ""
 	if user != nil {
 		inviteCode = user.InviteCode
@@ -200,7 +207,10 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 		HostedCreditBalance:    hostedCreditBalance,
 		RewardRemaining:        rewardRemaining,
 		InviteCode:             inviteCode,
-		ReferralCount:          len(referrals),
+		InviteLimit:            growthsvc.MaxReferralsPerInviter,
+		InviteRemaining:        inviteRemaining(inviteCount),
+		RewardPerInvite:        growthsvc.InviteActivationRewardAmount,
+		ReferralCount:          inviteCount,
 		ActivatedReferralCount: activatedReferralCount,
 		DiscordConnected:       discordConnection != nil,
 		DiscordGuildMember:     discordConnection != nil && discordConnection.GuildMember,
@@ -286,8 +296,11 @@ func (s *Service) Growth(ctx context.Context, userID uint64) (*GrowthSnapshot, e
 	}
 
 	snapshot := &GrowthSnapshot{
-		RewardGrants: make([]RewardGrantView, 0, len(rewardGrants)),
-		Referrals:    make([]ReferralView, 0, len(referrals)),
+		InviteLimit:     growthsvc.MaxReferralsPerInviter,
+		InviteRemaining: inviteRemaining(len(referrals)),
+		RewardPerInvite: growthsvc.InviteActivationRewardAmount,
+		RewardGrants:    make([]RewardGrantView, 0, len(rewardGrants)),
+		Referrals:       make([]ReferralView, 0, len(referrals)),
 	}
 	if user != nil {
 		snapshot.InviteCode = user.InviteCode
@@ -385,6 +398,14 @@ func newDiscordConnectionView(connection *model.DiscordConnection) DiscordConnec
 	view.VerificationStatus = "verification_blocked"
 	view.VerificationBlockedReason = DiscordGuildVerificationBlockedReason
 	return view
+}
+
+func inviteRemaining(count int) int {
+	remaining := growthsvc.MaxReferralsPerInviter - count
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 func generateAPIKey(salt string) (plain string, prefix string, hash string, err error) {

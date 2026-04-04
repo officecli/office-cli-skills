@@ -14,6 +14,7 @@ import (
 var (
 	ErrInviteCodeRequired       = errors.New("invite code is required")
 	ErrInviterNotFound          = errors.New("inviter not found")
+	ErrInviteLimitReached       = errors.New("invite limit reached")
 	ErrSelfReferral             = errors.New("self referral is not allowed")
 	ErrReferralNotFound         = errors.New("referral not found")
 	ErrDiscordUserIDRequired    = errors.New("discord user id is required")
@@ -25,13 +26,23 @@ var (
 	ErrInvalidRewardAmount      = errors.New("reward amount must be positive")
 )
 
+const (
+	MaxReferralsPerInviter       = 5
+	InviteActivationRewardAmount = 2
+)
+
 type UserStore interface {
 	FindUserByInviteCode(ctx context.Context, inviteCode string) (*model.User, error)
 }
 
 type ReferralStore interface {
 	FindReferralByInvitedUserID(ctx context.Context, invitedUserID uint64) (*model.UserReferral, error)
+	CountReferralsByInviterUserID(ctx context.Context, inviterUserID uint64) (int64, error)
 	SaveReferral(ctx context.Context, referral *model.UserReferral) error
+}
+
+type referralStoreWithAtomicLimit interface {
+	RegisterReferralWithinLimit(ctx context.Context, inviterUserID, invitedUserID uint64, inviteCode string, registeredAt time.Time) (*model.UserReferral, error)
 }
 
 type DiscordStore interface {
@@ -91,6 +102,16 @@ func (s *Service) RegisterReferral(ctx context.Context, inviteCode string, invit
 	}
 	if inviter.ID == invitedUserID {
 		return nil, ErrSelfReferral
+	}
+	if atomicStore, ok := s.referrals.(referralStoreWithAtomicLimit); ok {
+		return atomicStore.RegisterReferralWithinLimit(ctx, inviter.ID, invitedUserID, inviteCode, s.now())
+	}
+	referralCount, err := s.referrals.CountReferralsByInviterUserID(ctx, inviter.ID)
+	if err != nil {
+		return nil, err
+	}
+	if referralCount >= MaxReferralsPerInviter {
+		return nil, ErrInviteLimitReached
 	}
 
 	referral := &model.UserReferral{

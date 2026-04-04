@@ -6,6 +6,9 @@ export interface AppOverview {
   hosted_credit_balance: number
   reward_remaining: number
   invite_code?: string
+  invite_limit: number
+  invite_remaining: number
+  reward_per_invite: number
   referral_count: number
   activated_referral_count: number
   discord_connected: boolean
@@ -16,6 +19,9 @@ export interface AppOverview {
 }
 export interface AppGrowth {
   invite_code?: string
+  invite_limit: number
+  invite_remaining: number
+  reward_per_invite: number
   reward_remaining: number
   reward_grants: RewardGrant[]
   referrals: Referral[]

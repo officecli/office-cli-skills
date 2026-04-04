@@ -3,12 +3,14 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -101,7 +103,7 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 		return nil, "", "", err
 	}
 	if inviteCode := strings.TrimSpace(payload["invite_code"]); inviteCode != "" && s.referrals != nil {
-		if _, err := s.referrals.RegisterReferral(ctx, inviteCode, user.ID); err != nil {
+		if _, err := s.referrals.RegisterReferral(ctx, inviteCode, user.ID); err != nil && !errors.Is(err, growthsvc.ErrInviteLimitReached) {
 			return nil, "", "", err
 		}
 	}

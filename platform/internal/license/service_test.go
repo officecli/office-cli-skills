@@ -200,6 +200,7 @@ func (f *fakeRewardManager) Consume(_ context.Context, userID uint64) (*rewardsv
 type fakeReferralActivator struct {
 	mu        sync.Mutex
 	activated []uint64
+	amounts   []int
 	err       error
 }
 
@@ -210,6 +211,7 @@ func (f *fakeReferralActivator) ActivateReferral(_ context.Context, invitedUserI
 		return nil, f.err
 	}
 	f.activated = append(f.activated, invitedUserID)
+	f.amounts = append(f.amounts, rewardAmount)
 	return &growthsvc.RewardGrantResult{Created: true}, nil
 }
 
@@ -410,6 +412,7 @@ func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
 	require.Equal(t, []uint64{123}, referrals.activated)
+	require.Equal(t, []int{growthsvc.InviteActivationRewardAmount}, referrals.amounts)
 }
 
 func TestConsumeIgnoresMissingReferral(t *testing.T) {

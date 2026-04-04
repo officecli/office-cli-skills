@@ -17,6 +17,12 @@ export default function OverviewPage() {
   const rewardGrants = growth?.reward_grants ?? []
   const referrals = growth?.referrals ?? []
   const discordConnection = growth?.discord_connection
+  const inviteCode = overview?.invite_code ?? growth?.invite_code
+  const inviteLimit = overview?.invite_limit ?? growth?.invite_limit ?? 5
+  const referralCount = overview?.referral_count ?? referrals.length
+  const activatedReferralCount = overview?.activated_referral_count ?? referrals.filter((referral) => referral.activated_at).length
+  const inviteRemaining = overview?.invite_remaining ?? growth?.invite_remaining ?? Math.max(inviteLimit - referrals.length, 0)
+  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 2
   const discordParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const discordResult = discordParams.get('discord')
   const discordMessage = discordParams.get('discord_message')
@@ -89,8 +95,8 @@ export default function OverviewPage() {
 
       <div className="grid gap-4 xl:grid-cols-4">
         <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
-        <MetricCard label="Reward Credits" value={formatNumber(overview?.reward_remaining)} detail={overview?.invite_code ? `Invite code: ${overview.invite_code}` : 'No invite code available yet'} />
-        <MetricCard label="Referral Progress" value={`${formatNumber(overview?.activated_referral_count)}/${formatNumber(overview?.referral_count)}`} detail="Activated referrals / total invited users" />
+        <MetricCard label="Reward Credits" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} credits per activated invite` : 'No invite code available yet'} />
+        <MetricCard label="Referral Progress" value={`${formatNumber(referralCount)}/${formatNumber(inviteLimit)}`} detail={`${formatNumber(activatedReferralCount)} activated · ${formatNumber(inviteRemaining)} slots left`} />
         <MetricCard label="Discord Status" value={growthStatusValue} detail={discordConnection?.verification_blocked_reason ?? 'Guild membership determines Discord reward eligibility'} />
       </div>
 
@@ -122,7 +128,7 @@ export default function OverviewPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <Panel>
-          <SectionHeading eyebrow="Rewards ledger" title="Reward grants and referral progress" body="This view now consumes the real `/api/app/growth` payload so operators and users see the same grant and referral records." />
+          <SectionHeading eyebrow="Rewards ledger" title="Reward grants and referral progress" body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} reward credits.`} />
           {rewardGrants.length ? (
             <div className="space-y-3">
               {rewardGrants.map((grant) => (
@@ -164,7 +170,7 @@ export default function OverviewPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState title="No referrals captured" body="Invite registrations appear here after a new user completes the Google login flow through your invite link." />
+              <EmptyState title="No referrals captured" body={`Invite registrations appear here after a new user completes the Google login flow through your invite link. Each account can capture up to ${formatNumber(inviteLimit)} invited users.`} />
             )}
           </div>
         </Panel>

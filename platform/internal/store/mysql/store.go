@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
@@ -16,6 +17,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -716,8 +718,75 @@ func (s *Store) FindReferralByInvitedUserID(ctx context.Context, invitedUserID u
 	return &referral, nil
 }
 
+func (s *Store) CountReferralsByInviterUserID(ctx context.Context, inviterUserID uint64) (int64, error) {
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&model.UserReferral{}).Where("inviter_user_id = ?", inviterUserID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (s *Store) SaveReferral(ctx context.Context, referral *model.UserReferral) error {
 	return s.db.WithContext(ctx).Save(referral).Error
+}
+
+func (s *Store) RegisterReferralWithinLimit(ctx context.Context, inviterUserID, invitedUserID uint64, inviteCode string, registeredAt time.Time) (*model.UserReferral, error) {
+	var referral *model.UserReferral
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var inviter model.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id").
+			Where("id = ?", inviterUserID).
+			First(&inviter).Error; err != nil {
+			return err
+		}
+
+		var existing model.UserReferral
+		if err := tx.Where("invited_user_id = ?", invitedUserID).First(&existing).Error; err == nil {
+			referral = &existing
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		var count int64
+		if err := tx.Model(&model.UserReferral{}).Where("inviter_user_id = ?", inviterUserID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count >= int64(growthsvc.MaxReferralsPerInviter) {
+			return growthsvc.ErrInviteLimitReached
+		}
+
+		record := &model.UserReferral{
+			InviterUserID: inviterUserID,
+			InvitedUserID: invitedUserID,
+			InviteCode:    inviteCode,
+			RegisteredAt:  registeredAt,
+		}
+		if err := tx.Create(record).Error; err != nil {
+			if isDuplicateConstraintError(err) {
+				if loadErr := tx.Where("invited_user_id = ?", invitedUserID).First(&existing).Error; loadErr == nil {
+					referral = &existing
+					return nil
+				}
+			}
+			return err
+		}
+
+		referral = record
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return referral, nil
+}
+
+func isDuplicateConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return IsDuplicateError(err) || errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (s *Store) FindDiscordConnectionByUserID(ctx context.Context, userID uint64) (*model.DiscordConnection, error) {

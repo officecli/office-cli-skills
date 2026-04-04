@@ -143,7 +143,7 @@
 | 编号 | 模块 | 场景 | 前置条件 | 步骤 | 预期结果 | 优先级 | 自动化状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-OVR-001 | overview | 概览页展示基础指标 | 已登录，后端有 overview 数据 | 打开 `/app` | 展示 API Keys、Remaining Credits、Recent Usage、Orders 等指标 | P0 | 已自动化（`App.test.tsx`、`platform/web/app/src/pages/OverviewPage.tsx`） |
-| APP-OVR-002 | overview | 概览页展示奖励/邀请/Discord 状态 | 后端返回 `reward_remaining`、`invite_code`、`referral_count`、`discord_*` | 打开 `/app` | 展示 Reward Credits、Referral Progress、Discord Status | P1 | 已自动化（`App.test.tsx`、`platform/internal/appuser/service_test.go`） |
+| APP-OVR-002 | overview | 概览页展示奖励/邀请/Discord 状态 | 后端返回 `reward_remaining`、`invite_code`、`invite_limit`、`invite_remaining`、`reward_per_invite`、`referral_count`、`discord_*` | 打开 `/app` | 展示 Reward Credits、Referral Progress、Discord Status，并显示邀请上限、剩余名额与单个邀请奖励 | P1 | 已自动化（`platform/web/app/src/App.test.tsx`、`platform/internal/appuser/service_test.go`） |
 | APP-OVR-003 | overview | 无 key / 无 usage 时展示空态 | 新账号或空数据 | 打开 `/app` | 展示空态文案，不报错、不白屏 | P1 | 建议自动化 |
 | APP-KEY-001 | api-keys | 列表展示 key 前缀、状态、配额字段 | 已登录且存在 API keys | 打开 `/app/api-keys` | 正确展示 `key_prefix/status/plan/quota_total/quota_used/quota_remaining` | P0 | 已自动化（`platform/web/app/src/pages/ApiKeysPage.test.tsx`） |
 | APP-KEY-002 | api-keys | 用户只能编辑 note 与启停状态 | 已登录且有可编辑 key | 在页面尝试编辑 key | 仅允许改 `note/status`；总额、已用、过期时间只读 | P0 | 建议自动化 / 人工 E2E |
@@ -162,8 +162,11 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | APP-GROW-001 | growth | 概览页展示 invite code 与奖励余额 | 用户存在奖励账本 / invite code | 打开 `/app` | `invite_code` 与 `reward_remaining` 展示正确 | P1 | 已自动化（`platform/internal/appuser/service_test.go`） |
 | APP-GROW-002 | growth | app growth 数据结构可返回 referrals / reward grants / discord connection | 后端准备对应数据 | 调用 `/api/app/growth` 或打开相关页面/模块 | 数据结构完整；无字段缺失导致的前端异常 | P1 | 已自动化（`platform/internal/appuser/service_test.go`） |
-| APP-GROW-003 | growth | Discord 未绑定时状态正确 | 用户无 Discord 连接 | 打开 `/app` | 显示 `NOT LINKED` 或等价文案 | P2 | 建议自动化 |
-| APP-GROW-004 | growth | Discord 已绑定但未入 guild 的状态正确 | `discord_connected=true`，`discord_guild_member=false` | 打开 `/app` | 显示 `CONNECTED` 而非 `VERIFIED` | P2 | 已自动化（`App.test.tsx` 的 overview 数据覆盖） |
+| APP-GROW-003 | growth | 邀请规则字段返回正确 | 用户存在 referral / invite 数据 | 调用 `/api/app/overview`、`/api/app/growth` 或打开 `/app` | 返回并展示 `invite_limit=5`、`invite_remaining`、`reward_per_invite=2`，与 referral 数量一致 | P1 | 已自动化（`platform/internal/appuser/service_test.go`、`platform/web/app/src/App.test.tsx`） |
+| APP-GROW-004 | growth | 超过邀请上限后不再记录新的 referral | inviter 已成功邀请 5 人 | 第 6 个新用户带 invite 完成登录回调 | 返回 `invite limit reached` 语义；不新增第 6 条 referral；原 5 条记录保持不变 | P0 | 已自动化（`platform/internal/growth/service_test.go`、`platform/internal/store/mysql/store_test.go`） |
+| APP-GROW-005 | growth | 达到邀请上限时不阻断新用户登录 | inviter 已成功邀请 5 人，登录 callback 仍携带 invite code | 新用户继续完成 Google OAuth callback | 登录成功，session 正常建立，但不创建新的 referral 关系 | P0 | 已自动化（`platform/internal/auth/service_test.go`） |
+| APP-GROW-006 | growth | Discord 未绑定时状态正确 | 用户无 Discord 连接 | 打开 `/app` | 显示 `NOT LINKED` 或等价文案 | P2 | 建议自动化 |
+| APP-GROW-007 | growth | Discord 已绑定但未入 guild 的状态正确 | `discord_connected=true`，`discord_guild_member=false` | 打开 `/app` | 显示 `CONNECTED` 而非 `VERIFIED` | P2 | 已自动化（`platform/web/app/src/App.test.tsx` 的 overview 数据覆盖） |
 | APP-QUOTA-001 | quota | 免费 / 付费 / 奖励额度在 app 展示一致 | 后端分别构造 free / paid / reward 数据 | 打开 overview、api keys、usage | 指标、列表、event 模式一致，不互相冲突 | P0 | 建议自动化 |
 | APP-QUOTA-002 | quota | 后台调高 key 配额后 app 同步展示 | admin 已把 key `quota_total` 提高 | 刷新 `/app/api-keys` 与 `/app` | `quota_total`、`remaining`、总剩余额度同步增加 | P0 | 人工 E2E（参考 `docs/usage-limits-e2e.md`） |
 | APP-QUOTA-003 | quota | 后台调高 free quota 后 app / CLI 状态同步 | admin 已调整某 fingerprint free limit | 先后查看 app 相关概览与 CLI `auth status` / `new` | 展示/校验逻辑与后台一致 | P1 | 人工 E2E |
@@ -341,4 +344,3 @@
   - `docs/usage-limits-test-cases.md`
   - `docs/usage-limits-e2e.md`
   - `docs/usage-limits-test-report.md`
-
