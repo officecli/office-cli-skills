@@ -193,7 +193,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -201,7 +201,7 @@ func normalizeFlagArgs(args []string) []string {
 				continue
 			}
 			i++
-		case "--json", "--publish", "--no-publish", "--no-images":
+		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual":
 			flags = append(flags, current)
 			i++
 		default:
@@ -213,9 +213,11 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--style=") ||
 				strings.HasPrefix(current, "--audience=") ||
 				strings.HasPrefix(current, "--out=") ||
+				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
-				strings.HasPrefix(current, "--no-images=") {
+				strings.HasPrefix(current, "--no-images=") ||
+				strings.HasPrefix(current, "--no-visual=") {
 				flags = append(flags, current)
 			} else {
 				positionals = append(positionals, current)

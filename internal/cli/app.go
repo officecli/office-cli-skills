@@ -15,6 +15,7 @@ import (
 	licenseprovider "github.com/officecli/officecli/internal/license"
 	llmprovider "github.com/officecli/officecli/internal/providers/llm"
 	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 )
 
 type App struct {
@@ -23,6 +24,7 @@ type App struct {
 	Stdin             io.Reader
 	newLLMClient      func(cfg LLMConfig) (GeneratorLLMClient, error)
 	newLicenseService func(cfg LicenseConfig) (LicenseManager, error)
+	newReviewer       func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error)
 }
 
 var Version = "dev"
@@ -36,12 +38,13 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 		Stdin:  stdin,
 		newLLMClient: func(cfg LLMConfig) (GeneratorLLMClient, error) {
 			return llmprovider.NewClient(llmprovider.Config{
-				Provider:   cfg.Provider,
-				BaseURL:    cfg.BaseURL,
-				APIKey:     cfg.APIKey,
-				Model:      cfg.Model,
-				ImageModel: cfg.ImageModel,
-				TimeoutSec: cfg.TimeoutSec,
+				Provider:    cfg.Provider,
+				BaseURL:     cfg.BaseURL,
+				APIKey:      cfg.APIKey,
+				Model:       cfg.Model,
+				ImageModel:  cfg.ImageModel,
+				ReviewModel: cfg.ReviewModel,
+				TimeoutSec:  cfg.TimeoutSec,
 			})
 		},
 		newLicenseService: func(cfg LicenseConfig) (LicenseManager, error) {
@@ -53,6 +56,13 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 				return nil, nil
 			}
 			return svc, nil
+		},
+		newReviewer: func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
+			return reviewprovider.NewService(
+				reviewprovider.NewSofficeConverter(),
+				reviewprovider.NewOpenAIReviewer(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.ReviewModel, cfg.LLM.TimeoutSec),
+				reviewProgressReporter{emitter: progress},
+			), nil
 		},
 	}
 }
@@ -75,6 +85,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			help = AuthHelpText()
 		case "new":
 			help = NewHelpText()
+		case "review":
+			help = ReviewHelpText()
 		case "agent-bridge":
 			help = AgentBridgeHelpText()
 		default:
@@ -94,6 +106,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.runAuth(ctx, cfg, args[1:])
 	case "new":
 		return a.runNew(ctx, cfg, args[1:])
+	case "review":
+		return a.runReview(ctx, cfg, args[1:])
 	case "agent-bridge":
 		return a.runAgentBridge(ctx, cfg, args[1:])
 	default:
@@ -153,11 +167,12 @@ func defaultInitConfig() Config {
 			Mode: RuntimeModeExternal,
 		},
 		LLM: LLMConfig{
-			Provider:   "openai",
-			BaseURL:    "https://api.openai.com/v1",
-			ImageModel: "gpt-image-1",
-			Model:      "gpt-4.1",
-			TimeoutSec: 60,
+			Provider:    "openai",
+			BaseURL:     "https://api.openai.com/v1",
+			ImageModel:  "gpt-image-1",
+			Model:       "gpt-4.1",
+			ReviewModel: "gpt-5.4-mini",
+			TimeoutSec:  60,
 		},
 		License: LicenseConfig{
 			BaseURL:    "https://platform.officecli.io",
@@ -200,6 +215,7 @@ func HelpText() string {
   config                  查看或更新本地配置
   auth                    查看或设置授权信息
   new                     生成新的 PPTX / DOCX / XLSX 文件
+  review                  评估本地 PPTX 文件质量
   agent-bridge            通过 JSON-RPC over stdio 提供 agent 接口
 
 用法：
@@ -207,6 +223,7 @@ func HelpText() string {
   officecli config status
   officecli auth status
   officecli auth set-key <api-key>
+  officecli review pptx ./deck.pptx
 
 常用选项：
   --prompt <text>         直接提供完整提示词
@@ -244,7 +261,9 @@ func HelpText() string {
   officecli auth --help
   officecli auth set-key <your-api-key>
   officecli new pptx "企业协作平台介绍" "介绍这款企业协作平台的产品能力、客户价值与应用场景"
+  officecli review pptx ./output/企业协作平台介绍.pptx
   officecli new --help
+  officecli review --help
   officecli new docx "季度复盘" --prompt-file ./examples/prompt.txt
   officecli new xlsx "销售分析表" --json
   officecli --version
@@ -290,6 +309,17 @@ func NewHelpText() string {
   --no-publish            禁止发布在线预览
   --no-images             关闭 PPT 自动配图
   --json                  输出 JSON 结果
+`
+}
+
+func ReviewHelpText() string {
+	return `用法：
+  officecli review pptx <file>
+
+常用选项：
+  --json                  输出 JSON 结果
+  --no-visual             只执行结构检查，不调用视觉评审
+  --fail-below <0-100>    当总分低于阈值时返回非零退出码
 `
 }
 
@@ -342,6 +372,9 @@ func (a *App) runConfigStatus(cfg Config) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "默认生成模式：%s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "视觉评审模型：%s\n", fallbackString(cfg.LLM.ReviewModel, "gpt-5.4-mini")); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "生成后默认发布：%t\n", cfg.Defaults.Publish); err != nil {
@@ -559,6 +592,9 @@ func mergeInitBaseConfig(defaults Config, base Config) Config {
 	}
 	if strings.TrimSpace(base.LLM.ImageModel) != "" {
 		cfg.LLM.ImageModel = base.LLM.ImageModel
+	}
+	if strings.TrimSpace(base.LLM.ReviewModel) != "" {
+		cfg.LLM.ReviewModel = base.LLM.ReviewModel
 	}
 	if base.LLM.TimeoutSec > 0 {
 		cfg.LLM.TimeoutSec = base.LLM.TimeoutSec

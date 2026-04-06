@@ -7,6 +7,7 @@ import (
 	"github.com/officecli/officecli/engine"
 	licenseprovider "github.com/officecli/officecli/internal/license"
 	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 	"github.com/officecli/officecli/internal/runtime"
 )
 
@@ -44,12 +45,13 @@ func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
 }
 
 type LLMConfig struct {
-	Provider   string `json:"provider"`
-	BaseURL    string `json:"base_url"`
-	APIKey     string `json:"api_key"`
-	Model      string `json:"model"`
-	ImageModel string `json:"image_model"`
-	TimeoutSec int    `json:"timeout_sec"`
+	Provider    string `json:"provider"`
+	BaseURL     string `json:"base_url"`
+	APIKey      string `json:"api_key"`
+	Model       string `json:"model"`
+	ImageModel  string `json:"image_model"`
+	ReviewModel string `json:"review_model,omitempty"`
+	TimeoutSec  int    `json:"timeout_sec"`
 }
 
 type InputSources struct {
@@ -99,8 +101,19 @@ type GenerateResult struct {
 	PublishedSkippedReason string   `json:"published_skipped_reason,omitempty"`
 }
 
+type ReviewJob struct {
+	DocumentType string
+	FilePath     string
+	EnableVisual bool
+	FailBelow    int
+	JSONOutput   bool
+}
+
 type GenerateParams = runtime.GenerateParams
 type GeneratedArtifact = runtime.GeneratedArtifact
+type ReviewRequest = reviewprovider.Request
+type ReviewResult = reviewprovider.Result
+type ReviewIssue = reviewprovider.Issue
 type LicenseConfig = licenseprovider.Config
 type LicenseCheckRequest = licenseprovider.CheckRequest
 type LicenseCheckResult = licenseprovider.CheckResult
@@ -124,6 +137,10 @@ type Generator interface {
 }
 
 type GeneratorLLMClient = engine.LLMClient
+
+type Reviewer interface {
+	Review(ctx context.Context, req ReviewRequest) (*ReviewResult, error)
+}
 
 type LicenseManager interface {
 	Check(ctx context.Context, req LicenseCheckRequest) (*LicenseCheckResult, error)

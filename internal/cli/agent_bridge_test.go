@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -400,4 +401,90 @@ func readRPC(t *testing.T, r io.Reader) map[string]any {
 		t.Fatalf("unmarshal body: %v body=%s", err, string(body))
 	}
 	return msg
+}
+
+func TestAgentBridgeReviewTask(t *testing.T) {
+	tmpDir := t.TempDir()
+	deckPath := filepath.Join(tmpDir, "deck.pptx")
+	if err := os.WriteFile(deckPath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	app := NewApp(outW, bytes.NewBuffer(nil), inR)
+	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
+		return &stubReviewer{result: &ReviewResult{
+			Status:         "good",
+			DocumentType:   "pptx",
+			FilePath:       deckPath,
+			OverallScore:   78,
+			VisualScore:    80,
+			StructureScore: 72,
+			Summary:        "整体可用，但还有优化空间。",
+			UsedVisual:     true,
+		}}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- newAgentBridgeServer(app, Config{}, inR, outW, bytes.NewBuffer(nil)).Serve(ctx)
+	}()
+
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "task/invoke", "params": map[string]any{
+		"tool":          "office.review",
+		"interactive":   false,
+		"output_format": "json",
+		"args": map[string]any{
+			"document_type": "pptx",
+			"file_path":     deckPath,
+			"enable_visual": true,
+			"fail_below":    70,
+		},
+	}})
+
+	var taskID string
+	var sawCompleted bool
+	timeout := time.After(3 * time.Second)
+	for !sawCompleted {
+		select {
+		case <-timeout:
+			t.Fatal("timed out waiting for review events")
+		default:
+		}
+		msg := readRPC(t, outR)
+		if result, ok := msg["result"].(map[string]any); ok {
+			if id, ok := result["task_id"].(string); ok {
+				taskID = id
+			}
+			continue
+		}
+		if msg["method"] != "event" {
+			continue
+		}
+		params := msg["params"].(map[string]any)
+		if params["type"] == bridgeEventTaskCompleted {
+			sawCompleted = true
+		}
+	}
+	if taskID == "" {
+		t.Fatal("expected task id")
+	}
+
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "task/status", "params": map[string]any{"task_id": taskID}})
+	statusMsg := readRPC(t, outR)
+	status := statusMsg["result"].(map[string]any)
+	if status["tool"] != "office.review" || status["status"] != "completed" {
+		t.Fatalf("unexpected task status: %#v", status)
+	}
+	result := status["result"].(map[string]any)
+	if result["overall_score"].(float64) != 78 {
+		t.Fatalf("unexpected review result: %#v", result)
+	}
+
+	_ = inW.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("bridge exited with error: %v", err)
+	}
 }

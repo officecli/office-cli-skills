@@ -134,6 +134,20 @@ make run-help
 ./officecli new pptx "企业协作平台介绍" --prompt-file ./examples/prompt.txt --json
 ```
 
+### 评估一份本地 PPT 的质量
+
+```bash
+./officecli review pptx ./output/企业协作平台介绍.pptx
+```
+
+默认会先做结构检查；如果本机安装了 LibreOffice（`soffice`），还会自动补充一轮基于 PDF 的视觉评审。
+
+如需只跑结构规则、不触发视觉评审：
+
+```bash
+./officecli review pptx ./output/企业协作平台介绍.pptx --no-visual
+```
+
 ### 启动面向 agent 的 JSON-RPC bridge
 
 ```bash
@@ -202,6 +216,14 @@ bridge 会先返回 `task_id`，然后通过 `event` notification 持续推送�
 - `task.completed`
 - `task.failed`
 - `task.cancelled`
+
+如果要评估本地 PPT 质量，可调用 `office.review`，最小请求示例：
+
+```text
+Content-Length: 210
+
+{"jsonrpc":"2.0","id":5,"method":"task/invoke","params":{"tool":"office.review","interactive":false,"output_format":"json","args":{"document_type":"pptx","file_path":"./output/demo.pptx","enable_visual":true}}}
+```
 
 其中 `task.progress` 的 `payload` 当前会包含这些兼容字段：
 

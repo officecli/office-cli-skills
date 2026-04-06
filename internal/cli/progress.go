@@ -13,17 +13,20 @@ import (
 )
 
 const (
-	progressStepInit        = "init"
-	progressStepLicense     = "license"
-	progressStepPlanPrepare = "plan_prepare"
-	progressStepQuestion    = "question"
-	progressStepPlanConfirm = "plan_confirm"
-	progressStepGenerate    = "generate"
-	progressStepGenerateLLM = "generate_llm"
-	progressStepAssemble    = "assemble"
-	progressStepWriteFile   = "write_file"
-	progressStepPublish     = "publish"
-	progressStepFinalize    = "finalize"
+	progressStepInit         = "init"
+	progressStepLicense      = "license"
+	progressStepPlanPrepare  = "plan_prepare"
+	progressStepQuestion     = "question"
+	progressStepPlanConfirm  = "plan_confirm"
+	progressStepGenerate     = "generate"
+	progressStepGenerateLLM  = "generate_llm"
+	progressStepAssemble     = "assemble"
+	progressStepWriteFile    = "write_file"
+	progressStepPublish      = "publish"
+	progressStepReviewLint   = "review_lint"
+	progressStepReviewPDF    = "review_pdf"
+	progressStepReviewVisual = "review_visual"
+	progressStepFinalize     = "finalize"
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -197,6 +200,12 @@ func defaultProgressMessage(event engine.ProgressEvent) string {
 		return "正在写入本地文件"
 	case progressStepPublish:
 		return "正在发布在线预览"
+	case progressStepReviewLint:
+		return "正在执行 PPT 结构检查"
+	case progressStepReviewPDF:
+		return "正在将 PPT 转为 PDF"
+	case progressStepReviewVisual:
+		return "正在执行视觉质量评审"
 	case progressStepFinalize:
 		return "文档已生成"
 	default:

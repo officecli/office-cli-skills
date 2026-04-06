@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -15,12 +16,13 @@ import (
 )
 
 type Config struct {
-	Provider   string `json:"provider"`
-	BaseURL    string `json:"base_url"`
-	APIKey     string `json:"api_key"`
-	Model      string `json:"model"`
-	ImageModel string `json:"image_model"`
-	TimeoutSec int    `json:"timeout_sec"`
+	Provider    string `json:"provider"`
+	BaseURL     string `json:"base_url"`
+	APIKey      string `json:"api_key"`
+	Model       string `json:"model"`
+	ImageModel  string `json:"image_model"`
+	ReviewModel string `json:"review_model,omitempty"`
+	TimeoutSec  int    `json:"timeout_sec"`
 }
 
 type Provider interface {
@@ -187,7 +189,10 @@ func pickImageSize(aspectRatio float64) string {
 func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]any) (string, error) {
 	body, err := c.post(ctx, c.baseURL+"/chat/completions", payload)
 	if err != nil {
-		return "", err
+		if !requiresStreamingFallback(err) {
+			return "", err
+		}
+		return c.chatCompletionStream(ctx, payload)
 	}
 	var resp struct {
 		Choices []struct {
@@ -205,14 +210,120 @@ func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]an
 	return resp.Choices[0].Message.Content, nil
 }
 
+func requiresStreamingFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "Stream must be set to true")
+}
+
+func (c *openAIClient) chatCompletionStream(ctx context.Context, payload map[string]any) (string, error) {
+	streamPayload := make(map[string]any, len(payload)+1)
+	for key, value := range payload {
+		streamPayload[key] = value
+	}
+	streamPayload["stream"] = true
+
+	resp, err := c.postStream(ctx, c.baseURL+"/chat/completions", streamPayload)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Close()
+
+	reader := bufio.NewReader(resp)
+	var content strings.Builder
+	var eventData []string
+
+	flushEvent := func() error {
+		if len(eventData) == 0 {
+			return nil
+		}
+		payload := strings.Join(eventData, "\n")
+		eventData = eventData[:0]
+		if strings.TrimSpace(payload) == "" {
+			return nil
+		}
+		if strings.TrimSpace(payload) == "[DONE]" {
+			return io.EOF
+		}
+
+		var chunk struct {
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error,omitempty"`
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			return fmt.Errorf("decode streaming chat response: %w", err)
+		}
+		if chunk.Error != nil {
+			return fmt.Errorf("streaming chat response failed: %s", strings.TrimSpace(chunk.Error.Message))
+		}
+		for _, choice := range chunk.Choices {
+			content.WriteString(choice.Delta.Content)
+		}
+		return nil
+	}
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", err
+		}
+		trimmed := strings.TrimRight(line, "\r\n")
+		if trimmed == "" {
+			if flushErr := flushEvent(); flushErr != nil {
+				if flushErr == io.EOF {
+					break
+				}
+				return "", flushErr
+			}
+		} else if strings.HasPrefix(trimmed, "data:") {
+			eventData = append(eventData, strings.TrimSpace(strings.TrimPrefix(trimmed, "data:")))
+		}
+		if err == io.EOF {
+			if flushErr := flushEvent(); flushErr != nil && flushErr != io.EOF {
+				return "", flushErr
+			}
+			break
+		}
+	}
+
+	if content.Len() == 0 {
+		return "", fmt.Errorf("chat response is empty")
+	}
+	return content.String(), nil
+}
+
 func (c *openAIClient) post(ctx context.Context, url string, payload map[string]any) ([]byte, error) {
-	raw, err := json.Marshal(payload)
+	body, closeBody, err := c.doPost(ctx, url, payload)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	defer closeBody()
+	return io.ReadAll(body)
+}
+
+func (c *openAIClient) postStream(ctx context.Context, url string, payload map[string]any) (io.ReadCloser, error) {
+	body, _, err := c.doPost(ctx, url, payload)
 	if err != nil {
 		return nil, err
+	}
+	return body, nil
+}
+
+func (c *openAIClient) doPost(ctx context.Context, url string, payload map[string]any) (io.ReadCloser, func(), error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.apiKey != "" {
@@ -220,17 +331,23 @@ func (c *openAIClient) post(ctx context.Context, url string, payload map[string]
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer resp.Body.Close()
+	closeBody := func() {
+		_ = resp.Body.Close()
+	}
+	if resp.StatusCode < 300 {
+		return resp.Body, closeBody, nil
+	}
 	body, err := io.ReadAll(resp.Body)
+	closeBody()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, nil, fmt.Errorf("llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return body, nil
+	return io.NopCloser(bytes.NewReader(body)), func() {}, nil
 }
 
 type internalClient struct {

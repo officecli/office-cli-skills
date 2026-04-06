@@ -18,6 +18,7 @@ import (
 
 const (
 	bridgeToolOfficeGenerate = "office.generate"
+	bridgeToolOfficeReview   = "office.review"
 
 	bridgeEventTaskStarted   = "task.started"
 	bridgeEventTaskProgress  = "task.progress"
@@ -64,7 +65,7 @@ type bridgeTask struct {
 	Cancel      context.CancelFunc
 	CurrentQ    *bridgeQuestionState
 	LastError   string
-	Result      *GenerateResult
+	Result      any
 	Interactive bool
 	Prompt      *bridgePrompter
 }
@@ -113,6 +114,7 @@ type bridgeInvokeArgs struct {
 	DocumentType string `json:"document_type"`
 	Topic        string `json:"topic"`
 	Prompt       string `json:"prompt,omitempty"`
+	FilePath     string `json:"file_path,omitempty"`
 	Mode         string `json:"mode,omitempty"`
 	RuntimeMode  string `json:"runtime_mode,omitempty"`
 	Language     string `json:"lang,omitempty"`
@@ -121,6 +123,8 @@ type bridgeInvokeArgs struct {
 	OutputDir    string `json:"out,omitempty"`
 	Publish      *bool  `json:"publish,omitempty"`
 	EnableImages *bool  `json:"enable_images,omitempty"`
+	EnableVisual *bool  `json:"enable_visual,omitempty"`
+	FailBelow    *int   `json:"fail_below,omitempty"`
 }
 
 type bridgeRespondParams struct {
@@ -161,7 +165,7 @@ type bridgeTaskStatusResult struct {
 	UpdatedAt       string               `json:"updated_at"`
 	CurrentQuestion *bridgeQuestionState `json:"current_question,omitempty"`
 	LastError       string               `json:"last_error,omitempty"`
-	Result          *GenerateResult      `json:"result,omitempty"`
+	Result          any                  `json:"result,omitempty"`
 }
 
 type bridgeEventEnvelope struct {
@@ -379,6 +383,15 @@ func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
 					"runtime_mode":  "external|hosted",
 				},
 			},
+			{
+				"name": "office.review",
+				"input_schema": map[string]any{
+					"document_type": "pptx",
+					"file_path":     "string",
+					"enable_visual": "boolean",
+					"fail_below":    "0-100",
+				},
+			},
 		},
 	}
 }
@@ -426,7 +439,7 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		ID:          s.nextID("task"),
 		SessionID:   sessionID,
 		RequestID:   normalizeRPCID(rpcID),
-		Tool:        params.Tool,
+		Tool:        defaultIfEmpty(strings.TrimSpace(params.Tool), bridgeToolOfficeGenerate),
 		Status:      "running",
 		OutputFmt:   outputFormat,
 		CreatedAt:   time.Now().UTC(),
@@ -436,40 +449,62 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 	s.tasks[task.ID] = task
 	s.mu.Unlock()
 
-	job, err := s.app.buildGenerateJobFromRequest(s.cfg, params)
-	if err != nil {
+	runCtx, cancel := context.WithCancel(ctx)
+	task.Cancel = cancel
+	switch defaultIfEmpty(strings.TrimSpace(params.Tool), bridgeToolOfficeGenerate) {
+	case bridgeToolOfficeGenerate:
+		job, err := s.app.buildGenerateJobFromRequest(s.cfg, params)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.tasks, task.ID)
+			s.mu.Unlock()
+			return nil, err
+		}
+		prompter := (*bridgePrompter)(nil)
+		if params.Interactive && job.Mode == "best" {
+			prompter = &bridgePrompter{
+				ctx:    runCtx,
+				server: s,
+				task:   task,
+				answer: make(chan bridgePromptResponse, 1),
+			}
+			task.Prompt = prompter
+		}
+		s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
+			"tool":          task.Tool,
+			"document_type": job.DocumentType,
+			"mode":          job.Mode,
+			"runtime_mode":  job.RuntimeMode,
+			"interactive":   params.Interactive,
+		})
+		go s.runGenerateTask(runCtx, task, job, prompter)
+		return task, nil
+	case bridgeToolOfficeReview:
+		job, err := s.app.buildReviewJobFromRequest(params)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.tasks, task.ID)
+			s.mu.Unlock()
+			return nil, err
+		}
+		s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
+			"tool":          task.Tool,
+			"document_type": job.DocumentType,
+			"file_path":     job.FilePath,
+			"enable_visual": job.EnableVisual,
+			"fail_below":    job.FailBelow,
+		})
+		go s.runReviewTask(runCtx, task, job)
+		return task, nil
+	default:
 		s.mu.Lock()
 		delete(s.tasks, task.ID)
 		s.mu.Unlock()
-		return nil, err
+		return nil, fmt.Errorf("unsupported tool: %s", params.Tool)
 	}
-
-	runCtx, cancel := context.WithCancel(ctx)
-	task.Cancel = cancel
-	prompter := (*bridgePrompter)(nil)
-	if params.Interactive && job.Mode == "best" {
-		prompter = &bridgePrompter{
-			ctx:    runCtx,
-			server: s,
-			task:   task,
-			answer: make(chan bridgePromptResponse, 1),
-		}
-		task.Prompt = prompter
-	}
-
-	s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
-		"tool":          task.Tool,
-		"document_type": job.DocumentType,
-		"mode":          job.Mode,
-		"runtime_mode":  job.RuntimeMode,
-		"interactive":   params.Interactive,
-	})
-
-	go s.runTask(runCtx, task, job, prompter)
-	return task, nil
 }
 
-func (s *agentBridgeServer) runTask(ctx context.Context, task *bridgeTask, job GenerateJob, prompter *bridgePrompter) {
+func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTask, job GenerateJob, prompter *bridgePrompter) {
 	progress := &bridgeProgressEmitter{server: s, task: task}
 	var protocolPrompter Prompter
 	if prompter != nil {
@@ -501,7 +536,7 @@ func (s *agentBridgeServer) runTask(ctx context.Context, task *bridgeTask, job G
 	s.updateTask(task.ID, func(t *bridgeTask) {
 		t.Status = "completed"
 		t.UpdatedAt = time.Now().UTC()
-		t.Result = &result
+		t.Result = result
 		t.CurrentQ = nil
 	})
 	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
@@ -511,6 +546,46 @@ func (s *agentBridgeServer) runTask(ctx context.Context, task *bridgeTask, job G
 		"document_name": result.DocumentName,
 		"file_path":     result.FilePath,
 		"warnings":      append([]string(nil), result.Warnings...),
+	})
+}
+
+func (s *agentBridgeServer) runReviewTask(ctx context.Context, task *bridgeTask, job ReviewJob) {
+	progress := &bridgeProgressEmitter{server: s, task: task}
+	result, err := s.app.executeReviewJob(ctx, s.cfg, job, progress)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			s.updateTask(task.ID, func(t *bridgeTask) {
+				t.Status = "cancelled"
+				t.UpdatedAt = time.Now().UTC()
+				t.LastError = context.Canceled.Error()
+			})
+			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
+			return
+		}
+		payload := classifyBridgeError(err)
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, payload)
+		return
+	}
+
+	s.updateTask(task.ID, func(t *bridgeTask) {
+		t.Status = "completed"
+		t.UpdatedAt = time.Now().UTC()
+		t.Result = result
+	})
+	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, *result))
+	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
+		"status":          result.Status,
+		"document_type":   result.DocumentType,
+		"overall_score":   result.OverallScore,
+		"visual_score":    result.VisualScore,
+		"structure_score": result.StructureScore,
+		"used_visual":     result.UsedVisual,
+		"warnings":        append([]string(nil), result.Warnings...),
 	})
 }
 
@@ -583,28 +658,40 @@ func (s *agentBridgeServer) cancelTask(taskID string) error {
 	return nil
 }
 
-func (s *agentBridgeServer) outputPayload(outputFormat string, result GenerateResult) map[string]any {
-	payload := map[string]any{
-		"format":        outputFormat,
-		"status":        result.Status,
-		"file_path":     result.FilePath,
-		"document_type": result.DocumentType,
-		"document_name": result.DocumentName,
-		"warnings":      append([]string(nil), result.Warnings...),
-		"result":        result,
-	}
-	switch outputFormat {
-	case "file":
-		return payload
-	case "bundle":
-		payload["artifact"] = map[string]any{
-			"file_path":     result.FilePath,
-			"document_name": result.DocumentName,
-			"document_type": result.DocumentType,
+func (s *agentBridgeServer) outputPayload(outputFormat string, result any) map[string]any {
+	switch typed := result.(type) {
+	case GenerateResult:
+		payload := map[string]any{
+			"format":        outputFormat,
+			"status":        typed.Status,
+			"file_path":     typed.FilePath,
+			"document_type": typed.DocumentType,
+			"document_name": typed.DocumentName,
+			"warnings":      append([]string(nil), typed.Warnings...),
+			"result":        typed,
+		}
+		if outputFormat == "bundle" {
+			payload["artifact"] = map[string]any{
+				"file_path":     typed.FilePath,
+				"document_name": typed.DocumentName,
+				"document_type": typed.DocumentType,
+			}
 		}
 		return payload
+	case ReviewResult:
+		return map[string]any{
+			"format":          outputFormat,
+			"status":          typed.Status,
+			"file_path":       typed.FilePath,
+			"document_type":   typed.DocumentType,
+			"overall_score":   typed.OverallScore,
+			"visual_score":    typed.VisualScore,
+			"structure_score": typed.StructureScore,
+			"warnings":        append([]string(nil), typed.Warnings...),
+			"result":          typed,
+		}
 	default:
-		return payload
+		return map[string]any{"format": outputFormat, "result": typed}
 	}
 }
 
@@ -725,12 +812,15 @@ func classifyBridgeError(err error) bridgeErrorPayload {
 	case strings.Contains(message, "api-key 校验失败"), strings.Contains(message, "授权校验失败"), strings.Contains(message, "license"):
 		payload.Type = "auth_error"
 		payload.Code = "license_check_failed"
-	case strings.Contains(message, "topic is required"), strings.Contains(message, "unsupported"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"):
+	case strings.Contains(message, "topic is required"), strings.Contains(message, "file_path is required"), strings.Contains(message, "file is required"), strings.Contains(message, "unsupported"), strings.Contains(message, "暂不支持 review"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"), strings.Contains(message, "invalid fail_below"):
 		payload.Type = "validation_error"
 		payload.Code = "invalid_request"
 	case strings.Contains(message, "文档组装阶段失败"), strings.Contains(message, "parse llm response"), strings.Contains(message, "slides cannot be empty"):
 		payload.Type = "assembly_error"
 		payload.Code = "document_assembly_failed"
+	case strings.Contains(message, "读取本地 PPT 失败"):
+		payload.Type = "io_error"
+		payload.Code = "file_read_failed"
 	case strings.Contains(message, "生成内容阶段失败"), strings.Contains(message, "llm request failed"), strings.Contains(message, "internal llm request failed"):
 		payload.Type = "llm_error"
 		payload.Code = "llm_request_failed"
