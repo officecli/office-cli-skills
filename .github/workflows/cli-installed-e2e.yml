@@ -54,6 +54,8 @@ jobs:
       INSTALL_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || 'current_build' }}
       LICENSE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.license_mode || vars.CLI_INSTALLED_E2E_LICENSE_MODE || 'free' }}
       FINGERPRINT_SEED: ${{ vars.CLI_INSTALLED_E2E_FINGERPRINT_SEED || 'officecli-cli-installed-e2e' }}
+      EVAL_RETRY_MAX_ATTEMPTS: ${{ vars.CLI_INSTALLED_E2E_RETRY_MAX_ATTEMPTS || '3' }}
+      EVAL_RETRY_SLEEP_SECONDS: ${{ vars.CLI_INSTALLED_E2E_RETRY_SLEEP_SECONDS || '20' }}
       VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || vars.CLI_INSTALLED_E2E_DEFAULT_VERSION || 'latest' }}
       SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || vars.CLI_INSTALLED_E2E_DEFAULT_SUITE || 'smoke' }}
       REPORT_ROOT: ${{ github.workspace }}/.tmp/cli-installed-e2e
@@ -138,22 +140,43 @@ jobs:
           OFFICE_CLI_MACHINE_ID: ${{ steps.meta.outputs.machine_id }}
         run: |
           set +e
-          python3 ./scripts/eval_ppt_quality.py \
-            --root . \
-            --bin "officecli" \
-            --suite "${SUITE}" \
-            --publish \
-            --date "${{ steps.meta.outputs.run_date }}" \
-            --round "${{ steps.meta.outputs.round_name }}" \
-            --version-label "${{ steps.install.outputs.installed_version }}"
-          exit_code=$?
           report_dir="${{ steps.meta.outputs.report_dir }}"
+          max_attempts="${EVAL_RETRY_MAX_ATTEMPTS}"
+          sleep_seconds="${EVAL_RETRY_SLEEP_SECONDS}"
+          attempt=1
+          exit_code=1
+          retry_reason=""
+          while [ "${attempt}" -le "${max_attempts}" ]; do
+            rm -f "${report_dir}/blocked.json" "${report_dir}/summary.json" "${report_dir}/summary.md"
+            python3 ./scripts/eval_ppt_quality.py \
+              --root . \
+              --bin "officecli" \
+              --suite "${SUITE}" \
+              --publish \
+              --date "${{ steps.meta.outputs.run_date }}" \
+              --round "${{ steps.meta.outputs.round_name }}" \
+              --version-label "${{ steps.install.outputs.installed_version }}"
+            exit_code=$?
+            if [ "${exit_code}" = "0" ]; then
+              break
+            fi
+            retry_reason="$(REPORT_DIR="${report_dir}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}; details = (payload.get("details") or "").strip(); lower = details.lower(); retryable = "yes" if ("status=502" in lower or "502 bad gateway" in lower or "gateway timeout" in lower or "upstream prematurely closed connection" in lower) else "no"; print(retryable + "|" + details.replace("\n", " "))')"
+            retryable="${retry_reason%%|*}"
+            retry_detail="${retry_reason#*|}"
+            if [ "${retryable}" != "yes" ] || [ "${attempt}" -ge "${max_attempts}" ]; then
+              break
+            fi
+            echo "retryable platform error on attempt ${attempt}/${max_attempts}: ${retry_detail}"
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+          done
           if [ -z "${report_dir}" ]; then
             echo "report dir not found" >&2
             exit 1
           fi
           echo "report_dir=${report_dir}" >> "$GITHUB_OUTPUT"
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          echo "attempts=${attempt}" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Ensure fallback evaluation artifact
