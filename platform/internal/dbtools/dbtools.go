@@ -32,6 +32,18 @@ var copyTables = []string{
 	"admin_audit_logs",
 }
 
+var boolColumnsByTable = map[string]map[string]struct{}{
+	"api_keys": {
+		"hosted_enabled": {},
+	},
+	"usage_events": {
+		"charged": {},
+	},
+	"discord_connections": {
+		"guild_member": {},
+	},
+}
+
 func CopyMySQLToPostgres(ctx context.Context, mysqlDSN, postgresDSN string) ([]TableSummary, error) {
 	source, err := gorm.Open(mysql.Open(mysqlDSN), &gorm.Config{})
 	if err != nil {
@@ -92,6 +104,7 @@ func copyTable(ctx context.Context, source, target *gorm.DB, table string) (Tabl
 	if err := source.WithContext(ctx).Table(table).Order("id ASC").Find(&rows).Error; err != nil {
 		return summary, fmt.Errorf("read mysql %s: %w", table, err)
 	}
+	normalizeRows(table, rows)
 	if len(rows) > 0 {
 		if err := target.WithContext(ctx).Table(table).CreateInBatches(rows, 200).Error; err != nil {
 			return summary, fmt.Errorf("write postgres %s: %w", table, err)
@@ -157,4 +170,58 @@ func resetSequence(ctx context.Context, target *gorm.DB, table string) error {
 		return fmt.Errorf("reset sequence for %s: %w", table, err)
 	}
 	return nil
+}
+
+func normalizeRows(table string, rows []map[string]any) {
+	boolColumns := boolColumnsByTable[table]
+	for _, row := range rows {
+		for key, value := range row {
+			if value == nil {
+				continue
+			}
+			if _, ok := boolColumns[key]; ok {
+				row[key] = normalizeBool(value)
+				continue
+			}
+			switch typed := value.(type) {
+			case []byte:
+				row[key] = string(typed)
+			}
+		}
+	}
+}
+
+func normalizeBool(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case int:
+		return typed != 0
+	case int8:
+		return typed != 0
+	case int16:
+		return typed != 0
+	case int32:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case uint:
+		return typed != 0
+	case uint8:
+		return typed != 0
+	case uint16:
+		return typed != 0
+	case uint32:
+		return typed != 0
+	case uint64:
+		return typed != 0
+	case []byte:
+		text := strings.TrimSpace(string(typed))
+		return text == "1" || strings.EqualFold(text, "true")
+	case string:
+		text := strings.TrimSpace(typed)
+		return text == "1" || strings.EqualFold(text, "true")
+	default:
+		return false
+	}
 }
