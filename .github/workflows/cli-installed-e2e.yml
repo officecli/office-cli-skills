@@ -63,6 +63,7 @@ jobs:
       OFFICE_CLI_LLM_API_KEY: ${{ secrets.OFFICE_CLI_LLM_API_KEY }}
       OFFICE_CLI_LLM_MODEL: ${{ vars.OFFICE_CLI_LLM_MODEL || 'gpt-4.1' }}
       OFFICE_CLI_LLM_REVIEW_MODEL: ${{ vars.OFFICE_CLI_LLM_REVIEW_MODEL || 'gpt-5.4-mini' }}
+      OFFICE_CLI_LLM_TIMEOUT_SEC: ${{ vars.CLI_INSTALLED_E2E_LLM_TIMEOUT_SEC || '180' }}
       OFFICE_CLI_LICENSE_BASE_URL: ${{ vars.OFFICE_CLI_LICENSE_BASE_URL || 'https://platform.officecli.io' }}
       OFFICE_CLI_LICENSE_ENABLED: 'true'
       OFFICE_CLI_PUBLISH_BASE_URL: ${{ secrets.OFFICE_CLI_PUBLISH_BASE_URL }}
@@ -160,7 +161,7 @@ jobs:
             if [ "${exit_code}" = "0" ]; then
               break
             fi
-            retry_reason="$(REPORT_DIR="${report_dir}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}; details = (payload.get("details") or "").strip(); lower = details.lower(); retryable = "yes" if ("status=502" in lower or "502 bad gateway" in lower or "gateway timeout" in lower or "upstream prematurely closed connection" in lower) else "no"; print(retryable + "|" + details.replace("\n", " "))')"
+            retry_reason="$(REPORT_DIR="${report_dir}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}; details = (payload.get("details") or "").strip(); lower = details.lower(); retryable = "yes" if ("status=502" in lower or "502 bad gateway" in lower or "gateway timeout" in lower or "upstream prematurely closed connection" in lower or "context deadline exceeded" in lower or "client.timeout exceeded" in lower or "timeout exceeded while awaiting headers" in lower or "i/o timeout" in lower) else "no"; print(retryable + "|" + details.replace("\n", " "))')"
             retryable="${retry_reason%%|*}"
             retry_detail="${retry_reason#*|}"
             if [ "${retryable}" != "yes" ] || [ "${attempt}" -ge "${max_attempts}" ]; then
