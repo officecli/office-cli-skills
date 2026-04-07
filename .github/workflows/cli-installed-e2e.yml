@@ -13,6 +13,14 @@ on:
         options:
           - current_build
           - release
+      license_mode:
+        description: 'License mode: free trial quota or paid API key'
+        required: false
+        default: free
+        type: choice
+        options:
+          - free
+          - paid
       version:
         description: 'Release tag to install, e.g. v1.2.3 or latest'
         required: false
@@ -28,7 +36,7 @@ on:
           - full
 
 concurrency:
-  group: cli-installed-e2e-${{ github.event.schedule || inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || inputs.version || github.run_id }}
+  group: cli-installed-e2e-${{ github.event.schedule || inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || inputs.license_mode || vars.CLI_INSTALLED_E2E_LICENSE_MODE || inputs.version || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -44,6 +52,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       DIST_REPO: ${{ vars.CLI_E2E_DIST_REPO || 'officecli/officecli-dist' }}
       INSTALL_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || 'current_build' }}
+      LICENSE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.license_mode || vars.CLI_INSTALLED_E2E_LICENSE_MODE || 'free' }}
       VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || vars.CLI_INSTALLED_E2E_DEFAULT_VERSION || 'latest' }}
       SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || vars.CLI_INSTALLED_E2E_DEFAULT_SUITE || 'smoke' }}
       REPORT_ROOT: ${{ github.workspace }}/.tmp/cli-installed-e2e
@@ -52,7 +61,6 @@ jobs:
       OFFICE_CLI_LLM_MODEL: ${{ vars.OFFICE_CLI_LLM_MODEL || 'gpt-4.1' }}
       OFFICE_CLI_LLM_REVIEW_MODEL: ${{ vars.OFFICE_CLI_LLM_REVIEW_MODEL || 'gpt-5.4-mini' }}
       OFFICE_CLI_LICENSE_BASE_URL: ${{ vars.OFFICE_CLI_LICENSE_BASE_URL || 'https://platform.officecli.io' }}
-      OFFICE_CLI_LICENSE_API_KEY: ${{ secrets.OFFICE_CLI_LICENSE_API_KEY }}
       OFFICE_CLI_LICENSE_ENABLED: 'true'
       OFFICE_CLI_PUBLISH_BASE_URL: ${{ secrets.OFFICE_CLI_PUBLISH_BASE_URL }}
       OFFICE_CLI_PUBLISH_API_KEY: ${{ secrets.OFFICE_CLI_PUBLISH_API_KEY }}
@@ -122,6 +130,8 @@ jobs:
 
       - name: Run installed CLI evaluation
         id: eval
+        env:
+          OFFICE_CLI_LICENSE_API_KEY: ${{ env.LICENSE_MODE == 'paid' && secrets.OFFICE_CLI_LICENSE_API_KEY || '' }}
         run: |
           set +e
           python3 ./scripts/eval_ppt_quality.py \
@@ -147,6 +157,7 @@ jobs:
         env:
           REPORT_DIR: ${{ steps.meta.outputs.report_dir }}
           INSTALL_SOURCE: ${{ env.INSTALL_SOURCE }}
+          LICENSE_MODE: ${{ env.LICENSE_MODE }}
           VERSION: ${{ env.VERSION }}
           SUITE: ${{ steps.meta.outputs.suite }}
           INSTALL_CONCLUSION: ${{ steps.install.conclusion }}
@@ -167,8 +178,9 @@ jobs:
               "suite": os.environ.get("SUITE") or "unknown",
               "installed_version": os.environ.get("VERSION") or "unknown",
               "message": "评测未完成，未生成标准报告。",
-              "details": "install_source={}; install_step={}; eval_step={}".format(
+              "details": "install_source={}; license_mode={}; install_step={}; eval_step={}".format(
                   os.environ.get("INSTALL_SOURCE") or "unknown",
+                  os.environ.get("LICENSE_MODE") or "unknown",
                   os.environ.get("INSTALL_CONCLUSION") or "unknown",
                   os.environ.get("EVAL_CONCLUSION") or "unknown",
               ),
