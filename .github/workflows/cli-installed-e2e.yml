@@ -86,8 +86,15 @@ jobs:
       - name: Resolve run metadata
         id: meta
         run: |
+          run_date="$(date -u +%F)"
           stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          round_name="${SUITE}-${stamp}"
+          report_dir="${GITHUB_WORKSPACE}/output/evals/${run_date}/${round_name}"
+          mkdir -p "${report_dir}"
+          echo "run_date=${run_date}" >> "$GITHUB_OUTPUT"
           echo "stamp=${stamp}" >> "$GITHUB_OUTPUT"
+          echo "round_name=${round_name}" >> "$GITHUB_OUTPUT"
+          echo "report_dir=${report_dir}" >> "$GITHUB_OUTPUT"
           echo "suite=${SUITE}" >> "$GITHUB_OUTPUT"
 
       - name: Install officecli
@@ -97,10 +104,9 @@ jobs:
           if [ "${INSTALL_SOURCE}" = "current_build" ]; then
             short_sha="$(printf '%s' "${GITHUB_SHA}" | cut -c1-7)"
             build_version="current-${short_sha}"
-            commit="$(git rev-parse --short HEAD)"
             build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             go build \
-              -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${commit} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date}" \
+              -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${short_sha} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date}" \
               -o /usr/local/bin/officecli ./cmd/officecli
             chmod +x /usr/local/bin/officecli
           else
@@ -117,17 +123,16 @@ jobs:
         id: eval
         run: |
           set +e
-          round_name="${SUITE}-${{ steps.meta.outputs.stamp }}"
           python3 ./scripts/eval_ppt_quality.py \
             --root . \
             --bin "officecli" \
             --suite "${SUITE}" \
             --publish \
-            --date "$(date -u +%F)" \
-            --round "${round_name}" \
+            --date "${{ steps.meta.outputs.run_date }}" \
+            --round "${{ steps.meta.outputs.round_name }}" \
             --version-label "${{ steps.install.outputs.installed_version }}"
           exit_code=$?
-          report_dir="$(python3 -c 'from pathlib import Path; root = Path("output/evals"); paths = sorted([p for p in root.glob("*/*") if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True); print(paths[0].resolve() if paths else "")')"
+          report_dir="${{ steps.meta.outputs.report_dir }}"
           if [ -z "${report_dir}" ]; then
             echo "report dir not found" >&2
             exit 1
@@ -136,13 +141,47 @@ jobs:
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Ensure fallback evaluation artifact
+        if: always()
+        env:
+          REPORT_DIR: ${{ steps.meta.outputs.report_dir }}
+          INSTALL_SOURCE: ${{ env.INSTALL_SOURCE }}
+          VERSION: ${{ env.VERSION }}
+          SUITE: ${{ steps.meta.outputs.suite }}
+          INSTALL_CONCLUSION: ${{ steps.install.conclusion }}
+          EVAL_CONCLUSION: ${{ steps.eval.conclusion }}
+        run: |
+          mkdir -p "${REPORT_DIR}"
+          if [ -f "${REPORT_DIR}/summary.md" ] || [ -f "${REPORT_DIR}/blocked.json" ]; then
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report_dir = Path(os.environ["REPORT_DIR"])
+          payload = {
+              "status": "blocked",
+              "suite": os.environ.get("SUITE") or "unknown",
+              "installed_version": os.environ.get("VERSION") or "unknown",
+              "message": "评测未完成，未生成标准报告。",
+              "details": "install_source={}; install_step={}; eval_step={}".format(
+                  os.environ.get("INSTALL_SOURCE") or "unknown",
+                  os.environ.get("INSTALL_CONCLUSION") or "unknown",
+                  os.environ.get("EVAL_CONCLUSION") or "unknown",
+              ),
+          }
+          (report_dir / "blocked.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+
       - name: Append evaluation summary
         if: always()
         run: |
-          if [ -f "${{ steps.eval.outputs.report_dir }}/summary.md" ]; then
-            cat "${{ steps.eval.outputs.report_dir }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
-          elif [ -f "${{ steps.eval.outputs.report_dir }}/blocked.json" ]; then
-            REPORT_DIR="${{ steps.eval.outputs.report_dir }}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")); print("# PPT 质量评测阻塞"); print(); print("- 套件：{}".format(payload.get("suite", "unknown"))); print("- 安装版本：{}".format(payload.get("installed_version", "unknown"))); print("- 原因：{}".format(payload.get("message", "-"))); details = (payload.get("details") or "").strip(); print("- 详情：{}".format(details)) if details else None' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "${{ steps.meta.outputs.report_dir }}/summary.md" ]; then
+            cat "${{ steps.meta.outputs.report_dir }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "${{ steps.meta.outputs.report_dir }}/blocked.json" ]; then
+            REPORT_DIR="${{ steps.meta.outputs.report_dir }}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")); print("# PPT 质量评测阻塞"); print(); print("- 套件：{}".format(payload.get("suite", "unknown"))); print("- 安装版本：{}".format(payload.get("installed_version", "unknown"))); print("- 原因：{}".format(payload.get("message", "-"))); details = (payload.get("details") or "").strip(); print("- 详情：{}".format(details)) if details else None' >> "$GITHUB_STEP_SUMMARY"
           else
             echo "evaluation summary missing" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -152,7 +191,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.0
         with:
           name: cli-installed-e2e-report
-          path: ${{ steps.eval.outputs.report_dir }}
+          path: ${{ steps.meta.outputs.report_dir }}
           if-no-files-found: error
 
       - name: Fail job when evaluation failed
