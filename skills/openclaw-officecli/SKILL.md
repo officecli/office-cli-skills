@@ -60,9 +60,11 @@ Primary event types:
 
 ## Agent Behavior
 
-1. Ensure `officecli` is installed and reachable.
-2. Ensure `officecli agent-bridge` can be started locally.
-3. Convert the user's natural-language request into:
+1. Run `check-officecli-env.sh` before starting any bridge session.
+2. If the check exits with `10`, run `fix-officecli-env.sh`, then rerun the check.
+3. Ensure `officecli` is installed, configured, and reachable.
+4. Ensure `officecli agent-bridge` can be started locally.
+5. Convert the user's natural-language request into:
    - `document_type`
    - `topic`
    - `prompt`
@@ -70,12 +72,20 @@ Primary event types:
       - optional `lang`
    - optional `style`
    - optional `audience`
-4. Use `interactive=true` by default so the chat can handle follow-up questions.
-5. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
-6. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
-7. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
-8. On `task.failed`, convert the error into a user-friendly message.
-9. On user cancel, send `task/cancel`.
+6. Use `interactive=true` by default so the chat can handle follow-up questions.
+7. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
+8. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
+9. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
+10. On `task.failed`, convert the error into a user-friendly message.
+11. On user cancel, send `task/cancel`.
+
+## Environment Repair Rules
+
+- use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
+- use `fix-officecli-env.sh` as the single repair entrypoint
+- when config is missing, ask only for the missing generation/license values and let the fix script write local config
+- online preview config is optional unless the current request needs publish URLs
+- do not try to start `agent-bridge` until the check script returns ready
 
 ## Attachment Delivery
 
@@ -101,8 +111,8 @@ Do not only send a local file path unless attachment upload is impossible on the
 
 Expected local setup:
 
-- `officecli` available in `PATH`, or configured via `config.yaml`
-- `officecli config set-generation` and `officecli config set-license` already completed
+- `officecli` available in `PATH`, or repairable by `fix-officecli-env.sh`
+- generation and license config already completed, or repairable by the fix script
 - OpenClaw agent has permission to:
   - spawn local commands
   - read generated files

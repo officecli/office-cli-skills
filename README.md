@@ -453,9 +453,12 @@ Content-Length: 92
 1. 安装并配置 `officecli`
 
 ```bash
-officecli config set-generation
-officecli config set-license
+bash ./scripts/install-openclaw-skill.sh
+bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
+bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 ```
+
+如果本机还没有 `officecli`，或者只缺生成/额度配置，`fix-officecli-env.sh` 会优先尝试自动安装并补齐缺失项；只有在线预览发布配置仍然保持可选。
 
 2. 安装 OpenClaw skill
 
@@ -491,6 +494,7 @@ agents:
 运行时约定：
 
 - OpenClaw skill 通过 `officecli agent-bridge` 与本地 `officecli` 通信
+- skill 会先执行环境检查，必要时自动修复 `officecli` 安装与基础配置
 - skill 会把 `task.question` 转成聊天补问
 - 生成完成后，skill 应当把 `result.file_path` 对应文件作为附件回传
 

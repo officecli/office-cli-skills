@@ -8,8 +8,8 @@
 
 1. 已安装 OpenClaw
 2. 已配置至少一个可用 channel，例如 Telegram / Discord / Slack
-3. 已安装 `officecli`
-4. 已执行过：
+3. 已安装 `officecli`，或允许 skill 自动安装 `officecli`
+4. 已执行过配置，或允许 skill 自动补齐配置：
 
 ```bash
 officecli config set-generation
@@ -37,7 +37,21 @@ bash ./scripts/install-openclaw-skill.sh
 - `config.yaml`
 - `agent-config.example.yaml`
 
-## 第二步：确认本地命令可用
+## 第二步：先跑环境检查与修复
+
+优先执行：
+
+```bash
+bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
+```
+
+如果返回 repairable，再执行：
+
+```bash
+bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
+```
+
+## 第三步：确认本地命令可用
 
 确认 `officecli` 可以直接运行：
 
@@ -54,7 +68,7 @@ officecli agent-bridge
 
 看到进程进入等待状态即可，按 `Ctrl+C` 退出。
 
-## 第三步：把 skill 挂到你的 OpenClaw agent
+## 第四步：把 skill 挂到你的 OpenClaw agent
 
 编辑 `~/.openclaw/config.yaml`，把 skill 加入目标 agent：
 
@@ -69,11 +83,11 @@ agents:
 
 如果你的 agent 已经存在，只需要把 `openclaw-officecli` 加进 `skills` 列表。
 
-## 第四步：重启或重新加载 OpenClaw
+## 第五步：重启或重新加载 OpenClaw
 
 根据你的部署方式重启 OpenClaw，使新 skill 生效。
 
-## 第五步：开始使用
+## 第六步：开始使用
 
 在你的 channel 中直接发送：
 
@@ -106,7 +120,12 @@ agents:
 
 ### 3. bridge 报配置错误
 
-通常说明 `officecli config set-generation` 尚未完成，或者 `config.json` 里缺少生成服务 / 平台服务配置。
+通常说明 `officecli` 环境尚未完成修复。优先重新执行：
+
+```bash
+bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
+bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
+```
 
 ## 相关文件
 

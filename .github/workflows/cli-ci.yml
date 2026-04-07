@@ -53,6 +53,12 @@ jobs:
 
       - name: Validate release scripts
         run: |
+          bash -n skills/officecli/env-common.sh
+          bash -n skills/officecli/check-officecli-env.sh
+          bash -n skills/officecli/fix-officecli-env.sh
+          bash -n skills/openclaw-officecli/env-common.sh
+          bash -n skills/openclaw-officecli/check-officecli-env.sh
+          bash -n skills/openclaw-officecli/fix-officecli-env.sh
           bash -n scripts/install-officecli.sh
           bash -n scripts/install-openclaw-skill.sh
           python3 -m py_compile scripts/eval_ppt_quality.py
@@ -60,3 +66,6 @@ jobs:
           bash -n scripts/sync-public-dist-repo.sh
           bash -n scripts/sync-homebrew-tap.sh
           bash -n scripts/sync-public-skills-repo.sh
+
+      - name: Run skill environment tests
+        run: bash ./scripts/test-skill-officecli-env.sh

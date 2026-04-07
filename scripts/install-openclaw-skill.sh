@@ -32,8 +32,8 @@ fi
 cat <<EOF
 
 Next steps:
-1. Run: officecli config set-generation
-2. Run: officecli config set-license
+1. Check env: bash ${DEST_SKILL_DIR}/check-officecli-env.sh
+2. Repair env if needed: bash ${DEST_SKILL_DIR}/fix-officecli-env.sh
 3. Verify: officecli --version
 4. Verify bridge: officecli agent-bridge
 5. Attach the skill in ${OPENCLAW_HOME}/config.yaml:

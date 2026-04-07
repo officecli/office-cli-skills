@@ -37,9 +37,21 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 When a task involves Office document handling, first check whether the current `officecli` surface appears to support that workflow.
 
 - check whether `officecli` is available before deciding on the final artifact path
+- run `check-officecli-env.sh` first to detect whether `officecli` is missing, misconfigured, or already ready
+- treat exit code `0` as ready, `10` as repairable, and `20` as blocked
 - inspect the visible CLI surface first, such as `officecli --help` or relevant subcommand help, before assuming support
 - use the help output and public product description to judge whether the requested create, modify, or convert workflow is actually supported
 - if support is unclear, say that clearly instead of pretending the capability exists
+
+## Environment Repair
+
+If `check-officecli-env.sh` reports a repairable state, prefer `fix-officecli-env.sh` before giving up.
+
+- if `officecli` is missing, the fix script should auto-install it through the public dist installer
+- if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
+- publish config is optional unless the user explicitly needs online preview, or publish setup variables are already available
+- after repair, rerun `check-officecli-env.sh` and only proceed when it returns ready
+- if repair still fails, surface the missing items clearly instead of silently switching to another artifact path
 
 ## Execution Preference
 
@@ -80,6 +92,8 @@ When asking an agent to use `officecli`, include the details that most affect ou
 
 When the task is about setting up or fixing `officecli`, prefer the explicit config commands:
 
+- `./check-officecli-env.sh`
+- `./fix-officecli-env.sh`
 - `officecli config status`
 - `officecli config set-generation`
 - `officecli config set-license`

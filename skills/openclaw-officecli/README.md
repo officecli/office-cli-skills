@@ -17,8 +17,8 @@
 ## 前置条件
 
 1. 本机已安装并配置 OpenClaw
-2. 本机已安装 `officecli`
-3. 已完成 `officecli config set-generation` 与 `officecli config set-license`
+2. 本机已安装 `officecli`，或允许 skill 自动安装 `officecli`
+3. 已完成 `officecli config set-generation` 与 `officecli config set-license`，或允许 skill 自动补齐这些配置
 4. OpenClaw agent 具备：
    - 运行本地命令的能力
    - 读取本地文件的能力
@@ -56,6 +56,27 @@ OPENCLAW_HOME=/opt/openclaw bash ./scripts/install-openclaw-skill.sh
 - `default_publish`
 
 如果 `officecli` 已在 `PATH` 中，默认无需额外修改。
+
+## 环境检查与修复
+
+skill 目录现在内置两个脚本：
+
+- `check-officecli-env.sh`
+- `fix-officecli-env.sh`
+
+推荐顺序：
+
+```bash
+bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
+bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
+```
+
+行为说明：
+
+- 如果 `officecli` 不在 PATH，中间会尝试自动安装
+- 如果只缺生成或额度配置，脚本会只补齐缺失项
+- 如果你需要在线预览，再额外提供 publish 配置
+- 修复成功后，会把 `office_cli_path` 和 `agent_bridge_command` 写回 skill 的 `config.yaml`
 
 ## 挂载到 agent
 
