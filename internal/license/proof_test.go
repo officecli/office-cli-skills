@@ -41,6 +41,30 @@ func TestValidateCheckResultAcceptsSignedProof(t *testing.T) {
 	}
 }
 
+func TestValidateCheckResultAcceptsLegacyUnsignedToken(t *testing.T) {
+	req := CheckRequest{
+		FingerprintHash: "fp-legacy",
+		DocumentType:    "pptx",
+		RuntimeMode:     "external",
+		RequestNonce:    "nonce-legacy",
+		Action:          "generate",
+	}
+	result := &CheckResult{
+		Allowed:    true,
+		AccessMode: AccessModePaid,
+		CommitToken: CommitToken{
+			FingerprintHash: req.FingerprintHash,
+			RequestID:       "req-legacy-1",
+			AccessMode:      AccessModePaid,
+			APIKeyHint:      "cop_live_xxx",
+		},
+	}
+
+	if err := ValidateCheckResult(result, req); err != nil {
+		t.Fatalf("ValidateCheckResult() error = %v", err)
+	}
+}
+
 func TestValidateCheckResultRejectsNonceReplay(t *testing.T) {
 	req := CheckRequest{
 		FingerprintHash: "fp-1",
@@ -66,6 +90,26 @@ func TestValidateCheckResultRejectsNonceReplay(t *testing.T) {
 			IssuedAt:        time.Now().UTC().Add(-time.Minute),
 			ExpiresAt:       time.Now().UTC().Add(time.Minute),
 		}),
+	}
+
+	if err := ValidateCheckResult(result, req); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestValidateCheckResultRejectsLegacyFingerprintMismatch(t *testing.T) {
+	req := CheckRequest{
+		FingerprintHash: "fp-1",
+		Action:          "generate",
+	}
+	result := &CheckResult{
+		Allowed:    true,
+		AccessMode: AccessModePaid,
+		CommitToken: CommitToken{
+			FingerprintHash: "fp-other",
+			RequestID:       "req-legacy-2",
+			AccessMode:      AccessModePaid,
+		},
 	}
 
 	if err := ValidateCheckResult(result, req); err == nil {

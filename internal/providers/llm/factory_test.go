@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -91,5 +92,91 @@ func TestOpenAIClient_CompleteTextFallsBackToStreaming(t *testing.T) {
 	}
 	if requestCount != 2 {
 		t.Fatalf("expected 2 requests, got %d", requestCount)
+	}
+}
+
+func TestOpenAIClient_CompleteTextFallsBackToStreamingWhenContentIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		requestCount++
+		if requestCount == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":""}}]}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"流式\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"补救\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "openai",
+		BaseURL:  server.URL,
+		Model:    "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	content, err := client.CompleteText(context.Background(), []engine.LLMMessage{
+		{Role: "user", Content: "只回复流式补救"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteText: %v", err)
+	}
+	if content != "流式补救" {
+		t.Fatalf("unexpected content: %q", content)
+	}
+	if requestCount != 2 {
+		t.Fatalf("expected 2 requests, got %d", requestCount)
+	}
+}
+
+func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/gemini-2.5-flash-image:generateContent" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("x-goog-api-key"); got != "google-key" {
+			t.Fatalf("x-goog-api-key = %q", got)
+		}
+		_, _ = fmt.Fprintf(w, `{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":"%s"}}]}}]}`, imageData)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider:     "openai",
+		BaseURL:      "https://unused.example.com/v1",
+		APIKey:       "openai-key",
+		Model:        "gpt-test",
+		ImageBaseURL: server.URL,
+		ImageAPIKey:  "google-key",
+		ImageModel:   "gemini-2.5-flash-image",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt: "生成一张蓝色文件夹插图",
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+	if image.MIME != "image/png" {
+		t.Fatalf("unexpected mime: %q", image.MIME)
 	}
 }

@@ -154,7 +154,7 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 		orders:  []model.Order{{ID: 11}},
 		pricing: []model.PricingPack{{Code: "growth-500", AmountTotal: 7900}},
 	}, "salt")
-	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil)
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
 	api := router.Group("/api")
@@ -240,7 +240,7 @@ func TestRegisterAppRoutesDiscordConnectReturnsBlockedVerificationStatus(t *test
 	}
 	growth := &routeGrowthManager{}
 	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", growth)
-	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil)
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
 	api := router.Group("/api")
@@ -295,7 +295,7 @@ func TestRegisterAppRoutesDiscordStatusReturnsCurrentSnapshot(t *testing.T) {
 		},
 	}
 	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
-	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil)
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
 	api := router.Group("/api")
@@ -331,7 +331,7 @@ func TestRegisterAppRoutesDiscordLoginRedirectsBackWhenOAuthUnavailable(t *testi
 
 	store := &overviewRouteStore{user: &model.User{ID: 42, InviteCode: "invite-xyz"}}
 	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
-	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil)
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
 	api := router.Group("/api")

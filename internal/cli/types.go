@@ -45,13 +45,15 @@ func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
 }
 
 type LLMConfig struct {
-	Provider    string `json:"provider"`
-	BaseURL     string `json:"base_url"`
-	APIKey      string `json:"api_key"`
-	Model       string `json:"model"`
-	ImageModel  string `json:"image_model"`
-	ReviewModel string `json:"review_model,omitempty"`
-	TimeoutSec  int    `json:"timeout_sec"`
+	Provider     string `json:"provider"`
+	BaseURL      string `json:"base_url"`
+	APIKey       string `json:"api_key"`
+	Model        string `json:"model"`
+	ImageBaseURL string `json:"image_base_url,omitempty"`
+	ImageAPIKey  string `json:"image_api_key,omitempty"`
+	ImageModel   string `json:"image_model"`
+	ReviewModel  string `json:"review_model,omitempty"`
+	TimeoutSec   int    `json:"timeout_sec"`
 }
 
 type InputSources struct {

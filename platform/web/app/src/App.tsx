@@ -5,6 +5,7 @@ import { api } from './api'
 import { initAnalytics, trackPageView } from './analytics'
 import { AppSidebar, AppTopBar } from './components/chrome'
 import LoginPage from './pages/LoginPage'
+import AccessDeniedPage from './pages/AccessDeniedPage'
 import OverviewPage from './pages/OverviewPage'
 import ApiKeysPage from './pages/ApiKeysPage'
 import BillingPage from './pages/BillingPage'
@@ -55,6 +56,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/access-denied" element={<AccessDeniedPage />} />
       <Route path="/*" element={<ProtectedShell />} />
     </Routes>
   )

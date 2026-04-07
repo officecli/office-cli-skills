@@ -38,13 +38,15 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 		Stdin:  stdin,
 		newLLMClient: func(cfg LLMConfig) (GeneratorLLMClient, error) {
 			return llmprovider.NewClient(llmprovider.Config{
-				Provider:    cfg.Provider,
-				BaseURL:     cfg.BaseURL,
-				APIKey:      cfg.APIKey,
-				Model:       cfg.Model,
-				ImageModel:  cfg.ImageModel,
-				ReviewModel: cfg.ReviewModel,
-				TimeoutSec:  cfg.TimeoutSec,
+				Provider:     cfg.Provider,
+				BaseURL:      cfg.BaseURL,
+				APIKey:       cfg.APIKey,
+				Model:        cfg.Model,
+				ImageBaseURL: cfg.ImageBaseURL,
+				ImageAPIKey:  cfg.ImageAPIKey,
+				ImageModel:   cfg.ImageModel,
+				ReviewModel:  cfg.ReviewModel,
+				TimeoutSec:   cfg.TimeoutSec,
 			})
 		},
 		newLicenseService: func(cfg LicenseConfig) (LicenseManager, error) {

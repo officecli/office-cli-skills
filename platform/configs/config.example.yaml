@@ -1,6 +1,6 @@
 app_env: "development"
 http_addr: ":8080"
-mysql_dsn: "root:root@tcp(127.0.0.1:3306)/cli_office_platform?parseTime=true&multiStatements=true&charset=utf8mb4"
+postgres_dsn: "host=127.0.0.1 port=5432 user=officecli password=officecli dbname=officecli_platform sslmode=disable TimeZone=UTC"
 redis_addr: "127.0.0.1:6379"
 admin_login_rate_limit_per_minute: 60
 license_rate_limit_per_minute: 300
@@ -18,6 +18,7 @@ platform_base_url: "https://platform.officecli.io"
 app_session_secret: "change-me-app-session-secret-123456"
 app_session_ttl: "24h"
 google_redirect_url: "https://platform.officecli.io/api/auth/google/callback"
+app_google_allowlist: "luyang950@gmail.com"
 admin_google_redirect_url: "https://platform.officecli.io/api/admin/auth/google/callback"
 admin_google_allowlist: "luyang950@gmail.com"
 stripe_success_url: "https://platform.officecli.io/app/billing?status=success"

@@ -16,13 +16,15 @@ import (
 )
 
 type Config struct {
-	Provider    string `json:"provider"`
-	BaseURL     string `json:"base_url"`
-	APIKey      string `json:"api_key"`
-	Model       string `json:"model"`
-	ImageModel  string `json:"image_model"`
-	ReviewModel string `json:"review_model,omitempty"`
-	TimeoutSec  int    `json:"timeout_sec"`
+	Provider     string `json:"provider"`
+	BaseURL      string `json:"base_url"`
+	APIKey       string `json:"api_key"`
+	Model        string `json:"model"`
+	ImageBaseURL string `json:"image_base_url,omitempty"`
+	ImageAPIKey  string `json:"image_api_key,omitempty"`
+	ImageModel   string `json:"image_model"`
+	ReviewModel  string `json:"review_model,omitempty"`
+	TimeoutSec   int    `json:"timeout_sec"`
 }
 
 type Provider interface {
@@ -58,11 +60,13 @@ func (p *openAIProvider) NewClient() (engine.LLMClient, error) {
 		return nil, fmt.Errorf("llm model is required")
 	}
 	return &openAIClient{
-		baseURL:    strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
-		apiKey:     strings.TrimSpace(p.cfg.APIKey),
-		model:      strings.TrimSpace(p.cfg.Model),
-		imageModel: strings.TrimSpace(p.cfg.ImageModel),
-		client:     &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
+		baseURL:      strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
+		apiKey:       strings.TrimSpace(p.cfg.APIKey),
+		model:        strings.TrimSpace(p.cfg.Model),
+		imageBaseURL: strings.TrimRight(strings.TrimSpace(p.cfg.ImageBaseURL), "/"),
+		imageAPIKey:  strings.TrimSpace(p.cfg.ImageAPIKey),
+		imageModel:   strings.TrimSpace(p.cfg.ImageModel),
+		client:       &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
 	}, nil
 }
 
@@ -88,11 +92,13 @@ func timeoutFor(seconds int) time.Duration {
 }
 
 type openAIClient struct {
-	baseURL    string
-	apiKey     string
-	model      string
-	imageModel string
-	client     *http.Client
+	baseURL      string
+	apiKey       string
+	model        string
+	imageBaseURL string
+	imageAPIKey  string
+	imageModel   string
+	client       *http.Client
 }
 
 type chatMessage struct {
@@ -147,13 +153,24 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 	if model == "" {
 		model = c.model
 	}
+	imageBaseURL := c.baseURL
+	if c.imageBaseURL != "" {
+		imageBaseURL = c.imageBaseURL
+	}
+	imageAPIKey := c.apiKey
+	if c.imageAPIKey != "" {
+		imageAPIKey = c.imageAPIKey
+	}
+	if isGoogleImageEndpoint(imageBaseURL, model) {
+		return c.generateGoogleImage(ctx, imageBaseURL, imageAPIKey, model, req)
+	}
 	payload := map[string]any{
 		"model":           model,
 		"prompt":          req.Prompt,
 		"size":            pickImageSize(req.TargetAspectRatio),
 		"response_format": "b64_json",
 	}
-	body, err := c.post(ctx, c.baseURL+"/images/generations", payload)
+	body, err := c.postWithAPIKey(ctx, imageBaseURL+"/images/generations", imageAPIKey, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +190,67 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 		return nil, fmt.Errorf("decode image data: %w", err)
 	}
 	return &engine.ImageGenerationResult{Data: data, MIME: "image/png"}, nil
+}
+
+func isGoogleImageEndpoint(baseURL, model string) bool {
+	baseURL = strings.ToLower(strings.TrimSpace(baseURL))
+	model = strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(baseURL, "generativelanguage.googleapis.com") ||
+		strings.HasPrefix(model, "gemini-") ||
+		strings.HasPrefix(model, "imagen-")
+}
+
+func (c *openAIClient) generateGoogleImage(ctx context.Context, baseURL, apiKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	payload := map[string]any{
+		"contents": []map[string]any{
+			{
+				"parts": []map[string]any{
+					{
+						"text": req.Prompt,
+					},
+				},
+			},
+		},
+		"generationConfig": map[string]any{
+			"responseModalities": []string{"TEXT", "IMAGE"},
+		},
+	}
+	body, err := c.postGoogle(ctx, strings.TrimRight(baseURL, "/")+"/models/"+model+":generateContent", apiKey, payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					InlineData *struct {
+						MIMEType string `json:"mimeType"`
+						Data     string `json:"data"`
+					} `json:"inlineData,omitempty"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode google image response: %w", err)
+	}
+	for _, candidate := range resp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.InlineData == nil || strings.TrimSpace(part.InlineData.Data) == "" {
+				continue
+			}
+			data, err := base64.StdEncoding.DecodeString(part.InlineData.Data)
+			if err != nil {
+				return nil, fmt.Errorf("decode google image data: %w", err)
+			}
+			mime := strings.TrimSpace(part.InlineData.MIMEType)
+			if mime == "" {
+				mime = "image/png"
+			}
+			return &engine.ImageGenerationResult{Data: data, MIME: mime}, nil
+		}
+	}
+	return nil, fmt.Errorf("google image response is empty")
 }
 
 func pickImageSize(aspectRatio float64) string {
@@ -207,7 +285,15 @@ func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]an
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("chat response is empty")
 	}
-	return resp.Choices[0].Message.Content, nil
+	content := resp.Choices[0].Message.Content
+	if strings.TrimSpace(content) != "" {
+		return content, nil
+	}
+	streamContent, err := c.chatCompletionStream(ctx, payload)
+	if err != nil {
+		return "", fmt.Errorf("chat response is empty: %w", err)
+	}
+	return streamContent, nil
 }
 
 func requiresStreamingFallback(err error) bool {
@@ -300,7 +386,11 @@ func (c *openAIClient) chatCompletionStream(ctx context.Context, payload map[str
 }
 
 func (c *openAIClient) post(ctx context.Context, url string, payload map[string]any) ([]byte, error) {
-	body, closeBody, err := c.doPost(ctx, url, payload)
+	return c.postWithAPIKey(ctx, url, c.apiKey, payload)
+}
+
+func (c *openAIClient) postWithAPIKey(ctx context.Context, url, apiKey string, payload map[string]any) ([]byte, error) {
+	body, closeBody, err := c.doPost(ctx, url, apiKey, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -309,14 +399,42 @@ func (c *openAIClient) post(ctx context.Context, url string, payload map[string]
 }
 
 func (c *openAIClient) postStream(ctx context.Context, url string, payload map[string]any) (io.ReadCloser, error) {
-	body, _, err := c.doPost(ctx, url, payload)
+	body, _, err := c.doPost(ctx, url, c.apiKey, payload)
 	if err != nil {
 		return nil, err
 	}
 	return body, nil
 }
 
-func (c *openAIClient) doPost(ctx context.Context, url string, payload map[string]any) (io.ReadCloser, func(), error) {
+func (c *openAIClient) postGoogle(ctx context.Context, url, apiKey string, payload map[string]any) ([]byte, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("x-goog-api-key", strings.TrimSpace(apiKey))
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return body, nil
+}
+
+func (c *openAIClient) doPost(ctx context.Context, url, apiKey string, payload map[string]any) (io.ReadCloser, func(), error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, nil, err
@@ -326,8 +444,8 @@ func (c *openAIClient) doPost(ctx context.Context, url string, payload map[strin
 		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if strings.TrimSpace(apiKey) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {

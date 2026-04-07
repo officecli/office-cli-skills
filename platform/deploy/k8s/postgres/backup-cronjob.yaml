@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: officecli-platform-postgres-backup
+  namespace: officecli
+spec:
+  schedule: "10 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16
+              envFrom:
+                - secretRef:
+                    name: officecli-platform-postgres
+              command:
+                - sh
+                - -c
+                - |
+                  set -euo pipefail
+                  export PGPASSWORD="$POSTGRES_PASSWORD"
+                  mkdir -p /backup
+                  pg_dump -h officecli-platform-postgres.officecli.svc.cluster.local -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > "/backup/${POSTGRES_DB}-$(date +%Y%m%d-%H%M%S).dump"
+                  find /backup -type f -name '*.dump' -mtime +7 -delete
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              hostPath:
+                path: /opt/officecli-platform/postgres-backups
+                type: DirectoryOrCreate

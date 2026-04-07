@@ -49,13 +49,15 @@ func WriteDefaultConfig(path string) (string, error) {
 			Mode: RuntimeModeExternal,
 		},
 		LLM: LLMConfig{
-			Provider:    "openai",
-			BaseURL:     "https://your-generation-service.example.com/v1",
-			APIKey:      "YOUR_GENERATION_SERVICE_KEY",
-			Model:       "gpt-4.1",
-			ImageModel:  "gpt-image-1",
-			ReviewModel: "gpt-5.4-mini",
-			TimeoutSec:  60,
+			Provider:     "openai",
+			BaseURL:      "https://your-generation-service.example.com/v1",
+			APIKey:       "YOUR_GENERATION_SERVICE_KEY",
+			Model:        "gpt-4.1",
+			ImageBaseURL: "",
+			ImageAPIKey:  "",
+			ImageModel:   "gpt-image-1",
+			ReviewModel:  "gpt-5.4-mini",
+			TimeoutSec:   60,
 		},
 		License: licenseprovider.Config{
 			BaseURL:    "https://platform.officecli.io",
@@ -104,6 +106,8 @@ func applyEnvOverrides(cfg *Config) {
 	setIfPresent(&cfg.LLM.BaseURL, "OFFICE_CLI_LLM_BASE_URL")
 	setIfPresent(&cfg.LLM.APIKey, "OFFICE_CLI_LLM_API_KEY")
 	setIfPresent(&cfg.LLM.Model, "OFFICE_CLI_LLM_MODEL")
+	setIfPresent(&cfg.LLM.ImageBaseURL, "OFFICE_CLI_LLM_IMAGE_BASE_URL")
+	setIfPresent(&cfg.LLM.ImageAPIKey, "OFFICE_CLI_LLM_IMAGE_API_KEY")
 	setIfPresent(&cfg.LLM.ImageModel, "OFFICE_CLI_LLM_IMAGE_MODEL")
 	setIfPresent(&cfg.LLM.ReviewModel, "OFFICE_CLI_LLM_REVIEW_MODEL")
 	setIfPresent((*string)(&cfg.Runtime.Mode), "OFFICE_CLI_RUNTIME_MODE")

@@ -22,9 +22,7 @@
 docker compose -f deploy/docker-compose.yml up -d
 cp .env.example .env
 export $(grep -v '^#' .env | xargs)
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/001_init.sql
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/002_paid_quota.sql
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/003_auth_billing.sql
+go run ./cmd/platform db migrate
 make web-install
 make web-build
 make dev

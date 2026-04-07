@@ -15,8 +15,8 @@ import (
 
 	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/model"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type SessionPayload struct {
@@ -28,7 +28,7 @@ type SessionPayload struct {
 }
 
 type Service struct {
-	mysql              *mysqlstore.Store
+	mysql              *sqlstore.Store
 	redis              *redisstore.Store
 	adminPassword      string
 	sessionTTL         time.Duration
@@ -55,7 +55,7 @@ type CookieCodec interface {
 	Decode(value string) (string, error)
 }
 
-func NewService(mysql *mysqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
+func NewService(mysql *sqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
 	allowlist := make(map[string]struct{}, len(adminAllowlist))
 	for _, email := range adminAllowlist {
 		normalized := strings.ToLower(strings.TrimSpace(email))
@@ -143,7 +143,7 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code, state string) 
 	}
 	normalizedEmail := strings.ToLower(strings.TrimSpace(googleUser.Email))
 	if _, allowed := s.adminAllowlist[normalizedEmail]; !allowed {
-		_ = s.mysql.CreateAuditLog(ctx, "admin.google_login_denied", "google_account", normalizedEmail, mysqlstore.JSONString(map[string]any{
+		_ = s.mysql.CreateAuditLog(ctx, "admin.google_login_denied", "google_account", normalizedEmail, sqlstore.JSONString(map[string]any{
 			"email": normalizedEmail,
 			"name":  googleUser.Name,
 		}))
@@ -165,7 +165,7 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code, state string) 
 	if err != nil {
 		return nil, "", "", err
 	}
-	_ = s.mysql.CreateAuditLog(ctx, "admin.google_login", "session", sessionID, mysqlstore.JSONString(map[string]any{
+	_ = s.mysql.CreateAuditLog(ctx, "admin.google_login", "session", sessionID, sqlstore.JSONString(map[string]any{
 		"email":       normalizedEmail,
 		"name":        googleUser.Name,
 		"auth_method": "google",
@@ -313,7 +313,7 @@ func (s *Service) UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int)
 	return s.mysql.CreateAuditLog(ctx, "free_quota.update", "free_quota", fmt.Sprintf("%d", id), string(payload))
 }
 
-func (s *Service) ListUsageEvents(ctx context.Context, filter mysqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
+func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return s.mysql.ListUsageEvents(ctx, filter)
 }
 
@@ -332,7 +332,7 @@ func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserReque
 	if err := s.mysql.UpdateUser(ctx, id, updates); err != nil {
 		return err
 	}
-	return s.mysql.CreateAuditLog(ctx, "user.update", "user", fmt.Sprintf("%d", id), mysqlstore.JSONString(updates))
+	return s.mysql.CreateAuditLog(ctx, "user.update", "user", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
 }
 
 func (s *Service) ListOrders(ctx context.Context) ([]model.Order, error) {
@@ -353,7 +353,7 @@ func (s *Service) UpdateOrder(ctx context.Context, id uint64, req UpdateOrderReq
 	if err := s.mysql.UpdateOrder(ctx, id, updates); err != nil {
 		return err
 	}
-	return s.mysql.CreateAuditLog(ctx, "order.update", "order", fmt.Sprintf("%d", id), mysqlstore.JSONString(updates))
+	return s.mysql.CreateAuditLog(ctx, "order.update", "order", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
 }
 
 func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error) {

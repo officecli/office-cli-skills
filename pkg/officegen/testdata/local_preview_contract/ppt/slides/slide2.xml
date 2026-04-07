@@ -77,33 +77,6 @@
                     </a:graphicData>
                 </a:graphic>
             </p:graphicFrame>
-            <p:sp>
-                <p:nvSpPr>
-                    <p:cNvPr id="11" name="PageNum"/>
-                    <p:cNvSpPr/>
-                    <p:nvPr/>
-                </p:nvSpPr>
-                <p:spPr>
-                    <a:xfrm>
-                        <a:off x="10500000" y="6500000"/>
-                        <a:ext cx="1400000" cy="280000"/>
-                    </a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                </p:spPr>
-                <p:txBody>
-                    <a:bodyPr anchor="b"/>
-                    <a:lstStyle/>
-                    <a:p>
-                        <a:pPr algn="r"/>
-                        <a:r>
-                            <a:rPr lang="en-US" sz="900">
-                                <a:solidFill><a:srgbClr val="333333"><a:alpha val="60000"/></a:srgbClr></a:solidFill>
-                            </a:rPr>
-                            <a:t>Page 02</a:t>
-                        </a:r>
-                    </a:p>
-                </p:txBody>
-            </p:sp>
         </p:spTree>
     </p:cSld>
 </p:sld>

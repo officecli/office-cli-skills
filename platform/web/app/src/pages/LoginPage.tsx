@@ -18,12 +18,12 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <span className="chip mt-8">Google sign-in</span>
-            <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Sign in to continue</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Use your Google account to continue to the OfficeCLI workspace.</p>
+            <span className="chip mt-8">Google sign-in / allowlist required</span>
+            <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Authorized Google accounts only</h1>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Use a Google account that has been explicitly added to the OfficeCLI app allowlist to continue to the workspace.</p>
 
             <div className="panel-muted mt-8 p-6">
-              <div className="text-sm text-outline">You will be redirected to Google authentication and then returned to the app.</div>
+              <div className="text-sm text-outline">You will be redirected to Google authentication and then returned to the app only if the account is allowlisted and still active.</div>
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">

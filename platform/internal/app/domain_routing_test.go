@@ -124,6 +124,37 @@ func TestRegisterStaticStillServesAccessDenied(t *testing.T) {
 	}
 }
 
+func TestRegisterStaticServesAppAccessDeniedThroughSPA(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	root := t.TempDir()
+	adminDir := writeIndex(t, filepath.Join(root, "admin"), "admin")
+	appDir := writeIndex(t, filepath.Join(root, "app"), "app")
+	siteDir := writeIndex(t, filepath.Join(root, "site"), "site")
+
+	engine := gin.New()
+	registerStatic(engine, Config{
+		AdminStaticDir:  adminDir,
+		AppStaticDir:    appDir,
+		SiteStaticDir:   siteDir,
+		SiteBaseURL:     "https://officecli.io",
+		PlatformBaseURL: "https://platform.officecli.io",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://platform.officecli.io/app/access-denied?email=blocked@example.com", nil)
+	req.Host = "platform.officecli.io"
+	rec := httptest.NewRecorder()
+
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); body != "app" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
 func writeIndex(t *testing.T, dir, label string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

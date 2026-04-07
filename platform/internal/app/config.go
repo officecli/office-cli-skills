@@ -15,7 +15,7 @@ import (
 type Config struct {
 	AppEnv                       string
 	HTTPAddr                     string
-	MYSQLDSN                     string
+	PostgresDSN                  string
 	RedisAddr                    string
 	AdminLoginRateLimitPerMinute int
 	LicenseRateLimitPerMinute    int
@@ -38,6 +38,7 @@ type Config struct {
 	GoogleClientID               string
 	GoogleClientSecret           string
 	GoogleRedirectURL            string
+	AppGoogleAllowlist           []string
 	DiscordClientID              string
 	DiscordClientSecret          string
 	DiscordRedirectURL           string
@@ -67,7 +68,7 @@ func LoadConfig() (Config, error) {
 	cfg := Config{
 		AppEnv:                       normalizeAppEnv(mustEnvDefault("APP_ENV", "development")),
 		HTTPAddr:                     mustEnvDefault("HTTP_ADDR", ":8080"),
-		MYSQLDSN:                     mustEnvDefault("MYSQL_DSN", "root:root@tcp(127.0.0.1:3306)/cli_office_platform?parseTime=true&multiStatements=true&charset=utf8mb4"),
+		PostgresDSN:                  mustEnvDefault("POSTGRES_DSN", "host=127.0.0.1 port=5432 user=officecli password=officecli dbname=officecli_platform sslmode=disable TimeZone=UTC"),
 		RedisAddr:                    mustEnvDefault("REDIS_ADDR", "127.0.0.1:6379"),
 		AdminLoginRateLimitPerMinute: defaultAdminLoginRateLimit(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
 		LicenseRateLimitPerMinute:    defaultLicenseRateLimit(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
@@ -90,6 +91,7 @@ func LoadConfig() (Config, error) {
 		GoogleClientID:               os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),
+		AppGoogleAllowlist:           parseCSVList(os.Getenv("APP_GOOGLE_ALLOWLIST")),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
 		DiscordRedirectURL:           mustEnvDefault("DISCORD_REDIRECT_URL", "https://platform.officecli.io/api/app/discord/callback"),

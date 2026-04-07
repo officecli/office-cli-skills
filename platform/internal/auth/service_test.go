@@ -53,6 +53,10 @@ func (f *fakeAuthUserStore) GetUserByID(_ context.Context, id uint64) (*model.Us
 	return nil, nil
 }
 
+func (f *fakeAuthUserStore) CreateAuditLog(_ context.Context, action, targetType, targetID string, payload string) error {
+	return nil
+}
+
 type fakeSessionStore struct {
 	payloads map[string]any
 }
@@ -111,7 +115,7 @@ func (f *fakeReferralRegistrar) RegisterReferral(_ context.Context, inviteCode s
 
 func TestLoginURLStoresInviteCodeInOAuthState(t *testing.T) {
 	sessions := newFakeSessionStore()
-	svc := NewService(fakeOAuthProvider{}, &fakeAuthUserStore{}, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil)
+	svc := NewService(fakeOAuthProvider{}, &fakeAuthUserStore{}, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil, nil)
 
 	url, err := svc.LoginURL(context.Background(), "/app", "invite-abc")
 	require.NoError(t, err)
@@ -143,6 +147,7 @@ func TestHandleCallbackRegistersReferralFromOAuthState(t *testing.T) {
 		time.Hour,
 		fakeCookieCodec{},
 		referrals,
+		[]string{"demo@example.com"},
 	)
 
 	user, rawCookie, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
@@ -172,6 +177,7 @@ func TestHandleCallbackIgnoresInviteLimitError(t *testing.T) {
 		time.Hour,
 		fakeCookieCodec{},
 		referrals,
+		[]string{"demo@example.com"},
 	)
 
 	user, rawCookie, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
@@ -179,4 +185,58 @@ func TestHandleCallbackIgnoresInviteLimitError(t *testing.T) {
 	require.Equal(t, uint64(42), user.ID)
 	require.Equal(t, "/app", returnTo)
 	require.Contains(t, rawCookie, "cookie:")
+}
+
+func TestHandleCallbackRejectsNonAllowlistedEmail(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/app",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042", Status: model.UserStatusActive}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "blocked@example.com", Name: "Blocked"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"demo@example.com"},
+	)
+
+	_, _, _, err := svc.HandleCallback(context.Background(), "code", state)
+	require.Error(t, err)
+	var denied *AccessDeniedError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, "blocked@example.com", denied.Email)
+	require.Equal(t, "email_not_allowlisted", denied.Reason)
+}
+
+func TestHandleCallbackRejectsDisabledUser(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/app",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042", Status: model.UserStatusDisabled}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "demo@example.com", Name: "Blocked"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"demo@example.com"},
+	)
+
+	_, _, _, err := svc.HandleCallback(context.Background(), "code", state)
+	require.Error(t, err)
+	var denied *AccessDeniedError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, "demo@example.com", denied.Email)
+	require.Equal(t, "user_disabled", denied.Reason)
 }

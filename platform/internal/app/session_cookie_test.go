@@ -14,7 +14,7 @@ import (
 	"github.com/officecli/officecli/platform/internal/admin"
 	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/model"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeAuthRouteService struct {
@@ -23,6 +23,7 @@ type fakeAuthRouteService struct {
 	handleReturnTo string
 	logoutCookie   string
 	loginInvite    string
+	handleErr      error
 }
 
 func (f *fakeAuthRouteService) LoginURL(_ context.Context, returnTo, inviteCode string) (string, error) {
@@ -31,7 +32,7 @@ func (f *fakeAuthRouteService) LoginURL(_ context.Context, returnTo, inviteCode 
 }
 
 func (f *fakeAuthRouteService) HandleCallback(_ context.Context, code, state string) (*model.User, string, string, error) {
-	return f.handleUser, f.handleCookie, f.handleReturnTo, nil
+	return f.handleUser, f.handleCookie, f.handleReturnTo, f.handleErr
 }
 
 func (f *fakeAuthRouteService) Me(_ context.Context, raw string) (*model.User, error) {
@@ -99,7 +100,7 @@ func (f *fakeAdminRouteService) ListFreeQuotas(_ context.Context, fingerprint st
 func (f *fakeAdminRouteService) UpdateFreeQuota(_ context.Context, id uint64, freeLimit int) error {
 	return nil
 }
-func (f *fakeAdminRouteService) ListUsageEvents(_ context.Context, filter mysqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
+func (f *fakeAdminRouteService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
 }
 func (f *fakeAdminRouteService) ListUsers(_ context.Context) ([]model.User, error) { return nil, nil }
@@ -256,6 +257,30 @@ func TestRegisterAdminRoutesGoogleCallbackSetsSecureCookieAndRedirects(t *testin
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
 	if !strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "SameSite=Lax") {
+		t.Fatalf("Set-Cookie = %q", cookie)
+	}
+}
+
+func TestRegisterAuthRoutesGoogleCallbackRedirectsDeniedUsersWithoutCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	authSvc := &fakeAuthRouteService{
+		handleErr: &auth.AccessDeniedError{Email: "blocked@example.com", Reason: "email_not_allowlisted"},
+	}
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=demo&state=state", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if location := rec.Header().Get("Location"); location != "/app/access-denied?email=blocked%40example.com" {
+		t.Fatalf("location = %q", location)
+	}
+	if cookie := rec.Header().Get("Set-Cookie"); cookie != "" {
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
 }

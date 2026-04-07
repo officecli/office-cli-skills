@@ -612,7 +612,6 @@ func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name strin
 		user.Email = email
 		user.Name = name
 		user.AvatarURL = avatarURL
-		user.Status = model.UserStatusActive
 		if user.InviteCode == "" {
 			user.InviteCode = buildInviteCode(user.ID)
 		}

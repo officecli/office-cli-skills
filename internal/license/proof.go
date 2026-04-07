@@ -34,6 +34,18 @@ func ValidateCheckResult(result *CheckResult, req CheckRequest) error {
 }
 
 func ValidateCommitToken(token CommitToken, req CheckRequest, accessMode AccessMode) error {
+	if isLegacyUnsignedCommitToken(token) {
+		if strings.TrimSpace(token.RequestID) == "" {
+			return fmt.Errorf("license proof missing request id")
+		}
+		if token.FingerprintHash != "" && token.FingerprintHash != strings.TrimSpace(req.FingerprintHash) {
+			return fmt.Errorf("license proof fingerprint mismatch")
+		}
+		if token.AccessMode != "" && token.AccessMode != accessMode {
+			return fmt.Errorf("license proof access mode mismatch")
+		}
+		return nil
+	}
 	if strings.TrimSpace(token.ProofVersion) != licenseProofVersion {
 		return fmt.Errorf("license proof version mismatch")
 	}
@@ -87,6 +99,17 @@ func ValidateCommitToken(token CommitToken, req CheckRequest, accessMode AccessM
 		return fmt.Errorf("license proof signature mismatch")
 	}
 	return nil
+}
+
+func isLegacyUnsignedCommitToken(token CommitToken) bool {
+	return strings.TrimSpace(token.ProofVersion) == "" &&
+		strings.TrimSpace(token.Signature) == "" &&
+		token.IssuedAt.IsZero() &&
+		token.ExpiresAt.IsZero() &&
+		strings.TrimSpace(token.RequestNonce) == "" &&
+		strings.TrimSpace(token.Action) == "" &&
+		strings.TrimSpace(token.DocumentType) == "" &&
+		strings.TrimSpace(token.RuntimeMode) == ""
 }
 
 func commitTokenPayload(token CommitToken) string {

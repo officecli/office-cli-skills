@@ -18,6 +18,16 @@ KUBE_NAMESPACE="${KUBE_NAMESPACE:-officecli}"
 DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-officecli-platform}"
 CONTAINER_NAME="${CONTAINER_NAME:-platform}"
 IMAGE_REPO="${IMAGE_REPO:-docker.io/library/officecli-platform}"
+SECRET_NAME="${SECRET_NAME:-officecli-platform-env}"
+POSTGRES_SECRET_NAME="${POSTGRES_SECRET_NAME:-officecli-platform-postgres}"
+POSTGRES_STS_NAME="${POSTGRES_STS_NAME:-officecli-platform-postgres}"
+POSTGRES_SERVICE_NAME="${POSTGRES_SERVICE_NAME:-officecli-platform-postgres}"
+POSTGRES_HEADLESS_SERVICE_NAME="${POSTGRES_HEADLESS_SERVICE_NAME:-officecli-platform-postgres-headless}"
+POSTGRES_DB="${POSTGRES_DB:-officecli_platform}"
+POSTGRES_USER="${POSTGRES_USER:-officecli}"
+POSTGRES_BACKUP_CRONJOB_NAME="${POSTGRES_BACKUP_CRONJOB_NAME:-officecli-platform-postgres-backup}"
+POSTGRES_MANIFEST_DIR="${PLATFORM_DIR}/deploy/k8s/postgres"
+PLATFORM_ENV_FILE="${PLATFORM_ENV_FILE:-}"
 SSH_OPTS_STRING="${SSH_OPTS:-}"
 SSH_OPTS=()
 if [[ -n "${SSH_OPTS_STRING}" ]]; then
@@ -38,10 +48,12 @@ usage() {
   - 会构建 linux/amd64 镜像，打包后上传到生产服务器并导入 k3s containerd。
   - 会同步官网、app、admin 静态资源到 Nginx 目录。
   - 会把 Deployment 强制设为 imagePullPolicy=Never + strategy=Recreate。
+  - 若目标 namespace / service / deployment 不存在，会自动执行首次 bootstrap。
+  - 若首次 bootstrap 且缺少 Secret，可传 PLATFORM_ENV_FILE=<本地 env 文件路径> 自动创建 Secret。
 
 可覆盖环境变量：
   SERVER_HOST SERVER_USER SSH_PORT SSH_OPTS REMOTE_WORKDIR REMOTE_SITE_DIR REMOTE_APP_DIR REMOTE_ADMIN_DIR
-  KUBE_NAMESPACE DEPLOYMENT_NAME CONTAINER_NAME IMAGE_REPO
+  KUBE_NAMESPACE DEPLOYMENT_NAME CONTAINER_NAME IMAGE_REPO SECRET_NAME PLATFORM_ENV_FILE
 EOF
 }
 
@@ -180,12 +192,30 @@ deploy_remote() {
   local tag="$1"
   local archive_path="$2"
   local image_ref="$3"
+  local remote_env_file=""
+  local remote_postgres_manifest_dir="${REMOTE_WORKDIR}/postgres-manifests"
 
   log "确保远端工作目录存在 -> ${REMOTE_WORKDIR}"
   ssh_cmd "$SERVER" "sudo mkdir -p '${REMOTE_WORKDIR}' && sudo chown '${SERVER_USER}:${SERVER_USER}' '${REMOTE_WORKDIR}'"
 
   log "上传镜像归档 -> ${REMOTE_WORKDIR}/$(basename "$archive_path")"
   scp_cmd "${archive_path}" "${SERVER}:${REMOTE_WORKDIR}/"
+
+  if [[ -n "${PLATFORM_ENV_FILE}" ]]; then
+    [[ -f "${PLATFORM_ENV_FILE}" ]] || die "未找到 PLATFORM_ENV_FILE: ${PLATFORM_ENV_FILE}"
+    remote_env_file="${REMOTE_WORKDIR}/$(basename "${PLATFORM_ENV_FILE}")"
+    log "上传 bootstrap env 文件 -> ${remote_env_file}"
+    scp_cmd "${PLATFORM_ENV_FILE}" "${SERVER}:${remote_env_file}"
+  fi
+
+  if [[ -d "${POSTGRES_MANIFEST_DIR}" ]]; then
+    log "上传 PostgreSQL k8s 清单 -> ${remote_postgres_manifest_dir}"
+    ssh_cmd "$SERVER" "mkdir -p '${remote_postgres_manifest_dir}'"
+    scp_cmd "${POSTGRES_MANIFEST_DIR}/service-headless.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
+    scp_cmd "${POSTGRES_MANIFEST_DIR}/service.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
+    scp_cmd "${POSTGRES_MANIFEST_DIR}/statefulset.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
+    scp_cmd "${POSTGRES_MANIFEST_DIR}/backup-cronjob.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
+  fi
 
   log "在服务器导入镜像并更新 Deployment"
   ssh_cmd "$SERVER" \
@@ -196,54 +226,256 @@ deploy_remote() {
     KUBE_NAMESPACE="$KUBE_NAMESPACE" \
     DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
     CONTAINER_NAME="$CONTAINER_NAME" \
+    SECRET_NAME="$SECRET_NAME" \
+    POSTGRES_SECRET_NAME="$POSTGRES_SECRET_NAME" \
+    POSTGRES_STS_NAME="$POSTGRES_STS_NAME" \
+    POSTGRES_SERVICE_NAME="$POSTGRES_SERVICE_NAME" \
+    POSTGRES_HEADLESS_SERVICE_NAME="$POSTGRES_HEADLESS_SERVICE_NAME" \
+    POSTGRES_DB="$POSTGRES_DB" \
+    POSTGRES_USER="$POSTGRES_USER" \
+    POSTGRES_BACKUP_CRONJOB_NAME="$POSTGRES_BACKUP_CRONJOB_NAME" \
+    REMOTE_POSTGRES_MANIFEST_DIR="$remote_postgres_manifest_dir" \
+    REMOTE_ENV_FILE="$remote_env_file" \
     'bash -se' <<'EOF'
 set -euo pipefail
 
-resolve_namespace() {
-  local preferred="$1"
-  local legacy="cli-office"
-
-  if kubectl get namespace "$preferred" >/dev/null 2>&1; then
-    printf '%s\n' "$preferred"
-    return
-  fi
-  if [[ "$preferred" != "$legacy" ]] && kubectl get namespace "$legacy" >/dev/null 2>&1; then
-    printf '%s\n' "$legacy"
-    return
-  fi
-  printf '%s\n' "$preferred"
+die() {
+  echo "错误: $*" >&2
+  exit 1
 }
 
-resolve_deployment() {
-  local namespace="$1"
-  local preferred="$2"
-  local legacy="cli-office-platform"
+ensure_namespace() {
+  if ! kubectl get namespace "$KUBE_NAMESPACE" >/dev/null 2>&1; then
+    kubectl create namespace "$KUBE_NAMESPACE" >/dev/null
+  fi
+}
 
-  if kubectl -n "$namespace" get deployment "$preferred" >/dev/null 2>&1; then
-    printf '%s\n' "$preferred"
+ensure_secret() {
+  if kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     return
   fi
-  if [[ "$preferred" != "$legacy" ]] && kubectl -n "$namespace" get deployment "$legacy" >/dev/null 2>&1; then
-    printf '%s\n' "$legacy"
+  [[ -n "${REMOTE_ENV_FILE:-}" ]] || die "缺少 Secret: ${KUBE_NAMESPACE}/${SECRET_NAME}，且未提供 PLATFORM_ENV_FILE"
+  [[ -f "$REMOTE_ENV_FILE" ]] || die "未找到 bootstrap env 文件: $REMOTE_ENV_FILE"
+  kubectl -n "$KUBE_NAMESPACE" create secret generic "$SECRET_NAME" --from-env-file="$REMOTE_ENV_FILE"
+}
+
+ensure_postgres_secret() {
+  if kubectl -n "$KUBE_NAMESPACE" get secret "$POSTGRES_SECRET_NAME" >/dev/null 2>&1; then
     return
   fi
-  printf '%s\n' "$preferred"
+  POSTGRES_PASSWORD="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(24))
+PY
+)"
+  POSTGRES_DSN="host=${POSTGRES_SERVICE_NAME}.${KUBE_NAMESPACE}.svc.cluster.local port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable TimeZone=UTC"
+  kubectl -n "$KUBE_NAMESPACE" create secret generic "$POSTGRES_SECRET_NAME" \
+    --from-literal=POSTGRES_DB="$POSTGRES_DB" \
+    --from-literal=POSTGRES_USER="$POSTGRES_USER" \
+    --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+    --from-literal=POSTGRES_DSN="$POSTGRES_DSN"
+}
+
+sync_platform_secret_postgres_dsn() {
+  POSTGRES_DSN="$(kubectl -n "$KUBE_NAMESPACE" get secret "$POSTGRES_SECRET_NAME" -o jsonpath='{.data.POSTGRES_DSN}' | base64 -d)"
+  kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "{\"stringData\":{\"POSTGRES_DSN\":\"${POSTGRES_DSN}\"}}"
+}
+
+apply_postgres_manifests() {
+  [[ -d "${REMOTE_POSTGRES_MANIFEST_DIR}" ]] || die "未找到 PostgreSQL 清单目录: ${REMOTE_POSTGRES_MANIFEST_DIR}"
+  kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/service-headless.yaml"
+  kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/service.yaml"
+  kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/statefulset.yaml"
+  kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/backup-cronjob.yaml"
+}
+
+wait_postgres_ready() {
+  kubectl -n "$KUBE_NAMESPACE" rollout status "statefulset/${POSTGRES_STS_NAME}" --timeout=240s
+}
+
+run_db_pod() {
+  local pod_name="$1"
+  local args="$2"
+  local mysql_dsn="${3:-}"
+  kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
+  if [[ -n "$mysql_dsn" ]]; then
+    kubectl -n "$KUBE_NAMESPACE" run "$pod_name" \
+      --image="$IMAGE_REF" \
+      --restart=Never \
+      --env="POSTGRES_DSN=$(kubectl -n "$KUBE_NAMESPACE" get secret "$POSTGRES_SECRET_NAME" -o jsonpath='{.data.POSTGRES_DSN}' | base64 -d)" \
+      --env="MYSQL_DSN=${mysql_dsn}" \
+      --command -- /app/officecli-platform $args
+  else
+    kubectl -n "$KUBE_NAMESPACE" run "$pod_name" \
+      --image="$IMAGE_REF" \
+      --restart=Never \
+      --env="POSTGRES_DSN=$(kubectl -n "$KUBE_NAMESPACE" get secret "$POSTGRES_SECRET_NAME" -o jsonpath='{.data.POSTGRES_DSN}' | base64 -d)" \
+      --command -- /app/officecli-platform $args
+  fi
+  kubectl -n "$KUBE_NAMESPACE" wait --for=condition=Ready pod/"$pod_name" --timeout=180s >/dev/null 2>&1 || true
+  kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod_name" --timeout=600s
+  kubectl -n "$KUBE_NAMESPACE" logs "$pod_name"
+  kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
+}
+
+needs_initial_pg_copy() {
+  if kubectl -n "$KUBE_NAMESPACE" get configmap officecli-platform-pg-cutover >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+mark_pg_copy_complete() {
+  kubectl -n "$KUBE_NAMESPACE" create configmap officecli-platform-pg-cutover \
+    --from-literal=completed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+    --from-literal=image="$IMAGE_REF" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+
+ensure_service() {
+  if kubectl -n "$KUBE_NAMESPACE" get service "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
+    return
+  fi
+  cat <<SERVICE | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${DEPLOYMENT_NAME}
+  namespace: ${KUBE_NAMESPACE}
+  labels:
+    app: ${DEPLOYMENT_NAME}
+spec:
+  selector:
+    app: ${DEPLOYMENT_NAME}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+SERVICE
+}
+
+ensure_deployment() {
+  if kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
+    return
+  fi
+  cat <<DEPLOYMENT | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${DEPLOYMENT_NAME}
+  namespace: ${KUBE_NAMESPACE}
+  labels:
+    app: ${DEPLOYMENT_NAME}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ${DEPLOYMENT_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${DEPLOYMENT_NAME}
+    spec:
+      containers:
+        - name: ${CONTAINER_NAME}
+          image: ${IMAGE_REF}
+          imagePullPolicy: Never
+          env:
+            - name: HTTP_ADDR
+              value: :8080
+            - name: ADMIN_STATIC_DIR
+              value: /app/web/admin/dist
+          envFrom:
+            - secretRef:
+                name: ${SECRET_NAME}
+          ports:
+            - name: http
+              containerPort: 8080
+              hostPort: 29001
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+DEPLOYMENT
 }
 
 cd "$REMOTE_WORKDIR"
+
+ensure_namespace
+ensure_secret
+ensure_postgres_secret
+sync_platform_secret_postgres_dsn
+apply_postgres_manifests
+wait_postgres_ready
+ensure_service
+
+deployment_exists=0
+if kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
+  deployment_exists=1
+fi
+
+echo "--- import image ---"
 gzip -dc "$ARCHIVE_NAME" | sudo k3s ctr images import -
 
-KUBE_NAMESPACE="$(resolve_namespace "$KUBE_NAMESPACE")"
-DEPLOYMENT_NAME="$(resolve_deployment "$KUBE_NAMESPACE" "$DEPLOYMENT_NAME")"
+echo
+echo "--- run postgres migration ---"
+run_db_pod officecli-platform-db-migrate "db migrate"
 
-kubectl -n "$KUBE_NAMESPACE" set image "deployment/$DEPLOYMENT_NAME" \
-  "$CONTAINER_NAME=$IMAGE_REF"
+mysql_dsn=""
+if kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.MYSQL_DSN}' >/dev/null 2>&1; then
+  mysql_dsn="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.MYSQL_DSN}' | base64 -d)"
+fi
+
+if [[ "$deployment_exists" -eq 1 ]] && [[ -n "$mysql_dsn" ]] && needs_initial_pg_copy; then
+  echo
+  echo "--- initial mysql -> postgres copy ---"
+  kubectl -n "$KUBE_NAMESPACE" scale deployment "$DEPLOYMENT_NAME" --replicas=0
+  kubectl -n "$KUBE_NAMESPACE" wait --for=delete pod -l "app=${DEPLOYMENT_NAME}" --timeout=180s >/dev/null 2>&1 || true
+  run_db_pod officecli-platform-db-copy "db copy" "$mysql_dsn"
+  mark_pg_copy_complete
+fi
+
+if [[ "$deployment_exists" -eq 1 ]]; then
+  echo "--- preflight deployment ---"
+  kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" -o wide
+
+  echo
+  echo "--- backup deployment yaml ---"
+  backup_path="${REMOTE_WORKDIR}/${DEPLOYMENT_NAME}-${TAG}-before.yaml"
+  kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" -o yaml > "$backup_path"
+  echo "$backup_path"
+
+  kubectl -n "$KUBE_NAMESPACE" set image "deployment/$DEPLOYMENT_NAME" \
+    "$CONTAINER_NAME=$IMAGE_REF"
 
   kubectl -n "$KUBE_NAMESPACE" patch deployment "$DEPLOYMENT_NAME" --type json -p \
     '[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Never"}]'
 
-kubectl -n "$KUBE_NAMESPACE" patch deployment "$DEPLOYMENT_NAME" --type merge -p \
-  '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+  kubectl -n "$KUBE_NAMESPACE" patch deployment "$DEPLOYMENT_NAME" --type merge -p \
+    '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+else
+  echo "--- bootstrap deployment ---"
+  ensure_deployment
+fi
 
 kubectl -n "$KUBE_NAMESPACE" delete pod -l "app=${DEPLOYMENT_NAME}" --ignore-not-found=true --wait=false || true
 kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$DEPLOYMENT_NAME" --timeout=180s

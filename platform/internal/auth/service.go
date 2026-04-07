@@ -60,9 +60,18 @@ type Service struct {
 	cookieName string
 	sessionTTL time.Duration
 	codec      CookieCodec
+	allowlist  map[string]struct{}
 }
 
-func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, cookieName string, sessionTTL time.Duration, codec CookieCodec, referrals ReferralRegistrar) *Service {
+func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, cookieName string, sessionTTL time.Duration, codec CookieCodec, referrals ReferralRegistrar, allowlist []string) *Service {
+	normalizedAllowlist := make(map[string]struct{}, len(allowlist))
+	for _, email := range allowlist {
+		normalized := strings.ToLower(strings.TrimSpace(email))
+		if normalized == "" {
+			continue
+		}
+		normalizedAllowlist[normalized] = struct{}{}
+	}
 	return &Service{
 		provider:   provider,
 		users:      users,
@@ -71,6 +80,7 @@ func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, 
 		cookieName: cookieName,
 		sessionTTL: sessionTTL,
 		codec:      codec,
+		allowlist:  normalizedAllowlist,
 	}
 }
 
@@ -98,9 +108,27 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 	if err != nil {
 		return nil, "", "", err
 	}
-	user, err := s.users.SaveGoogleUser(ctx, googleUser.Subject, googleUser.Email, googleUser.Name, googleUser.AvatarURL)
+	normalizedEmail := strings.ToLower(strings.TrimSpace(googleUser.Email))
+	if _, allowed := s.allowlist[normalizedEmail]; !allowed {
+		s.writeAuditLog(ctx, "app.google_login_denied", normalizedEmail, map[string]any{
+			"email":  normalizedEmail,
+			"name":   googleUser.Name,
+			"reason": "email_not_allowlisted",
+		})
+		return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "email_not_allowlisted"}
+	}
+	user, err := s.users.SaveGoogleUser(ctx, googleUser.Subject, normalizedEmail, googleUser.Name, googleUser.AvatarURL)
 	if err != nil {
 		return nil, "", "", err
+	}
+	if user.Status == model.UserStatusDisabled {
+		s.writeAuditLog(ctx, "app.google_login_denied", normalizedEmail, map[string]any{
+			"email":   normalizedEmail,
+			"name":    googleUser.Name,
+			"user_id": user.ID,
+			"reason":  "user_disabled",
+		})
+		return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "user_disabled"}
 	}
 	if inviteCode := strings.TrimSpace(payload["invite_code"]); inviteCode != "" && s.referrals != nil {
 		if _, err := s.referrals.RegisterReferral(ctx, inviteCode, user.ID); err != nil && !errors.Is(err, growthsvc.ErrInviteLimitReached) {
@@ -156,4 +184,25 @@ func (s *Service) Me(ctx context.Context, raw string) (*model.User, error) {
 func MarshalAudit(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
+}
+
+type AccessDeniedError struct {
+	Email  string
+	Reason string
+}
+
+func (e *AccessDeniedError) Error() string {
+	return "app account is not authorized"
+}
+
+type auditLogger interface {
+	CreateAuditLog(ctx context.Context, action, targetType, targetID string, payload string) error
+}
+
+func (s *Service) writeAuditLog(ctx context.Context, action, targetID string, payload map[string]any) {
+	logger, ok := s.users.(auditLogger)
+	if !ok {
+		return
+	}
+	_ = logger.CreateAuditLog(ctx, action, "google_account", targetID, MarshalAudit(payload))
 }

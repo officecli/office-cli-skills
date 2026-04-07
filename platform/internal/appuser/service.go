@@ -13,7 +13,7 @@ import (
 
 	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type Store interface {
@@ -237,7 +237,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPI
 	if err != nil {
 		return nil, err
 	}
-	_ = s.store.CreateAuditLog(ctx, "app.api_key.create", "api_key", fmt.Sprintf("%d", key.ID), mysqlstore.JSONString(key))
+	_ = s.store.CreateAuditLog(ctx, "app.api_key.create", "api_key", fmt.Sprintf("%d", key.ID), sqlstore.JSONString(key))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: *key}, nil
 }
 

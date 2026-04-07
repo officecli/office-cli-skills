@@ -107,7 +107,7 @@ install_binary_macos() {
     local tap_repo
     tap_repo="$(brew --repository "${HOMEBREW_TAP_NAME}" 2>/dev/null || true)"
     if [[ -n "${tap_repo}" ]]; then
-      rm -f "${tap_repo}/Formula/cli-office.rb"
+      rm -f "${tap_repo}/Formula/officecli.rb"
     fi
 
     if brew install "${HOMEBREW_FORMULA}" >/dev/null 2>&1 || brew upgrade "${HOMEBREW_FORMULA}" >/dev/null 2>&1; then

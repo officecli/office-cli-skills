@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/officecli/officecli/platform/internal/model"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeCodec struct{}
@@ -51,7 +51,7 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.FreeQuota{}, &model.UsageEvent{}, &model.AdminAuditLog{}))
-	mysqlRepo := mysqlstore.NewWithDB(db)
+	mysqlRepo := sqlstore.NewWithDB(db)
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"})
 	_ = client
 	redisRepo := redisstore.NewStore(redis.NewClient(&redis.Options{Addr: "localhost:6379"}))

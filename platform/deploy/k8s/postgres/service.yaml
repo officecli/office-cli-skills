@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: officecli-platform-postgres
+  namespace: officecli
+spec:
+  selector:
+    app: officecli-platform-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

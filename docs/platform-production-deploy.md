@@ -2,6 +2,12 @@
 
 本文档记录 `platform/` 当前生产环境的实际发布流程。目标是让后续 agent 可以直接按文档操作，而不是重新猜部署方式。
 
+命名约束：
+
+- 生产环境统一使用 `officecli` / `officecli-platform` / `officecli_platform`
+- 不再保留任何旧前缀兼容命名
+- 如果现网仍有旧命名资源，先完成一次性迁移，再走常规发版
+
 ## 推荐入口
 
 如仓库主线存在 GitHub Actions 工作流 `Platform Deploy`（`.github/workflows/platform-deploy.yml`），优先用该 workflow 发版；它本质上仍调用仓库脚本 `scripts/deploy-platform-prod.sh` 作为底层执行器。
@@ -35,7 +41,63 @@
 - 强制 `strategy=Recreate`
 - 执行发布后公网验证
 
+如果是首次发布到一个空 namespace，脚本还会自动：
+
+- 创建 `officecli` namespace
+- 创建 `officecli-platform` Service
+- 在不存在 Deployment 时自动 bootstrap `officecli-platform`
+- 如果 Secret 缺失且传入 `PLATFORM_ENV_FILE`，自动创建 `officecli-platform-env`
+
 只有在脚本不可用或需要排障时，才按本文后面的分步命令手工执行。
+
+## 旧命名迁移
+
+如果生产环境里还残留旧命名资源，先迁移，再发布。建议顺序：
+
+1. 先做只读核验：
+   - `kubectl -n officecli get deploy,pod -o wide`
+   - `kubectl -n officecli get deployment officecli-platform -o yaml`
+   - `sudo sed -n '1,240p' /etc/nginx/sites-available/officecli.io`
+   - `sudo sed -n '1,240p' /etc/nginx/sites-available/platform.officecli.io`
+2. 备份生产数据库，并把生产 `MYSQL_DSN` 指向 `officecli_platform`
+3. 确保远端工作目录固定为 `/opt/officecli-platform`
+4. 确保镜像固定为 `docker.io/library/officecli-platform:<tag>`
+5. 确保最终 Deployment 固定为 `officecli-platform`
+
+说明：
+
+- Kubernetes Deployment 不能原地改名，需要删除旧 Deployment 后创建新 Deployment。
+- 由于现网使用 `hostPort: 29001`，切换必须走短暂停机窗口，不能双 Pod 并行。
+
+## 首次 bootstrap 约定
+
+如果是一个全新的生产节点，推荐直接使用仓库脚本初始化：
+
+```bash
+PLATFORM_ENV_FILE=/path/to/platform-prod.env \
+SECRET_NAME=officecli-platform-env \
+./scripts/deploy-platform-prod.sh
+```
+
+其中 `platform-prod.env` 建议至少包含：
+
+```env
+MYSQL_DSN=...
+REDIS_ADDR=...
+ADMIN_PASSWORD=...
+SESSION_SECRET=...
+APP_SESSION_SECRET=...
+API_KEY_HASH_SALT=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URL=https://platform.officecli.io/api/auth/google/callback
+```
+
+说明：
+
+- 若目标 namespace、Service、Deployment 已存在，脚本走常规升级发布。
+- 若 namespace 已存在但 Secret 不存在，脚本只有在传入 `PLATFORM_ENV_FILE` 时才会自动补 Secret。
+- 线上默认 Secret 名称为 `officecli-platform-env`；如需覆盖，可设置 `SECRET_NAME`。
 
 ## 生产环境现状
 
@@ -171,6 +233,14 @@ kubectl -n officecli patch deployment officecli-platform --type json -p \
 kubectl -n officecli patch deployment officecli-platform --type json -p \
   '[{"op":"remove","path":"/spec/strategy/rollingUpdate"},{"op":"replace","path":"/spec/strategy/type","value":"Recreate"}]'
 ```
+
+如果是在旧命名资源迁移后的首次切换，不要继续对旧 Deployment 打补丁，而是：
+
+1. 导出旧 Deployment 作为备份
+2. 生成新的 `officecli-platform` Deployment 清单
+3. 校验 selector、template labels、镜像、`imagePullPolicy`、`strategy`、`hostPort`
+4. 删除旧 Deployment
+5. `kubectl apply -f <new-deployment.yaml>`
 
 ### 5. 重建 Pod 并等待完成
 

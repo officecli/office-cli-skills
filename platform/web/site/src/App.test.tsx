@@ -37,7 +37,10 @@ describe('site metadata and assets', () => {
   it('defines marketing metadata in index.html', () => {
     const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8')
 
+    expect(html).toContain('<title>OfficeCLI</title>')
     expect(html).toContain('name="description"')
+    expect(html).toContain('property="og:title" content="OfficeCLI"')
+    expect(html).toContain('name="twitter:title" content="OfficeCLI"')
     expect(html).toContain('property="og:title"')
     expect(html).toContain('name="twitter:card"')
   })

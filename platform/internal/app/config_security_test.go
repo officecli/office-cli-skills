@@ -139,3 +139,21 @@ func TestLoadConfigAllowsRateLimitOverrides(t *testing.T) {
 		t.Fatalf("RateLimitVisitorTTL = %v", cfg.RateLimitVisitorTTL)
 	}
 }
+
+func TestLoadConfigParsesAppGoogleAllowlist(t *testing.T) {
+	t.Setenv("APP_GOOGLE_ALLOWLIST", " Demo@example.com, ops@example.com , ")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if len(cfg.AppGoogleAllowlist) != 2 {
+		t.Fatalf("AppGoogleAllowlist len = %d", len(cfg.AppGoogleAllowlist))
+	}
+	if cfg.AppGoogleAllowlist[0] != "Demo@example.com" {
+		t.Fatalf("AppGoogleAllowlist[0] = %q", cfg.AppGoogleAllowlist[0])
+	}
+	if cfg.AppGoogleAllowlist[1] != "ops@example.com" {
+		t.Fatalf("AppGoogleAllowlist[1] = %q", cfg.AppGoogleAllowlist[1])
+	}
+}

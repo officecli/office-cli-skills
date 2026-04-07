@@ -4,9 +4,9 @@
 
 ## 技术栈与目录结构
 
-- 后端：Go + ego + GORM + MySQL + Redis
+- 后端：Go + ego + GORM + PostgreSQL + Redis
 - 前端：React + TypeScript + Vite + Ant Design + TanStack Query
-- 本地依赖：Docker Compose 启动 MySQL/Redis
+- 本地依赖：Docker Compose 启动 PostgreSQL/Redis
 - 静态托管：Go 服务托管 `web/site/dist`、`web/app/dist`、`web/admin/dist`
 
 主要目录：
@@ -19,7 +19,7 @@
 - `internal/appuser`：2c 用户中心 API
 - `internal/billing`：Stripe checkout / webhook / 订单
 - `internal/model`：实体模型
-- `internal/store/mysql`：GORM repository
+- `internal/store/sqlstore`：GORM repository
 - `internal/store/redis`：会话、幂等、锁
 - `migrations/`：建表 SQL
 - `seed/`：演示数据
@@ -27,7 +27,7 @@
 - `web/app/`：2c 用户中心
 - `web/admin/`：React 管理台源码
 - `web/*/dist/`：各前端构建产物
-- `deploy/docker-compose.yml`：本地 MySQL/Redis
+- `deploy/docker-compose.yml`：本地 PostgreSQL/Redis
 
 ## 域名与路由分配
 
@@ -60,13 +60,10 @@ export $(grep -v '^#' .env | xargs)
 3. 执行 migration：
 
 ```bash
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/001_init.sql
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/002_paid_quota.sql
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/003_auth_billing.sql
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < migrations/004_growth_rewards.sql
+go run ./cmd/platform db migrate
 ```
 
-> `platform` 启动时也会自动按文件名顺序执行 `migrations/*.sql`。上面的手工命令主要用于首次建库或排障时显式校验库结构。
+> `platform` 启动时也会自动按版本执行 `migrations/postgres/*.sql`。上面的手工命令主要用于首次建库或排障时显式校验库结构。
 
 4. 安装前端依赖并构建：
 
@@ -96,7 +93,7 @@ make dev
 
 - `APP_ENV`：运行环境，支持 `development` / `staging` / `production`，默认 `development`
 - `HTTP_ADDR`：HTTP 监听地址
-- `MYSQL_DSN`：MySQL 连接串
+- `POSTGRES_DSN`：PostgreSQL 连接串
 - `REDIS_ADDR`：Redis 地址
 - `ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE`：管理员登录接口每分钟限流阈值
 - `LICENSE_RATE_LIMIT_PER_MINUTE`：license check / consume 每分钟限流阈值
@@ -112,6 +109,7 @@ make dev
 - `APP_SESSION_SECRET`：2c 用户 session 签名密钥
 - `APP_SESSION_TTL`：2c 用户会话 TTL
 - `GOOGLE_REDIRECT_URL`：Google OAuth 回调地址，默认指向 `https://platform.officecli.io/api/auth/google/callback`
+- `APP_GOOGLE_ALLOWLIST`：平台 App 允许登录的 Google 邮箱列表，逗号分隔；为空时拒绝所有 App 登录
 - `STRIPE_SUCCESS_URL`：Stripe 成功回跳地址，默认指向 `https://platform.officecli.io/app/billing?status=success`
 - `STRIPE_CANCEL_URL`：Stripe 取消回跳地址，默认指向 `https://platform.officecli.io/app/billing?status=cancel`
 - `HOSTED_LLM_BASE_URL`：hosted LLM 上游 API 地址
@@ -125,6 +123,8 @@ make dev
 - `SITE_STATIC_DIR`：官网构建产物目录
 
 修改默认免费额度只需要调整 `DEFAULT_FREE_LIMIT`。
+
+用户 App 登录当前采用 Google OAuth + allowlist；需要通过 `APP_GOOGLE_ALLOWLIST` 显式配置允许登录的邮箱，留空时默认拒绝所有 App 登录。
 
 管理员登录当前采用 Google OAuth + allowlist；默认示例配置已收口为仅允许 `luyang950@gmail.com` 进入后台。
 
@@ -177,7 +177,7 @@ paid 模式当前采用“次数包余额”模型：`check` 只校验是否可�
 - 演示免费额度数据：
 
 ```bash
-mysql -uroot -proot -h127.0.0.1 cli_office_platform < seed/demo.sql
+psql "host=127.0.0.1 port=5432 user=officecli password=officecli dbname=officecli_platform sslmode=disable" -f seed/demo.sql
 ```
 
 ## 创建测试 api-key

@@ -55,6 +55,31 @@ func TestSaveGoogleUserBackfillsMissingInviteCode(t *testing.T) {
 	require.Equal(t, buildInviteCode(legacy.ID), user.InviteCode)
 }
 
+func TestSaveGoogleUserKeepsDisabledStatusForExistingUser(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:save_google_user_keeps_disabled_status?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+
+	legacy := &model.User{
+		GoogleSub:  "legacy-sub",
+		Email:      "legacy@example.com",
+		Name:       "Legacy User",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusDisabled,
+	}
+	require.NoError(t, db.Create(legacy).Error)
+
+	store := NewWithDB(db)
+	user, err := store.SaveGoogleUser(context.Background(), "legacy-sub", "legacy@example.com", "Renamed User", nil)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusDisabled, user.Status)
+
+	saved, err := store.GetUserByID(context.Background(), legacy.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusDisabled, saved.Status)
+	require.Equal(t, "Renamed User", saved.Name)
+}
+
 func TestCountReferralsByInviterUserID(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:count_referrals_by_inviter_user_id?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

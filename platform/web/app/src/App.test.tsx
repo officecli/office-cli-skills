@@ -28,7 +28,7 @@ describe('platform app shell', () => {
 
     renderApp('/')
 
-    expect(await screen.findByRole('heading', { name: /Sign in to continue/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Authorized Google accounts only/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
     expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
@@ -36,6 +36,16 @@ describe('platform app shell', () => {
     expect(screen.queryByText(/Ship faster from the terminal/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/What unlocks after sign-in/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/\$ officecli auth status/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the access denied route with the blocked email context', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderApp('/access-denied?email=blocked@example.com')
+
+    expect(await screen.findByRole('heading', { name: /Access not granted/i })).toBeInTheDocument()
+    expect(screen.getByText('blocked@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Try another Google account/i })).toHaveAttribute('href', '/api/auth/google/login?return_to=%2Fapp')
   })
 
   it('renders the overview after login and shows the remaining credits board', async () => {

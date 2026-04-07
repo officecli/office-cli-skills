@@ -33,8 +33,8 @@ import (
 	"github.com/officecli/officecli/platform/internal/model"
 	publishsvc "github.com/officecli/officecli/platform/internal/publish"
 	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type Application struct{ ego *ego.Ego }
@@ -68,7 +68,7 @@ type adminRouteService interface {
 	UpdateAPIKey(ctx context.Context, id uint64, req admin.UpdateAPIKeyRequest) error
 	ListFreeQuotas(ctx context.Context, fingerprint string) ([]model.FreeQuota, error)
 	UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error
-	ListUsageEvents(ctx context.Context, filter mysqlstore.UsageEventFilter) ([]model.UsageEvent, error)
+	ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error)
 	ListUsers(ctx context.Context) ([]model.User, error)
 	UpdateUser(ctx context.Context, id uint64, req admin.UpdateUserRequest) error
 	ListOrders(ctx context.Context) ([]model.Order, error)
@@ -105,14 +105,14 @@ func New() (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	mysqlDB, err := mysqlstore.New(cfg.MYSQLDSN)
+	dbStore, err := sqlstore.New(cfg.PostgresDSN)
 	if err != nil {
 		return nil, err
 	}
-	if err := mysqlDB.Ping(context.Background()); err != nil {
+	if err := dbStore.Ping(context.Background()); err != nil {
 		return nil, err
 	}
-	if err := mysqlDB.EnsureMigrations(context.Background()); err != nil {
+	if err := dbStore.EnsureMigrations(context.Background()); err != nil {
 		return nil, err
 	}
 	redisClient := redisstore.NewClient(cfg.RedisAddr)
@@ -121,12 +121,12 @@ func New() (*Application, error) {
 		return nil, err
 	}
 
-	rewardService := rewardsvc.NewService(mysqlDB)
-	growthService := growthsvc.NewService(mysqlDB, mysqlDB, mysqlDB, mysqlDB)
+	rewardService := rewardsvc.NewService(dbStore)
+	growthService := growthsvc.NewService(dbStore, dbStore, dbStore, dbStore)
 	lic := licensesvc.NewService(
-		apiKeyRepo{store: mysqlDB},
-		freeQuotaRepo{store: mysqlDB},
-		usageEventRepo{store: mysqlDB},
+		apiKeyRepo{store: dbStore},
+		freeQuotaRepo{store: dbStore},
+		usageEventRepo{store: dbStore},
 		redisLicenseAdapter{store: redisRepo},
 		rewardService,
 		growthService,
@@ -138,7 +138,7 @@ func New() (*Application, error) {
 			TTL:  cfg.LicenseProofTTL,
 		},
 	)
-	hostedLLMSvc := hostedllm.NewService(mysqlDB, hostedllm.Config{
+	hostedLLMSvc := hostedllm.NewService(dbStore, hostedllm.Config{
 		BaseURL:    cfg.HostedLLMBaseURL,
 		APIKey:     cfg.HostedLLMAPIKey,
 		TextModel:  cfg.HostedLLMTextModel,
@@ -148,11 +148,11 @@ func New() (*Application, error) {
 		TimeoutSec: 60,
 	})
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
-	adminSvc := admin.NewService(mysqlDB, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
-	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), mysqlDB, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService)
-	billingSvc := billing.NewService(mysqlDB, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
-	appSvc := appuser.NewService(mysqlDB, billingSvc, cfg.APIKeyHashSalt, growthService)
-	publishService := publishsvc.NewService(apiKeyRepo{store: mysqlDB}, publishsvc.Config{
+	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
+	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
+	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, growthService)
+	publishService := publishsvc.NewService(apiKeyRepo{store: dbStore}, publishsvc.Config{
 		BaseURL:              cfg.ClaudeOfficeBaseURL,
 		AuthKey:              cfg.ClaudeOfficeAuthKey,
 		HashSalt:             cfg.APIKeyHashSalt,
@@ -450,6 +450,15 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 	api.GET("/auth/google/callback", func(c *gin.Context) {
 		user, rawCookie, returnTo, err := authSvc.HandleCallback(c.Request.Context(), c.Query("code"), c.Query("state"))
 		if err != nil {
+			var denied *auth.AccessDeniedError
+			if errors.As(err, &denied) {
+				deniedURL := "/app/access-denied"
+				if denied.Email != "" {
+					deniedURL += "?email=" + url.QueryEscape(denied.Email)
+				}
+				c.Redirect(http.StatusFound, deniedURL)
+				return
+			}
 			httpapi.LogWarnRequest(c, "auth_callback_failed",
 				"path", c.Request.URL.Path,
 				"client_ip", c.ClientIP(),
@@ -638,7 +647,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
 	protected.GET("/usage-events", func(c *gin.Context) {
-		filter := mysqlstore.UsageEventFilter{Mode: c.Query("mode"), Result: c.Query("result"), ReasonCode: c.Query("reason_code"), Fingerprint: c.Query("fingerprint_hash")}
+		filter := sqlstore.UsageEventFilter{Mode: c.Query("mode"), Result: c.Query("result"), ReasonCode: c.Query("reason_code"), Fingerprint: c.Query("fingerprint_hash")}
 		if raw := c.Query("api_key_id"); raw != "" {
 			parsed, _ := strconv.ParseUint(raw, 10, 64)
 			filter.APIKeyID = &parsed
@@ -1091,7 +1100,7 @@ func hostPart(addr string) string {
 	return addr[:idx]
 }
 
-type apiKeyRepo struct{ store *mysqlstore.Store }
+type apiKeyRepo struct{ store *sqlstore.Store }
 
 func (r apiKeyRepo) FindByHash(ctx context.Context, hash string) (*model.APIKey, error) {
 	return r.store.FindAPIKeyByHash(ctx, hash)
@@ -1113,7 +1122,7 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 	return key, err
 }
 
-type freeQuotaRepo struct{ store *mysqlstore.Store }
+type freeQuotaRepo struct{ store *sqlstore.Store }
 
 func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
 	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
@@ -1129,7 +1138,7 @@ func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDat
 	return quota, err
 }
 
-type usageEventRepo struct{ store *mysqlstore.Store }
+type usageEventRepo struct{ store *sqlstore.Store }
 
 func (r usageEventRepo) Create(ctx context.Context, event *model.UsageEvent) error {
 	return r.store.CreateUsageEvent(ctx, event)

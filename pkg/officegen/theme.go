@@ -15,11 +15,19 @@ func generateThemeXML(theme *SlideTheme) string {
 
 	primaryColor := theme.PrimaryColor
 	accentColor := theme.AccentColor
+	fontFamily := theme.FontFamily
+	eaFontFamily := theme.EAFontFamily
 	if primaryColor == "" {
 		primaryColor = "5B9BD5"
 	}
 	if accentColor == "" {
 		accentColor = "ED7D31"
+	}
+	if fontFamily == "" {
+		fontFamily = "Noto Sans CJK SC"
+	}
+	if eaFontFamily == "" {
+		eaFontFamily = fontFamily
 	}
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -65,13 +73,13 @@ func generateThemeXML(theme *SlideTheme) string {
         </a:clrScheme>
         <a:fontScheme name="Apple-Style">
             <a:majorFont>
-                <a:latin typeface="Helvetica Neue" panose="020B0604020202020204"/>
-                <a:ea typeface="PingFang SC"/>
+                <a:latin typeface="%s" panose="020B0604020202020204"/>
+                <a:ea typeface="%s"/>
                 <a:cs typeface=""/>
             </a:majorFont>
             <a:minorFont>
-                <a:latin typeface="Helvetica Neue" panose="020B0604020202020204"/>
-                <a:ea typeface="PingFang SC"/>
+                <a:latin typeface="%s" panose="020B0604020202020204"/>
+                <a:ea typeface="%s"/>
                 <a:cs typeface=""/>
             </a:minorFont>
         </a:fontScheme>
@@ -209,5 +217,5 @@ func generateThemeXML(theme *SlideTheme) string {
     </a:themeElements>
     <a:objectDefaults/>
     <a:extraClrSchemeLst/>
-</a:theme>`, primaryColor, accentColor)
+</a:theme>`, primaryColor, accentColor, fontFamily, eaFontFamily, fontFamily, eaFontFamily)
 }

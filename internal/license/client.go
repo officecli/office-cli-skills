@@ -48,7 +48,7 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResult, er
 		return nil, err
 	}
 	var result CheckResult
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := decodeEnvelope(body, &result); err != nil {
 		return nil, fmt.Errorf("decode license check response: %w", err)
 	}
 	return &result, nil
@@ -71,10 +71,24 @@ func (s *Service) Consume(ctx context.Context, token CommitToken) (*ConsumeResul
 		return nil, err
 	}
 	var result ConsumeResult
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := decodeEnvelope(body, &result); err != nil {
 		return nil, fmt.Errorf("decode license consume response: %w", err)
 	}
 	return &result, nil
+}
+
+func decodeEnvelope(body []byte, target any) error {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return err
+	}
+	if data, ok := envelope["data"]; ok {
+		if len(data) == 0 || string(data) == "null" {
+			return fmt.Errorf("response missing data field")
+		}
+		return json.Unmarshal(data, target)
+	}
+	return json.Unmarshal(body, target)
 }
 
 func (s *Service) post(ctx context.Context, path string, payload any) ([]byte, error) {

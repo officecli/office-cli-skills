@@ -1070,6 +1070,34 @@ func TestCheckLicenseRejectsTamperedReplayProof(t *testing.T) {
 	}
 }
 
+func TestCheckLicenseAcceptsLegacyPlatformToken(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				return &LicenseCheckResult{
+					Allowed:    true,
+					AccessMode: LicenseAccessModePaid,
+					CommitToken: UsageCommitToken{
+						FingerprintHash: req.FingerprintHash,
+						RequestID:       "req-legacy",
+						AccessMode:      LicenseAccessModePaid,
+						APIKeyHint:      "cop_live_DBq",
+					},
+				}, nil
+			},
+		}, nil
+	}
+
+	result, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
+	if err != nil {
+		t.Fatalf("checkLicense() error = %v", err)
+	}
+	if result == nil || result.AccessMode != LicenseAccessModePaid {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestCheckLicenseRejectsExpiredProof(t *testing.T) {
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {

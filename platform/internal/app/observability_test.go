@@ -17,7 +17,7 @@ import (
 	"github.com/officecli/officecli/platform/internal/admin"
 	"github.com/officecli/officecli/platform/internal/httpapi"
 	"github.com/officecli/officecli/platform/internal/model"
-	mysqlstore "github.com/officecli/officecli/platform/internal/store/mysql"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeAuthRouteFailureService struct{}
@@ -69,7 +69,7 @@ func (fakeAdminRouteFailureService) ListFreeQuotas(_ context.Context, fingerprin
 func (fakeAdminRouteFailureService) UpdateFreeQuota(_ context.Context, id uint64, freeLimit int) error {
 	return nil
 }
-func (fakeAdminRouteFailureService) ListUsageEvents(_ context.Context, filter mysqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
+func (fakeAdminRouteFailureService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
 }
 func (fakeAdminRouteFailureService) ListUsers(_ context.Context) ([]model.User, error) {
