@@ -17,7 +17,9 @@ import (
 )
 
 type fakeAPIKeyStore struct {
-	key *model.APIKey
+	key       *model.APIKey
+	touched   bool
+	touchedID uint64
 }
 
 func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey, error) {
@@ -28,7 +30,9 @@ func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey
 	return &cloned, nil
 }
 
-func (f *fakeAPIKeyStore) TouchLastUsedAt(_ context.Context, _ uint64, _ time.Time) error {
+func (f *fakeAPIKeyStore) TouchLastUsedAt(_ context.Context, id uint64, _ time.Time) error {
+	f.touched = true
+	f.touchedID = id
 	return nil
 }
 
@@ -85,6 +89,71 @@ func TestAuthorizeAcceptsHostedCreditKey(t *testing.T) {
 	key, err := svc.authorize(context.Background(), "Bearer demo")
 	require.NoError(t, err)
 	require.NotNil(t, key)
+}
+
+func TestUploadAttachmentUsesDynamicSignatureHeaders(t *testing.T) {
+	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 1, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
+	var gotKeyID string
+	var gotTimestamp string
+	var gotSignature string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKeyID = r.Header.Get("X-Auth-Key-Id")
+		gotTimestamp = r.Header.Get("X-Auth-Timestamp")
+		gotSignature = r.Header.Get("X-Auth-Signature")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"storage_key": "attachments/demo.docx",
+			},
+		})
+	}))
+	defer server.Close()
+
+	svc := NewService(store, Config{
+		BaseURL:          server.URL,
+		AuthKeyID:        "platform-prod",
+		AuthSharedSecret: "shared-secret",
+		HashSalt:         "salt",
+	})
+	_, err := svc.uploadAttachment(context.Background(), Request{
+		FileName:     "demo.docx",
+		DocumentType: "docx",
+		DocumentName: "demo.docx",
+		ContentType:  "application/octet-stream",
+		Reader:       strings.NewReader("hello"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "platform-prod", gotKeyID)
+	require.NotEmpty(t, gotTimestamp)
+	require.NotEmpty(t, gotSignature)
+}
+
+func TestUploadAttachmentFallsBackToLegacyAuthKey(t *testing.T) {
+	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 1, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
+	var gotLegacy string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotLegacy = r.Header.Get("X-Auth-Key")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"storage_key": "attachments/demo.docx",
+			},
+		})
+	}))
+	defer server.Close()
+
+	svc := NewService(store, Config{
+		BaseURL:  server.URL,
+		AuthKey:  "legacy-key",
+		HashSalt: "salt",
+	})
+	_, err := svc.uploadAttachment(context.Background(), Request{
+		FileName:     "demo.docx",
+		DocumentType: "docx",
+		DocumentName: "demo.docx",
+		ContentType:  "application/octet-stream",
+		Reader:       strings.NewReader("hello"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "legacy-key", gotLegacy)
 }
 
 func TestPublishUsesServerSideAttachmentUpload(t *testing.T) {
@@ -154,3 +223,57 @@ func TestPublishUsesServerSideAttachmentUpload(t *testing.T) {
 	require.Equal(t, "claudeoffice-auth", uploadAuth)
 	require.Equal(t, "pptx-bytes", uploaded.String())
 }
+
+func TestPublishSignsPreviewRequests(t *testing.T) {
+	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 7, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
+	var seenUpload bool
+	var seenPreviewShare bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/attachment/upload":
+			seenUpload = r.Header.Get("X-Auth-Signature") != ""
+			if err := r.ParseMultipartForm(2 << 20); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"storage_key": "attachments/demo.docx",
+				},
+			})
+		case "/api/preview-shares":
+			seenPreviewShare = r.Header.Get("X-Auth-Signature") != ""
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_url": server.URL + "/preview/s/1",
+				"password":   "123456",
+				"file_id":    "file-1",
+				"expires_at": time.Now().UTC(),
+			})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	svc := NewService(store, Config{
+		BaseURL:              server.URL,
+		AuthKeyID:            "platform-prod",
+		AuthSharedSecret:     "shared-secret",
+		HashSalt:             "salt",
+		DefaultExpireSeconds: 60,
+	})
+	_, err := svc.Publish(context.Background(), "Bearer user-key", Request{
+		FileName:     "demo.docx",
+		DocumentType: "docx",
+		DocumentName: "demo.docx",
+		ContentType:  "application/octet-stream",
+		Reader:       strings.NewReader("hello"),
+	})
+	require.NoError(t, err)
+	require.True(t, seenUpload)
+	require.True(t, seenPreviewShare)
+	require.True(t, store.touched)
+	require.Equal(t, uint64(7), store.touchedID)
+}
+
+func intPtr(v int) *int { return &v }

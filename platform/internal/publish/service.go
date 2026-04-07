@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,8 @@ type APIKeyStore interface {
 type Config struct {
 	BaseURL              string
 	AuthKey              string
+	AuthKeyID            string
+	AuthSharedSecret     string
 	HashSalt             string
 	TimeoutSec           int
 	DefaultExpireSeconds int
@@ -235,7 +238,7 @@ func (s *Service) deleteUploadedObject(ctx context.Context, storageKey string) e
 	if err != nil {
 		return err
 	}
-	s.attachAuth(req)
+	s.attachAuth(req, nil)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return err
@@ -258,7 +261,7 @@ func (s *Service) postJSON(ctx context.Context, path string, payload any) ([]byt
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	s.attachAuth(req)
+	s.attachAuth(req, raw)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -274,11 +277,20 @@ func (s *Service) postJSON(ctx context.Context, path string, payload any) ([]byt
 	return body, nil
 }
 
-func (s *Service) attachAuth(req *http.Request) {
-	if req == nil || strings.TrimSpace(s.cfg.AuthKey) == "" {
+func (s *Service) attachAuth(req *http.Request, body []byte) {
+	if req == nil {
 		return
 	}
-	req.Header.Set("X-Auth-Key", strings.TrimSpace(s.cfg.AuthKey))
+	if strings.TrimSpace(s.cfg.AuthSharedSecret) != "" {
+		timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+		req.Header.Set("X-Auth-Key-Id", strings.TrimSpace(s.cfg.AuthKeyID))
+		req.Header.Set("X-Auth-Timestamp", timestamp)
+		req.Header.Set("X-Auth-Signature", signDynamic(strings.TrimSpace(s.cfg.AuthSharedSecret), timestamp, req.Method, canonicalPath(req), bodySHA256Hex(body)))
+		return
+	}
+	if strings.TrimSpace(s.cfg.AuthKey) != "" {
+		req.Header.Set("X-Auth-Key", strings.TrimSpace(s.cfg.AuthKey))
+	}
 }
 
 func timeoutFor(seconds int) time.Duration {
