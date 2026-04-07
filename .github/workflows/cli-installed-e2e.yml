@@ -119,7 +119,7 @@ jobs:
           if [ -f "${{ steps.eval.outputs.report_dir }}/summary.md" ]; then
             cat "${{ steps.eval.outputs.report_dir }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
           elif [ -f "${{ steps.eval.outputs.report_dir }}/blocked.json" ]; then
-            REPORT_DIR="${{ steps.eval.outputs.report_dir }}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")); print("# PPT 质量评测阻塞"); print(); print(f"- 套件：{payload.get(\"suite\", \"unknown\")}"); print(f"- 安装版本：{payload.get(\"installed_version\", \"unknown\")}"); print(f"- 原因：{payload.get(\"message\", \"-\")}"); details = (payload.get(\"details\") or \"\").strip(); print(f"- 详情：{details}") if details else None' >> "$GITHUB_STEP_SUMMARY"
+            REPORT_DIR="${{ steps.eval.outputs.report_dir }}" python3 -c 'import json, os; from pathlib import Path; path = Path(os.environ["REPORT_DIR"]) / "blocked.json"; payload = json.loads(path.read_text(encoding="utf-8")); print("# PPT 质量评测阻塞"); print(); print("- 套件：{}".format(payload.get("suite", "unknown"))); print("- 安装版本：{}".format(payload.get("installed_version", "unknown"))); print("- 原因：{}".format(payload.get("message", "-"))); details = (payload.get("details") or "").strip(); print("- 详情：{}".format(details)) if details else None' >> "$GITHUB_STEP_SUMMARY"
           else
             echo "evaluation summary missing" >> "$GITHUB_STEP_SUMMARY"
           fi
