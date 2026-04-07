@@ -3,6 +3,7 @@ package license
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/officecli/officecli/platform/internal/model"
 )
@@ -22,5 +23,15 @@ func TestBuildRequestIDHasStableBoundedLength(t *testing.T) {
 	}
 	if len(got) > 128 {
 		t.Fatalf("request id too long: len=%d value=%q", len(got), got)
+	}
+}
+
+func TestNewProofSignerUsesLongerDefaultTTL(t *testing.T) {
+	signer, err := newProofSigner(ProofConfig{})
+	if err != nil {
+		t.Fatalf("newProofSigner: %v", err)
+	}
+	if signer.ttl != 15*time.Minute {
+		t.Fatalf("default ttl = %s, want %s", signer.ttl, 15*time.Minute)
 	}
 }

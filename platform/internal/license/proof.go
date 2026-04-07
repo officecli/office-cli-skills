@@ -16,7 +16,7 @@ import (
 const (
 	licenseProofVersion          = "v1"
 	defaultLicenseProofSeed      = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
-	defaultLicenseProofTTL       = 2 * time.Minute
+	defaultLicenseProofTTL       = 15 * time.Minute
 	defaultLicenseProofClockSkew = 30 * time.Second
 )
 
