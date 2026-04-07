@@ -16,7 +16,7 @@
 | Lane | 当前状态 | 已有证据 | 主要 blocker |
 | --- | --- | --- | --- |
 | lane1：奖励账本 / 三类额度来源 / CLI 真实额度展示 | 部分完成 | `platform/internal/reward/service.go`、`platform/internal/license/service.go` 已打通 reward balance/consume；`internal/cli/app.go`、`internal/cli/executor.go` 已展示 `reward_remaining`；`platform/internal/license/service_test.go`、`internal/cli/*_test.go` 已覆盖主要路径 | 仍缺 reward ledger 明细 API / 页面；当前返回值只有剩余额度，没有具体 grant 选择轨迹；缺真实 DB + CLI 的 E2E 证据 |
-| lane2：邀请码 / 邀请激活奖励 / Discord 绑定与发奖 | 部分完成 | `platform/internal/store/mysql/store.go` 已生成 `invite_code`；`platform/internal/auth/service.go` 已注册 referral；`platform/internal/growth/service.go` 已实现 referral / Discord 奖励逻辑；`platform/internal/app/application.go` 已新增 `/api/app/discord/connect` 与 `/api/app/discord/status`；后端测试已覆盖 connect/幂等/发奖约束 | 没有真实 Discord OAuth callback / guild membership 校验；当前只允许 connect，不允许依赖前端参数直接发奖；anti-abuse 仍仅停留在幂等与唯一键 |
+| lane2：邀请码 / 邀请激活奖励 / Discord 绑定与发奖 | 部分完成 | `platform/internal/store/sqlstore/store.go` 已生成 `invite_code`；`platform/internal/auth/service.go` 已注册 referral；`platform/internal/growth/service.go` 已实现 referral / Discord 奖励逻辑；`platform/internal/app/application.go` 已新增 `/api/app/discord/connect` 与 `/api/app/discord/status`；后端测试已覆盖 connect/幂等/发奖约束 | 没有真实 Discord OAuth callback / guild membership 校验；当前只允许 connect，不允许依赖前端参数直接发奖；anti-abuse 仍仅停留在幂等与唯一键 |
 | lane3：app/admin/site 权益页、邀请进度、Discord 状态、奖励可见性、归因 | 部分完成 | `/api/app/growth` 与 `/api/admin/growth` 已返回明细；`platform/web/app/src/pages/OverviewPage.tsx` 已展示 reward grants / referrals / discord status；`platform/web/admin/src/pages/GrowthPage.tsx` 已展示 growth 运营视图；site/app 已补最小 GA4 初始化与关键事件上报 | 没有完整 attribution 落库/报表；Discord 仍无可信 guild 校验；跨服务 E2E 仍缺 |
 | lane4：测试补齐、README/平台文档、生产 blocker 清单 | 部分完成 | `docs/monetization-lane-verification.md`、`docs/release-checklist.md`、`docs/platform-production-deploy.md`、`platform/README.md` 已记录当前实现与 blocker；Go package tests 已覆盖 reward/growth/auth/app wiring | 缺跨服务 E2E；缺 Discord / analytics 配置；Google OAuth / Stripe / Discord / analytics 生产联调仍需人工验收 |
 
@@ -44,7 +44,7 @@
 
 当前 HEAD 已明确落地：
 
-- `platform/internal/store/mysql/store.go`
+- `platform/internal/store/sqlstore/store.go`
   - 新/老 Google 用户都会被补齐确定性的 `invite_code`。
 - `platform/internal/auth/service.go`
   - OAuth state 会保留 `invite_code`，callback 后会注册 referral。

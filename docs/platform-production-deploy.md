@@ -59,7 +59,7 @@
    - `kubectl -n officecli get deployment officecli-platform -o yaml`
    - `sudo sed -n '1,240p' /etc/nginx/sites-available/officecli.io`
    - `sudo sed -n '1,240p' /etc/nginx/sites-available/platform.officecli.io`
-2. 备份生产数据库，并把生产 `MYSQL_DSN` 指向 `officecli_platform`
+2. 备份生产数据库，并确认生产 `POSTGRES_DSN` 指向 `officecli-platform-postgres.officecli.svc.cluster.local:5432`
 3. 确保远端工作目录固定为 `/opt/officecli-platform`
 4. 确保镜像固定为 `docker.io/library/officecli-platform:<tag>`
 5. 确保最终 Deployment 固定为 `officecli-platform`
@@ -82,7 +82,7 @@ SECRET_NAME=officecli-platform-env \
 其中 `platform-prod.env` 建议至少包含：
 
 ```env
-MYSQL_DSN=...
+POSTGRES_DSN=...
 REDIS_ADDR=...
 ADMIN_PASSWORD=...
 SESSION_SECRET=...

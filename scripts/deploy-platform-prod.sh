@@ -313,7 +313,11 @@ run_db_pod() {
       --command -- /app/officecli-platform $args
   fi
   kubectl -n "$KUBE_NAMESPACE" wait --for=condition=Ready pod/"$pod_name" --timeout=180s >/dev/null 2>&1 || true
-  kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod_name" --timeout=600s
+  if ! kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod_name" --timeout=600s; then
+    kubectl -n "$KUBE_NAMESPACE" logs "$pod_name" || true
+    kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
+    die "任务失败: ${pod_name}"
+  fi
   kubectl -n "$KUBE_NAMESPACE" logs "$pod_name"
   kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
 }
@@ -330,6 +334,12 @@ mark_pg_copy_complete() {
     --from-literal=completed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
     --from-literal=image="$IMAGE_REF" \
     --dry-run=client -o yaml | kubectl apply -f -
+}
+
+remove_mysql_dsn_from_secret() {
+  if kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.MYSQL_DSN}' >/dev/null 2>&1; then
+    kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type json -p '[{"op":"remove","path":"/data/MYSQL_DSN"}]' >/dev/null 2>&1 || true
+  fi
 }
 
 ensure_service() {
@@ -433,6 +443,12 @@ if kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" >/dev/null 2>&
   deployment_exists=1
 fi
 
+previous_replicas=1
+if [[ "$deployment_exists" -eq 1 ]]; then
+  previous_replicas="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$DEPLOYMENT_NAME" -o jsonpath='{.spec.replicas}')"
+  [[ -n "$previous_replicas" ]] || previous_replicas=1
+fi
+
 echo "--- import image ---"
 gzip -dc "$ARCHIVE_NAME" | sudo k3s ctr images import -
 
@@ -448,10 +464,16 @@ fi
 if [[ "$deployment_exists" -eq 1 ]] && [[ -n "$mysql_dsn" ]] && needs_initial_pg_copy; then
   echo
   echo "--- initial mysql -> postgres copy ---"
+  rollback_scaledown() {
+    kubectl -n "$KUBE_NAMESPACE" scale deployment "$DEPLOYMENT_NAME" --replicas="$previous_replicas" >/dev/null 2>&1 || true
+  }
+  trap rollback_scaledown ERR
   kubectl -n "$KUBE_NAMESPACE" scale deployment "$DEPLOYMENT_NAME" --replicas=0
   kubectl -n "$KUBE_NAMESPACE" wait --for=delete pod -l "app=${DEPLOYMENT_NAME}" --timeout=180s >/dev/null 2>&1 || true
   run_db_pod officecli-platform-db-copy "db copy" "$mysql_dsn"
   mark_pg_copy_complete
+  remove_mysql_dsn_from_secret
+  trap - ERR
 fi
 
 if [[ "$deployment_exists" -eq 1 ]]; then

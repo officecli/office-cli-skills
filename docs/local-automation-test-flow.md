@@ -105,7 +105,7 @@ LOCAL_TEST_SKIP_BUILD=1 make test-full
 
 前提条件：
 
-1. 本地已启动 `platform` 与依赖（MySQL / Redis）
+1. 本地已启动 `platform` 与依赖（PostgreSQL / Redis）
 2. `PLATFORM_BASE_URL` 指向可访问的服务，默认 `http://127.0.0.1:8080`
 3. 目标 fingerprint 已按需要准备 free quota（脚本默认按 `FREE_LIMIT=2` 预期执行）
 

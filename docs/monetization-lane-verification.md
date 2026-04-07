@@ -10,7 +10,7 @@ Status: partial
 
 Covered now:
 
-- `platform/internal/reward/service.go` and `platform/internal/store/mysql/store.go` provide reward-grant storage, balance aggregation, and single-credit consume behavior.
+- `platform/internal/reward/service.go` and `platform/internal/store/sqlstore/store.go` provide reward-grant storage, balance aggregation, and single-credit consume behavior.
 - `platform/internal/license/service.go` now checks reward balance before free quota when no API key is supplied, and supports reward consumes with idempotent restore semantics.
 - `internal/cli/app.go` and `internal/cli/executor.go` already surface `reward_remaining` in auth status and post-generate warnings.
 - Tests cover reward path resolution and consume/idempotency in `platform/internal/license/service_test.go`, plus CLI rendering in `internal/cli/app_test.go` and `internal/cli/executor_test.go`.
@@ -27,7 +27,7 @@ Status: partial
 
 Covered now:
 
-- `platform/internal/store/mysql/store.go` now generates deterministic `invite_code` values during Google-user creation/update, matching the unique schema introduced by `platform/migrations/004_growth_rewards.sql`.
+- `platform/internal/store/sqlstore/store.go` now generates deterministic `invite_code` values during Google-user creation/update, matching the unique schema introduced by `platform/migrations/004_growth_rewards.sql`.
 - `platform/internal/auth/service.go` preserves invite codes through OAuth state and registers referrals after login callback.
 - `platform/internal/growth/service.go` implements idempotent referral registration, invite-activation reward grants, Discord connection linking, and Discord-join reward grants.
 - Tests cover invite-code propagation and referral registration in `platform/internal/auth/service_test.go`, plus referral/Discord reward idempotency in `platform/internal/growth/service_test.go`.

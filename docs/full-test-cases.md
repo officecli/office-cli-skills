@@ -163,7 +163,7 @@
 | APP-GROW-001 | growth | 概览页展示 invite code 与奖励余额 | 用户存在奖励账本 / invite code | 打开 `/app` | `invite_code` 与 `reward_remaining` 展示正确 | P1 | 已自动化（`platform/internal/appuser/service_test.go`） |
 | APP-GROW-002 | growth | app growth 数据结构可返回 referrals / reward grants / discord connection | 后端准备对应数据 | 调用 `/api/app/growth` 或打开相关页面/模块 | 数据结构完整；无字段缺失导致的前端异常 | P1 | 已自动化（`platform/internal/appuser/service_test.go`） |
 | APP-GROW-003 | growth | 邀请规则字段返回正确 | 用户存在 referral / invite 数据 | 调用 `/api/app/overview`、`/api/app/growth` 或打开 `/app` | 返回并展示 `invite_limit=5`、`invite_remaining`、`reward_per_invite=2`，与 referral 数量一致 | P1 | 已自动化（`platform/internal/appuser/service_test.go`、`platform/web/app/src/App.test.tsx`） |
-| APP-GROW-004 | growth | 超过邀请上限后不再记录新的 referral | inviter 已成功邀请 5 人 | 第 6 个新用户带 invite 完成登录回调 | 返回 `invite limit reached` 语义；不新增第 6 条 referral；原 5 条记录保持不变 | P0 | 已自动化（`platform/internal/growth/service_test.go`、`platform/internal/store/mysql/store_test.go`） |
+| APP-GROW-004 | growth | 超过邀请上限后不再记录新的 referral | inviter 已成功邀请 5 人 | 第 6 个新用户带 invite 完成登录回调 | 返回 `invite limit reached` 语义；不新增第 6 条 referral；原 5 条记录保持不变 | P0 | 已自动化（`platform/internal/growth/service_test.go`、`platform/internal/store/sqlstore/store_test.go`） |
 | APP-GROW-005 | growth | 达到邀请上限时不阻断新用户登录 | inviter 已成功邀请 5 人，登录 callback 仍携带 invite code | 新用户继续完成 Google OAuth callback | 登录成功，session 正常建立，但不创建新的 referral 关系 | P0 | 已自动化（`platform/internal/auth/service_test.go`） |
 | APP-GROW-006 | growth | Discord 未绑定时状态正确 | 用户无 Discord 连接 | 打开 `/app` | 显示 `NOT LINKED` 或等价文案 | P2 | 建议自动化 |
 | APP-GROW-007 | growth | Discord 已绑定但未入 guild 的状态正确 | `discord_connected=true`，`discord_guild_member=false` | 打开 `/app` | 显示 `CONNECTED` 而非 `VERIFIED` | P2 | 已自动化（`platform/web/app/src/App.test.tsx` 的 overview 数据覆盖） |
