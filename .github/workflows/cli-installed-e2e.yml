@@ -1,0 +1,167 @@
+name: CLI Installed E2E
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to install, e.g. v1.2.3 or latest'
+        required: false
+        default: latest
+        type: string
+      suite:
+        description: 'Evaluation suite'
+        required: false
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - full
+
+concurrency:
+  group: cli-installed-e2e-${{ github.event.schedule || inputs.version || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  installed_e2e:
+    name: Install And Evaluate OfficeCLI
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.CLI_INSTALLED_E2E_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    permissions:
+      contents: read
+    env:
+      DIST_REPO: ${{ vars.CLI_E2E_DIST_REPO || 'officecli/officecli-dist' }}
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || vars.CLI_INSTALLED_E2E_DEFAULT_VERSION || 'latest' }}
+      SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || vars.CLI_INSTALLED_E2E_DEFAULT_SUITE || 'smoke' }}
+      REPORT_ROOT: ${{ github.workspace }}/.tmp/cli-installed-e2e
+      OFFICE_CLI_LLM_BASE_URL: ${{ secrets.OFFICE_CLI_LLM_BASE_URL }}
+      OFFICE_CLI_LLM_API_KEY: ${{ secrets.OFFICE_CLI_LLM_API_KEY }}
+      OFFICE_CLI_LLM_MODEL: ${{ vars.OFFICE_CLI_LLM_MODEL || 'gpt-4.1' }}
+      OFFICE_CLI_LLM_REVIEW_MODEL: ${{ vars.OFFICE_CLI_LLM_REVIEW_MODEL || 'gpt-5.4-mini' }}
+      OFFICE_CLI_LICENSE_BASE_URL: ${{ vars.OFFICE_CLI_LICENSE_BASE_URL || 'https://platform.officecli.io' }}
+      OFFICE_CLI_LICENSE_API_KEY: ${{ secrets.OFFICE_CLI_LICENSE_API_KEY }}
+      OFFICE_CLI_LICENSE_ENABLED: 'true'
+      OFFICE_CLI_PUBLISH_BASE_URL: ${{ secrets.OFFICE_CLI_PUBLISH_BASE_URL }}
+      OFFICE_CLI_PUBLISH_API_KEY: ${{ secrets.OFFICE_CLI_PUBLISH_API_KEY }}
+      OFFICE_CLI_PUBLISH_PROVIDER: http
+      OFFICE_CLI_PUBLISH_ENABLED: 'true'
+      OFFICE_CLI_DEFAULT_PUBLISH: 'true'
+      OFFICE_CLI_MODE: fast
+    outputs:
+      report_dir: ${{ steps.eval.outputs.report_dir }}
+      installed_version: ${{ steps.install.outputs.installed_version }}
+      suite: ${{ steps.meta.outputs.suite }}
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            ca-certificates \
+            curl \
+            jq \
+            python3 \
+            tar \
+            libreoffice-impress \
+            fonts-noto-cjk \
+            fonts-noto-color-emoji
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve run metadata
+        id: meta
+        run: |
+          stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          echo "stamp=${stamp}" >> "$GITHUB_OUTPUT"
+          echo "suite=${SUITE}" >> "$GITHUB_OUTPUT"
+
+      - name: Install released officecli
+        id: install
+        run: |
+          mkdir -p /usr/local/bin
+          DIST_REPO="${DIST_REPO}" VERSION="${VERSION}" INSTALL_DIR="/usr/local/bin" bash ./scripts/install-officecli.sh
+          installed_version="$(officecli --version | awk '{print $NF}' | tail -n1)"
+          if [ -z "${installed_version}" ]; then
+            echo "failed to resolve installed version from officecli --version" >&2
+            exit 1
+          fi
+          echo "installed_version=${installed_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Run installed CLI evaluation
+        id: eval
+        run: |
+          set +e
+          round_name="${SUITE}-${{ steps.meta.outputs.stamp }}"
+          python3 ./scripts/eval_ppt_quality.py \
+            --root . \
+            --bin "officecli" \
+            --suite "${SUITE}" \
+            --publish \
+            --date "$(date -u +%F)" \
+            --round "${round_name}" \
+            --version-label "${{ steps.install.outputs.installed_version }}"
+          exit_code=$?
+          report_dir="$(python3 -c 'from pathlib import Path; root = Path("output/evals"); paths = sorted([p for p in root.glob("*/*") if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True); print(paths[0].resolve() if paths else "")')"
+          if [ -z "${report_dir}" ]; then
+            echo "report dir not found" >&2
+            exit 1
+          fi
+          echo "report_dir=${report_dir}" >> "$GITHUB_OUTPUT"
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Append evaluation summary
+        if: always()
+        run: |
+          if [ -f "${{ steps.eval.outputs.report_dir }}/summary.md" ]; then
+            cat "${{ steps.eval.outputs.report_dir }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f "${{ steps.eval.outputs.report_dir }}/blocked.json" ]; then
+            python3 -c 'from pathlib import Path; import json; path = Path("${{ steps.eval.outputs.report_dir }}/blocked.json"); payload = json.loads(path.read_text(encoding="utf-8")); print("# PPT 质量评测阻塞"); print(); print(f"- 套件：{payload.get(\"suite\", \"unknown\")}"); print(f"- 安装版本：{payload.get(\"installed_version\", \"unknown\")}"); print(f"- 原因：{payload.get(\"message\", \"-\")}"); details = (payload.get("details") or "").strip(); print(f"- 详情：{details}") if details else None' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "evaluation summary missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload evaluation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-installed-e2e-report
+          path: ${{ steps.eval.outputs.report_dir }}
+          if-no-files-found: error
+
+      - name: Fail job when evaluation failed
+        if: steps.eval.outputs.exit_code != '0'
+        run: exit 1
+
+  notify:
+    name: Notify Email And DingTalk
+    runs-on: ubuntu-latest
+    needs:
+      - installed_e2e
+    if: ${{ always() && needs.installed_e2e.result != 'skipped' }}
+    env:
+      CLI_E2E_EMAIL_SMTP_HOST: ${{ secrets.CLI_E2E_EMAIL_SMTP_HOST }}
+      CLI_E2E_EMAIL_SMTP_PORT: ${{ vars.CLI_E2E_EMAIL_SMTP_PORT || '587' }}
+      CLI_E2E_EMAIL_SMTP_USERNAME: ${{ secrets.CLI_E2E_EMAIL_SMTP_USERNAME }}
+      CLI_E2E_EMAIL_SMTP_PASSWORD: ${{ secrets.CLI_E2E_EMAIL_SMTP_PASSWORD }}
+      CLI_E2E_EMAIL_FROM: ${{ vars.CLI_E2E_EMAIL_FROM }}
+      CLI_E2E_EMAIL_TO: ${{ vars.CLI_E2E_EMAIL_TO }}
+      DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download evaluation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-installed-e2e-report
+          path: ${{ runner.temp }}/cli-installed-e2e-report
+
+      - name: Send notifications
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 ./scripts/notify-cli-e2e.py "${RUNNER_TEMP}/cli-installed-e2e-report"
