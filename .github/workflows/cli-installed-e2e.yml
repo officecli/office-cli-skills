@@ -5,6 +5,14 @@ on:
     - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
+      install_source:
+        description: 'Install source: released dist binary or current repository build'
+        required: false
+        default: current_build
+        type: choice
+        options:
+          - current_build
+          - release
       version:
         description: 'Release tag to install, e.g. v1.2.3 or latest'
         required: false
@@ -20,7 +28,7 @@ on:
           - full
 
 concurrency:
-  group: cli-installed-e2e-${{ github.event.schedule || inputs.version || github.run_id }}
+  group: cli-installed-e2e-${{ github.event.schedule || inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || inputs.version || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +43,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       DIST_REPO: ${{ vars.CLI_E2E_DIST_REPO || 'officecli/officecli-dist' }}
+      INSTALL_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.install_source || vars.CLI_INSTALLED_E2E_INSTALL_SOURCE || 'current_build' }}
       VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || vars.CLI_INSTALLED_E2E_DEFAULT_VERSION || 'latest' }}
       SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || vars.CLI_INSTALLED_E2E_DEFAULT_SUITE || 'smoke' }}
       REPORT_ROOT: ${{ github.workspace }}/.tmp/cli-installed-e2e
@@ -62,6 +71,8 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             ca-certificates \
             curl \
+            git \
+            golang-go \
             jq \
             python3 \
             tar \
@@ -79,16 +90,28 @@ jobs:
           echo "stamp=${stamp}" >> "$GITHUB_OUTPUT"
           echo "suite=${SUITE}" >> "$GITHUB_OUTPUT"
 
-      - name: Install released officecli
+      - name: Install officecli
         id: install
         run: |
           mkdir -p /usr/local/bin
-          DIST_REPO="${DIST_REPO}" VERSION="${VERSION}" INSTALL_DIR="/usr/local/bin" bash ./scripts/install-officecli.sh
+          if [ "${INSTALL_SOURCE}" = "current_build" ]; then
+            short_sha="$(printf '%s' "${GITHUB_SHA}" | cut -c1-7)"
+            build_version="current-${short_sha}"
+            commit="$(git rev-parse --short HEAD)"
+            build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            go build \
+              -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${commit} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date}" \
+              -o /usr/local/bin/officecli ./cmd/officecli
+            chmod +x /usr/local/bin/officecli
+          else
+            DIST_REPO="${DIST_REPO}" VERSION="${VERSION}" INSTALL_DIR="/usr/local/bin" bash ./scripts/install-officecli.sh
+          fi
           installed_version="$(officecli --version | grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"
           if [ -z "${installed_version}" ]; then
             installed_version="$(officecli --version | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-120)"
           fi
           echo "installed_version=${installed_version}" >> "$GITHUB_OUTPUT"
+          echo "install_source=${INSTALL_SOURCE}" >> "$GITHUB_OUTPUT"
 
       - name: Run installed CLI evaluation
         id: eval
