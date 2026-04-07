@@ -50,6 +50,8 @@ type Config struct {
 	HostedLLMProvider            string
 	ClaudeOfficeBaseURL          string
 	ClaudeOfficeAuthKey          string
+	ClaudeOfficeAuthKeyID        string
+	ClaudeOfficeAuthSharedSecret string
 	PublishRateLimitPerMinute    int
 	PublishMaxFileBytes          int64
 	PublishDefaultExpireSeconds  int
@@ -102,6 +104,8 @@ func LoadConfig() (Config, error) {
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
 		ClaudeOfficeBaseURL:          mustEnvDefault("CLAUDEOFFICE_BASE_URL", ""),
 		ClaudeOfficeAuthKey:          os.Getenv("CLAUDEOFFICE_AUTH_KEY"),
+		ClaudeOfficeAuthKeyID:        mustEnvDefault("CLAUDEOFFICE_AUTH_KEY_ID", "platform-prod"),
+		ClaudeOfficeAuthSharedSecret: os.Getenv("CLAUDEOFFICE_AUTH_SHARED_SECRET"),
 		PublishRateLimitPerMinute:    mustEnvInt("PUBLISH_RATE_LIMIT_PER_MINUTE", 30),
 		PublishMaxFileBytes:          mustEnvInt64("PUBLISH_MAX_FILE_BYTES", 50<<20),
 		PublishDefaultExpireSeconds:  mustEnvInt("PUBLISH_DEFAULT_EXPIRE_SECONDS", 24*60*60),
