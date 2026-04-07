@@ -106,6 +106,7 @@ jobs:
             build_version="current-${short_sha}"
             build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             go build \
+              -buildvcs=false \
               -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${short_sha} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date}" \
               -o /usr/local/bin/officecli ./cmd/officecli
             chmod +x /usr/local/bin/officecli
