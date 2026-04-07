@@ -1,8 +1,10 @@
 package license
 
 import (
+	"crypto/sha256"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -133,7 +135,16 @@ func (s *proofSigner) verifyCommitToken(token CommitToken, req ConsumeRequest, a
 
 func buildRequestID(req CheckRequest) string {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return strings.TrimSpace(req.FingerprintHash) + "|" + strings.TrimSpace(req.Action) + "|" + strings.TrimSpace(req.DocumentType) + "|" + strings.TrimSpace(req.RuntimeMode) + "|" + strings.TrimSpace(req.RequestNonce) + "|" + now
+	payload := strings.Join([]string{
+		strings.TrimSpace(req.FingerprintHash),
+		strings.TrimSpace(req.Action),
+		strings.TrimSpace(req.DocumentType),
+		strings.TrimSpace(req.RuntimeMode),
+		strings.TrimSpace(req.RequestNonce),
+		now,
+	}, "|")
+	sum := sha256.Sum256([]byte(payload))
+	return "req_" + hex.EncodeToString(sum[:])
 }
 
 func commitTokenPayload(token CommitToken) string {
