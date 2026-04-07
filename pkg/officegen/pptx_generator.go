@@ -2341,7 +2341,7 @@ func (g *PPTXGenerator) createBarChartXML(chart *ChartData) string {
 	sb.WriteString(g.buildValueXML(chart.Values))
 	sb.WriteString(`</c:ser>`)
 
-	sb.WriteString(`<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>`)
+	sb.WriteString(`<c:dLbls><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>`)
 	sb.WriteString(`<c:gapWidth val="219"/><c:overlap val="-27"/>`)
 	sb.WriteString(`<c:axId val="111111111"/><c:axId val="222222222"/>`)
 	sb.WriteString(`</c:barChart>`)

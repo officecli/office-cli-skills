@@ -242,6 +242,10 @@ func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 	if !strings.Contains(opsPrompt, "本主题固定按 6 页组织：1封面，2经营结论，3核心指标，4问题定位，5下季重点，6执行动作") {
 		t.Fatalf("ops prompt missing archetype outline:\n%s", opsPrompt)
 	}
+	trainingPrompt := BuildPPTXPrompt("OfficeCLI 新员工上手培训", generateengine.PromptTarget{}, false)
+	if !strings.Contains(trainingPrompt, "本主题固定按 6 页组织：1封面，2学习目标，3安装配置，4常用命令，5示例流程，6注意事项") {
+		t.Fatalf("training prompt missing archetype outline:\n%s", trainingPrompt)
+	}
 }
 
 func TestCleanSentence_PreservesTimeNumbers(t *testing.T) {
@@ -356,6 +360,27 @@ func TestNormalizePPTXPayload_EnforcesOpsSkeleton(t *testing.T) {
 	}
 	if payload.Slides[5].Title != "执行动作" || len(payload.Slides[5].Sections) != 3 {
 		t.Fatalf("ops closing slide = %#v", payload.Slides[5])
+	}
+}
+
+func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
+	payload := &pptxPayload{
+		Title: "OfficeCLI 新员工上手培训",
+		Slides: []officegen.Slide{
+			{Title: "OfficeCLI 新员工上手培训", Layout: "title", IsTitle: true},
+			{Title: "第一页"},
+			{Title: "第二页"},
+		},
+	}
+	normalizePPTXPayload(payload, "OfficeCLI 新员工上手培训", true)
+	if len(payload.Slides) != 6 {
+		t.Fatalf("slide count = %d, want 6", len(payload.Slides))
+	}
+	if payload.Slides[3].Title != "常用命令" || len(payload.Slides[3].Sections) != 3 {
+		t.Fatalf("training command slide = %#v", payload.Slides[3])
+	}
+	if payload.Slides[5].Title != "注意事项" || len(payload.Slides[5].Sections) != 3 {
+		t.Fatalf("training closing slide = %#v", payload.Slides[5])
 	}
 }
 

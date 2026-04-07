@@ -230,6 +230,7 @@ const (
 	pptxArchetypeCompany pptxArchetype = "company"
 	pptxArchetypeMarket  pptxArchetype = "market"
 	pptxArchetypeOps     pptxArchetype = "ops"
+	pptxArchetypeTraining pptxArchetype = "training"
 )
 
 const pptxStructuredSchema = `{
@@ -989,6 +990,8 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 		return pptxArchetypeMarket
 	case strings.Contains(text, "经营复盘") || strings.Contains(text, "季度经营") || strings.Contains(text, "数据汇报") || strings.Contains(text, "经营汇报"):
 		return pptxArchetypeOps
+	case strings.Contains(text, "上手培训") || strings.Contains(text, "新员工") || strings.Contains(text, "教程") || strings.Contains(text, "入门指南"):
+		return pptxArchetypeTraining
 	default:
 		return pptxArchetypeGeneral
 	}
@@ -1011,6 +1014,11 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - 第 3 页“核心指标”必须使用 chart，并写清数据口径或对比周期；不要只写抽象判断
 - 第 4 页“问题定位”使用 sections，按获客、交付、回款等维度拆解问题与影响，不要写成长段 bullet
 - 第 5-6 页必须体现动作闭环：写清阶段、负责人、截止时间、验收口径中的至少两项；本主题默认不要配图`
+	case pptxArchetypeTraining:
+		return `- 本主题固定按 6 页组织：1封面，2学习目标，3安装配置，4常用命令，5示例流程，6注意事项
+- 第 3-6 页优先使用 sections，按“步骤/命令/结果”组织；每组 heading 2-6 个字，detail 12-24 个字
+- 命令类页面统一使用简短命令名 + 中文解释，不要混入冗长英文句子，不要出现被截断的命令
+- 培训主题默认不要配图，示例流程也优先用结构化步骤表达，不要依赖截图`
 	default:
 		return ""
 	}
@@ -1031,6 +1039,8 @@ func enforceArchetypeSkeleton(slides []officegen.Slide, archetype pptxArchetype,
 		enforceMarketSkeleton(slides)
 	case pptxArchetypeOps:
 		enforceOpsSkeleton(slides)
+	case pptxArchetypeTraining:
+		enforceTrainingSkeleton(slides)
 	}
 	return slides
 }
@@ -1071,11 +1081,23 @@ func defaultArchetypeSlide(archetype pptxArchetype, idx int, deckTitle string) o
 	case pptxArchetypeOps:
 		defaults := []officegen.Slide{
 			{Title: firstNonEmpty(deckTitle, "SaaS季度经营复盘"), Layout: "title", IsTitle: true, Subtitle: "围绕营收、客户效率与下季动作做经营闭环复盘"},
-			{Title: "经营结论", Layout: "content", Subtitle: "营收继续增长，但续费与交付效率成为主要约束", Points: []string{"本季ARR保持增长，新增贡献高于续费贡献", "签约转化改善，但回款节奏和交付产能承压", "下季优先抓续费修复、交付提效与现金回收"}},
+			{Title: "经营结论", Layout: "content", Subtitle: "新增拉动增长，但续费、交付与回款拖慢质量改善", Points: []string{"ARR指数升至128，增长主要由新增拉动", "续费率84、回款率76，质量指标明显落后", "下季先抓续费修复、交付提效与现金回收"}},
 			{Title: "核心指标", Layout: "chart", Subtitle: "新增仍在拉动增长，但续费和回款拖慢质量改善", Chart: &officegen.ChartData{Type: "bar", Title: "季度经营关键指标", Categories: []string{"新增ARR", "续费率", "回款率"}, Values: []float64{128, 84, 76}}, Points: []string{"新增ARR指数达128，说明拉新仍是本季增长主因", "续费率和回款率低于目标，增长质量需修复"}, Source: "口径：以上季=100 的相对指数；续费率/回款率按季度目标完成度折算"},
-			{Title: "问题定位", Layout: "content", Subtitle: "获客、交付、回款三处卡点共同拉低经营质量", Sections: []officegen.SlideSection{{Heading: "获客", Detail: "线索充足，但中段商机转化仍不稳定"}, {Heading: "交付", Detail: "定制需求偏多，项目排期压缩毛利"}, {Heading: "回款", Detail: "大客户账期偏长，影响现金回笼速度"}}},
-			{Title: "下季重点", Layout: "content", Subtitle: "先修复续费与交付，再放大高质量新增", Sections: []officegen.SlideSection{{Heading: "续费修复", Detail: "客户成功负责人锁定前20大续费账户"}, {Heading: "交付提效", Detail: "交付负责人压缩非标需求与返工比例"}, {Heading: "回款攻坚", Detail: "销售运营联合财务推进重点账款清收"}}},
-			{Title: "执行动作", Layout: "content", Subtitle: "以月度节奏推进，确保动作有人负责且可验收", Sections: []officegen.SlideSection{{Heading: "4月完成", Detail: "销售总监复盘商机漏斗并修正报价策略"}, {Heading: "5月完成", Detail: "交付负责人上线标准包并压降返工率"}, {Heading: "6月验收", Detail: "经营负责人按续费率与回款率复盘结果"}}},
+			{Title: "问题定位", Layout: "content", Subtitle: "P1交付、P2回款、P3转化，三处卡点共同拉低经营质量", Sections: []officegen.SlideSection{{Heading: "P1交付产能", Detail: "非标占比42%，项目周期拉长约10天"}, {Heading: "P2回款节奏", Detail: "前10大客户账期偏长，现金回笼偏慢"}, {Heading: "P3获客转化", Detail: "中段商机赢率低于目标7个百分点"}}},
+			{Title: "下季重点", Layout: "content", Subtitle: "每项重点都绑定负责人和结果指标，避免只写方向", Sections: []officegen.SlideSection{{Heading: "续费修复", Detail: "客户成功负责人，续费率回到90以上"}, {Heading: "交付提效", Detail: "交付负责人，非标占比压到30以内"}, {Heading: "回款攻坚", Detail: "销售运营牵头，回款率提升到90"}}},
+			{Title: "执行动作", Layout: "content", Subtitle: "按月推进并绑定负责人、里程碑与验收指标", Sections: []officegen.SlideSection{{Heading: "4月销售总监", Detail: "完成漏斗复盘，赢率提升3个百分点"}, {Heading: "5月交付负责人", Detail: "上线标准包，返工率降到10以内"}, {Heading: "6月经营负责人", Detail: "按续费率90与回款率90做验收"}}},
+		}
+		if idx < len(defaults) {
+			return defaults[idx]
+		}
+	case pptxArchetypeTraining:
+		defaults := []officegen.Slide{
+			{Title: firstNonEmpty(deckTitle, "OfficeCLI新员工上手培训"), Layout: "title", IsTitle: true, Subtitle: "围绕安装、常用命令与示例流程快速完成新人入门"},
+			{Title: "学习目标", Layout: "content", Subtitle: "先建立认知，再完成首轮可独立操作的命令演练", Points: []string{"理解 OfficeCLI 用途、输入输出和常见场景", "完成安装登录并跑通一次本地生成命令", "知道正式使用前的配置边界与注意事项"}},
+			{Title: "安装配置", Layout: "content", Subtitle: "按环境检查、安装、登录三步完成准备", Sections: []officegen.SlideSection{{Heading: "环境检查", Detail: "确认 Go、配置文件与本地依赖可用"}, {Heading: "安装命令", Detail: "执行构建或下载命令，生成可运行程序"}, {Heading: "登录验证", Detail: "完成配置后运行状态命令检查连通性"}}},
+			{Title: "常用命令", Layout: "content", Subtitle: "先记住最常用的三类命令，再逐步扩展场景", Sections: []officegen.SlideSection{{Heading: "状态检查", Detail: "运行 config status 检查配置与依赖"}, {Heading: "生成PPT", Detail: "运行 new pptx 生成本地 PPT 文件"}, {Heading: "质量评审", Detail: "运行 review pptx 做结构和视觉评审"}}},
+			{Title: "示例流程", Layout: "content", Subtitle: "一次完整演练要覆盖生成、检查和修正三个环节", Sections: []officegen.SlideSection{{Heading: "步骤1 设题", Detail: "先写主题、受众、风格，明确输出目标"}, {Heading: "步骤2 生成", Detail: "运行 new pptx 并确认文件落盘成功"}, {Heading: "步骤3 复核", Detail: "运行 review pptx 并按问题继续修正"}}},
+			{Title: "注意事项", Layout: "content", Subtitle: "先用本地输出验证质量，再进入正式协作流程", Sections: []officegen.SlideSection{{Heading: "先本地验证", Detail: "默认关闭发布，先确认生成结果与 review 评分"}, {Heading: "配置要完整", Detail: "模型、图片和依赖缺失会直接影响生成效果"}, {Heading: "命令要规范", Detail: "命令、路径和参数保持完整，避免手工截断"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
@@ -1238,15 +1260,15 @@ func enforceOpsSkeleton(slides []officegen.Slide) {
 	slides[1].Title = "经营结论"
 	slides[1].Layout = "content"
 	slides[1].Points = normalizePoints([]string{
-		"本季ARR继续增长，但增长主要来自新增而非续费",
-		"签约效率改善，交付产能和回款节奏成为主要约束",
-		"下季先修复续费、交付与回款，再放大高质量新增",
+		"ARR指数升至128，增长主要由新增拉动",
+		"续费率84、回款率76，质量指标明显落后",
+		"下季先抓续费修复、交付提效与现金回收",
 	}, 3, 28)
 	slides[1].Sections = nil
 	slides[1].Metrics = nil
 	slides[1].Chart = nil
 	slides[1].Source = ""
-	slides[1].Subtitle = "增长延续，但经营质量仍受续费与交付约束"
+	slides[1].Subtitle = "新增拉动增长，但续费、交付与回款拖慢质量改善"
 
 	slides[2].Title = "核心指标"
 	slides[2].Layout = "chart"
@@ -1268,41 +1290,117 @@ func enforceOpsSkeleton(slides []officegen.Slide) {
 	slides[3].Title = "问题定位"
 	slides[3].Layout = "content"
 	slides[3].Sections = normalizeSections([]officegen.SlideSection{
-		{Heading: "获客转化", Detail: "线索充足，但中段商机转化稳定性不足"},
-		{Heading: "交付产能", Detail: "非标需求偏多，项目排期压缩毛利空间"},
-		{Heading: "回款节奏", Detail: "大客户账期偏长，现金回笼速度偏慢"},
+		{Heading: "P1交付产能", Detail: "非标占比42%，项目周期拉长约10天"},
+		{Heading: "P2回款节奏", Detail: "前10大客户账期偏长，现金回笼偏慢"},
+		{Heading: "P3获客转化", Detail: "中段商机赢率低于目标7个百分点"},
 	}, 3)
 	slides[3].Points = nil
 	slides[3].Metrics = nil
 	slides[3].Chart = nil
 	slides[3].Source = ""
-	slides[3].Subtitle = "获客、交付、回款三处卡点共同拉低经营质量"
+	slides[3].Subtitle = "P1交付、P2回款、P3转化，三处卡点共同拉低经营质量"
 
 	slides[4].Title = "下季重点"
 	slides[4].Layout = "content"
 	slides[4].Sections = normalizeSections([]officegen.SlideSection{
-		{Heading: "续费修复", Detail: "客户成功负责人锁定前20大续费账户"},
-		{Heading: "交付提效", Detail: "交付负责人压缩非标需求与返工比例"},
-		{Heading: "回款攻坚", Detail: "销售运营联动财务推进重点账款清收"},
+		{Heading: "续费修复", Detail: "客户成功负责人，续费率回到90以上"},
+		{Heading: "交付提效", Detail: "交付负责人，非标占比压到30以内"},
+		{Heading: "回款攻坚", Detail: "销售运营牵头，回款率提升到90"},
 	}, 3)
 	slides[4].Points = nil
 	slides[4].Metrics = nil
 	slides[4].Chart = nil
 	slides[4].Source = ""
-	slides[4].Subtitle = "先修复续费与交付，再放大高质量新增"
+	slides[4].Subtitle = "每项重点都绑定负责人和结果指标，避免只写方向"
 
 	slides[5].Title = "执行动作"
 	slides[5].Layout = "content"
 	slides[5].Sections = normalizeSections([]officegen.SlideSection{
-		{Heading: "4月完成", Detail: "销售总监复盘漏斗并修正报价策略"},
-		{Heading: "5月完成", Detail: "交付负责人上线标准包并压降返工率"},
-		{Heading: "6月验收", Detail: "经营负责人按续费率与回款率复盘"},
+		{Heading: "4月销售总监", Detail: "完成漏斗复盘，赢率提升3个百分点"},
+		{Heading: "5月交付负责人", Detail: "上线标准包，返工率降到10以内"},
+		{Heading: "6月经营负责人", Detail: "按续费率90与回款率90做验收"},
 	}, 3)
 	slides[5].Points = nil
 	slides[5].Metrics = nil
 	slides[5].Chart = nil
 	slides[5].Source = ""
-	slides[5].Subtitle = "以月度节奏推进，确保动作有人负责且可验收"
+	slides[5].Subtitle = "按月推进并绑定负责人、里程碑与验收指标"
+}
+
+func enforceTrainingSkeleton(slides []officegen.Slide) {
+	if len(slides) < 6 {
+		return
+	}
+	for idx := 1; idx < len(slides); idx++ {
+		slides[idx].HasImage = false
+		slides[idx].ImagePrompt = ""
+		slides[idx].ImagePos = ""
+	}
+
+	slides[1].Title = "学习目标"
+	slides[1].Layout = "content"
+	slides[1].Points = normalizePoints([]string{
+		"理解 OfficeCLI 用途、输入输出和常见场景",
+		"完成安装登录并跑通一次本地生成命令",
+		"知道正式使用前的配置边界与注意事项",
+	}, 3, 28)
+	slides[1].Sections = nil
+	slides[1].Metrics = nil
+	slides[1].Chart = nil
+	slides[1].Source = ""
+	slides[1].Subtitle = "先建立认知，再完成首轮可独立操作的命令演练"
+
+	slides[2].Title = "安装配置"
+	slides[2].Layout = "content"
+	slides[2].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "环境检查", Detail: "确认 Go、配置文件与本地依赖可用"},
+		{Heading: "安装命令", Detail: "执行构建或下载命令，生成可运行程序"},
+		{Heading: "登录验证", Detail: "完成配置后运行状态命令检查连通性"},
+	}, 3)
+	slides[2].Points = nil
+	slides[2].Metrics = nil
+	slides[2].Chart = nil
+	slides[2].Source = ""
+	slides[2].Subtitle = "按环境检查、安装、登录三步完成准备"
+
+	slides[3].Title = "常用命令"
+	slides[3].Layout = "content"
+	slides[3].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "状态检查", Detail: "运行 config status 检查配置与依赖"},
+		{Heading: "生成PPT", Detail: "运行 new pptx 生成本地 PPT 文件"},
+		{Heading: "质量评审", Detail: "运行 review pptx 做结构和视觉评审"},
+	}, 3)
+	slides[3].Points = nil
+	slides[3].Metrics = nil
+	slides[3].Chart = nil
+	slides[3].Source = ""
+	slides[3].Subtitle = "先记住最常用的三类命令，再逐步扩展场景"
+
+	slides[4].Title = "示例流程"
+	slides[4].Layout = "content"
+	slides[4].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "步骤1 设题", Detail: "先写主题、受众、风格，明确输出目标"},
+		{Heading: "步骤2 生成", Detail: "运行 new pptx 并确认文件落盘成功"},
+		{Heading: "步骤3 复核", Detail: "运行 review pptx 并按问题继续修正"},
+	}, 3)
+	slides[4].Points = nil
+	slides[4].Metrics = nil
+	slides[4].Chart = nil
+	slides[4].Source = ""
+	slides[4].Subtitle = "一次完整演练要覆盖生成、检查和修正三个环节"
+
+	slides[5].Title = "注意事项"
+	slides[5].Layout = "content"
+	slides[5].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "先本地验证", Detail: "默认关闭发布，先确认生成结果与评分"},
+		{Heading: "配置要完整", Detail: "模型、图片和依赖缺失会直接影响效果"},
+		{Heading: "命令要规范", Detail: "命令、路径和参数保持完整，避免截断"},
+	}, 3)
+	slides[5].Points = nil
+	slides[5].Metrics = nil
+	slides[5].Chart = nil
+	slides[5].Source = ""
+	slides[5].Subtitle = "先用本地输出验证质量，再进入正式协作流程"
 }
 
 func isActionSlide(slide officegen.Slide) bool {
