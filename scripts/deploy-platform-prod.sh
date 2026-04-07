@@ -473,6 +473,7 @@ if [[ "$deployment_exists" -eq 1 ]] && [[ -n "$mysql_dsn" ]] && needs_initial_pg
   run_db_pod officecli-platform-db-copy "db copy" "$mysql_dsn"
   mark_pg_copy_complete
   remove_mysql_dsn_from_secret
+  kubectl -n "$KUBE_NAMESPACE" scale deployment "$DEPLOYMENT_NAME" --replicas="$previous_replicas"
   trap - ERR
 fi
 
