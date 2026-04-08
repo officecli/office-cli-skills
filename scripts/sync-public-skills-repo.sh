@@ -192,6 +192,7 @@ The installer will:
 - try to auto-install the \`officecli\` binary when it is missing
 - use Homebrew on macOS when available, and fall back to direct binary install when brew fails
 - use the public Linux installer and install into \`~/.local/bin\` by default
+- install the default \`latest\` CLI from the rolling latest public dist build
 
 If \`officecli\` is still reported as not found after installation, first try the current-shell fix:
 

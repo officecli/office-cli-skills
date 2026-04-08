@@ -12,6 +12,7 @@ on:
       - 'go.mod'
       - 'Makefile'
       - '.goreleaser.dist.yml'
+      - '.github/workflows/cli-publish-latest.yml'
       - '.github/workflows/cli-ci.yml'
   push:
     branches:
@@ -26,6 +27,7 @@ on:
       - 'go.mod'
       - 'Makefile'
       - '.goreleaser.dist.yml'
+      - '.github/workflows/cli-publish-latest.yml'
       - '.github/workflows/cli-ci.yml'
 
 concurrency:
@@ -63,6 +65,7 @@ jobs:
           bash -n skills/openclaw-officecli/check-officecli-env.sh
           bash -n skills/openclaw-officecli/fix-officecli-env.sh
           bash -n scripts/install-officecli.sh
+          bash -n scripts/build-latest-release-assets.sh
           bash -n scripts/install-openclaw-skill.sh
           python3 -m py_compile scripts/eval_ppt_quality.py
           python3 -m py_compile scripts/notify-cli-e2e.py

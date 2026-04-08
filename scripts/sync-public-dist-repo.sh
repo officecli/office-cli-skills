@@ -50,7 +50,9 @@ brew upgrade officecli/officecli/officecli
 curl -fsSL https://raw.githubusercontent.com/${DIST_REPO}/${DIST_DEFAULT_BRANCH}/scripts/install-officecli.sh | DIST_REPO=${DIST_REPO} bash
 \`\`\`
 
-Re-running the same installer command refreshes the local binary to the latest published version.
+By default, the installer downloads and installs the rolling \`latest\` build from this repository.
+
+Re-running the same installer command refreshes the local binary to the newest rolling latest build.
 
 If your shell still reports \`officecli: command not found\`, first try:
 
@@ -61,7 +63,7 @@ officecli --version
 
 If that works, add \`~/.local/bin\` to your shell startup file so future shells can find the command.
 
-To install a specific version, set \`VERSION\` before invoking the script:
+To install a specific published release, set \`VERSION\` before invoking the script:
 
 \`\`\`bash
 curl -fsSL https://raw.githubusercontent.com/${DIST_REPO}/${DIST_DEFAULT_BRANCH}/scripts/install-officecli.sh | VERSION=v0.1.1 DIST_REPO=${DIST_REPO} bash
@@ -69,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/${DIST_REPO}/${DIST_DEFAULT_BRANCH}
 
 ## Manual Download
 
-Download archives and \`checksums.txt\` from the Releases page of this repository.
+Download versioned archives and \`checksums.txt\` from the Releases page of this repository.
 
 ## Notes
 

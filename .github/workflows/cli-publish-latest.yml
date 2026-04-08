@@ -1,0 +1,74 @@
+name: CLI Publish Latest
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cmd/**'
+      - 'engine/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'Makefile'
+      - 'scripts/build-latest-release-assets.sh'
+      - 'scripts/install-officecli.sh'
+      - 'scripts/sync-public-dist-repo.sh'
+      - '.github/workflows/cli-publish-latest.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: cli-publish-latest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish_latest:
+    name: Publish Rolling Latest CLI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      LATEST_TAG: latest
+      PUBLIC_DIST_REPO: ${{ vars.PUBLIC_DIST_REPO }}
+      PUBLIC_DIST_DEFAULT_BRANCH: ${{ vars.PUBLIC_DIST_DEFAULT_BRANCH || 'main' }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build rolling latest assets
+        env:
+          VERSION_LABEL: latest-${{ github.sha }}
+          COMMIT: ${{ github.sha }}
+        run: bash ./scripts/build-latest-release-assets.sh
+
+      - name: Recreate public latest release
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_DIST_REPO_TOKEN }}
+        run: |
+          gh release delete "${LATEST_TAG}" -R "${PUBLIC_DIST_REPO}" --yes --cleanup-tag || true
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_DIST_REPO}.git" ":refs/tags/${LATEST_TAG}" || true
+          gh release create "${LATEST_TAG}" \
+            -R "${PUBLIC_DIST_REPO}" \
+            --title "latest" \
+            --notes "Rolling latest build from main (${GITHUB_SHA})." \
+            dist/latest/officecli_latest_*.tar.gz \
+            dist/latest/checksums.txt
+
+      - name: Sync public dist repository docs and install script
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_DIST_REPO_TOKEN }}
+          DIST_REPO: ${{ env.PUBLIC_DIST_REPO }}
+          DIST_DEFAULT_BRANCH: ${{ env.PUBLIC_DIST_DEFAULT_BRANCH }}
+          HOMEBREW_TAP_REPO: ${{ env.HOMEBREW_TAP_REPO }}
+        run: bash ./scripts/sync-public-dist-repo.sh

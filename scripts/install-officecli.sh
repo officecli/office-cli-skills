@@ -7,6 +7,7 @@ VERSION="${VERSION:-latest}"
 PREFIX="${PREFIX:-/usr/local}"
 BIN_DIR="${BIN_DIR:-${PREFIX}/bin}"
 INSTALL_DIR="${INSTALL_DIR:-${BIN_DIR}}"
+LATEST_TAG="${LATEST_TAG:-latest}"
 
 if [[ -z "${DIST_REPO}" ]]; then
   echo "DIST_REPO is required, e.g. officecli/officecli-dist" >&2
@@ -32,19 +33,11 @@ detect_arch() {
 }
 
 resolve_version() {
-  if [[ "${VERSION}" != "latest" ]]; then
-    echo "${VERSION#v}"
+  if [[ "${VERSION}" == "latest" ]]; then
+    echo "latest"
     return
   fi
-
-  local api_url="https://api.github.com/repos/${DIST_REPO}/releases/latest"
-  local latest
-  latest="$(curl -fsSL "${api_url}" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-  if [[ -z "${latest}" ]]; then
-    echo "failed to resolve latest release tag from ${api_url}" >&2
-    exit 1
-  fi
-  echo "${latest#v}"
+  echo "${VERSION#v}"
 }
 
 download() {
@@ -114,8 +107,14 @@ if [[ "${os}" != "linux" && "${os}" != "darwin" ]]; then
 fi
 
 resolved_version="$(resolve_version)"
-tag="v${resolved_version}"
-archive_name="officecli_${resolved_version}_${os}_${arch}.tar.gz"
+if [[ "${resolved_version}" == "latest" ]]; then
+  tag="${LATEST_TAG}"
+  archive_name="officecli_latest_${os}_${arch}.tar.gz"
+else
+  tag="v${resolved_version}"
+  archive_name="officecli_${resolved_version}_${os}_${arch}.tar.gz"
+fi
+
 base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
 
 tmpdir="$(mktemp -d)"

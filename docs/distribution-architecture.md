@@ -26,6 +26,11 @@
 - Linux 安装脚本
 - 面向终端用户的最小安装说明
 
+发布形态：
+
+- 版本化 release：`vX.Y.Z`
+- 滚动 latest release：`latest`
+
 注意：
 
 - 不提交源码
@@ -58,6 +63,14 @@
 3. `GoReleaser` 构建 darwin/linux x amd64/arm64 资产并发布到公共分发仓 Releases
 4. 同步公共分发仓的 README 与 Linux 安装脚本
 5. 更新公共 Homebrew tap 仓 formula
+
+另有一条滚动最新分发链路：
+
+1. 私有源码仓 `main` 更新
+2. GitHub Actions 触发 `CLI Publish Latest`
+3. 构建 darwin/linux x amd64/arm64 的 `officecli_latest_*` 资产
+4. 覆盖公共分发仓 `latest` release
+5. 同步公共分发仓 README 与 Linux 安装脚本
 
 ## 需要配置的仓库变量
 
