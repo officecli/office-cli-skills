@@ -56,6 +56,25 @@ case "${1:-}" in
   --version)
     echo "officecli test-1.0.0"
     ;;
+  --help)
+    echo "officecli help"
+    ;;
+  new)
+    shift
+    case "${1:-}" in
+      pptx)
+        shift || true
+        if [[ "${1:-}" == "--help" ]]; then
+          echo "officecli new pptx help"
+        else
+          exit 1
+        fi
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+    ;;
   config)
     shift
     case "${1:-}" in
@@ -173,43 +192,77 @@ source "${case3_dir}/state/state.sh"
 assert_eq "${GENERATION_READY}" "1" "generation configured"
 assert_eq "${LICENSE_READY}" "1" "license configured"
 
-# case 4: openclaw check requires bridge
+# case 4: officecli check fails when CLI help surface is broken
 case4_dir="${TMP_ROOT}/case4"
 mkdir -p "${case4_dir}/bin" "${case4_dir}/state"
-make_fake_officecli "${case4_dir}/bin/officecli"
-cat > "${case4_dir}/state/state.sh" <<'STATE'
+cat > "${case4_dir}/bin/officecli" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  config)
+    shift
+    if [[ "${1:-}" == "status" ]]; then
+      echo "生成服务已配置：true"
+      echo "额度校验已启用：true"
+      echo "在线预览发布已启用：false"
+      exit 0
+    fi
+    ;;
+  --help)
+    exit 1
+    ;;
+  new)
+    exit 1
+    ;;
+esac
+exit 1
+SCRIPT
+chmod +x "${case4_dir}/bin/officecli"
+PATH="${case4_dir}/bin:${PATH}" run_check "${OFFICECLI_SKILL_DIR}/check-officecli-env.sh" "${case4_dir}/out.json" || code=$?
+code=${code:-0}
+assert_eq "${code}" "10" "officecli check broken cli surface exit code"
+assert_contains "${case4_dir}/out.json" 'cli_surface'
+unset code
+
+# case 5: openclaw check requires bridge
+case5_dir="${TMP_ROOT}/case5"
+mkdir -p "${case5_dir}/bin" "${case5_dir}/state"
+make_fake_officecli "${case5_dir}/bin/officecli"
+cat > "${case5_dir}/state/state.sh" <<'STATE'
 GENERATION_READY=1
 LICENSE_READY=1
 PUBLISH_READY=0
 BRIDGE_READY=0
 STATE
-PATH="${case4_dir}/bin:${PATH}" OFFICECLI_FAKE_STATE_DIR="${case4_dir}/state" run_check "${OPENCLAW_SKILL_DIR}/check-officecli-env.sh" "${case4_dir}/out.json" || code=$?
+PATH="${case5_dir}/bin:${PATH}" OFFICECLI_FAKE_STATE_DIR="${case5_dir}/state" run_check "${OPENCLAW_SKILL_DIR}/check-officecli-env.sh" "${case5_dir}/out.json" || code=$?
 code=${code:-0}
 assert_eq "${code}" "10" "openclaw check missing bridge exit code"
-assert_contains "${case4_dir}/out.json" 'agent_bridge'
+assert_contains "${case5_dir}/out.json" 'agent_bridge'
 unset code
 
-# case 5: openclaw fix writes config.yaml and returns ready
-case5_dir="${TMP_ROOT}/case5"
-mkdir -p "${case5_dir}/home/.local/bin" "${case5_dir}/state" "${case5_dir}/install" "${case5_dir}/skill"
-make_fake_officecli "${case5_dir}/install/officecli"
-INSTALL_CMD="mkdir -p '${case5_dir}/home/.local/bin' && cp '${case5_dir}/install/officecli' '${case5_dir}/home/.local/bin/officecli' && chmod +x '${case5_dir}/home/.local/bin/officecli'"
-cp "${OPENCLAW_SKILL_DIR}/config.example.yaml" "${case5_dir}/skill/config.yaml"
+# case 6: openclaw fix writes config.yaml and returns ready
+case6_dir="${TMP_ROOT}/case6"
+mkdir -p "${case6_dir}/home/.local/bin" "${case6_dir}/state" "${case6_dir}/install" "${case6_dir}/skill"
+make_fake_officecli "${case6_dir}/install/officecli"
+INSTALL_CMD="mkdir -p '${case6_dir}/home/.local/bin' && cp '${case6_dir}/install/officecli' '${case6_dir}/home/.local/bin/officecli' && chmod +x '${case6_dir}/home/.local/bin/officecli'"
+REFRESH_CMD="mkdir -p '${case6_dir}/home/.openai/skills' && true"
+cp "${OPENCLAW_SKILL_DIR}/config.example.yaml" "${case6_dir}/skill/config.yaml"
 set +e
-HOME="${case5_dir}/home" \
+HOME="${case6_dir}/home" \
 PATH="/usr/bin:/bin" \
-OPENCLAW_SKILL_CONFIG="${case5_dir}/skill/config.yaml" \
+OPENCLAW_SKILL_CONFIG="${case6_dir}/skill/config.yaml" \
 OFFICECLI_INSTALL_COMMAND="${INSTALL_CMD}" \
-OFFICECLI_FAKE_STATE_DIR="${case5_dir}/state" \
+OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
+OFFICECLI_FAKE_STATE_DIR="${case6_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
-"${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case5_dir}/out.json" 2>&1
+"${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case6_dir}/out.json" 2>&1
 code=$?
 set -e
 assert_eq "${code}" "0" "openclaw fix exit code"
-assert_contains "${case5_dir}/out.json" '"status":"ready"'
-assert_contains "${case5_dir}/skill/config.yaml" 'office_cli_path: "'
-assert_contains "${case5_dir}/skill/config.yaml" 'agent_bridge_command: "'
+assert_contains "${case6_dir}/out.json" '"status":"ready"'
+assert_contains "${case6_dir}/skill/config.yaml" 'office_cli_path: "'
+assert_contains "${case6_dir}/skill/config.yaml" 'agent_bridge_command: "'
 
 echo "skill environment tests passed"

@@ -13,12 +13,14 @@ officecli_path=""
 generation_ready=false
 license_ready=false
 publish_ready=false
+cli_surface_ready=false
 bridge_ready=true
 fixable=true
 status="repairable"
 
 if officecli_path="$(resolve_officecli_path 2>/dev/null)"; then
   officecli_found=true
+  check_cli_surface_ready "${officecli_path}" && cli_surface_ready=true
   status_output="$(run_config_status "${officecli_path}")"
   check_generation_ready "${status_output}" && generation_ready=true
   check_license_ready "${status_output}" && license_ready=true
@@ -30,6 +32,7 @@ fi
 if [[ "${officecli_found}" != true ]]; then
   status="repairable"
 else
+  [[ "${cli_surface_ready}" == true ]] || missing_items+=("cli_surface")
   [[ "${generation_ready}" == true ]] || missing_items+=("generation_config")
   [[ "${license_ready}" == true ]] || missing_items+=("license_config")
   if should_configure_publish && [[ "${publish_ready}" != true ]]; then

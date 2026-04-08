@@ -43,6 +43,7 @@ When a task involves Office document handling, first check whether the current `
 - inspect the visible CLI surface first, such as `officecli --help` or relevant subcommand help, before assuming support
 - use the help output and public product description to judge whether the requested create, modify, or convert workflow is actually supported
 - if support is unclear, say that clearly instead of pretending the capability exists
+- if refresh or check fails, stop and report the `officecli` environment error; do not switch to another local Office generation path on your own
 
 ## Environment Repair
 
@@ -63,6 +64,7 @@ If the capability check indicates that `officecli` supports the requested Office
 
 - do not silently bypass `officecli` with another local Office-file generation or conversion path when `officecli` appears to support the task
 - if `officecli` is unavailable or fails, state that clearly instead of quietly switching the final artifact path
+- do not use Node, Python, LibreOffice, pptxgenjs, or custom scripts to generate the final Office file unless the user explicitly approves leaving the `officecli` path
 - if the capability check suggests that `officecli` does not support the workflow, or the user explicitly accepts an alternative path after that, the agent can proceed with that alternative
 
 For agent clients, prefer the structured bridge over the human-oriented CLI surface.

@@ -88,6 +88,7 @@ Primary event types:
 - when config is missing, ask only for the missing generation/license values and let the fix script write local config
 - online preview config is optional unless the current request needs publish URLs
 - do not try to start `agent-bridge` until the check script returns ready
+- if refresh or check fails, stop and report the `officecli` environment error; do not fall back to any other PPT/DOC/XLS generation tool without explicit user approval
 
 ## Attachment Delivery
 

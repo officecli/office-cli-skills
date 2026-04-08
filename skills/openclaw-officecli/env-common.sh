@@ -78,6 +78,12 @@ check_bridge_ready() {
   "${officecli_bin}" agent-bridge --help >/dev/null 2>&1
 }
 
+check_cli_surface_ready() {
+  local officecli_bin="$1"
+  "${officecli_bin}" --help >/dev/null 2>&1 || return 1
+  "${officecli_bin}" new pptx --help >/dev/null 2>&1 || return 1
+}
+
 print_check_json() {
   local status="$1"
   local officecli_found="$2"
