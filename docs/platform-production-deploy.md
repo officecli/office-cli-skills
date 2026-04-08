@@ -91,6 +91,8 @@ API_KEY_HASH_SALT=...
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URL=https://platform.officecli.io/api/auth/google/callback
+CLAUDEOFFICE_BASE_URL=https://claudeoffice.com
+CLAUDEOFFICE_AUTH_KEY=...
 ```
 
 说明：
@@ -98,6 +100,8 @@ GOOGLE_REDIRECT_URL=https://platform.officecli.io/api/auth/google/callback
 - 若目标 namespace、Service、Deployment 已存在，脚本走常规升级发布。
 - 若 namespace 已存在但 Secret 不存在，脚本只有在传入 `PLATFORM_ENV_FILE` 时才会自动补 Secret。
 - 线上默认 Secret 名称为 `officecli-platform-env`；如需覆盖，可设置 `SECRET_NAME`。
+- `CLAUDEOFFICE_BASE_URL` 是在线预览发布链路必填项；缺失时 `/api/publish` 会直接报 `claudeoffice base url is required`。
+- 当前推荐把 `CLAUDEOFFICE_BASE_URL` 指向 `https://claudeoffice.com`。
 
 ## 生产环境现状
 

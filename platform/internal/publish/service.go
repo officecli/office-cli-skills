@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -74,11 +76,8 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 		return nil, err
 	}
 
-	upload, err := s.requestUploadToken(ctx, req.FileName)
+	upload, err := s.uploadAttachment(ctx, req)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.upload(ctx, upload.UploadURL, req.ContentType, req.Reader); err != nil {
 		return nil, err
 	}
 
@@ -100,7 +99,6 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 }
 
 type uploadTokenResponse struct {
-	UploadURL  string `json:"upload_url"`
 	StorageKey string `json:"storage_key"`
 }
 
@@ -159,42 +157,54 @@ func validateRequest(req Request) error {
 	}
 }
 
-func (s *Service) requestUploadToken(ctx context.Context, fileName string) (*uploadTokenResponse, error) {
-	rawBody, err := s.postJSON(ctx, "/api/attachment/upload/token", map[string]string{"fileName": fileName})
+func (s *Service) uploadAttachment(ctx context.Context, req Request) (*uploadTokenResponse, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	fileName := filepath.Base(strings.TrimSpace(req.FileName))
+	if err := writer.WriteField("fileName", fileName); err != nil {
+		return nil, err
+	}
+	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
 		return nil, err
 	}
+	if _, err := io.Copy(part, req.Reader); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.BaseURL, "/")+"/api/attachment/upload", &body)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	s.attachAuth(httpReq)
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("claudeoffice request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	}
+
 	var envelope struct {
 		Data uploadTokenResponse `json:"data"`
 	}
 	if err := json.Unmarshal(rawBody, &envelope); err != nil {
-		return nil, fmt.Errorf("decode upload token response: %w", err)
+		return nil, fmt.Errorf("decode upload response: %w", err)
 	}
-	if strings.TrimSpace(envelope.Data.UploadURL) == "" || strings.TrimSpace(envelope.Data.StorageKey) == "" {
-		return nil, fmt.Errorf("upload token response missing fields")
+	if strings.TrimSpace(envelope.Data.StorageKey) == "" {
+		return nil, fmt.Errorf("upload response missing storage_key")
 	}
 	return &envelope.Data, nil
-}
-
-func (s *Service) upload(ctx context.Context, uploadURL, contentType string, reader io.Reader) error {
-	if strings.TrimSpace(contentType) == "" {
-		contentType = "application/octet-stream"
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, reader)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", contentType)
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("upload file failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
 }
 
 func (s *Service) createPreviewShare(ctx context.Context, storageKey, documentName, documentType string, expiresAt time.Time) (*Result, error) {

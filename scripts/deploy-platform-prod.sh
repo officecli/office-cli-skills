@@ -82,6 +82,22 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "缺少命令: $1"
 }
 
+require_env_keys_in_file() {
+  local env_file="$1"
+  shift
+  [[ -f "${env_file}" ]] || die "未找到 env 文件: ${env_file}"
+  local missing=()
+  local key
+  for key in "$@"; do
+    if ! grep -Eq "^${key}=" "${env_file}"; then
+      missing+=("${key}")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "env 文件缺少必填项: ${missing[*]} (${env_file})"
+  fi
+}
+
 detect_base_version() {
   local package_json="${PLATFORM_DIR}/web/app/package.json"
   if command -v python3 >/dev/null 2>&1; then
@@ -203,6 +219,7 @@ deploy_remote() {
 
   if [[ -n "${PLATFORM_ENV_FILE}" ]]; then
     [[ -f "${PLATFORM_ENV_FILE}" ]] || die "未找到 PLATFORM_ENV_FILE: ${PLATFORM_ENV_FILE}"
+    require_env_keys_in_file "${PLATFORM_ENV_FILE}" CLAUDEOFFICE_BASE_URL
     remote_env_file="${REMOTE_WORKDIR}/$(basename "${PLATFORM_ENV_FILE}")"
     log "上传 bootstrap env 文件 -> ${remote_env_file}"
     scp_cmd "${PLATFORM_ENV_FILE}" "${SERVER}:${remote_env_file}"
@@ -257,6 +274,19 @@ ensure_secret() {
   [[ -n "${REMOTE_ENV_FILE:-}" ]] || die "缺少 Secret: ${KUBE_NAMESPACE}/${SECRET_NAME}，且未提供 PLATFORM_ENV_FILE"
   [[ -f "$REMOTE_ENV_FILE" ]] || die "未找到 bootstrap env 文件: $REMOTE_ENV_FILE"
   kubectl -n "$KUBE_NAMESPACE" create secret generic "$SECRET_NAME" --from-env-file="$REMOTE_ENV_FILE"
+}
+
+assert_secret_keys() {
+  local missing=()
+  local key
+  for key in CLAUDEOFFICE_BASE_URL; do
+    if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
+      missing+=("$key")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} 缺少必填项: ${missing[*]}"
+  fi
 }
 
 ensure_postgres_secret() {
@@ -432,6 +462,7 @@ cd "$REMOTE_WORKDIR"
 
 ensure_namespace
 ensure_secret
+assert_secret_keys
 ensure_postgres_secret
 sync_platform_secret_postgres_dsn
 apply_postgres_manifests
