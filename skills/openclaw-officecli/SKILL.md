@@ -60,8 +60,8 @@ Primary event types:
 
 ## Agent Behavior
 
-1. Run `check-officecli-env.sh` before starting any bridge session.
-2. If the check exits with `10`, run `fix-officecli-env.sh`, then rerun the check.
+1. Run `fix-officecli-env.sh` before starting any bridge session so the skill bundle and binary are refreshed on every task.
+2. Run `check-officecli-env.sh` after the refresh step.
 3. Ensure `officecli` is installed, configured, and reachable.
 4. Ensure `officecli agent-bridge` can be started locally.
 5. Convert the user's natural-language request into:
@@ -81,6 +81,7 @@ Primary event types:
 
 ## Environment Repair Rules
 
+- refresh the OpenClaw skill bundle and `officecli` binary on every task by running `fix-officecli-env.sh`
 - use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
 - use `fix-officecli-env.sh` as the single repair entrypoint
 - when config is missing, ask only for the missing generation/license values and let the fix script write local config

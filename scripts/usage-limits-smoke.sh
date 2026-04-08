@@ -19,6 +19,12 @@ fail() {
   exit 1
 }
 
+extract_json() {
+  local json="$1"
+  local expr="$2"
+  printf '%s' "$json" | jq -er "$expr"
+}
+
 request() {
   local method="$1"
   local path="$2"
@@ -64,6 +70,7 @@ info "1) 免费首次 check"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
+  "request_nonce":"${FINGERPRINT_HASH}-nonce-1",
   "action":"generate"
 }
 JSON
@@ -72,14 +79,18 @@ status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
 assert_status "$status" "200" "免费首次 check 返回 200"
 assert_body_contains "$body" '"access_mode":"free"' "免费首次 check 返回 free 模式"
+assert_body_contains "$body" '"allowed":true' "免费首次 check 允许继续"
+commit_token_1="$(extract_json "$body" '.data.commit_token')"
+request_id_1="$(extract_json "$body" '.data.commit_token.request_id')"
 
 info "2) 免费 consume 第 1 次"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
-  "request_id":"${FINGERPRINT_HASH}-req-1",
+  "request_id":"${request_id_1}",
   "usage_type":"generate",
-  "access_mode":"free"
+  "access_mode":"free",
+  "commit_token":${commit_token_1}
 }
 JSON
 )")"
@@ -88,13 +99,31 @@ body="$(extract_body "$resp")"
 assert_status "$status" "200" "免费 consume 第 1 次返回 200"
 assert_body_contains "$body" '"access_mode":"free"' "免费 consume 第 1 次返回 free 模式"
 
-info "3) 免费 consume 第 2 次"
+info "3) 免费第 2 次 check"
+resp="$(request POST /api/license/check "$(cat <<JSON
+{
+  "fingerprint_hash":"${FINGERPRINT_HASH}",
+  "request_nonce":"${FINGERPRINT_HASH}-nonce-2",
+  "action":"generate"
+}
+JSON
+)")"
+status="$(extract_status "$resp")"
+body="$(extract_body "$resp")"
+assert_status "$status" "200" "免费第 2 次 check 返回 200"
+assert_body_contains "$body" '"access_mode":"free"' "免费第 2 次 check 返回 free 模式"
+assert_body_contains "$body" '"allowed":true' "免费第 2 次 check 允许继续"
+commit_token_2="$(extract_json "$body" '.data.commit_token')"
+request_id_2="$(extract_json "$body" '.data.commit_token.request_id')"
+
+info "4) 免费 consume 第 2 次"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
-  "request_id":"${FINGERPRINT_HASH}-req-2",
+  "request_id":"${request_id_2}",
   "usage_type":"generate",
-  "access_mode":"free"
+  "access_mode":"free",
+  "commit_token":${commit_token_2}
 }
 JSON
 )")"
@@ -106,22 +135,22 @@ else
   assert_status "$status" "409" "免费 consume 第 2 次返回 409"
 fi
 
-info "4) 再次 consume，验证额度耗尽返回 409"
-resp="$(request POST /api/license/consume "$(cat <<JSON
+info "5) 再次 check，验证额度耗尽后被阻止"
+resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
-  "request_id":"${FINGERPRINT_HASH}-req-overflow",
-  "usage_type":"generate",
-  "access_mode":"free"
+  "request_nonce":"${FINGERPRINT_HASH}-nonce-overflow",
+  "action":"generate"
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "409" "免费额度耗尽时 consume 返回 409"
-assert_body_contains "$body" 'quota exhausted|free quota exhausted' "免费额度耗尽错误文案正确"
+assert_status "$status" "200" "免费额度耗尽时 check 仍返回 200"
+assert_body_contains "$body" '"allowed":false' "免费额度耗尽时 check 返回 blocked"
+assert_body_contains "$body" '"reason_code":"free_quota_exhausted"' "免费额度耗尽原因码正确"
 
-info "5) 非法 JSON 请求返回 400"
+info "6) 非法 JSON 请求返回 400"
 tmp="$(mktemp)"
 status="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST "${PLATFORM_BASE_URL}/api/license/check" -H 'Content-Type: application/json' -d '{invalid')"
 body="$(cat "$tmp")"

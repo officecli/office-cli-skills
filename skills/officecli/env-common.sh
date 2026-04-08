@@ -5,6 +5,8 @@ set -euo pipefail
 OFFICECLI_ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_REPO_DEFAULT="${DIST_REPO:-officecli/officecli-dist}"
 DEFAULT_LICENSE_BASE_URL="${OFFICECLI_SETUP_LICENSE_BASE_URL:-https://platform.officecli.io}"
+PUBLIC_SKILLS_REPO_DEFAULT="${PUBLIC_SKILLS_REPO:-officecli/officecli-skills}"
+PUBLIC_SKILLS_BRANCH_DEFAULT="${PUBLIC_SKILLS_BRANCH:-main}"
 
 json_escape() {
   local value="${1:-}"
@@ -148,6 +150,24 @@ install_officecli_binary() {
   fi
   curl -fsSL "https://raw.githubusercontent.com/${DIST_REPO_DEFAULT}/main/scripts/install-officecli.sh" \
     | PREFIX="${HOME}/.local" BIN_DIR="${HOME}/.local/bin" INSTALL_DIR="${HOME}/.local/bin" DIST_REPO="${DIST_REPO_DEFAULT}" bash
+}
+
+refresh_officecli_binary() {
+  install_officecli_binary
+}
+
+refresh_codex_officecli_skill() {
+  local refresh_cmd="${OFFICECLI_REFRESH_SKILL_COMMAND:-}"
+  if [[ -n "${refresh_cmd}" ]]; then
+    bash -lc "${refresh_cmd}"
+    return 0
+  fi
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "missing curl, unable to auto-refresh officecli skill" >&2
+    return 1
+  fi
+  curl -fsSL "https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO_DEFAULT}/${PUBLIC_SKILLS_BRANCH_DEFAULT}/scripts/install-skill.sh" \
+    | AUTO_INSTALL_BINARY=0 bash -s -- officecli
 }
 
 run_set_generation() {

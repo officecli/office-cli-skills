@@ -7,13 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=skills/openclaw-officecli/env-common.sh
 source "${SCRIPT_DIR}/env-common.sh"
 
-if officecli_path="$(resolve_officecli_path 2>/dev/null)"; then
-  :
-else
-  install_officecli_binary
-  export PATH="${HOME}/.local/bin:${PATH}"
-  officecli_path="$(resolve_officecli_path)"
-fi
+refresh_openclaw_officecli_skill
+refresh_officecli_binary
+export PATH="${HOME}/.local/bin:${PATH}"
+officecli_path="$(resolve_officecli_path)"
 
 status_output="$(run_config_status "${officecli_path}")"
 if ! check_generation_ready "${status_output}"; then

@@ -6,6 +6,7 @@ PUBLIC_SKILLS_REPO="${PUBLIC_SKILLS_REPO:-}"
 PUBLIC_SKILLS_DEFAULT_BRANCH="${PUBLIC_SKILLS_DEFAULT_BRANCH:-main}"
 SOURCE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLIC_SKILL_NAME="officecli"
+OPENCLAW_SKILL_NAME="openclaw-officecli"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
@@ -24,8 +25,9 @@ cd "${tmpdir}/skills-repo"
 git checkout "${PUBLIC_SKILLS_DEFAULT_BRANCH}"
 
 find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-mkdir -p "skills/${PUBLIC_SKILL_NAME}"
+mkdir -p "skills/${PUBLIC_SKILL_NAME}" "skills/${OPENCLAW_SKILL_NAME}"
 cp -R "${SOURCE_REPO_ROOT}/skills/${PUBLIC_SKILL_NAME}/." "./skills/${PUBLIC_SKILL_NAME}/"
+cp -R "${SOURCE_REPO_ROOT}/skills/${OPENCLAW_SKILL_NAME}/." "./skills/${OPENCLAW_SKILL_NAME}/"
 mkdir -p scripts
 
 cat > scripts/install-skill.sh <<'INSTALLER'
@@ -248,6 +250,7 @@ After copying, restart Codex.
 ## Layout
 
 - \`skills/officecli/\`: public skill definition
+- \`skills/openclaw-officecli/\`: public OpenClaw skill definition
 - \`scripts/install-skill.sh\`: shell installer for direct \`wget\` / \`curl\` usage
 README
 

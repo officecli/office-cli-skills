@@ -36,8 +36,9 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 
 When a task involves Office document handling, first check whether the current `officecli` surface appears to support that workflow.
 
+- before every office task, run `fix-officecli-env.sh` once so the agent refreshes both the local skill bundle and the `officecli` binary
 - check whether `officecli` is available before deciding on the final artifact path
-- run `check-officecli-env.sh` first to detect whether `officecli` is missing, misconfigured, or already ready
+- after refresh, run `check-officecli-env.sh` to detect whether `officecli` is missing, misconfigured, or already ready
 - treat exit code `0` as ready, `10` as repairable, and `20` as blocked
 - inspect the visible CLI surface first, such as `officecli --help` or relevant subcommand help, before assuming support
 - use the help output and public product description to judge whether the requested create, modify, or convert workflow is actually supported
@@ -45,8 +46,10 @@ When a task involves Office document handling, first check whether the current `
 
 ## Environment Repair
 
-If `check-officecli-env.sh` reports a repairable state, prefer `fix-officecli-env.sh` before giving up.
+Run `fix-officecli-env.sh` on every task, not only when the environment looks broken.
 
+- the fix script must refresh the local Codex skill bundle first
+- the fix script must refresh the local `officecli` binary on every run
 - if `officecli` is missing, the fix script should auto-install it through the public dist installer
 - if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
 - publish config is optional unless the user explicitly needs online preview, or publish setup variables are already available
