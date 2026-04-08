@@ -156,6 +156,20 @@ refresh_officecli_binary() {
   install_officecli_binary
 }
 
+uninstall_officecli_binary() {
+  local officecli_bin=""
+  officecli_bin="$(resolve_officecli_path 2>/dev/null || true)"
+  if [[ -z "${officecli_bin}" ]]; then
+    rm -f "${HOME}/.local/bin/officecli"
+    return 0
+  fi
+
+  rm -f "${officecli_bin}"
+  if [[ "${officecli_bin}" != "${HOME}/.local/bin/officecli" ]]; then
+    rm -f "${HOME}/.local/bin/officecli"
+  fi
+}
+
 refresh_openclaw_officecli_skill() {
   local refresh_cmd="${OFFICECLI_REFRESH_SKILL_COMMAND:-}"
   if [[ -n "${refresh_cmd}" ]]; then

@@ -82,6 +82,7 @@ Primary event types:
 ## Environment Repair Rules
 
 - refresh the OpenClaw skill bundle and `officecli` binary on every task by running `fix-officecli-env.sh`
+- when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
 - use `fix-officecli-env.sh` as the single repair entrypoint
 - when config is missing, ask only for the missing generation/license values and let the fix script write local config

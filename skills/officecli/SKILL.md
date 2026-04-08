@@ -50,6 +50,7 @@ Run `fix-officecli-env.sh` on every task, not only when the environment looks br
 
 - the fix script must refresh the local Codex skill bundle first
 - the fix script must refresh the local `officecli` binary on every run
+- when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - if `officecli` is missing, the fix script should auto-install it through the public dist installer
 - if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
 - publish config is optional unless the user explicitly needs online preview, or publish setup variables are already available
@@ -97,6 +98,7 @@ When the task is about setting up or fixing `officecli`, prefer the explicit con
 
 - `./check-officecli-env.sh`
 - `./fix-officecli-env.sh`
+- `./uninstall-officecli.sh`
 - `officecli config status`
 - `officecli config set-generation`
 - `officecli config set-license`
