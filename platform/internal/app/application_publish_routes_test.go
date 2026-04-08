@@ -96,4 +96,58 @@ func TestRegisterPublishRoutesReturnsPublishPayload(t *testing.T) {
 	if fake.auth != "Bearer test-key" {
 		t.Fatalf("auth = %q", fake.auth)
 	}
+	if fake.req.DocumentType != "docx" {
+		t.Fatalf("document type = %q", fake.req.DocumentType)
+	}
+	if fake.req.DocumentName != "demo.docx" {
+		t.Fatalf("document name = %q", fake.req.DocumentName)
+	}
+	data, _ := io.ReadAll(fake.req.Reader)
+	if string(data) != "hello" {
+		t.Fatalf("file body = %q", string(data))
+	}
+}
+
+func TestRegisterPublishRoutesAcceptsFileBeforeMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	fake := &fakePublishService{result: &publishsvc.Result{
+		AccessURL: "https://preview.example.com/share/2",
+		Password:  "654321",
+		FileID:    "file-2",
+	}}
+	registerPublishRoutes(api, Config{PublishMaxFileBytes: 1024, PublishRateLimitPerMinute: 10}, fake)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, _ := writer.CreateFormFile("file", "deck.pptx")
+	_, _ = part.Write([]byte("ppt-bytes"))
+	_ = writer.WriteField("document_type", "pptx")
+	_ = writer.WriteField("document_name", "deck.pptx")
+	_ = writer.WriteField("expires_in_seconds", "3600")
+	_ = writer.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/publish", &body)
+	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if fake.req.DocumentType != "pptx" {
+		t.Fatalf("document type = %q", fake.req.DocumentType)
+	}
+	if fake.req.DocumentName != "deck.pptx" {
+		t.Fatalf("document name = %q", fake.req.DocumentName)
+	}
+	if fake.req.ExpiresInSeconds != 3600 {
+		t.Fatalf("expires_in_seconds = %d", fake.req.ExpiresInSeconds)
+	}
+	data, _ := io.ReadAll(fake.req.Reader)
+	if string(data) != "ppt-bytes" {
+		t.Fatalf("file body = %q", string(data))
+	}
 }

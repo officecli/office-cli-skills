@@ -1,13 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -241,7 +241,7 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			expiresInSeconds int
 			fileName         string
 			contentType      string
-			filePart         *multipart.Part
+			fileData         []byte
 		)
 
 		for {
@@ -257,7 +257,12 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			case "file":
 				fileName = filepath.Base(part.FileName())
 				contentType = strings.TrimSpace(part.Header.Get("Content-Type"))
-				filePart = part
+				fileData, err = io.ReadAll(part)
+				_ = part.Close()
+				if err != nil {
+					httpapi.Error(c, http.StatusBadRequest, "invalid multipart request")
+					return
+				}
 			case "document_type":
 				data, _ := io.ReadAll(io.LimitReader(part, 128))
 				documentType = strings.TrimSpace(string(data))
@@ -274,15 +279,11 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 				_, _ = io.Copy(io.Discard, part)
 				_ = part.Close()
 			}
-			if filePart != nil {
-				break
-			}
 		}
-		if filePart == nil {
+		if len(fileData) == 0 && fileName == "" {
 			httpapi.Error(c, http.StatusBadRequest, "file is required")
 			return
 		}
-		defer filePart.Close()
 		if documentName == "" {
 			documentName = fileName
 		}
@@ -293,7 +294,7 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			DocumentName:     documentName,
 			ExpiresInSeconds: expiresInSeconds,
 			ContentType:      contentType,
-			Reader:           filePart,
+			Reader:           bytes.NewReader(fileData),
 		})
 		if err != nil {
 			status := http.StatusBadRequest
