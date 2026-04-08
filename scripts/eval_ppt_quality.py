@@ -54,14 +54,64 @@ CASES = [
         "style": "清晰易学",
         "lang": "zh-CN",
     },
+    {
+        "id": "company_exec",
+        "category": "公司介绍",
+        "topic": "企业协作平台管理层介绍",
+        "brief": "面向企业管理层介绍协作平台的业务价值、治理能力、投入产出与分阶段推进建议。",
+        "audience": "企业管理层",
+        "style": "结论先行",
+        "lang": "zh-CN",
+    },
+    {
+        "id": "market_finance",
+        "category": "行业/市场分析",
+        "topic": "AI 办公行业竞争格局与进入窗口",
+        "brief": "面向投资与战略团队分析 AI 办公行业竞争格局、进入窗口、区域优先级与风险边界。",
+        "audience": "投资与战略团队",
+        "style": "结论先行",
+        "lang": "zh-CN",
+    },
+    {
+        "id": "ops_board",
+        "category": "经营/数据汇报",
+        "topic": "SaaS 月度经营看板复盘",
+        "brief": "面向经营管理层复盘月度新增、续费、回款、交付效率与下月纠偏动作，要求数据驱动。",
+        "audience": "经营管理层",
+        "style": "数据驱动",
+        "lang": "zh-CN",
+    },
+    {
+        "id": "launch_gtm",
+        "category": "产品发布方案",
+        "topic": "OfficeCLI 新版本 GTM 协同方案",
+        "brief": "面向产品、销售、运营和客服团队制定新版本上市节奏、资源分工、风险预案与上线后跟踪机制。",
+        "audience": "产品销售运营客服联合团队",
+        "style": "行动导向",
+        "lang": "zh-CN",
+    },
+    {
+        "id": "training_ops",
+        "category": "培训/教程",
+        "topic": "OfficeCLI 日常使用入门培训",
+        "brief": "面向一线同学讲解 OfficeCLI 的安装检查、常用命令、生成与 review 配合方式，以及常见误区。",
+        "audience": "一线业务同学",
+        "style": "清晰易学",
+        "lang": "zh-CN",
+    },
 ]
 
 SUITES = {
     "smoke": ["launch"],
-    "full": [item["id"] for item in CASES],
+    "full": [item["id"] for item in CASES[:5]],
+    "extended": [item["id"] for item in CASES],
+    "strict": [item["id"] for item in CASES],
 }
 
-PASS_SCORE = 85
+DEFAULT_PASS_SCORE = 85
+STRICT_PASS_SCORE = 88
+STRICT_VISUAL_SCORE = 80
+STRICT_MAX_MEDIUM = 2
 
 
 def run_json(cmd, cwd):
@@ -102,18 +152,20 @@ def build_summary_markdown(report):
         f"- 安装版本：{report['installed_version']}",
         f"- 整体状态：{report['status']}",
         f"- 样例数：{len(report['cases'])}",
+        f"- 通过线：overall >= {report['pass_score']} / visual >= {report['min_visual_score']} / medium <= {report['max_medium_count']} / 必须无 high",
         "",
-        "| 样例 | 发布 | 总分 | 视觉分 | 结构分 | high | medium | 结果 | 在线预览 | 关键问题 |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |",
+        "| 样例 | 发布 | 总分 | 视觉分 | 结构分 | high | medium | 结果 | 视觉 | 在线预览 | 关键问题 |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
     ]
     for item in report["cases"]:
         issues = "；".join(item["top_issues"]) if item["top_issues"] else "-"
         preview = item.get("access_url") or "-"
         publish_state = "已发布" if item.get("published") else "未发布"
         result = "通过" if item["passed"] else "未通过"
+        visual = "已检查" if item.get("used_visual") else "跳过"
         lines.append(
             f"| {item['category']} | {publish_state} | {item['overall_score']} | {item['visual_score']} | {item['structure_score']} | "
-            f"{item['high_count']} | {item['medium_count']} | {result} | {preview} | {issues} |"
+            f"{item['high_count']} | {item['medium_count']} | {result} | {visual} | {preview} | {issues} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -127,6 +179,10 @@ def main():
     parser.add_argument("--root", default=".", help="仓库根目录")
     parser.add_argument("--publish", action="store_true", help="生成后发布在线预览")
     parser.add_argument("--version-label", default="unknown", help="安装版本标识")
+    parser.add_argument("--pass-score", type=int, default=None, help="通过所需最低 overall 分")
+    parser.add_argument("--min-visual-score", type=int, default=None, help="通过所需最低 visual 分")
+    parser.add_argument("--max-medium-count", type=int, default=None, help="通过允许的 medium 问题上限")
+    parser.add_argument("--require-visual", action="store_true", help="要求所有样例都必须完成视觉评审")
     args = parser.parse_args()
 
     repo = Path(args.root).resolve()
@@ -167,11 +223,34 @@ def main():
         return 2
 
     cases = select_cases(args.suite)
+    pass_score = args.pass_score
+    min_visual_score = args.min_visual_score
+    max_medium_count = args.max_medium_count
+    require_visual = args.require_visual
+    if args.suite == "strict":
+        if pass_score is None:
+            pass_score = STRICT_PASS_SCORE
+        if min_visual_score is None:
+            min_visual_score = STRICT_VISUAL_SCORE
+        if max_medium_count is None:
+            max_medium_count = STRICT_MAX_MEDIUM
+        require_visual = True
+    else:
+        if pass_score is None:
+            pass_score = DEFAULT_PASS_SCORE
+        if min_visual_score is None:
+            min_visual_score = 0
+        if max_medium_count is None:
+            max_medium_count = 999
+
     report = {
         "status": "passed",
         "suite": args.suite,
         "installed_version": args.version_label,
-        "pass_score": PASS_SCORE,
+        "pass_score": pass_score,
+        "min_visual_score": min_visual_score,
+        "max_medium_count": max_medium_count,
+        "require_visual": require_visual,
         "publish_enabled": args.publish,
         "output_dir": str(out_root),
         "cases": [],
@@ -217,7 +296,18 @@ def main():
             published = bool(generate.get("published"))
             preview_url = (generate.get("access_url") or "").strip()
             publish_ok = (not args.publish) or (published and preview_url)
-            passed = review.get("overall_score", 0) >= PASS_SCORE and high_count == 0 and publish_ok
+            used_visual = bool(review.get("used_visual"))
+            visual_ok = review.get("visual_score", 0) >= min_visual_score
+            medium_ok = medium_count <= max_medium_count
+            visual_required_ok = (not require_visual) or used_visual
+            passed = (
+                review.get("overall_score", 0) >= pass_score
+                and visual_ok
+                and high_count == 0
+                and medium_ok
+                and publish_ok
+                and visual_required_ok
+            )
             if not passed:
                 report["status"] = "failed"
 
@@ -237,6 +327,7 @@ def main():
                     "structure_score": review.get("structure_score", 0),
                     "high_count": high_count,
                     "medium_count": medium_count,
+                    "used_visual": used_visual,
                     "passed": passed,
                     "top_issues": top_issues,
                     "published_skipped_reason": generate.get("published_skipped_reason", ""),
