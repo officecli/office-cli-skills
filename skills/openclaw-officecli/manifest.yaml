@@ -1,0 +1,43 @@
+name: openclaw-officecli
+version: 0.1.0
+description: Generate local PPTX, DOCX, and XLSX files through officecli agent-bridge and return them to OpenClaw users as channel attachments.
+author: officecli
+license: MIT
+entrypoint: SKILL.md
+homepage: https://github.com/officecli/officecli
+repository: https://github.com/officecli/officecli
+tags:
+  - office
+  - pptx
+  - docx
+  - xlsx
+  - telegram
+  - discord
+  - slack
+  - openclaw
+intent_examples:
+  - 生成一个五页的 PPT，介绍企业协作平台
+  - 帮我写一个给客户的 docx，介绍我们的协作平台
+  - 做一个项目预算 excel 表
+config:
+  schema:
+    type: object
+    properties:
+      office_cli_path:
+        type: string
+        description: Absolute path to the officecli binary. Leave empty to use PATH lookup.
+      agent_bridge_command:
+        type: string
+        description: Command used to start officecli agent-bridge locally.
+      default_mode:
+        type: string
+        description: Default generation mode.
+      default_output_format:
+        type: string
+        description: Default bridge output format.
+      default_lang:
+        type: string
+        description: Default document language.
+      default_publish:
+        type: boolean
+        description: Whether generated documents should publish previews by default.

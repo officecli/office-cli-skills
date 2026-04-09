@@ -1,0 +1,11 @@
+{
+  "name": "openclaw-officecli",
+  "description": "OpenClaw-oriented Office document generation skill powered by officecli agent-bridge",
+  "version": "0.1.0",
+  "author": {
+    "name": "officecli"
+  },
+  "homepage": "https://github.com/officecli/officecli",
+  "repository": "https://github.com/officecli/officecli",
+  "license": "MIT"
+}
