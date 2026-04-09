@@ -23,6 +23,11 @@ type stubLicenseManager struct {
 	checkErr    error
 }
 
+func TestMain(m *testing.M) {
+	_ = os.Setenv(officeTaskPreflightSkipEnv, "1")
+	os.Exit(m.Run())
+}
+
 type dynamicLicenseManager struct {
 	check func(req LicenseCheckRequest) (*LicenseCheckResult, error)
 }
@@ -138,6 +143,16 @@ func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
 }
 
+func writeTestPreflightScript(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
 type terminalBuffer struct {
 	mu      sync.Mutex
 	raw     strings.Builder
@@ -197,6 +212,113 @@ func TestRenderProgress_TTYAnimatesAndFinalizesStage(t *testing.T) {
 	history := strings.Join(out.History(), "\n")
 	if !strings.Contains(history, "✔ 已生成文档内容") {
 		t.Fatalf("expected finalized success line, got %q", history)
+	}
+}
+
+func TestAppRun_NewInvokesInstalledSkillPreflight(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	configPath := filepath.Join(tmpDir, "config.json")
+	markerPath := filepath.Join(tmpDir, "preflight-ran")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n: > \""+markerPath+"\"\n")
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "介绍这款企业协作平台", "--json", "--no-publish"}); err != nil {
+		t.Fatalf("Run(new): %v", err)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("expected preflight marker: %v", err)
+	}
+}
+
+func TestAppRun_NewFailsWhenInstalledSkillPreflightFails(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nexit 17\n")
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"})
+	if err == nil || !strings.Contains(err.Error(), "skill preflight failed") {
+		t.Fatalf("expected preflight failure, got %v", err)
+	}
+}
+
+func TestAppRun_NewReloadsConfigAfterInstalledSkillPreflight(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	configPath := filepath.Join(tmpDir, "config.json")
+	initialOutDir := filepath.Join(tmpDir, "initial-output")
+	updatedOutDir := filepath.Join(tmpDir, "updated-output")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\ncat > \"$OFFICE_CLI_CONFIG\" <<'JSON'\n{\n  \"defaults\": {\n    \"output_dir\": \""+updatedOutDir+"\",\n    \"mode\": \"fast\",\n    \"publish\": false\n  },\n  \"llm\": {\n    \"base_url\": \"https://api.example.com/v1\",\n    \"api_key\": \"llm-key\",\n    \"model\": \"gpt-4.1\"\n  },\n  \"license\": {\n    \"base_url\": \"https://license.example.com/api\",\n    \"enabled\": true,\n    \"timeout_sec\": 60\n  },\n  \"publish\": {\n    \"enabled\": false\n  }\n}\nJSON\n")
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: initialOutDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--no-publish"}); err != nil {
+		t.Fatalf("Run(new): %v", err)
+	}
+	entries, err := os.ReadDir(updatedOutDir)
+	if err != nil {
+		t.Fatalf("ReadDir(updated output): %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("expected generated file in updated output dir")
+	}
+	if _, err := os.Stat(initialOutDir); !os.IsNotExist(err) {
+		t.Fatalf("expected initial output dir to remain unused, got %v", err)
 	}
 }
 

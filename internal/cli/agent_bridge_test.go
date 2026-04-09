@@ -46,8 +46,13 @@ func (b blockingLLMClient) GenerateImage(context.Context, engine.ImageGeneration
 
 func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	markerPath := filepath.Join(tmpDir, "bridge-preflight-ran")
 	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("HOME", homeDir)
 	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n: > \""+markerPath+"\"\n")
 	_, err := WriteConfig("", Config{
 		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
 		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
@@ -149,6 +154,9 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	_ = inW.Close()
 	if err := <-done; err != nil {
 		t.Fatalf("bridge exited with error: %v", err)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("expected bridge preflight marker: %v", err)
 	}
 }
 

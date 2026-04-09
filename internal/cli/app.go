@@ -19,12 +19,13 @@ import (
 )
 
 type App struct {
-	Stdout            io.Writer
-	Stderr            io.Writer
-	Stdin             io.Reader
-	newLLMClient      func(cfg LLMConfig) (GeneratorLLMClient, error)
-	newLicenseService func(cfg LicenseConfig) (LicenseManager, error)
-	newReviewer       func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error)
+	Stdout              io.Writer
+	Stderr              io.Writer
+	Stdin               io.Reader
+	newLLMClient        func(cfg LLMConfig) (GeneratorLLMClient, error)
+	newLicenseService   func(cfg LicenseConfig) (LicenseManager, error)
+	newReviewer         func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error)
+	officeTaskPreflight func(ctx context.Context, command string) error
 }
 
 var Version = "dev"
@@ -66,6 +67,9 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 				reviewProgressReporter{emitter: progress},
 			), nil
 		},
+		officeTaskPreflight: func(ctx context.Context, command string) error {
+			return runInstalledSkillPreflight(ctx, stdin, stdout, stderr, command)
+		},
 	}
 }
 
@@ -97,20 +101,38 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		_, err := io.WriteString(a.Stdout, help)
 		return err
 	}
-	cfg, err := LoadConfig("")
-	if err != nil {
-		return err
-	}
 	switch args[0] {
 	case "config":
 		return a.runConfig(args[1:])
 	case "auth":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
 		return a.runAuth(ctx, cfg, args[1:])
 	case "new":
+		if err := a.officeTaskPreflight(ctx, args[0]); err != nil {
+			return err
+		}
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
 		return a.runNew(ctx, cfg, args[1:])
 	case "review":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
 		return a.runReview(ctx, cfg, args[1:])
 	case "agent-bridge":
+		if err := a.officeTaskPreflight(ctx, args[0]); err != nil {
+			return err
+		}
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
 		return a.runAgentBridge(ctx, cfg, args[1:])
 	default:
 		return fmt.Errorf("unsupported command: %s", args[0])
