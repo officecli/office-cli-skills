@@ -123,6 +123,9 @@ func LoadConfig() (Config, error) {
 	cfg.AdminLoginRateLimitPerMinute = mustEnvInt("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", cfg.AdminLoginRateLimitPerMinute)
 	cfg.LicenseRateLimitPerMinute = mustEnvInt("LICENSE_RATE_LIMIT_PER_MINUTE", cfg.LicenseRateLimitPerMinute)
 	cfg.RateLimitVisitorTTL = mustEnvDuration("RATE_LIMIT_VISITOR_TTL", cfg.RateLimitVisitorTTL)
+	if strings.TrimSpace(cfg.ClaudeOfficeAuthSharedSecret) == "" {
+		cfg.ClaudeOfficeAuthSharedSecret = cfg.ClaudeOfficeAuthKey
+	}
 	if cfg.AppEnv != "development" && cfg.AppEnv != "staging" && cfg.AppEnv != "production" {
 		return Config{}, fmt.Errorf("APP_ENV must be one of development, staging, production")
 	}

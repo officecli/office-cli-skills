@@ -305,6 +305,23 @@ PY
   kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "${payload}" >/dev/null
 }
 
+backfill_publish_auth_secret() {
+  local legacy_auth_key=""
+  local shared_secret=""
+  local key_id=""
+
+  legacy_auth_key="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_KEY}' 2>/dev/null | base64 -d || true)"
+  shared_secret="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_SHARED_SECRET}' 2>/dev/null | base64 -d || true)"
+  key_id="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_KEY_ID}' 2>/dev/null | base64 -d || true)"
+
+  if [[ -z "$shared_secret" && -n "$legacy_auth_key" ]]; then
+    kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "{\"stringData\":{\"CLAUDEOFFICE_AUTH_SHARED_SECRET\":\"${legacy_auth_key}\"}}" >/dev/null
+  fi
+  if [[ -z "$key_id" ]]; then
+    kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p '{"stringData":{"CLAUDEOFFICE_AUTH_KEY_ID":"platform-prod"}}' >/dev/null
+  fi
+}
+
 assert_secret_keys() {
   local missing=()
   local key
@@ -492,6 +509,7 @@ cd "$REMOTE_WORKDIR"
 ensure_namespace
 ensure_secret
 sync_secret_from_env_file
+backfill_publish_auth_secret
 assert_secret_keys
 ensure_postgres_secret
 sync_platform_secret_postgres_dsn
