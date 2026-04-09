@@ -62,9 +62,15 @@ resolve_officecli_path() {
   return 1
 }
 
+run_officecli_no_preflight() {
+  local officecli_bin="$1"
+  shift
+  OFFICECLI_SKIP_SKILL_PREFLIGHT=1 "${officecli_bin}" "$@"
+}
+
 run_config_status() {
   local officecli_bin="$1"
-  "${officecli_bin}" config status 2>/dev/null || true
+  run_officecli_no_preflight "${officecli_bin}" config status 2>/dev/null || true
 }
 
 check_generation_ready() {
@@ -86,13 +92,13 @@ check_bridge_ready() {
     bash -lc "$1 --help" >/dev/null 2>&1
     return $?
   fi
-  "${officecli_bin}" agent-bridge --help >/dev/null 2>&1
+  run_officecli_no_preflight "${officecli_bin}" agent-bridge --help >/dev/null 2>&1
 }
 
 check_cli_surface_ready() {
   local officecli_bin="$1"
-  "${officecli_bin}" --help >/dev/null 2>&1 || return 1
-  "${officecli_bin}" new pptx --help >/dev/null 2>&1 || return 1
+  run_officecli_no_preflight "${officecli_bin}" --help >/dev/null 2>&1 || return 1
+  run_officecli_no_preflight "${officecli_bin}" new --help >/dev/null 2>&1 || return 1
 }
 
 print_check_json() {
@@ -205,20 +211,20 @@ run_set_generation() {
   local officecli_bin="$1"
   local base_url="$2"
   local api_key="$3"
-  printf '%s\n%s\n' "$base_url" "$api_key" | "${officecli_bin}" config set-generation >/dev/null
+  printf '%s\n%s\n' "$base_url" "$api_key" | run_officecli_no_preflight "${officecli_bin}" config set-generation >/dev/null
 }
 
 run_set_license() {
   local officecli_bin="$1"
   local api_key="$2"
-  printf 'yes\n%s\n' "$api_key" | "${officecli_bin}" config set-license >/dev/null
+  printf 'yes\n%s\n' "$api_key" | run_officecli_no_preflight "${officecli_bin}" config set-license >/dev/null
 }
 
 run_set_publish() {
   local officecli_bin="$1"
   local base_url="$2"
   local api_key="$3"
-  printf 'yes\n%s\n%s\n' "$base_url" "$api_key" | "${officecli_bin}" config set-publish >/dev/null
+  printf 'yes\n%s\n%s\n' "$base_url" "$api_key" | run_officecli_no_preflight "${officecli_bin}" config set-publish >/dev/null
 }
 
 should_configure_publish() {

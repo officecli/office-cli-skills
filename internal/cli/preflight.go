@@ -25,6 +25,7 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 	for _, script := range scripts {
 		retry, err := shouldRetryAfterScriptRefresh(script, func() error {
 			cmd := exec.CommandContext(ctx, "bash", script)
+			cmd.Env = append(os.Environ(), officeTaskPreflightSkipEnv+"=1")
 			if isTerminalReader(stdin) {
 				cmd.Stdin = stdin
 			}

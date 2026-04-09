@@ -253,6 +253,46 @@ func TestAppRun_NewInvokesInstalledSkillPreflight(t *testing.T) {
 	}
 }
 
+func TestAppRun_NewPreflightSetsSkipEnvForScriptChildren(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	configPath := filepath.Join(tmpDir, "config.json")
+	markerPath := filepath.Join(tmpDir, "skip-env")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s' \"${OFFICECLI_SKIP_SKILL_PREFLIGHT:-}\" > \""+markerPath+"\"\n")
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"}); err != nil {
+		t.Fatalf("Run(new): %v", err)
+	}
+	raw, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("ReadFile(marker): %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "1" {
+		t.Fatalf("expected skip env to be set, got %q", string(raw))
+	}
+}
+
 func TestAppRun_NewFailsWhenInstalledSkillPreflightFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
