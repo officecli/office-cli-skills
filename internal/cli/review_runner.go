@@ -62,7 +62,7 @@ func (a *App) buildReviewJobFromRequest(req bridgeInvokeParams) (ReviewJob, erro
 	if strings.TrimSpace(req.Tool) == "" {
 		req.Tool = bridgeToolOfficeReview
 	}
-	if req.Tool != bridgeToolOfficeReview {
+	if req.Tool != bridgeToolOfficeReview && req.Tool != bridgeToolOfficeScore {
 		return ReviewJob{}, fmt.Errorf("unsupported tool: %s", req.Tool)
 	}
 	if strings.ToLower(strings.TrimSpace(req.Args.DocumentType)) != "pptx" {

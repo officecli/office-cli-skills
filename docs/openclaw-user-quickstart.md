@@ -100,9 +100,13 @@ agents:
 默认行为：
 
 - skill 会把请求路由到 `officecli agent-bridge`
+- agent 应先读取 `initialize` / `capabilities/get`
+- `pptx` 是否默认自动配图，以 `document_generation.pptx.image_support` 为准
 - 如果信息足够，直接开始生成
 - 如果需要更多信息，会在聊天里继续补问
 - 生成完成后，文件应当作为附件回传到当前 channel
+
+如果用户明确说“不要图片 / 纯文本版 PPT”，agent 应传 `enable_images=false`。
 
 ## 常见问题
 
@@ -126,6 +130,22 @@ agents:
 bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
 bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 ```
+
+### 4. PPT 能生成，但没有图片
+
+优先检查 agent 是否已经按能力协商读取 `document_generation.pptx.image_support`，然后执行：
+
+```bash
+officecli config set-generation
+```
+
+重点确认图片模型相关字段：
+
+- `image_base_url`
+- `image_api_key`
+- `image_model`
+
+如果你本来就只想要纯文本版 PPT，则让 agent 传 `enable_images=false`，或在 CLI 中使用 `--no-images`。
 
 ## 相关文件
 

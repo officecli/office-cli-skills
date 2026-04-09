@@ -59,6 +59,12 @@ go build -o officecli ./cmd/officecli
 ./officecli config set-defaults  # 可选
 ```
 
+其中 `./officecli config set-generation` 会同时处理 `pptx` 自动配图相关设置：
+
+- 默认会复用文本生成服务尝试生成图片
+- 如果你的文本模型不支持图片接口，可以按提示改成独立图片模型服务
+- 独立图片模型服务需要填写图片模型的 `url`、`ak` 和模型名
+
 你也可以随时查看当前配置状态：
 
 ```bash
@@ -112,6 +118,14 @@ make run-help
 ```
 
 默认会尝试为合适页面自动配图，并把图片直接嵌入生成的 `pptx` 文件。
+
+如果生成出来一直没有图片，优先执行：
+
+```bash
+./officecli config set-generation
+```
+
+然后检查是否需要单独填写图片模型的 `url`、`ak` 和模型名。
 
 ### 只生成本地文件，不发布预览
 
@@ -171,8 +185,16 @@ make run-help
 ### 评估一份本地 PPT 的质量
 
 ```bash
+./officecli score pptx ./output/企业协作平台介绍.pptx
+```
+
+或继续使用兼容别名：
+
+```bash
 ./officecli review pptx ./output/企业协作平台介绍.pptx
 ```
+
+评分默认不会在生成后自动执行，需要你显式调用 `score` 或 `review`。
 
 默认会先做结构检查；如果本机安装了 LibreOffice（`soffice`），还会自动补充一轮基于 PDF 的视觉评审。
 
@@ -923,6 +945,8 @@ export OFFICE_CLI_CONFIG=/path/to/config.json
 officecli config set-generation
 ```
 
+如果 `pptx` 能生成但没有图，也建议先重新执行这一条；它会引导你检查或补全 `image_base_url`、`image_api_key`、`image_model`。
+
 ### 常用配置层级
 
 对普通用户来说，主要只需要关注三类配置：
@@ -930,6 +954,17 @@ officecli config set-generation
 - 生成服务接入
 - 额度 / 授权服务接入
 - 在线预览发布接入
+
+生成服务相关：
+
+- `OFFICE_CLI_LLM_PROVIDER`
+- `OFFICE_CLI_LLM_BASE_URL`
+- `OFFICE_CLI_LLM_API_KEY`
+- `OFFICE_CLI_LLM_MODEL`
+- `OFFICE_CLI_LLM_IMAGE_BASE_URL`
+- `OFFICE_CLI_LLM_IMAGE_API_KEY`
+- `OFFICE_CLI_LLM_IMAGE_MODEL`
+- `OFFICE_CLI_LLM_TIMEOUT_SEC`
 
 发布相关：
 

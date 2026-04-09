@@ -705,8 +705,10 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"officecli",
 		"config                  查看或更新本地配置",
 		"auth                    查看或设置授权信息",
+		"score                   按需开启本地 PPTX 评分",
 		"new <pptx|docx|xlsx> <topic> [brief]",
 		"officecli config status",
+		"officecli score --help",
 		"officecli auth --help",
 		"officecli new --help",
 		"子命令：",
@@ -732,7 +734,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 	}{
 		{args: []string{"config", "--help"}, needles: []string{"用法：", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "查看额度状态"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "评分默认不会在生成后自动执行"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best", "默认会尝试自动配图", "officecli config set-generation"}},
 	}
 	for _, tc := range cases {
 		var stdout bytes.Buffer
@@ -807,7 +810,7 @@ func TestAppRun_ConfigSetGenerationWritesConfig(t *testing.T) {
 	t.Setenv("OFFICE_CLI_CONFIG", configPath)
 
 	var stdout bytes.Buffer
-	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("https://api.example.com/v1\nsk-test\n"))
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("https://api.example.com/v1\nsk-test\nno\n"))
 
 	if err := app.Run(t.Context(), []string{"config", "set-generation"}); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -823,8 +826,38 @@ func TestAppRun_ConfigSetGenerationWritesConfig(t *testing.T) {
 			t.Fatalf("config missing %q: %s", needle, content)
 		}
 	}
+	if strings.Contains(content, "\"image_base_url\"") {
+		t.Fatalf("config should reuse text generation service by default: %s", content)
+	}
 	if !strings.Contains(stdout.String(), "已更新生成服务配置") {
 		t.Fatalf("stdout = %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "--no-images") {
+		t.Fatalf("stdout should include image guidance: %s", stdout.String())
+	}
+}
+
+func TestAppRun_ConfigSetGenerationWritesSeparateImageConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "officecli.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("https://api.example.com/v1\nsk-test\nyes\nhttps://img.example.com/v1\nimg-key\ngpt-image-1\n"))
+
+	if err := app.Run(t.Context(), []string{"config", "set-generation"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	content := string(data)
+	for _, needle := range []string{"https://img.example.com/v1", "img-key", "gpt-image-1"} {
+		if !strings.Contains(content, needle) {
+			t.Fatalf("config missing %q: %s", needle, content)
+		}
 	}
 }
 
@@ -924,7 +957,7 @@ func TestAppRun_ConfigStatusShowsProductState(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	output := stdout.String()
-	for _, needle := range []string{"配置文件路径：", "生成服务已配置：true", "额度校验已启用：true", "默认输出目录：./out", "默认生成模式：best", "生成后默认发布：true"} {
+	for _, needle := range []string{"配置文件路径：", "生成服务已配置：true", "图片生成配置：未单独配置（默认复用生成服务）", "额度校验已启用：true", "默认输出目录：./out", "默认生成模式：best", "生成后默认发布：true"} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("status missing %q: %s", needle, output)
 		}

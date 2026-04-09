@@ -73,6 +73,34 @@ func TestAppRun_ReviewJSONOutput(t *testing.T) {
 	}
 }
 
+func TestAppRun_ScoreJSONOutput(t *testing.T) {
+	deckPath := filepath.Join(t.TempDir(), "deck.pptx")
+	if err := os.WriteFile(deckPath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, strings.NewReader(""))
+	stub := &stubReviewer{result: &ReviewResult{
+		Status:         "good",
+		DocumentType:   "pptx",
+		FilePath:       deckPath,
+		OverallScore:   90,
+		StructureScore: 90,
+		Summary:        "结构良好。",
+	}}
+	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
+		return stub, nil
+	}
+
+	if err := app.Run(context.Background(), []string{"score", "--json", "--no-visual", "pptx", deckPath}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if stub.lastReq.EnableVisual {
+		t.Fatalf("expected no visual request, got %+v", stub.lastReq)
+	}
+}
+
 func TestAppRun_ReviewFailBelowReturnsError(t *testing.T) {
 	deckPath := filepath.Join(t.TempDir(), "deck.pptx")
 	if err := os.WriteFile(deckPath, []byte("test"), 0o644); err != nil {

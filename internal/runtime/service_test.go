@@ -486,6 +486,9 @@ func TestServiceGeneratePPTX_DegradesGracefullyWhenImageGenerationFails(t *testi
 	if got := doc.Warnings[0].Message; !strings.Contains(got, "已自动降级为无图版本") {
 		t.Fatalf("warning = %q", got)
 	}
+	if got := doc.Warnings[0].Message; !strings.Contains(got, "officecli config set-generation") {
+		t.Fatalf("warning should include config guidance: %q", got)
+	}
 	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide2.xml.rels")
 	if strings.Contains(rels, `relationships/image`) {
 		t.Fatalf("slide rels should not include image relationship after degradation: %s", rels)

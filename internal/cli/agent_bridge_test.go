@@ -85,6 +85,29 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if initMsg["result"] == nil {
 		t.Fatalf("initialize result missing: %#v", initMsg)
 	}
+	initResult := initMsg["result"].(map[string]any)
+	capabilities, ok := initResult["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("capabilities missing: %#v", initResult)
+	}
+	docGen, ok := capabilities["document_generation"].(map[string]any)
+	if !ok {
+		t.Fatalf("document_generation missing: %#v", capabilities)
+	}
+	pptxCaps, ok := docGen["pptx"].(map[string]any)
+	if !ok {
+		t.Fatalf("pptx capabilities missing: %#v", docGen)
+	}
+	imageSupport, ok := pptxCaps["image_support"].(map[string]any)
+	if !ok {
+		t.Fatalf("pptx image_support missing: %#v", pptxCaps)
+	}
+	if imageSupport["disable_flag"] != "--no-images" {
+		t.Fatalf("unexpected disable_flag: %#v", imageSupport["disable_flag"])
+	}
+	if imageSupport["config_command"] != "officecli config set-generation" {
+		t.Fatalf("unexpected config_command: %#v", imageSupport["config_command"])
+	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
 	sessionMsg := readRPC(t, outR)
@@ -157,6 +180,30 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	}
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("expected bridge preflight marker: %v", err)
+	}
+}
+
+func TestAgentBridgeCapabilitiesGetIncludesPPTImageSupport(t *testing.T) {
+	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	caps := server.initializeResult().Capabilities
+
+	docGen, ok := caps["document_generation"].(map[string]any)
+	if !ok {
+		t.Fatalf("document_generation missing: %#v", caps)
+	}
+	pptxCaps, ok := docGen["pptx"].(map[string]any)
+	if !ok {
+		t.Fatalf("pptx capabilities missing: %#v", docGen)
+	}
+	imageSupport, ok := pptxCaps["image_support"].(map[string]any)
+	if !ok {
+		t.Fatalf("image_support missing: %#v", pptxCaps)
+	}
+	if imageSupport["default_enabled"] != true {
+		t.Fatalf("unexpected default_enabled: %#v", imageSupport["default_enabled"])
+	}
+	if imageSupport["invoke_field"] != "enable_images" {
+		t.Fatalf("unexpected invoke_field: %#v", imageSupport["invoke_field"])
 	}
 }
 
@@ -319,16 +366,67 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 		FilePath:     "/tmp/demo.pptx",
 		DocumentType: "pptx",
 		DocumentName: "demo.pptx",
-		Warnings:     []string{"image degraded"},
+		Warnings:     []string{"部分图片生成失败，已自动降级为无图版本。"},
 	})
 
-	for _, key := range []string{"format", "status", "file_path", "document_type", "document_name", "warnings", "result"} {
+	for _, key := range []string{"format", "status", "file_path", "document_type", "document_name", "warnings", "result", "result_meta"} {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("payload missing key %q: %#v", key, payload)
 		}
 	}
 	if payload["format"] != "file" {
 		t.Fatalf("format = %#v", payload["format"])
+	}
+	meta, ok := payload["result_meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("result_meta = %#v", payload["result_meta"])
+	}
+	imageSupport, ok := meta["image_support"].(map[string]any)
+	if !ok {
+		t.Fatalf("image_support = %#v", meta["image_support"])
+	}
+	if imageSupport["config_command"] != "officecli config set-generation" {
+		t.Fatalf("unexpected config command: %#v", imageSupport["config_command"])
+	}
+	if imageSupport["attention_required"] != true {
+		t.Fatalf("unexpected attention_required: %#v", imageSupport["attention_required"])
+	}
+}
+
+func TestAgentBridgeTaskStatusIncludesResultMeta(t *testing.T) {
+	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	server.tasks["task-1"] = &bridgeTask{
+		ID:        "task-1",
+		SessionID: "session-1",
+		Tool:      bridgeToolOfficeGenerate,
+		Status:    "completed",
+		OutputFmt: "json",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Result: GenerateResult{
+			Status:       "success",
+			FilePath:     "/tmp/demo.pptx",
+			DocumentType: "pptx",
+			DocumentName: "demo.pptx",
+			Warnings: []string{
+				"部分图片生成失败，已自动降级为无图版本。请检查生成服务是否支持图片接口，或运行 `officecli config set-generation` 配置图片模型地址（image url）、访问凭证（image ak）和模型名；如只需纯文本版可直接使用 `--no-images`。",
+			},
+		},
+	}
+
+	status, err := server.taskStatus("task-1")
+	if err != nil {
+		t.Fatalf("taskStatus: %v", err)
+	}
+	if status.ResultMeta == nil {
+		t.Fatal("expected result meta")
+	}
+	imageSupport, ok := status.ResultMeta["image_support"].(map[string]any)
+	if !ok {
+		t.Fatalf("image_support = %#v", status.ResultMeta["image_support"])
+	}
+	if imageSupport["reason"] != "image_generation_degraded" {
+		t.Fatalf("unexpected reason: %#v", imageSupport["reason"])
 	}
 }
 

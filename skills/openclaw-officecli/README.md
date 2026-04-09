@@ -7,6 +7,7 @@
 - OpenClaw 负责理解用户消息、在聊天里完成补问，并把结果回传到 channel
 - `officecli agent-bridge` 负责本地文档执行与结构化任务事件
 - `officecli` 负责最终文件的生成、组装、落盘与可选发布
+- agent 应优先读取 `initialize` / `capabilities/get`，并根据 `document_generation.pptx.image_support` 判断 PPT 图片能力
 
 ## 适用场景
 
@@ -108,6 +109,16 @@ agents:
 1. 读取 `task.output.result.file_path`
 2. 把对应文件上传为聊天附件
 3. 在消息中补充文档类型、文件名和 warning
+4. 如果 `result_meta.image_support.attention_required=true`，优先提示用户检查 `image_base_url`、`image_api_key`、`image_model`，或改用 `--no-images`
+
+## PPT 图片约定
+
+对所有接入这个 skill 的 agent，推荐统一遵循下面的桥接规则：
+
+- `pptx` 默认允许自动配图，是否默认开启以 `document_generation.pptx.image_support.default_enabled` 为准
+- 用户明确说“不要图片 / 纯文本版”时，应传 `enable_images=false`
+- 用户问“为什么没图”时，应优先提示运行 `officecli config set-generation`
+- 优先读取 `result_meta.image_support` 做程序判断，不要只靠 warning 文本猜测
 
 ## 调试
 

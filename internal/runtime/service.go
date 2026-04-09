@@ -226,10 +226,10 @@ type pptxPayload struct {
 type pptxArchetype string
 
 const (
-	pptxArchetypeGeneral pptxArchetype = "general"
-	pptxArchetypeCompany pptxArchetype = "company"
-	pptxArchetypeMarket  pptxArchetype = "market"
-	pptxArchetypeOps     pptxArchetype = "ops"
+	pptxArchetypeGeneral  pptxArchetype = "general"
+	pptxArchetypeCompany  pptxArchetype = "company"
+	pptxArchetypeMarket   pptxArchetype = "market"
+	pptxArchetypeOps      pptxArchetype = "ops"
 	pptxArchetypeTraining pptxArchetype = "training"
 )
 
@@ -493,7 +493,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			if len(warnings) == 0 {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
-					Message: "部分图片生成失败，已自动降级为无图版本。",
+					Message: "部分图片生成失败，已自动降级为无图版本。请检查生成服务是否支持图片接口，或运行 `officecli config set-generation` 配置图片模型地址（image url）、访问凭证（image ak）和模型名；如只需纯文本版可直接使用 `--no-images`。",
 					Field:   "slides",
 				})
 			}

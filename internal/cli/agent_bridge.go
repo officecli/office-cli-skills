@@ -19,6 +19,7 @@ import (
 const (
 	bridgeToolOfficeGenerate = "office.generate"
 	bridgeToolOfficeReview   = "office.review"
+	bridgeToolOfficeScore    = "office.score"
 
 	bridgeEventTaskStarted   = "task.started"
 	bridgeEventTaskProgress  = "task.progress"
@@ -166,6 +167,7 @@ type bridgeTaskStatusResult struct {
 	CurrentQuestion *bridgeQuestionState `json:"current_question,omitempty"`
 	LastError       string               `json:"last_error,omitempty"`
 	Result          any                  `json:"result,omitempty"`
+	ResultMeta      map[string]any       `json:"result_meta,omitempty"`
 }
 
 type bridgeEventEnvelope struct {
@@ -371,6 +373,32 @@ func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
 				bridgeEventTaskCancelled,
 			},
 			"output_formats": []string{"json", "file", "bundle"},
+			"document_generation": map[string]any{
+				"pptx": map[string]any{
+					"image_support": map[string]any{
+						"default_enabled": true,
+						"disable_flag":    "--no-images",
+						"invoke_field":    "enable_images",
+						"config_command":  "officecli config set-generation",
+						"config_fields":   []string{"image_base_url", "image_api_key", "image_model"},
+						"notes": []string{
+							"pptx 默认会尝试自动配图并将图片嵌入最终文件",
+							"如果没有图片，优先检查图片模型 url、ak 和模型名配置",
+							"如只需纯文本版，可显式关闭图片",
+						},
+					},
+				},
+				"docx": map[string]any{
+					"image_support": map[string]any{
+						"default_enabled": false,
+					},
+				},
+				"xlsx": map[string]any{
+					"image_support": map[string]any{
+						"default_enabled": false,
+					},
+				},
+			},
 		},
 		Tools: []map[string]any{
 			{
@@ -385,6 +413,15 @@ func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
 			},
 			{
 				"name": "office.review",
+				"input_schema": map[string]any{
+					"document_type": "pptx",
+					"file_path":     "string",
+					"enable_visual": "boolean",
+					"fail_below":    "0-100",
+				},
+			},
+			{
+				"name": "office.score",
 				"input_schema": map[string]any{
 					"document_type": "pptx",
 					"file_path":     "string",
@@ -546,6 +583,7 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 		"document_name": result.DocumentName,
 		"file_path":     result.FilePath,
 		"warnings":      append([]string(nil), result.Warnings...),
+		"result_meta":   buildGenerateBridgeMeta(result),
 	})
 }
 
@@ -641,6 +679,7 @@ func (s *agentBridgeServer) taskStatus(taskID string) (*bridgeTaskStatusResult, 
 		CurrentQuestion: task.CurrentQ,
 		LastError:       task.LastError,
 		Result:          task.Result,
+		ResultMeta:      buildBridgeResultMeta(task.Result),
 	}, nil
 }
 
@@ -668,6 +707,7 @@ func (s *agentBridgeServer) outputPayload(outputFormat string, result any) map[s
 			"document_type": typed.DocumentType,
 			"document_name": typed.DocumentName,
 			"warnings":      append([]string(nil), typed.Warnings...),
+			"result_meta":   buildGenerateBridgeMeta(typed),
 			"result":        typed,
 		}
 		if outputFormat == "bundle" {
@@ -693,6 +733,52 @@ func (s *agentBridgeServer) outputPayload(outputFormat string, result any) map[s
 	default:
 		return map[string]any{"format": outputFormat, "result": typed}
 	}
+}
+
+func buildBridgeResultMeta(result any) map[string]any {
+	switch typed := result.(type) {
+	case GenerateResult:
+		return buildGenerateBridgeMeta(typed)
+	default:
+		return nil
+	}
+}
+
+func buildGenerateBridgeMeta(result GenerateResult) map[string]any {
+	if !strings.EqualFold(strings.TrimSpace(result.DocumentType), "pptx") {
+		return nil
+	}
+	attentionRequired := hasPPTImageGuidanceWarning(result.Warnings)
+	imageSupport := map[string]any{
+		"default_enabled":    true,
+		"disable_flag":       "--no-images",
+		"config_command":     "officecli config set-generation",
+		"config_fields":      []string{"image_base_url", "image_api_key", "image_model"},
+		"attention_required": attentionRequired,
+	}
+	if attentionRequired {
+		imageSupport["reason"] = "image_generation_degraded"
+		imageSupport["message"] = "PPT 已降级为无图版本；请检查图片模型 url、ak 和模型名配置，或直接使用 --no-images。"
+	}
+	return map[string]any{
+		"image_support": imageSupport,
+	}
+}
+
+func hasPPTImageGuidanceWarning(warnings []string) bool {
+	for _, warning := range warnings {
+		text := strings.TrimSpace(strings.ToLower(warning))
+		if text == "" {
+			continue
+		}
+		if strings.Contains(text, "图片生成失败") ||
+			strings.Contains(text, "无图版本") ||
+			strings.Contains(text, "set-generation") ||
+			strings.Contains(text, "--no-images") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *agentBridgeServer) emitEvent(task *bridgeTask, eventType string, payload any) {

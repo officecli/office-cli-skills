@@ -42,6 +42,7 @@ Always prefer the structured bridge:
 Required bridge methods:
 
 - `initialize`
+- `capabilities/get`
 - `session/open`
 - `task/invoke`
 - `task/respond`
@@ -64,7 +65,8 @@ Primary event types:
 2. Run `check-officecli-env.sh` after the refresh step.
 3. Ensure `officecli` is installed, configured, and reachable.
 4. Ensure `officecli agent-bridge` can be started locally.
-5. Convert the user's natural-language request into:
+5. Read `initialize` or `capabilities/get` before invoking generation, and cache `document_generation.pptx.image_support`.
+6. Convert the user's natural-language request into:
    - `document_type`
    - `topic`
    - `prompt`
@@ -72,12 +74,24 @@ Primary event types:
       - optional `lang`
    - optional `style`
    - optional `audience`
-6. Use `interactive=true` by default so the chat can handle follow-up questions.
-7. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
-8. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
-9. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
-10. On `task.failed`, convert the error into a user-friendly message.
-11. On user cancel, send `task/cancel`.
+7. If the user explicitly wants no images for `pptx`, set `enable_images=false`; otherwise follow the bridge capability default instead of hard-coding a client default.
+8. Use `interactive=true` by default so the chat can handle follow-up questions.
+9. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
+10. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
+11. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
+12. On `task.failed`, convert the error into a user-friendly message.
+13. On user cancel, send `task/cancel`.
+
+## PPT Image Rules
+
+For all OpenClaw agents using this skill:
+
+- inspect `document_generation.pptx.image_support.default_enabled` during capability discovery
+- use `document_generation.pptx.image_support.disable_flag` when explaining how to produce a text-only deck
+- use `document_generation.pptx.image_support.config_command` and `config_fields` when the user reports missing images
+- if `task.output`, `task.completed`, or `task/status` includes `result_meta.image_support.attention_required=true`, surface that immediately in the chat
+- if `result_meta.image_support.reason=image_generation_degraded`, tell the user the deck was downgraded to a no-image version and they should check `image_base_url`, `image_api_key`, and `image_model`
+- do not rely only on free-form warning strings for client decisions; prefer `result_meta`
 
 ## Environment Repair Rules
 
@@ -101,6 +115,7 @@ When generation succeeds:
   - document type
   - document name
   - any warnings returned by bridge
+  - when present, `result_meta.image_support.message`
 
 Do not only send a local file path unless attachment upload is impossible on the current channel.
 
@@ -110,6 +125,7 @@ Do not only send a local file path unless attachment upload is impossible on the
 - If topic or goal is missing, ask a concise clarifying question.
 - If the bridge emits `task.question`, relay it instead of inventing your own replacement question.
 - Keep progress updates short and stage-based.
+- do not trigger `office.review` / `office.score` automatically after generation unless the user explicitly asks for scoring, review, validation, or quality checking
 
 ## Local Requirements
 

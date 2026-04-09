@@ -330,6 +330,12 @@ agents:
     tools: [shell, file_read]
 
 6. Restart OpenClaw
+
+PPT image behavior for all agents:
+  - read initialize/capabilities.get first
+  - use document_generation.pptx.image_support as the source of truth
+  - if users want a text-only deck, send enable_images=false
+  - if a PPT returns without images, run: officecli config set-generation
 EOF
 INSTALLER
 
@@ -465,6 +471,12 @@ officecli config set-license
 2. Attach `openclaw-officecli` to your OpenClaw agent in `~/.openclaw/config.yaml` and ensure the agent can use `shell` and `file_read`.
 
 3. Restart OpenClaw, then verify both `officecli --version` and `officecli agent-bridge` work on the same host where OpenClaw runs.
+
+For PPT generation, agents should first read `initialize` / `capabilities/get` and use
+`document_generation.pptx.image_support` as the machine-readable contract for image behavior.
+If a user wants a text-only deck, the agent should send `enable_images=false`.
+If a generated PPT has no images, rerun `officecli config set-generation` and check
+`image_base_url`, `image_api_key`, and `image_model`.
 
 ## Safety and scope
 

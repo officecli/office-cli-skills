@@ -90,6 +90,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			help = AuthHelpText()
 		case "new":
 			help = NewHelpText()
+		case "score":
+			help = ReviewHelpText()
 		case "review":
 			help = ReviewHelpText()
 		case "agent-bridge":
@@ -118,6 +120,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 		return a.runNew(ctx, cfg, args[1:])
+	case "score":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runReview(ctx, cfg, args[1:])
 	case "review":
 		cfg, err := LoadConfig("")
 		if err != nil {
@@ -233,6 +241,7 @@ func HelpText() string {
   config                  查看或更新本地配置
   auth                    查看或设置授权信息
   new                     生成新的 PPTX / DOCX / XLSX 文件
+  score                   按需开启本地 PPTX 评分
   review                  评估本地 PPTX 文件质量
   agent-bridge            通过 JSON-RPC over stdio 提供 agent 接口
 
@@ -241,6 +250,7 @@ func HelpText() string {
   officecli config status
   officecli auth status
   officecli auth set-key <api-key>
+  officecli score pptx ./deck.pptx
   officecli review pptx ./deck.pptx
 
 常用选项：
@@ -279,8 +289,10 @@ func HelpText() string {
   officecli auth --help
   officecli auth set-key <your-api-key>
   officecli new pptx "企业协作平台介绍" "介绍这款企业协作平台的产品能力、客户价值与应用场景"
+  officecli score pptx ./output/企业协作平台介绍.pptx
   officecli review pptx ./output/企业协作平台介绍.pptx
   officecli new --help
+  officecli score --help
   officecli review --help
   officecli new docx "季度复盘" --prompt-file ./examples/prompt.txt
   officecli new xlsx "销售分析表" --json
@@ -297,7 +309,7 @@ func ConfigHelpText() string {
   officecli config set-defaults
 
 说明：
-  查看当前配置状态，或分别更新生成服务、额度服务、在线预览发布和默认值。
+  查看当前配置状态，或分别更新生成服务、图片生成、额度服务、在线预览发布和默认值。
 `
 }
 
@@ -327,17 +339,27 @@ func NewHelpText() string {
   --no-publish            禁止发布在线预览
   --no-images             关闭 PPT 自动配图
   --json                  输出 JSON 结果
+
+说明：
+  - ` + "`pptx`" + ` 默认会尝试自动配图并把图片嵌入最终文件
+  - 如果只想生成纯文本版 PPT，可显式加 ` + "`--no-images`" + `
+  - 如果一直没有图片，请运行 ` + "`officecli config set-generation`" + ` 检查图片模型地址 / 凭证 / 模型名配置
 `
 }
 
 func ReviewHelpText() string {
 	return `用法：
+  officecli score pptx <file>
   officecli review pptx <file>
 
 常用选项：
   --json                  输出 JSON 结果
   --no-visual             只执行结构检查，不调用视觉评审
   --fail-below <0-100>    当总分低于阈值时返回非零退出码
+
+说明：
+  - 评分默认不会在生成后自动执行
+  - 如需手动开启评分，请显式运行 ` + "`officecli score ...`" + ` 或 ` + "`officecli review ...`" + `
 `
 }
 
@@ -377,6 +399,9 @@ func (a *App) runConfigStatus(cfg Config) error {
 	if _, err := fmt.Fprintf(a.Stdout, "生成服务已配置：%t\n", hasGenerationConfig(cfg)); err != nil {
 		return err
 	}
+	if _, err := fmt.Fprintf(a.Stdout, "图片生成配置：%s\n", imageConfigSummary(cfg)); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(a.Stdout, "额度校验已启用：%t\n", cfg.License.Enabled); err != nil {
 		return err
 	}
@@ -413,11 +438,33 @@ func (a *App) runConfigSetGeneration(cfg Config) error {
 	if strings.TrimSpace(cfg.LLM.Model) == "" {
 		cfg.LLM.Model = defaultInitConfig().LLM.Model
 	}
+	useSeparateImageService, err := a.promptYesNo(reader, "PPT 自动配图是否使用独立图片模型服务？(yes/no)", hasSeparateImageConfig(cfg))
+	if err != nil {
+		return err
+	}
+	if useSeparateImageService {
+		defaultImageBaseURL := fallbackString(cfg.LLM.ImageBaseURL, cfg.LLM.BaseURL)
+		if cfg.LLM.ImageBaseURL, err = a.promptRequiredLine(reader, "请输入图片模型服务地址（image url）", defaultImageBaseURL); err != nil {
+			return err
+		}
+		if cfg.LLM.ImageAPIKey, err = a.promptRequiredLine(reader, "请输入图片模型访问凭证（image ak）", fallbackString(cfg.LLM.ImageAPIKey, cfg.LLM.APIKey)); err != nil {
+			return err
+		}
+		if cfg.LLM.ImageModel, err = a.promptRequiredLine(reader, "请输入图片模型名称", fallbackString(cfg.LLM.ImageModel, defaultInitConfig().LLM.ImageModel)); err != nil {
+			return err
+		}
+	} else {
+		cfg.LLM.ImageBaseURL = ""
+		cfg.LLM.ImageAPIKey = ""
+		if strings.TrimSpace(cfg.LLM.ImageModel) == "" {
+			cfg.LLM.ImageModel = defaultInitConfig().LLM.ImageModel
+		}
+	}
 	path, err := WriteConfig("", cfg, true)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已更新生成服务配置：%s\n", path)
+	_, err = fmt.Fprintf(a.Stdout, "已更新生成服务配置：%s\n提示：pptx 默认会自动配图；如需纯文本版可使用 `--no-images`。\n", path)
 	return err
 }
 
@@ -509,6 +556,18 @@ func hasGenerationConfig(cfg Config) bool {
 	return strings.TrimSpace(cfg.LLM.BaseURL) != "" &&
 		strings.TrimSpace(cfg.LLM.APIKey) != "" &&
 		strings.TrimSpace(cfg.LLM.Model) != ""
+}
+
+func hasSeparateImageConfig(cfg Config) bool {
+	return strings.TrimSpace(cfg.LLM.ImageBaseURL) != "" ||
+		strings.TrimSpace(cfg.LLM.ImageAPIKey) != ""
+}
+
+func imageConfigSummary(cfg Config) string {
+	if hasSeparateImageConfig(cfg) {
+		return "已配置独立图片模型服务"
+	}
+	return "未单独配置（默认复用生成服务）"
 }
 
 func fallbackString(value, fallback string) string {
@@ -621,6 +680,12 @@ func mergeInitBaseConfig(defaults Config, base Config) Config {
 	}
 	if strings.TrimSpace(base.LLM.Model) != "" {
 		cfg.LLM.Model = base.LLM.Model
+	}
+	if strings.TrimSpace(base.LLM.ImageBaseURL) != "" {
+		cfg.LLM.ImageBaseURL = base.LLM.ImageBaseURL
+	}
+	if strings.TrimSpace(base.LLM.ImageAPIKey) != "" {
+		cfg.LLM.ImageAPIKey = base.LLM.ImageAPIKey
 	}
 	if strings.TrimSpace(base.LLM.ImageModel) != "" {
 		cfg.LLM.ImageModel = base.LLM.ImageModel
