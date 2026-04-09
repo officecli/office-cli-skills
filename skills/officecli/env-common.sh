@@ -133,7 +133,12 @@ print_check_json() {
   local bridge_ready="$8"
   local fixable="$9"
   shift 9
-  local missing_items=("$@")
+  local missing_items=()
+  local item
+  for item in "$@"; do
+    [[ -n "${item}" ]] || continue
+    missing_items+=("${item}")
+  done
 
   printf '{'
   printf '"status":"%s",' "$(json_escape "$status")"
@@ -145,7 +150,11 @@ print_check_json() {
   printf '"publish_ready":%s,' "$publish_ready"
   printf '"bridge_ready":%s,' "$bridge_ready"
   printf '"fixable":%s,' "$fixable"
-  printf '"missing_items":%s' "$(join_json_array "${missing_items[@]}")"
+  if [[ ${#missing_items[@]} -eq 0 ]]; then
+    printf '"missing_items":[]'
+  else
+    printf '"missing_items":%s' "$(join_json_array "${missing_items[@]}")"
+  fi
   printf '}\n'
 }
 

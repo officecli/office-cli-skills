@@ -62,6 +62,9 @@ case "${1:-}" in
   new)
     shift
     case "${1:-}" in
+      --help)
+        echo "officecli new help"
+        ;;
       pptx)
         shift || true
         if [[ "${1:-}" == "--help" ]]; then
@@ -175,10 +178,12 @@ case3_dir="${TMP_ROOT}/case3"
 mkdir -p "${case3_dir}/home/.local/bin" "${case3_dir}/state" "${case3_dir}/install"
 make_fake_officecli "${case3_dir}/install/officecli"
 INSTALL_CMD="mkdir -p '${case3_dir}/home/.local/bin' && cp '${case3_dir}/install/officecli' '${case3_dir}/home/.local/bin/officecli' && chmod +x '${case3_dir}/home/.local/bin/officecli'"
+REFRESH_CMD="mkdir -p '${case3_dir}/home/.codex/skills' && true"
 set +e
 HOME="${case3_dir}/home" \
 PATH="/usr/bin:/bin" \
 OFFICECLI_INSTALL_COMMAND="${INSTALL_CMD}" \
+OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
 OFFICECLI_FAKE_STATE_DIR="${case3_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
@@ -189,6 +194,7 @@ code=$?
 set -e
 assert_eq "${code}" "0" "officecli fix exit code"
 assert_contains "${case3_dir}/out.json" '"status":"ready"'
+assert_contains "${case3_dir}/out.json" '"missing_items":[]'
 # shellcheck disable=SC1090
 source "${case3_dir}/state/state.sh"
 assert_eq "${GENERATION_READY}" "1" "generation configured"
@@ -266,6 +272,7 @@ code=$?
 set -e
 assert_eq "${code}" "0" "openclaw fix exit code"
 assert_contains "${case6_dir}/out.json" '"status":"ready"'
+assert_contains "${case6_dir}/out.json" '"missing_items":[]'
 assert_contains "${case6_dir}/skill/config.yaml" 'office_cli_path: "'
 assert_contains "${case6_dir}/skill/config.yaml" 'agent_bridge_command: "'
 
