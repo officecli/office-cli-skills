@@ -110,7 +110,7 @@ func LoadConfig() (Config, error) {
 		ClaudeOfficeAuthSharedSecret: os.Getenv("CLAUDEOFFICE_AUTH_SHARED_SECRET"),
 		PublishRateLimitPerMinute:    mustEnvInt("PUBLISH_RATE_LIMIT_PER_MINUTE", 30),
 		PublishMaxFileBytes:          mustEnvInt64("PUBLISH_MAX_FILE_BYTES", 50<<20),
-		PublishDefaultExpireSeconds:  mustEnvInt("PUBLISH_DEFAULT_EXPIRE_SECONDS", 24*60*60),
+		PublishDefaultExpireSeconds:  mustEnvInt("PUBLISH_DEFAULT_EXPIRE_SECONDS", 30*24*60*60),
 		HostedPricingRules:           defaultHostedPricingRules(),
 		AdminGoogleRedirectURL:       mustEnvDefault("ADMIN_GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/admin/auth/google/callback"),
 		AdminGoogleAllowlist:         parseCSVList(os.Getenv("ADMIN_GOOGLE_ALLOWLIST")),

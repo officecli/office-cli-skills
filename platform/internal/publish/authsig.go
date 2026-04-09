@@ -2,9 +2,11 @@ package publish
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -43,12 +45,21 @@ func bodySHA256Hex(body []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func signDynamic(secret, timestamp, method, path, bodyHash string) string {
+func newRequestNonce() (string, error) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate request nonce: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
+}
+
+func signDynamic(secret, timestamp, method, path, bodyHash, nonce string) string {
 	base := strings.Join([]string{
 		strings.TrimSpace(timestamp),
 		strings.ToUpper(strings.TrimSpace(method)),
 		strings.TrimSpace(path),
 		strings.TrimSpace(bodyHash),
+		strings.TrimSpace(nonce),
 	}, "\n")
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(base))

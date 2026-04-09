@@ -71,6 +71,12 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 	if strings.TrimSpace(s.cfg.BaseURL) == "" {
 		return nil, fmt.Errorf("claudeoffice base url is required")
 	}
+	if strings.TrimSpace(s.cfg.AuthSharedSecret) == "" {
+		return nil, fmt.Errorf("claudeoffice auth shared secret is required")
+	}
+	if strings.TrimSpace(s.cfg.AuthKeyID) == "" {
+		return nil, fmt.Errorf("claudeoffice auth key id is required")
+	}
 	key, err := s.authorize(ctx, bearer)
 	if err != nil {
 		return nil, err
@@ -89,7 +95,7 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 		expiresIn = s.cfg.DefaultExpireSeconds
 	}
 	if expiresIn <= 0 {
-		expiresIn = 24 * 60 * 60
+		expiresIn = 30 * 24 * 60 * 60
 	}
 	expiresAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
 	result, err := s.createPreviewShare(ctx, upload.StorageKey, req.DocumentName, req.DocumentType, expiresAt)
@@ -281,16 +287,18 @@ func (s *Service) attachAuth(req *http.Request, body []byte) {
 	if req == nil {
 		return
 	}
-	if strings.TrimSpace(s.cfg.AuthSharedSecret) != "" {
-		timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
-		req.Header.Set("X-Auth-Key-Id", strings.TrimSpace(s.cfg.AuthKeyID))
-		req.Header.Set("X-Auth-Timestamp", timestamp)
-		req.Header.Set("X-Auth-Signature", signDynamic(strings.TrimSpace(s.cfg.AuthSharedSecret), timestamp, req.Method, canonicalPath(req), bodySHA256Hex(body)))
+	if strings.TrimSpace(s.cfg.AuthSharedSecret) == "" || strings.TrimSpace(s.cfg.AuthKeyID) == "" {
 		return
 	}
-	if strings.TrimSpace(s.cfg.AuthKey) != "" {
-		req.Header.Set("X-Auth-Key", strings.TrimSpace(s.cfg.AuthKey))
+	nonce, err := newRequestNonce()
+	if err != nil {
+		return
 	}
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	req.Header.Set("X-Auth-Key-Id", strings.TrimSpace(s.cfg.AuthKeyID))
+	req.Header.Set("X-Auth-Timestamp", timestamp)
+	req.Header.Set("X-Auth-Nonce", nonce)
+	req.Header.Set("X-Auth-Signature", signDynamic(strings.TrimSpace(s.cfg.AuthSharedSecret), timestamp, req.Method, canonicalPath(req), bodySHA256Hex(body), nonce))
 }
 
 func timeoutFor(seconds int) time.Duration {

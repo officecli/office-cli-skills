@@ -4,6 +4,38 @@ OfficeCLI 是一个面向人类用户的命令行工具：你用自然语言描�
 
 其中 `PPTX` 生成默认会为合适页面自动配图并把图片嵌进最终文件；如果你只想生成纯文本版 PPT，可以显式加 `--no-images`。
 
+## Claude marketplace 安装
+
+本仓库现在同时包含可发布到 Claude Code plugin marketplace 的 skills 包装层：
+
+- `officecli`：面向 Claude Code / agent 的通用 Office 文件技能
+- `openclaw-officecli`：面向 OpenClaw 集成场景的 Office 文件技能
+
+如果你把当前仓库发布到 GitHub，例如 `officecli/officecli-skills`，Claude Code 用户可以直接这样安装：
+
+```text
+/plugin marketplace add officecli/officecli-skills
+/plugin install officecli@officecli-skills
+```
+
+如需安装 OpenClaw 版本：
+
+```text
+/plugin install openclaw-officecli@officecli-skills
+```
+
+本仓库里的 Claude marketplace 关键文件如下：
+
+- `/.claude-plugin/marketplace.json`
+- `/plugins/officecli/.claude-plugin/plugin.json`
+- `/plugins/openclaw-officecli/.claude-plugin/plugin.json`
+
+如果你想先在本地验证插件目录，也可以用 Claude Code 直接加载：
+
+```bash
+claude --plugin-dir ./plugins/officecli --plugin-dir ./plugins/openclaw-officecli
+```
+
 ## 30 秒上手
 
 如果你想先跑通一次，最短路径就是下面 4 步：

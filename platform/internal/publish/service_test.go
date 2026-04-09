@@ -95,10 +95,12 @@ func TestUploadAttachmentUsesDynamicSignatureHeaders(t *testing.T) {
 	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 1, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
 	var gotKeyID string
 	var gotTimestamp string
+	var gotNonce string
 	var gotSignature string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKeyID = r.Header.Get("X-Auth-Key-Id")
 		gotTimestamp = r.Header.Get("X-Auth-Timestamp")
+		gotNonce = r.Header.Get("X-Auth-Nonce")
 		gotSignature = r.Header.Get("X-Auth-Signature")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
@@ -124,46 +126,20 @@ func TestUploadAttachmentUsesDynamicSignatureHeaders(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "platform-prod", gotKeyID)
 	require.NotEmpty(t, gotTimestamp)
+	require.NotEmpty(t, gotNonce)
 	require.NotEmpty(t, gotSignature)
-}
-
-func TestUploadAttachmentFallsBackToLegacyAuthKey(t *testing.T) {
-	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 1, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
-	var gotLegacy string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotLegacy = r.Header.Get("X-Auth-Key")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"storage_key": "attachments/demo.docx",
-			},
-		})
-	}))
-	defer server.Close()
-
-	svc := NewService(store, Config{
-		BaseURL:  server.URL,
-		AuthKey:  "legacy-key",
-		HashSalt: "salt",
-	})
-	_, err := svc.uploadAttachment(context.Background(), Request{
-		FileName:     "demo.docx",
-		DocumentType: "docx",
-		DocumentName: "demo.docx",
-		ContentType:  "application/octet-stream",
-		Reader:       strings.NewReader("hello"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, "legacy-key", gotLegacy)
 }
 
 func TestPublishUsesServerSideAttachmentUpload(t *testing.T) {
 	quotaTotal := 100
 	var uploaded bytes.Buffer
-	var uploadAuth string
+	var uploadKeyID string
+	var uploadNonce string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/attachment/upload":
-			uploadAuth = r.Header.Get("X-Auth-Key")
+			uploadKeyID = r.Header.Get("X-Auth-Key-Id")
+			uploadNonce = r.Header.Get("X-Auth-Nonce")
 			if !strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
 				http.Error(w, "bad content type", http.StatusBadRequest)
 				return
@@ -208,7 +184,7 @@ func TestPublishUsesServerSideAttachmentUpload(t *testing.T) {
 			HostedEnabled: false,
 			QuotaTotal:    &quotaTotal,
 		},
-	}, Config{BaseURL: server.URL, AuthKey: "claudeoffice-auth", HashSalt: "salt"})
+	}, Config{BaseURL: server.URL, AuthKeyID: "platform-prod", AuthSharedSecret: "shared-secret", HashSalt: "salt"})
 
 	result, err := svc.Publish(context.Background(), "Bearer demo", Request{
 		FileName:     "demo.pptx",
@@ -220,7 +196,8 @@ func TestPublishUsesServerSideAttachmentUpload(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://claudeoffice.com/preview/s/share-1", result.AccessURL)
 	require.Equal(t, "123456", result.Password)
-	require.Equal(t, "claudeoffice-auth", uploadAuth)
+	require.Equal(t, "platform-prod", uploadKeyID)
+	require.NotEmpty(t, uploadNonce)
 	require.Equal(t, "pptx-bytes", uploaded.String())
 }
 
@@ -228,11 +205,13 @@ func TestPublishSignsPreviewRequests(t *testing.T) {
 	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 7, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
 	var seenUpload bool
 	var seenPreviewShare bool
+	var seenNonce bool
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/attachment/upload":
 			seenUpload = r.Header.Get("X-Auth-Signature") != ""
+			seenNonce = r.Header.Get("X-Auth-Nonce") != ""
 			if err := r.ParseMultipartForm(2 << 20); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -273,8 +252,27 @@ func TestPublishSignsPreviewRequests(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, seenUpload)
 	require.True(t, seenPreviewShare)
+	require.True(t, seenNonce)
 	require.True(t, store.touched)
 	require.Equal(t, uint64(7), store.touchedID)
+}
+
+func TestPublishRequiresDynamicAuthConfig(t *testing.T) {
+	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 7, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
+	svc := NewService(store, Config{
+		BaseURL:              "https://claudeoffice.com",
+		HashSalt:             "salt",
+		DefaultExpireSeconds: 60,
+	})
+	_, err := svc.Publish(context.Background(), "Bearer user-key", Request{
+		FileName:     "demo.docx",
+		DocumentType: "docx",
+		DocumentName: "demo.docx",
+		ContentType:  "application/octet-stream",
+		Reader:       strings.NewReader("hello"),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "auth shared secret is required")
 }
 
 func intPtr(v int) *int { return &v }

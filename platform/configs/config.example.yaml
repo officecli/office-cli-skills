@@ -32,4 +32,4 @@ claudeoffice_auth_key_id: "platform-prod"
 claudeoffice_auth_shared_secret: ""
 publish_rate_limit_per_minute: 30
 publish_max_file_bytes: 52428800
-publish_default_expire_seconds: 86400
+publish_default_expire_seconds: 2592000
