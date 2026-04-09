@@ -70,7 +70,7 @@ if [[ "${officecli_found}" != true ]] && [[ -z "${OFFICECLI_INSTALL_COMMAND:-}" 
   status="blocked"
 fi
 
-print_check_json "${status}" "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${missing_items[@]}"
+print_check_json "${status}" "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${missing_items[@]-}"
 
 case "${status}" in
   ready) exit 0 ;;

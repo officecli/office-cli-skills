@@ -102,6 +102,22 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		_, err := io.WriteString(a.Stdout, help)
 		return err
 	}
+	if args[0] == "new" && len(args) > 2 {
+		for _, arg := range args[1:] {
+			if isHelpArg(arg) {
+				_, err := io.WriteString(a.Stdout, NewHelpText())
+				return err
+			}
+		}
+	}
+	if (args[0] == "review" || args[0] == "score") && len(args) > 2 {
+		for _, arg := range args[1:] {
+			if isHelpArg(arg) {
+				_, err := io.WriteString(a.Stdout, ReviewHelpText())
+				return err
+			}
+		}
+	}
 	switch args[0] {
 	case "config":
 		return a.runConfig(args[1:])

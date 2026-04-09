@@ -816,6 +816,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "查看额度状态"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "评分默认不会在生成后自动执行"}},
 		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best", "默认会尝试自动配图", "officecli config set-generation"}},
+		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
 	for _, tc := range cases {
 		var stdout bytes.Buffer
