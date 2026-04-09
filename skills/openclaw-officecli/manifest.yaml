@@ -2,7 +2,7 @@ name: openclaw-officecli
 version: 0.1.0
 description: Generate local PPTX, DOCX, and XLSX files through officecli agent-bridge and return them to OpenClaw users as channel attachments.
 author: officecli
-license: MIT
+license: UNLICENSED
 entrypoint: SKILL.md
 homepage: https://github.com/officecli/officecli
 repository: https://github.com/officecli/officecli

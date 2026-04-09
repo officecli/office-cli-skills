@@ -39,6 +39,25 @@ truthy() {
   esac
 }
 
+default_publish_base_url() {
+  local publish_base_url="${OFFICECLI_SETUP_PUBLISH_BASE_URL:-}"
+  if [[ -n "${publish_base_url}" ]]; then
+    printf '%s\n' "${publish_base_url}"
+    return 0
+  fi
+
+  local license_base_url="${DEFAULT_LICENSE_BASE_URL}"
+  license_base_url="${license_base_url%/}"
+  if [[ -z "${license_base_url}" ]]; then
+    return 0
+  fi
+  if [[ "${license_base_url}" == */api ]]; then
+    printf '%s\n' "${license_base_url}"
+    return 0
+  fi
+  printf '%s/api\n' "${license_base_url}"
+}
+
 resolve_officecli_path() {
   if [[ -n "${OFFICECLI_BIN:-}" && -x "${OFFICECLI_BIN}" ]]; then
     printf '%s\n' "${OFFICECLI_BIN}"
@@ -212,6 +231,6 @@ run_set_publish() {
 }
 
 should_configure_publish() {
-  truthy "${OFFICECLI_REQUIRE_PUBLISH:-0}" && return 0
-  [[ -n "${OFFICECLI_SETUP_PUBLISH_BASE_URL:-}" && -n "${OFFICECLI_SETUP_PUBLISH_API_KEY:-}" ]]
+  truthy "${OFFICECLI_SKIP_PUBLISH_SETUP:-0}" && return 1
+  return 0
 }

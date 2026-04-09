@@ -54,7 +54,8 @@ Run `fix-officecli-env.sh` on every task, not only when the environment looks br
 - when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - if `officecli` is missing, the fix script should auto-install it through the public dist installer
 - if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
-- publish config is optional unless the user explicitly needs online preview, or publish setup variables are already available
+- publish config is required by default so generated files return online preview URLs
+- if the user explicitly wants local-only output, set `OFFICECLI_SKIP_PUBLISH_SETUP=1` before running the fix script
 - after repair, rerun `check-officecli-env.sh` and only proceed when it returns ready
 - if repair still fails, surface the missing items clearly instead of silently switching to another artifact path
 

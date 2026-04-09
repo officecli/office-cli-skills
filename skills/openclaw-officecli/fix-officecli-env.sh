@@ -32,8 +32,8 @@ if ! check_license_ready "${status_output}"; then
 fi
 
 if should_configure_publish && ! check_publish_ready "${status_output}"; then
-  publish_base_url="${OFFICECLI_SETUP_PUBLISH_BASE_URL:-}"
-  [[ -n "${publish_base_url}" ]] || publish_base_url="$(prompt_value '请输入发布服务地址' '' 0)"
+  publish_base_url="$(default_publish_base_url)"
+  publish_base_url="$(prompt_value '请输入发布服务地址' "${publish_base_url}" 0)"
   publish_api_key="${OFFICECLI_SETUP_PUBLISH_API_KEY:-}"
   [[ -n "${publish_api_key}" ]] || publish_api_key="$(prompt_value '请输入发布服务访问凭证' '' 0)"
   run_set_publish "${officecli_path}" "${publish_base_url}" "${publish_api_key}"
