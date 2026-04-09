@@ -128,6 +128,12 @@ officecli config set-license
 
 3. Restart OpenClaw, then verify both `officecli --version` and `officecli agent-bridge` work on the same host where OpenClaw runs.
 
+For PPT generation, agents should first read `initialize` / `capabilities/get` and use
+`document_generation.pptx.image_support` as the machine-readable contract for image behavior.
+If a user wants a text-only deck, the agent should send `enable_images=false`.
+If a generated PPT has no images, rerun `officecli config set-generation` and check
+`image_base_url`, `image_api_key`, and `image_model`.
+
 ## Safety and scope
 
 - this repository distributes local skill wrappers, not a hosted SaaS integration

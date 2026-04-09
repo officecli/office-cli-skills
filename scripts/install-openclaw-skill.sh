@@ -151,4 +151,10 @@ agents:
     tools: [shell, file_read]
 
 6. Restart OpenClaw
+
+PPT image behavior for all agents:
+  - read initialize/capabilities.get first
+  - use document_generation.pptx.image_support as the source of truth
+  - if users want a text-only deck, send enable_images=false
+  - if a PPT returns without images, run: officecli config set-generation
 EOF
