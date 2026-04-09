@@ -1,0 +1,22 @@
+{
+  "name": "officecli-skills",
+  "owner": {
+    "name": "officecli"
+  },
+  "metadata": {
+    "description": "OfficeCLI skills marketplace for Claude Code",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "officecli",
+      "source": "./plugins/officecli",
+      "description": "Office document handling skill for PPTX, DOCX, and XLSX"
+    },
+    {
+      "name": "openclaw-officecli",
+      "source": "./plugins/openclaw-officecli",
+      "description": "OpenClaw-oriented OfficeCLI integration skill"
+    }
+  ]
+}
