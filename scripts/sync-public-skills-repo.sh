@@ -7,6 +7,8 @@ PUBLIC_SKILLS_DEFAULT_BRANCH="${PUBLIC_SKILLS_DEFAULT_BRANCH:-main}"
 SOURCE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLIC_SKILL_NAME="officecli"
 OPENCLAW_SKILL_NAME="openclaw-officecli"
+CLAUDE_MARKETPLACE_DIR=".claude-plugin"
+CLAUDE_PLUGIN_ROOT="plugins"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
@@ -28,6 +30,14 @@ find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 mkdir -p "skills/${PUBLIC_SKILL_NAME}" "skills/${OPENCLAW_SKILL_NAME}"
 cp -R "${SOURCE_REPO_ROOT}/skills/${PUBLIC_SKILL_NAME}/." "./skills/${PUBLIC_SKILL_NAME}/"
 cp -R "${SOURCE_REPO_ROOT}/skills/${OPENCLAW_SKILL_NAME}/." "./skills/${OPENCLAW_SKILL_NAME}/"
+if [[ -d "${SOURCE_REPO_ROOT}/${CLAUDE_MARKETPLACE_DIR}" ]]; then
+  mkdir -p "${CLAUDE_MARKETPLACE_DIR}"
+  cp -R "${SOURCE_REPO_ROOT}/${CLAUDE_MARKETPLACE_DIR}/." "./${CLAUDE_MARKETPLACE_DIR}/"
+fi
+if [[ -d "${SOURCE_REPO_ROOT}/${CLAUDE_PLUGIN_ROOT}" ]]; then
+  mkdir -p "${CLAUDE_PLUGIN_ROOT}"
+  cp -R "${SOURCE_REPO_ROOT}/${CLAUDE_PLUGIN_ROOT}/." "./${CLAUDE_PLUGIN_ROOT}/"
+fi
 mkdir -p scripts
 
 cat > scripts/install-skill.sh <<'INSTALLER'
@@ -325,135 +335,196 @@ INSTALLER
 
 chmod +x scripts/install-openclaw-skill.sh
 
-cat > README.md <<README
+cat > README.md <<'README'
 # OfficeCLI Skills
 
-This repository contains the public Codex skill and OpenClaw skill package for the closed-source \
-\`officecli\` product.
+This repository contains the public Claude Code and OpenClaw skill packages for the closed-source
+`officecli` product.
 
-## Install
+The primary plugin currently intended for Anthropic marketplace review is:
 
-### One-line install
+- `officecli`
 
-Use \`wget\`:
+This repository also includes:
 
-\`\`\`bash
-wget -qO- https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-skill.sh | bash -s -- officecli
-\`\`\`
+- a Claude Code marketplace definition
+- a Claude Code plugin wrapper for `officecli`
+- a Claude Code plugin wrapper for `openclaw-officecli`
+- public skill definitions and install scripts
 
-Or use \`curl\`:
+## Claude Code
 
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-skill.sh | bash -s -- officecli
-\`\`\`
+### Marketplace source
 
-The installer will:
+Add the OfficeCLI marketplace source:
 
-- install the \`officecli\` skill into \`~/.codex/skills\`
-- try to auto-install the \`officecli\` binary when it is missing
-- use Homebrew on macOS when available, and fall back to direct binary install when brew fails
-- use the public Linux installer and install into \`~/.local/bin\` by default
-- install the default \`latest\` CLI from the rolling latest public dist build
+```text
+/plugin marketplace add __PUBLIC_SKILLS_REPO__
+```
 
-If \`officecli\` is still reported as not found after installation, first try the current-shell fix:
+Install the primary plugin:
 
-\`\`\`bash
-export PATH="\$HOME/.local/bin:\$PATH"
+```text
+/plugin install officecli@officecli-skills
+```
+
+### What the plugin does
+
+The `officecli` plugin helps Claude Code handle local Office document workflows for:
+
+- `pptx`
+- `docx`
+- `xlsx`
+- generate or convert supported Office files through a local `officecli` installation
+- check whether a requested workflow is supported before execution
+- keep Office file generation on the local machine instead of using a hosted plugin backend
+
+### Requirements
+
+- Claude Code with plugin support
+- a local `officecli` binary
+- local OfficeCLI generation and license configuration
+- permission for Claude Code to invoke local commands on the same machine
+
+### Quick verification
+
+After installation, verify the local dependency chain:
+
+```bash
 officecli --version
-\`\`\`
+officecli config status
+```
 
-Then add \`~/.local/bin\` to the startup config for your shell if needed.
+Then use Claude Code for a supported Office document request such as:
 
-Re-running the same installer command refreshes the local skill to the latest version from GitHub.
+```text
+Create a 6-slide PPTX introducing our enterprise collaboration platform.
+```
+
+## Direct install scripts
+
+If you want the public skill files without marketplace installation, use the direct installer.
+
+### Codex-style local skill install
+
+Use `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-skill.sh | bash -s -- officecli
+```
+
+Or use `curl`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-skill.sh | bash -s -- officecli
+```
 
 If you only want the skill and do not want to auto-install the binary:
 
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-skill.sh | AUTO_INSTALL_BINARY=0 bash -s -- officecli
-\`\`\`
-
-### Update
-
-To update an existing local skill from GitHub, run the same install command again:
-
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-skill.sh | bash -s -- officecli
-\`\`\`
-
-Or with \`wget\`:
-
-\`\`\`bash
-wget -qO- https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-skill.sh | bash -s -- officecli
-\`\`\`
-
-### Manual install
-
-Copy the skill directory into your local Codex skills directory:
-
-\`\`\`bash
-mkdir -p ~/.codex/skills
-
-tmpdir="\$(mktemp -d)"
-git clone https://github.com/${PUBLIC_SKILLS_REPO}.git "\$tmpdir/repo"
-cp -R "\$tmpdir/repo/skills/officecli" ~/.codex/skills/
-\`\`\`
-
-After copying, restart Codex.
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-skill.sh | AUTO_INSTALL_BINARY=0 bash -s -- officecli
+```
 
 ## OpenClaw Install
 
 If you want OpenClaw users to generate local Office files directly from Telegram, Discord, Slack, or other channels, install the OpenClaw-facing skill package:
 
-Use \`wget\`:
+Use `wget`:
 
-\`\`\`bash
-wget -qO- https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-openclaw-skill.sh | bash
-\`\`\`
+```bash
+wget -qO- https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-openclaw-skill.sh | bash
+```
 
-Or use \`curl\`:
+Or use `curl`:
 
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-openclaw-skill.sh | bash
-\`\`\`
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-openclaw-skill.sh | bash
+```
 
 The OpenClaw installer will:
 
-- install \`openclaw-officecli\` into \`~/.openclaw/skills\`
-- create \`config.yaml\` from \`config.example.yaml\` when needed
-- try to auto-install the \`officecli\` binary when it is missing
+- install `openclaw-officecli` into `~/.openclaw/skills`
+- create `config.yaml` from `config.example.yaml` when needed
+- try to auto-install the `officecli` binary when it is missing
 
 If you only want the OpenClaw skill and do not want to auto-install the binary:
 
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
-\`\`\`
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
+```
 
 After installation, 3 more steps are still required before the skill can be used:
 
-1. Configure \`officecli\` itself:
+1. Configure `officecli` itself:
 
-\`\`\`bash
+```bash
 officecli config set-generation
 officecli config set-license
-\`\`\`
+```
 
-2. Attach \`openclaw-officecli\` to your OpenClaw agent in \`~/.openclaw/config.yaml\` and ensure the agent can use \`shell\` and \`file_read\`.
+2. Attach `openclaw-officecli` to your OpenClaw agent in `~/.openclaw/config.yaml` and ensure the agent can use `shell` and `file_read`.
 
-3. Restart OpenClaw, then verify both \`officecli --version\` and \`officecli agent-bridge\` work on the same host where OpenClaw runs.
+3. Restart OpenClaw, then verify both `officecli --version` and `officecli agent-bridge` work on the same host where OpenClaw runs.
+
+## Safety and scope
+
+- this repository distributes local skill wrappers, not a hosted SaaS integration
+- Office file generation is executed through the user's local `officecli` installation
+- this repository does not contain the closed-source OfficeCLI implementation
+- the primary marketplace submission target is `officecli`, not `openclaw-officecli`
 
 ## Scope
 
-- Public \`SKILL.md\` content and examples
-- No closed-source \`officecli\` implementation code
+- Public `SKILL.md` content and examples
+- Claude Code marketplace metadata and plugin wrappers
+- No closed-source `officecli` implementation code
 - No private repository metadata or internal deployment details
 
 ## Layout
 
-- \`skills/officecli/\`: public skill definition
-- \`skills/openclaw-officecli/\`: public OpenClaw skill definition
-- \`scripts/install-skill.sh\`: shell installer for direct \`wget\` / \`curl\` usage
-- \`scripts/install-openclaw-skill.sh\`: shell installer for OpenClaw users
+- `.claude-plugin/marketplace.json`: Claude Code marketplace definition
+- `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
+- `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
+- `skills/officecli/`: public skill definition
+- `skills/openclaw-officecli/`: public OpenClaw skill definition
+- `scripts/install-skill.sh`: shell installer for direct `wget` / `curl` usage
+- `scripts/install-openclaw-skill.sh`: shell installer for OpenClaw users
 README
+
+PUBLIC_SKILLS_REPO="${PUBLIC_SKILLS_REPO}" PUBLIC_SKILLS_DEFAULT_BRANCH="${PUBLIC_SKILLS_DEFAULT_BRANCH}" python3 - <<'PY'
+from pathlib import Path
+import os
+
+path = Path("README.md")
+content = path.read_text()
+content = content.replace("__PUBLIC_SKILLS_REPO__", os.environ["PUBLIC_SKILLS_REPO"])
+content = content.replace("__PUBLIC_SKILLS_DEFAULT_BRANCH__", os.environ["PUBLIC_SKILLS_DEFAULT_BRANCH"])
+path.write_text(content)
+PY
+
+cat > LICENSE <<'LICENSE'
+MIT License
+
+Copyright (c) 2026 officecli
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+LICENSE
 
 if git diff --quiet; then
   echo "public skills repository already up to date"
