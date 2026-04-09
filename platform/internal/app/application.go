@@ -152,12 +152,7 @@ func New() (*Application, error) {
 	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, growthService)
-	publishService := publishsvc.NewService(apiKeyRepo{store: dbStore}, publishsvc.Config{
-		BaseURL:              cfg.ClaudeOfficeBaseURL,
-		AuthKey:              cfg.ClaudeOfficeAuthKey,
-		HashSalt:             cfg.APIKeyHashSalt,
-		DefaultExpireSeconds: cfg.PublishDefaultExpireSeconds,
-	})
+	publishService := publishsvc.NewService(apiKeyRepo{store: dbStore}, publishConfigFromAppConfig(cfg, cfg.APIKeyHashSalt))
 	discordOAuthSvc := discordoauth.NewService(
 		discordoauth.NewOAuthClient(cfg.DiscordClientID, cfg.DiscordClientSecret, cfg.DiscordRedirectURL, cfg.DiscordGuildID, cfg.DiscordBotToken),
 		redisRepo,
@@ -174,6 +169,17 @@ func New() (*Application, error) {
 	application := ego.New()
 	application.Serve(server)
 	return &Application{ego: application}, nil
+}
+
+func publishConfigFromAppConfig(cfg Config, hashSalt string) publishsvc.Config {
+	return publishsvc.Config{
+		BaseURL:              cfg.ClaudeOfficeBaseURL,
+		AuthKey:              cfg.ClaudeOfficeAuthKey,
+		AuthKeyID:            cfg.ClaudeOfficeAuthKeyID,
+		AuthSharedSecret:     cfg.ClaudeOfficeAuthSharedSecret,
+		HashSalt:             hashSalt,
+		DefaultExpireSeconds: cfg.PublishDefaultExpireSeconds,
+	}
 }
 
 func (a *Application) Run() error { return a.ego.Run() }
