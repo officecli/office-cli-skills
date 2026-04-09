@@ -86,7 +86,8 @@ Primary event types:
 - use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
 - use `fix-officecli-env.sh` as the single repair entrypoint
 - when config is missing, ask only for the missing generation/license values and let the fix script write local config
-- online preview config is optional unless the current request needs publish URLs
+- online preview config is required by default so generated files can return publish URLs
+- if the current request is intentionally local-only, set `OFFICECLI_SKIP_PUBLISH_SETUP=1` before running the fix script
 - do not try to start `agent-bridge` until the check script returns ready
 - if refresh or check fails, stop and report the `officecli` environment error; do not fall back to any other PPT/DOC/XLS generation tool without explicit user approval
 

@@ -11,7 +11,9 @@ OfficeCLI 是一个面向人类用户的命令行工具：你用自然语言描�
 - `officecli`：面向 Claude Code / agent 的通用 Office 文件技能
 - `openclaw-officecli`：面向 OpenClaw 集成场景的 Office 文件技能
 
-如果你把当前仓库发布到 GitHub，例如 `officecli/officecli-skills`，Claude Code 用户可以直接这样安装：
+建议把 Claude marketplace 仓库正式命名为 `officecli/officecli-skills`。这个名字和仓库里的默认脚本、安装地址、环境变量约定保持一致，后续公开发布时最省心。
+
+当该公开仓库可访问后，Claude Code 用户可以直接这样安装：
 
 ```text
 /plugin marketplace add officecli/officecli-skills
@@ -490,7 +492,7 @@ bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
 bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 ```
 
-如果本机还没有 `officecli`，或者只缺生成/额度配置，`fix-officecli-env.sh` 会优先尝试自动安装并补齐缺失项；只有在线预览发布配置仍然保持可选。
+如果本机还没有 `officecli`，或者缺少生成 / 额度 / 在线预览发布配置，`fix-officecli-env.sh` 会优先尝试自动安装并补齐缺失项。默认会要求在线预览发布可用；如果你明确只想保留本地文件，可以在执行前设置 `OFFICECLI_SKIP_PUBLISH_SETUP=1`。
 
 2. 安装 OpenClaw skill
 

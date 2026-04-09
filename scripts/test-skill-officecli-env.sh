@@ -143,7 +143,7 @@ run_check() {
   return "${code}"
 }
 
-# case 1: officecli skill ready without publish
+# case 1: officecli skill now requires publish by default
 case1_dir="${TMP_ROOT}/case1"
 mkdir -p "${case1_dir}/bin" "${case1_dir}/state"
 make_fake_officecli "${case1_dir}/bin/officecli"
@@ -155,9 +155,10 @@ BRIDGE_READY=1
 STATE
 PATH="${case1_dir}/bin:${PATH}" OFFICECLI_FAKE_STATE_DIR="${case1_dir}/state" run_check "${OFFICECLI_SKILL_DIR}/check-officecli-env.sh" "${case1_dir}/out.json" || code=$?
 code=${code:-0}
-assert_eq "${code}" "0" "officecli check ready exit code"
-assert_contains "${case1_dir}/out.json" '"status":"ready"'
+assert_eq "${code}" "10" "officecli check missing publish exit code"
+assert_contains "${case1_dir}/out.json" '"status":"repairable"'
 assert_contains "${case1_dir}/out.json" '"publish_ready":false'
+assert_contains "${case1_dir}/out.json" 'publish_config'
 unset code
 
 # case 2: missing binary is repairable
@@ -182,6 +183,8 @@ OFFICECLI_FAKE_STATE_DIR="${case3_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
+OFFICECLI_SETUP_PUBLISH_BASE_URL="https://platform.officecli.io/api" \
+OFFICECLI_SETUP_PUBLISH_API_KEY="publish-key" \
 "${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case3_dir}/out.json" 2>&1
 code=$?
 set -e
@@ -191,6 +194,7 @@ assert_contains "${case3_dir}/out.json" '"status":"ready"'
 source "${case3_dir}/state/state.sh"
 assert_eq "${GENERATION_READY}" "1" "generation configured"
 assert_eq "${LICENSE_READY}" "1" "license configured"
+assert_eq "${PUBLISH_READY}" "1" "publish configured"
 
 # case 4: officecli check fails when CLI help surface is broken
 case4_dir="${TMP_ROOT}/case4"
@@ -257,6 +261,8 @@ OFFICECLI_FAKE_STATE_DIR="${case6_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
+OFFICECLI_SETUP_PUBLISH_BASE_URL="https://platform.officecli.io/api" \
+OFFICECLI_SETUP_PUBLISH_API_KEY="publish-key" \
 "${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case6_dir}/out.json" 2>&1
 code=$?
 set -e
