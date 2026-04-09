@@ -10,6 +10,16 @@ on:
         description: '要发布的 tag，例如 v0.2.0-prod-20260402-1'
         required: true
         type: string
+      claudeoffice_base_url:
+        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_BASE_URL；留空则回退到仓库变量或现网已有值'
+        required: false
+        default: ''
+        type: string
+      claudeoffice_auth_key:
+        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_KEY；留空则回退到仓库 Secret 或现网已有值'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +45,9 @@ jobs:
       DEPLOYMENT_NAME: ${{ vars.PLATFORM_DEPLOYMENT_NAME || 'officecli-platform' }}
       CONTAINER_NAME: ${{ vars.PLATFORM_CONTAINER_NAME || 'platform' }}
       IMAGE_REPO: ${{ vars.PLATFORM_IMAGE_REPO || 'docker.io/library/officecli-platform' }}
+      SECRET_NAME: ${{ vars.PLATFORM_SECRET_NAME || 'officecli-platform-env' }}
+      CLAUDEOFFICE_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_base_url || vars.PLATFORM_CLAUDEOFFICE_BASE_URL || '' }}
+      CLAUDEOFFICE_AUTH_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_key || secrets.PLATFORM_CLAUDEOFFICE_AUTH_KEY || '' }}
     steps:
       - name: Checkout target ref
         uses: actions/checkout@v4
@@ -92,6 +105,20 @@ jobs:
         run: |
           git fetch --tags --force
           git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1
+
+      - name: Prepare production secret env file
+        if: env.CLAUDEOFFICE_BASE_URL != '' || env.CLAUDEOFFICE_AUTH_KEY != ''
+        run: |
+          set -euo pipefail
+          env_file="${RUNNER_TEMP}/platform-prod-sync.env"
+          : > "${env_file}"
+          if [ -n "${CLAUDEOFFICE_BASE_URL}" ]; then
+            printf 'CLAUDEOFFICE_BASE_URL=%s\n' "${CLAUDEOFFICE_BASE_URL}" >> "${env_file}"
+          fi
+          if [ -n "${CLAUDEOFFICE_AUTH_KEY}" ]; then
+            printf 'CLAUDEOFFICE_AUTH_KEY=%s\n' "${CLAUDEOFFICE_AUTH_KEY}" >> "${env_file}"
+          fi
+          echo "PLATFORM_ENV_FILE=${env_file}" >> "$GITHUB_ENV"
 
       - name: Deploy platform production
         run: ./scripts/deploy-platform-prod.sh "${RELEASE_TAG}"

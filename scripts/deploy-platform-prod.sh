@@ -276,6 +276,36 @@ ensure_secret() {
   kubectl -n "$KUBE_NAMESPACE" create secret generic "$SECRET_NAME" --from-env-file="$REMOTE_ENV_FILE"
 }
 
+sync_secret_from_env_file() {
+  [[ -n "${REMOTE_ENV_FILE:-}" ]] || return
+  [[ -f "$REMOTE_ENV_FILE" ]] || die "未找到 bootstrap env 文件: $REMOTE_ENV_FILE"
+
+  payload="$(
+    python3 - <<'PY' "$REMOTE_ENV_FILE"
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+data = {}
+for raw in path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    key = key.strip()
+    if not key:
+        continue
+    data[key] = value
+print(json.dumps({"stringData": data}, ensure_ascii=False))
+PY
+  )"
+  [[ -n "${payload}" ]] || die "无法从 env 文件生成 Secret patch: ${REMOTE_ENV_FILE}"
+  kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "${payload}" >/dev/null
+}
+
 assert_secret_keys() {
   local missing=()
   local key
@@ -462,6 +492,7 @@ cd "$REMOTE_WORKDIR"
 
 ensure_namespace
 ensure_secret
+sync_secret_from_env_file
 assert_secret_keys
 ensure_postgres_secret
 sync_platform_secret_postgres_dsn

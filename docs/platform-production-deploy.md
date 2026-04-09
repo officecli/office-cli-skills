@@ -17,6 +17,17 @@
 - GitHub Actions `workflow_dispatch`，传入 `release_tag`
 - 或在本地直接执行仓库脚本
 
+其中 `Platform Deploy` workflow 现在支持在发版前自动同步生产 Secret 里的发布配置：
+
+- `claudeoffice_base_url`
+- `claudeoffice_auth_key`
+
+优先级：
+
+- `workflow_dispatch` 显式输入
+- 仓库变量 / Secret（`PLATFORM_CLAUDEOFFICE_BASE_URL`、`PLATFORM_CLAUDEOFFICE_AUTH_KEY`）
+- 若都未提供，则保持现网已有 Secret 不变
+
 优先使用仓库脚本：
 
 ```bash
@@ -47,6 +58,7 @@
 - 创建 `officecli-platform` Service
 - 在不存在 Deployment 时自动 bootstrap `officecli-platform`
 - 如果 Secret 缺失且传入 `PLATFORM_ENV_FILE`，自动创建 `officecli-platform-env`
+- 如果 Secret 已存在且传入 `PLATFORM_ENV_FILE`，自动把 env 文件中的键同步到现有 `officecli-platform-env`
 
 只有在脚本不可用或需要排障时，才按本文后面的分步命令手工执行。
 
@@ -98,7 +110,8 @@ CLAUDEOFFICE_AUTH_KEY=...
 说明：
 
 - 若目标 namespace、Service、Deployment 已存在，脚本走常规升级发布。
-- 若 namespace 已存在但 Secret 不存在，脚本只有在传入 `PLATFORM_ENV_FILE` 时才会自动补 Secret。
+- 若 namespace 已存在但 Secret 不存在，脚本只有在传入 `PLATFORM_ENV_FILE` 时才会自动创建 Secret。
+- 若 Secret 已存在且传入 `PLATFORM_ENV_FILE`，脚本会把 env 文件中的键 merge 到现有 Secret，再继续发布。
 - 线上默认 Secret 名称为 `officecli-platform-env`；如需覆盖，可设置 `SECRET_NAME`。
 - `CLAUDEOFFICE_BASE_URL` 是在线预览发布链路必填项；缺失时 `/api/publish` 会直接报 `claudeoffice base url is required`。
 - 当前推荐把 `CLAUDEOFFICE_BASE_URL` 指向 `https://claudeoffice.com`。
