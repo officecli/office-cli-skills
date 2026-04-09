@@ -20,12 +20,13 @@
 其中 `Platform Deploy` workflow 现在支持在发版前自动同步生产 Secret 里的发布配置：
 
 - `claudeoffice_base_url`
-- `claudeoffice_auth_key`
+- `claudeoffice_auth_key_id`
+- `claudeoffice_auth_shared_secret`
 
 优先级：
 
 - `workflow_dispatch` 显式输入
-- 仓库变量 / Secret（`PLATFORM_CLAUDEOFFICE_BASE_URL`、`PLATFORM_CLAUDEOFFICE_AUTH_KEY`）
+- 仓库变量 / Secret（`PLATFORM_CLAUDEOFFICE_BASE_URL`、`PLATFORM_CLAUDEOFFICE_AUTH_KEY_ID`、`PLATFORM_CLAUDEOFFICE_AUTH_SHARED_SECRET`）
 - 若都未提供，则保持现网已有 Secret 不变
 
 优先使用仓库脚本：
@@ -104,7 +105,8 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URL=https://platform.officecli.io/api/auth/google/callback
 CLAUDEOFFICE_BASE_URL=https://claudeoffice.com
-CLAUDEOFFICE_AUTH_KEY=...
+CLAUDEOFFICE_AUTH_KEY_ID=platform-prod
+CLAUDEOFFICE_AUTH_SHARED_SECRET=...
 ```
 
 说明：
@@ -114,6 +116,8 @@ CLAUDEOFFICE_AUTH_KEY=...
 - 若 Secret 已存在且传入 `PLATFORM_ENV_FILE`，脚本会把 env 文件中的键 merge 到现有 Secret，再继续发布。
 - 线上默认 Secret 名称为 `officecli-platform-env`；如需覆盖，可设置 `SECRET_NAME`。
 - `CLAUDEOFFICE_BASE_URL` 是在线预览发布链路必填项；缺失时 `/api/publish` 会直接报 `claudeoffice base url is required`。
+- `CLAUDEOFFICE_AUTH_SHARED_SECRET` 是导入预览动态签名必填项；缺失时 `/api/publish` 会直接报 `claudeoffice auth shared secret is required`。
+- `CLAUDEOFFICE_AUTH_KEY_ID` 默认可使用 `platform-prod`，但客户端与服务端必须保持一致。
 - 当前推荐把 `CLAUDEOFFICE_BASE_URL` 指向 `https://claudeoffice.com`。
 
 ## 生产环境现状

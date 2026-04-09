@@ -15,8 +15,13 @@ on:
         required: false
         default: ''
         type: string
-      claudeoffice_auth_key:
-        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_KEY；留空则回退到仓库 Secret 或现网已有值'
+      claudeoffice_auth_key_id:
+        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_KEY_ID；留空则回退到仓库变量或默认 platform-prod'
+        required: false
+        default: ''
+        type: string
+      claudeoffice_auth_shared_secret:
+        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_SHARED_SECRET；留空则回退到仓库 Secret 或现网已有值'
         required: false
         default: ''
         type: string
@@ -47,7 +52,8 @@ jobs:
       IMAGE_REPO: ${{ vars.PLATFORM_IMAGE_REPO || 'docker.io/library/officecli-platform' }}
       SECRET_NAME: ${{ vars.PLATFORM_SECRET_NAME || 'officecli-platform-env' }}
       CLAUDEOFFICE_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_base_url || vars.PLATFORM_CLAUDEOFFICE_BASE_URL || '' }}
-      CLAUDEOFFICE_AUTH_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_key || secrets.PLATFORM_CLAUDEOFFICE_AUTH_KEY || '' }}
+      CLAUDEOFFICE_AUTH_KEY_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_key_id || vars.PLATFORM_CLAUDEOFFICE_AUTH_KEY_ID || 'platform-prod' }}
+      CLAUDEOFFICE_AUTH_SHARED_SECRET: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_shared_secret || secrets.PLATFORM_CLAUDEOFFICE_AUTH_SHARED_SECRET || secrets.PLATFORM_CLAUDEOFFICE_AUTH_KEY || '' }}
     steps:
       - name: Checkout target ref
         uses: actions/checkout@v4
@@ -107,7 +113,7 @@ jobs:
           git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1
 
       - name: Prepare production secret env file
-        if: env.CLAUDEOFFICE_BASE_URL != '' || env.CLAUDEOFFICE_AUTH_KEY != ''
+        if: env.CLAUDEOFFICE_BASE_URL != '' || env.CLAUDEOFFICE_AUTH_KEY_ID != '' || env.CLAUDEOFFICE_AUTH_SHARED_SECRET != ''
         run: |
           set -euo pipefail
           env_file="${RUNNER_TEMP}/platform-prod-sync.env"
@@ -115,8 +121,11 @@ jobs:
           if [ -n "${CLAUDEOFFICE_BASE_URL}" ]; then
             printf 'CLAUDEOFFICE_BASE_URL=%s\n' "${CLAUDEOFFICE_BASE_URL}" >> "${env_file}"
           fi
-          if [ -n "${CLAUDEOFFICE_AUTH_KEY}" ]; then
-            printf 'CLAUDEOFFICE_AUTH_KEY=%s\n' "${CLAUDEOFFICE_AUTH_KEY}" >> "${env_file}"
+          if [ -n "${CLAUDEOFFICE_AUTH_KEY_ID}" ]; then
+            printf 'CLAUDEOFFICE_AUTH_KEY_ID=%s\n' "${CLAUDEOFFICE_AUTH_KEY_ID}" >> "${env_file}"
+          fi
+          if [ -n "${CLAUDEOFFICE_AUTH_SHARED_SECRET}" ]; then
+            printf 'CLAUDEOFFICE_AUTH_SHARED_SECRET=%s\n' "${CLAUDEOFFICE_AUTH_SHARED_SECRET}" >> "${env_file}"
           fi
           echo "PLATFORM_ENV_FILE=${env_file}" >> "$GITHUB_ENV"
 

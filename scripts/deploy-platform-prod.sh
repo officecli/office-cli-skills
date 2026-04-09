@@ -309,7 +309,7 @@ PY
 assert_secret_keys() {
   local missing=()
   local key
-  for key in CLAUDEOFFICE_BASE_URL; do
+  for key in CLAUDEOFFICE_BASE_URL CLAUDEOFFICE_AUTH_SHARED_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
