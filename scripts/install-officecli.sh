@@ -46,6 +46,14 @@ download() {
   curl -fsSL "${url}" -o "${out}"
 }
 
+resolve_latest_release_tag() {
+  local api_url="https://api.github.com/repos/${DIST_REPO}/releases/latest"
+  local response
+
+  response="$(curl -fsSL "${api_url}" | tr -d '\n')"
+  printf '%s' "${response}" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
 verify_checksum() {
   local archive_name="$1"
   local checksum_file="$2"
@@ -107,6 +115,7 @@ if [[ "${os}" != "linux" && "${os}" != "darwin" ]]; then
 fi
 
 resolved_version="$(resolve_version)"
+display_version="${resolved_version}"
 if [[ "${resolved_version}" == "latest" ]]; then
   tag="${LATEST_TAG}"
   archive_name="officecli_latest_${os}_${arch}.tar.gz"
@@ -115,19 +124,36 @@ else
   archive_name="officecli_${resolved_version}_${os}_${arch}.tar.gz"
 fi
 
-base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
-
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
+base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
+
+if [[ "${resolved_version}" == "latest" ]]; then
+  if ! download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}" 2>/dev/null; then
+    fallback_tag="$(resolve_latest_release_tag)"
+    if [[ -z "${fallback_tag}" ]]; then
+      echo "failed to resolve latest release tag for ${DIST_REPO}" >&2
+      exit 1
+    fi
+    display_version="${fallback_tag}"
+    fallback_version="${fallback_tag#v}"
+    tag="${fallback_tag}"
+    archive_name="officecli_${fallback_version}_${os}_${arch}.tar.gz"
+    base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
+    download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
+  fi
+else
+  download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
+fi
+
 download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt"
 verify_checksum "${archive_name}" "${tmpdir}/checksums.txt"
 
 tar -xzf "${tmpdir}/${archive_name}" -C "${tmpdir}"
 install_binary "${tmpdir}" "${INSTALL_DIR}"
 
-echo "installed officecli ${resolved_version} to ${INSTALL_DIR}/officecli"
+echo "installed officecli ${display_version} to ${INSTALL_DIR}/officecli"
 
 if command -v officecli >/dev/null 2>&1; then
   echo "officecli is already available on PATH: $(command -v officecli)"
