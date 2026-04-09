@@ -24,7 +24,7 @@ type App struct {
 	newLLMClient        func(cfg LLMConfig) (GeneratorLLMClient, error)
 	newLicenseService   func(cfg LicenseConfig) (LicenseManager, error)
 	newReviewer         func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error)
-	officeTaskPreflight func(ctx context.Context, command string) error
+	officeTaskPreflight func(ctx context.Context, command string, args []string) error
 }
 
 var Version = "dev"
@@ -66,8 +66,8 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 				reviewProgressReporter{emitter: progress},
 			), nil
 		},
-		officeTaskPreflight: func(ctx context.Context, command string) error {
-			return runInstalledSkillPreflight(ctx, stdin, stdout, stderr, command)
+		officeTaskPreflight: func(ctx context.Context, command string, args []string) error {
+			return runInstalledSkillPreflight(ctx, stdin, stdout, stderr, command, args)
 		},
 	}
 }
@@ -112,7 +112,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		}
 		return a.runAuth(ctx, cfg, args[1:])
 	case "new":
-		if err := a.officeTaskPreflight(ctx, args[0]); err != nil {
+		if err := a.officeTaskPreflight(ctx, args[0], args[1:]); err != nil {
 			return err
 		}
 		cfg, err := LoadConfig("")
@@ -133,7 +133,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		}
 		return a.runReview(ctx, cfg, args[1:])
 	case "agent-bridge":
-		if err := a.officeTaskPreflight(ctx, args[0]); err != nil {
+		if err := a.officeTaskPreflight(ctx, args[0], args[1:]); err != nil {
 			return err
 		}
 		cfg, err := LoadConfig("")

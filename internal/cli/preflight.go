@@ -11,9 +11,12 @@ import (
 	"time"
 )
 
-const officeTaskPreflightSkipEnv = "OFFICECLI_SKIP_SKILL_PREFLIGHT"
+const (
+	officeTaskPreflightSkipEnv        = "OFFICECLI_SKIP_SKILL_PREFLIGHT"
+	officeTaskPreflightSkipPublishEnv = "OFFICECLI_SKIP_PUBLISH_SETUP"
+)
 
-func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string) error {
+func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args []string) error {
 	if truthy(os.Getenv(officeTaskPreflightSkipEnv)) {
 		return nil
 	}
@@ -26,6 +29,9 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		retry, err := shouldRetryAfterScriptRefresh(script, func() error {
 			cmd := exec.CommandContext(ctx, "bash", script)
 			cmd.Env = append(os.Environ(), officeTaskPreflightSkipEnv+"=1")
+			if shouldSkipPublishPreflight(command, args) {
+				cmd.Env = append(cmd.Env, officeTaskPreflightSkipPublishEnv+"=1")
+			}
 			if isTerminalReader(stdin) {
 				cmd.Stdin = stdin
 			}
@@ -44,6 +50,19 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		}
 	}
 	return nil
+}
+
+func shouldSkipPublishPreflight(command string, args []string) bool {
+	if command != "new" {
+		return false
+	}
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "--no-publish" || strings.HasPrefix(trimmed, "--no-publish=") {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldRetryAfterScriptRefresh(script string, run func() error) (bool, error) {
