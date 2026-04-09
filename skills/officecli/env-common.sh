@@ -62,6 +62,27 @@ resolve_officecli_path() {
   return 1
 }
 
+print_officecli_version() {
+  local label="$1"
+  local officecli_bin="${2:-}"
+  local version_text=""
+
+  if [[ -z "${officecli_bin}" ]]; then
+    officecli_bin="$(resolve_officecli_path 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${officecli_bin}" && -x "${officecli_bin}" ]]; then
+    version_text="$(OFFICECLI_SKIP_SKILL_PREFLIGHT=1 "${officecli_bin}" --version 2>/dev/null || true)"
+  fi
+
+  if [[ -n "${version_text}" ]]; then
+    printf '%s%s\n' "${label}" "${version_text}" >&2
+    return 0
+  fi
+
+  printf '%sofficecli not installed\n' "${label}" >&2
+}
+
 run_officecli_no_preflight() {
   local officecli_bin="$1"
   shift
@@ -176,7 +197,9 @@ install_officecli_binary() {
 }
 
 refresh_officecli_binary() {
+  print_officecli_version "officecli version before refresh: "
   install_officecli_binary
+  print_officecli_version "officecli version after refresh: "
 }
 
 uninstall_officecli_binary() {
