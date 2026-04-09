@@ -466,6 +466,18 @@ bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 bash ./scripts/install-openclaw-skill.sh
 ```
 
+或者直接从公共 skills 仓安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash
+```
+
+如只想安装 OpenClaw skill、不自动安装 `officecli` 二进制：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
+```
+
 默认会安装到：
 
 ```bash

@@ -428,7 +428,18 @@ If you only want the OpenClaw skill and do not want to auto-install the binary:
 curl -fsSL https://raw.githubusercontent.com/${PUBLIC_SKILLS_REPO}/${PUBLIC_SKILLS_DEFAULT_BRANCH}/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
 \`\`\`
 
-After installation, attach \`openclaw-officecli\` to your OpenClaw agent in \`~/.openclaw/config.yaml\` and restart OpenClaw.
+After installation, 3 more steps are still required before the skill can be used:
+
+1. Configure \`officecli\` itself:
+
+\`\`\`bash
+officecli config set-generation
+officecli config set-license
+\`\`\`
+
+2. Attach \`openclaw-officecli\` to your OpenClaw agent in \`~/.openclaw/config.yaml\` and ensure the agent can use \`shell\` and \`file_read\`.
+
+3. Restart OpenClaw, then verify both \`officecli --version\` and \`officecli agent-bridge\` work on the same host where OpenClaw runs.
 
 ## Scope
 
