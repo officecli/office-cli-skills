@@ -183,8 +183,7 @@ OFFICECLI_FAKE_STATE_DIR="${case3_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
-OFFICECLI_SETUP_PUBLISH_BASE_URL="https://platform.officecli.io/api" \
-OFFICECLI_SETUP_PUBLISH_API_KEY="publish-key" \
+OFFICECLI_SETUP_PUBLISH_BASE_URL="https://claudeoffice.com" \
 "${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case3_dir}/out.json" 2>&1
 code=$?
 set -e
@@ -261,8 +260,7 @@ OFFICECLI_FAKE_STATE_DIR="${case6_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
-OFFICECLI_SETUP_PUBLISH_BASE_URL="https://platform.officecli.io/api" \
-OFFICECLI_SETUP_PUBLISH_API_KEY="publish-key" \
+OFFICECLI_SETUP_PUBLISH_BASE_URL="https://claudeoffice.com" \
 "${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case6_dir}/out.json" 2>&1
 code=$?
 set -e

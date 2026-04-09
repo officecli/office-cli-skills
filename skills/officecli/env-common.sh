@@ -5,6 +5,7 @@ set -euo pipefail
 OFFICECLI_ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_REPO_DEFAULT="${DIST_REPO:-officecli/officecli-dist}"
 DEFAULT_LICENSE_BASE_URL="${OFFICECLI_SETUP_LICENSE_BASE_URL:-https://platform.officecli.io}"
+DEFAULT_PUBLISH_BASE_URL="${OFFICECLI_SETUP_DEFAULT_PUBLISH_BASE_URL:-https://claudeoffice.com}"
 PUBLIC_SKILLS_REPO_DEFAULT="${PUBLIC_SKILLS_REPO:-officecli/officecli-skills}"
 PUBLIC_SKILLS_BRANCH_DEFAULT="${PUBLIC_SKILLS_BRANCH:-main}"
 
@@ -46,16 +47,7 @@ default_publish_base_url() {
     return 0
   fi
 
-  local license_base_url="${DEFAULT_LICENSE_BASE_URL}"
-  license_base_url="${license_base_url%/}"
-  if [[ -z "${license_base_url}" ]]; then
-    return 0
-  fi
-  if [[ "${license_base_url}" == */api ]]; then
-    printf '%s\n' "${license_base_url}"
-    return 0
-  fi
-  printf '%s/api\n' "${license_base_url}"
+  printf '%s\n' "${DEFAULT_PUBLISH_BASE_URL}"
 }
 
 resolve_officecli_path() {

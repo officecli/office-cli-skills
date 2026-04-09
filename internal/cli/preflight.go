@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const officeTaskPreflightSkipEnv = "OFFICECLI_SKIP_SKILL_PREFLIGHT"
@@ -22,17 +23,52 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		return err
 	}
 	for _, script := range scripts {
-		cmd := exec.CommandContext(ctx, "bash", script)
-		if isTerminalReader(stdin) {
-			cmd.Stdin = stdin
+		retry, err := shouldRetryAfterScriptRefresh(script, func() error {
+			cmd := exec.CommandContext(ctx, "bash", script)
+			if isTerminalReader(stdin) {
+				cmd.Stdin = stdin
+			}
+			cmd.Stdout = stdout
+			cmd.Stderr = stderr
+			return cmd.Run()
+		})
+		if err == nil {
+			continue
 		}
-		cmd.Stdout = stdout
-		cmd.Stderr = stderr
-		if err := cmd.Run(); err != nil {
+		if retry {
+			continue
+		}
+		if err != nil {
 			return fmt.Errorf("skill preflight failed for %s: %w", script, err)
 		}
 	}
 	return nil
+}
+
+func shouldRetryAfterScriptRefresh(script string, run func() error) (bool, error) {
+	before, _ := os.Stat(script)
+	err := run()
+	if err == nil {
+		return false, nil
+	}
+	after, statErr := os.Stat(script)
+	if statErr != nil || before == nil || after == nil {
+		return false, err
+	}
+	if sameFileInfo(before, after) {
+		return false, err
+	}
+	if retryErr := run(); retryErr != nil {
+		return true, retryErr
+	}
+	return true, nil
+}
+
+func sameFileInfo(before, after os.FileInfo) bool {
+	if before == nil || after == nil {
+		return true
+	}
+	return before.Size() == after.Size() && before.ModTime().Equal(after.ModTime().Round(time.Second))
 }
 
 func installedSkillPreflightScripts(command string) ([]string, error) {
