@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -168,13 +167,8 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 		}
 		return Config{}, fmt.Errorf("缺少必填环境变量，请先补全生成服务配置，或改用 `officecli config set-generation`")
 	}
-	if cfg.Publish.Enabled {
-		if strings.TrimSpace(cfg.Publish.BaseURL) == "" {
-			return Config{}, errors.New("缺少必填环境变量，请补全在线预览发布服务地址")
-		}
-		if strings.TrimSpace(cfg.Publish.APIKey) == "" {
-			return Config{}, errors.New("缺少必填环境变量，请补全在线预览发布访问凭证")
-		}
+	if err := publishprovider.ValidateConfig(cfg.Publish); err != nil {
+		return Config{}, err
 	}
 	cfg.Defaults.Publish = cfg.Publish.Enabled
 	return cfg, nil
@@ -459,11 +453,18 @@ func (a *App) runConfigSetPublish(cfg Config) error {
 	}
 	cfg.Defaults.Publish = cfg.Publish.Enabled
 	if cfg.Publish.Enabled {
-		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", cfg.Publish.BaseURL); err != nil {
+		defaultBaseURL := fallbackString(cfg.Publish.BaseURL, publishprovider.EmbeddedPublishBaseURL)
+		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", defaultBaseURL); err != nil {
 			return err
 		}
-		if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
-			return err
+		if publishprovider.SupportsEmbeddedDynamicAuth() {
+			if cfg.Publish.APIKey, err = a.promptLine(reader, "请输入发布服务访问凭证（可留空，默认使用内置动态认证）", cfg.Publish.APIKey); err != nil {
+				return err
+			}
+		} else {
+			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
+				return err
+			}
 		}
 	} else {
 		cfg.Publish.BaseURL = ""
@@ -569,11 +570,18 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 	}
 	cfg.Defaults.Publish = cfg.Publish.Enabled
 	if cfg.Publish.Enabled {
-		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", cfg.Publish.BaseURL); err != nil {
+		defaultBaseURL := fallbackString(cfg.Publish.BaseURL, publishprovider.EmbeddedPublishBaseURL)
+		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", defaultBaseURL); err != nil {
 			return Config{}, err
 		}
-		if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
-			return Config{}, err
+		if publishprovider.SupportsEmbeddedDynamicAuth() {
+			if cfg.Publish.APIKey, err = a.promptLine(reader, "请输入发布服务访问凭证（可留空，默认使用内置动态认证）", cfg.Publish.APIKey); err != nil {
+				return Config{}, err
+			}
+		} else {
+			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
+				return Config{}, err
+			}
 		}
 	} else {
 		cfg.Publish.BaseURL = ""

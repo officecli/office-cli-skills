@@ -84,12 +84,15 @@
 - `HOMEBREW_TAP_DEFAULT_BRANCH=main`
 - `PUBLIC_SKILLS_REPO=officecli/officecli-skills`
 - `PUBLIC_SKILLS_DEFAULT_BRANCH=main`
+- `CLI_EMBEDDED_PUBLISH_BASE_URL=https://claudeoffice.com`
+- `CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID=officecli-cli`
 
 ## 需要配置的仓库 secrets
 
 - `PUBLIC_DIST_REPO_TOKEN`
 - `HOMEBREW_TAP_TOKEN`
 - `PUBLIC_SKILLS_REPO_TOKEN`
+- `CLI_EMBEDDED_PUBLISH_AUTH_KEY`
 
 这些 token 至少需要对应公共仓的写权限。
 
@@ -98,6 +101,7 @@
 - `PUBLIC_DIST_REPO_TOKEN`：对 `officecli/officecli-dist` 有 contents write
 - `HOMEBREW_TAP_TOKEN`：对 `officecli/homebrew-officecli` 有 contents write
 - `PUBLIC_SKILLS_REPO_TOKEN`：对 `officecli/officecli-skills` 有 contents write
+- `CLI_EMBEDDED_PUBLISH_AUTH_KEY`：用于在 CLI 二进制构建时注入发布动态认证密钥，不应提交到源码仓
 
 ## 本地验证
 

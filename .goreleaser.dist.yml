@@ -23,6 +23,9 @@ builds:
       - -X github.com/officecli/officecli/internal/cli.Version={{ .Version }}
       - -X github.com/officecli/officecli/internal/cli.Commit={{ .Commit }}
       - -X github.com/officecli/officecli/internal/cli.BuildDate={{ .Date }}
+      - -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishBaseURL={{ .Env.CLI_EMBEDDED_PUBLISH_BASE_URL }}
+      - -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKeyID={{ .Env.CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID }}
+      - -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKey={{ .Env.CLI_EMBEDDED_PUBLISH_AUTH_KEY }}
 
 archives:
   - id: officecli

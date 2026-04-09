@@ -113,6 +113,10 @@ jobs:
 
       - name: Install officecli
         id: install
+        env:
+          CLI_EMBEDDED_PUBLISH_BASE_URL: ${{ vars.CLI_EMBEDDED_PUBLISH_BASE_URL || 'https://claudeoffice.com' }}
+          CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID: ${{ vars.CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID || 'officecli-cli' }}
+          CLI_EMBEDDED_PUBLISH_AUTH_KEY: ${{ secrets.CLI_EMBEDDED_PUBLISH_AUTH_KEY || '' }}
         run: |
           mkdir -p /usr/local/bin
           if [ "${INSTALL_SOURCE}" = "current_build" ]; then
@@ -121,7 +125,7 @@ jobs:
             build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             go build \
               -buildvcs=false \
-              -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${short_sha} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date}" \
+              -ldflags "-X github.com/officecli/officecli/internal/cli.Version=${build_version} -X github.com/officecli/officecli/internal/cli.Commit=${short_sha} -X github.com/officecli/officecli/internal/cli.BuildDate=${build_date} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishBaseURL=${CLI_EMBEDDED_PUBLISH_BASE_URL} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKeyID=${CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKey=${CLI_EMBEDDED_PUBLISH_AUTH_KEY}" \
               -o /usr/local/bin/officecli ./cmd/officecli
             chmod +x /usr/local/bin/officecli
           else

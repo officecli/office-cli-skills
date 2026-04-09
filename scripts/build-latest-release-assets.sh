@@ -7,6 +7,9 @@ VERSION_LABEL="${VERSION_LABEL:-latest}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 BUILD_DATE="${BUILD_DATE:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
 APP_NAME="officecli"
+CLI_EMBEDDED_PUBLISH_BASE_URL="${CLI_EMBEDDED_PUBLISH_BASE_URL:-}"
+CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID="${CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID:-}"
+CLI_EMBEDDED_PUBLISH_AUTH_KEY="${CLI_EMBEDDED_PUBLISH_AUTH_KEY:-}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -23,7 +26,7 @@ build_one() {
 
   GOOS="${os}" GOARCH="${arch}" CGO_ENABLED=0 go build \
     -buildvcs=false \
-    -ldflags "-s -w -X github.com/officecli/officecli/internal/cli.Version=${VERSION_LABEL} -X github.com/officecli/officecli/internal/cli.Commit=${COMMIT} -X github.com/officecli/officecli/internal/cli.BuildDate=${BUILD_DATE}" \
+    -ldflags "-s -w -X github.com/officecli/officecli/internal/cli.Version=${VERSION_LABEL} -X github.com/officecli/officecli/internal/cli.Commit=${COMMIT} -X github.com/officecli/officecli/internal/cli.BuildDate=${BUILD_DATE} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishBaseURL=${CLI_EMBEDDED_PUBLISH_BASE_URL} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKeyID=${CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID} -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKey=${CLI_EMBEDDED_PUBLISH_AUTH_KEY}" \
     -o "${workdir}/officecli" \
     ./cmd/officecli
 
