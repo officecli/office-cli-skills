@@ -219,7 +219,6 @@ deploy_remote() {
 
   if [[ -n "${PLATFORM_ENV_FILE}" ]]; then
     [[ -f "${PLATFORM_ENV_FILE}" ]] || die "未找到 PLATFORM_ENV_FILE: ${PLATFORM_ENV_FILE}"
-    require_env_keys_in_file "${PLATFORM_ENV_FILE}" CLAUDEOFFICE_BASE_URL
     remote_env_file="${REMOTE_WORKDIR}/$(basename "${PLATFORM_ENV_FILE}")"
     log "上传 bootstrap env 文件 -> ${remote_env_file}"
     scp_cmd "${PLATFORM_ENV_FILE}" "${SERVER}:${remote_env_file}"
