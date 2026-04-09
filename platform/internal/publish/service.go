@@ -183,7 +183,7 @@ func (s *Service) uploadAttachment(ctx context.Context, req Request) (*uploadTok
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-	s.attachAuth(httpReq)
+	s.attachAuth(httpReq, body.Bytes())
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {

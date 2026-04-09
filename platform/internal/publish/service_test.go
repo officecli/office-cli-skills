@@ -228,7 +228,8 @@ func TestPublishSignsPreviewRequests(t *testing.T) {
 	store := &fakeAPIKeyStore{key: &model.APIKey{ID: 7, Status: model.APIKeyStatusActive, QuotaTotal: intPtr(1)}}
 	var seenUpload bool
 	var seenPreviewShare bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/attachment/upload":
 			seenUpload = r.Header.Get("X-Auth-Signature") != ""
