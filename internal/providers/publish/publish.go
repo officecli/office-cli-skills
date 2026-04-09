@@ -207,6 +207,8 @@ func (p *claudeOfficePublisher) Publish(ctx context.Context, req PublishRequest)
 	return result, nil
 }
 
+const defaultPreviewShareTTL = 30 * 24 * time.Hour
+
 type uploadTokenResponse struct {
 	StorageKey string `json:"storage_key"`
 }
@@ -260,11 +262,13 @@ func (p *claudeOfficePublisher) uploadAttachment(ctx context.Context, fileName s
 }
 
 func (p *claudeOfficePublisher) createPreviewShare(ctx context.Context, documentName, documentType, storageKey string) (*PublishResult, error) {
+	expiresAt := time.Now().UTC().Add(defaultPreviewShareTTL)
 	payload := map[string]any{
 		"source_type":   "storage_key",
 		"source_value":  storageKey,
 		"file_name":     documentName,
 		"file_type":     documentType,
+		"expires_at":    expiresAt.Format(time.RFC3339),
 		"readonly":      true,
 		"password_mode": "auto",
 	}

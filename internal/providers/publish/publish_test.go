@@ -2,6 +2,7 @@ package publish
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ func TestNewPublisherUsesEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 	}()
 
 	var sawUploadAuth bool
+	var previewPayload map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/attachment/upload":
@@ -34,6 +36,9 @@ func TestNewPublisherUsesEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 			}
 			_, _ = io.WriteString(w, `{"data":{"storage_key":"store-1"}}`)
 		case "/api/preview-shares":
+			if err := json.NewDecoder(r.Body).Decode(&previewPayload); err != nil {
+				t.Fatalf("decode preview payload: %v", err)
+			}
 			_, _ = io.WriteString(w, `{"access_url":"https://claudeoffice.com/preview/t/1","password":"123456"}`)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -64,6 +69,9 @@ func TestNewPublisherUsesEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 	}
 	if !sawUploadAuth {
 		t.Fatal("expected dynamic auth headers on upload request")
+	}
+	if strings.TrimSpace(previewPayload["expires_at"].(string)) == "" {
+		t.Fatalf("expected expires_at in preview payload: %#v", previewPayload)
 	}
 	if result.AccessURL == "" || result.Password == "" {
 		t.Fatalf("unexpected result: %+v", result)
