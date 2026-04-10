@@ -12,7 +12,7 @@ CLAUDE_PLUGIN_ROOT="plugins"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
-HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli/officecli/officecli}"
+HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli}"
 
 if [[ -z "${GH_TOKEN:-}" || -z "${PUBLIC_SKILLS_REPO}" ]]; then
   echo "GH_TOKEN and PUBLIC_SKILLS_REPO are required" >&2
@@ -52,7 +52,7 @@ AUTO_INSTALL_BINARY="${AUTO_INSTALL_BINARY:-1}"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
-HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli/officecli/officecli}"
+HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli}"
 LINUX_PREFIX="${LINUX_PREFIX:-${HOME}/.local}"
 LINUX_BIN_DIR="${LINUX_BIN_DIR:-${LINUX_PREFIX}/bin}"
 
@@ -189,7 +189,7 @@ AUTO_INSTALL_BINARY="${AUTO_INSTALL_BINARY:-1}"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
-HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli/officecli/officecli}"
+HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli}"
 LINUX_PREFIX="${LINUX_PREFIX:-${HOME}/.local}"
 LINUX_BIN_DIR="${LINUX_BIN_DIR:-${LINUX_PREFIX}/bin}"
 
