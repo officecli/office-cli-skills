@@ -9,7 +9,7 @@ AUTO_INSTALL_BINARY="${AUTO_INSTALL_BINARY:-1}"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
-HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli/officecli/officecli}"
+HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli}"
 LINUX_PREFIX="${LINUX_PREFIX:-${HOME}/.local}"
 LINUX_BIN_DIR="${LINUX_BIN_DIR:-${LINUX_PREFIX}/bin}"
 
