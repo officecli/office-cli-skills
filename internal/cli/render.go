@@ -13,15 +13,15 @@ func RenderResult(w io.Writer, result GenerateResult, jsonOutput bool) error {
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
-	if _, err := fmt.Fprintf(w, "生成完成！已保存至 %s\n", result.FilePath); err != nil {
+	if _, err := fmt.Fprintf(w, "Generation completed. Saved to %s\n", result.FilePath); err != nil {
 		return err
 	}
 	if result.Published {
-		if _, err := fmt.Fprintf(w, "在线访问地址：%s；访问密码：%s\n", result.AccessURL, result.Password); err != nil {
+		if _, err := fmt.Fprintf(w, "Preview URL: %s; Password: %s\n", result.AccessURL, result.Password); err != nil {
 			return err
 		}
 		if strings.TrimSpace(result.ExpiresAt) != "" {
-			if _, err := fmt.Fprintf(w, "链接有效期至：%s\n", result.ExpiresAt); err != nil {
+			if _, err := fmt.Fprintf(w, "Link expires at: %s\n", result.ExpiresAt); err != nil {
 				return err
 			}
 		}
@@ -30,7 +30,7 @@ func RenderResult(w io.Writer, result GenerateResult, jsonOutput bool) error {
 		if strings.TrimSpace(warning) == "" {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "提示：%s\n", warning); err != nil {
+		if _, err := fmt.Fprintf(w, "Warning: %s\n", warning); err != nil {
 			return err
 		}
 	}
@@ -43,26 +43,26 @@ func RenderReviewResult(w io.Writer, result ReviewResult, jsonOutput bool) error
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
-	if _, err := fmt.Fprintf(w, "评估完成：总分 %d（%s）\n", result.OverallScore, result.Status); err != nil {
+	if _, err := fmt.Fprintf(w, "Review completed: overall score %d (%s)\n", result.OverallScore, result.Status); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "结构分：%d；视觉分：%d；已使用视觉评审：%t\n", result.StructureScore, result.VisualScore, result.UsedVisual); err != nil {
+	if _, err := fmt.Fprintf(w, "Structure score: %d; Visual score: %d; Visual review used: %t\n", result.StructureScore, result.VisualScore, result.UsedVisual); err != nil {
 		return err
 	}
 	if strings.TrimSpace(result.Summary) != "" {
-		if _, err := fmt.Fprintf(w, "结论：%s\n", result.Summary); err != nil {
+		if _, err := fmt.Fprintf(w, "Summary: %s\n", result.Summary); err != nil {
 			return err
 		}
 	}
 	for _, issue := range topReviewIssues(result.Issues, 3) {
 		line := issue.Title
 		if strings.TrimSpace(issue.Message) != "" {
-			line = fmt.Sprintf("%s：%s", issue.Title, issue.Message)
+			line = fmt.Sprintf("%s: %s", issue.Title, issue.Message)
 		}
 		if len(issue.SlideNumbers) > 0 {
-			line = fmt.Sprintf("%s（页码 %v）", line, issue.SlideNumbers)
+			line = fmt.Sprintf("%s (slides %v)", line, issue.SlideNumbers)
 		}
-		if _, err := fmt.Fprintf(w, "问题：%s\n", line); err != nil {
+		if _, err := fmt.Fprintf(w, "Issue: %s\n", line); err != nil {
 			return err
 		}
 	}
@@ -70,7 +70,7 @@ func RenderReviewResult(w io.Writer, result ReviewResult, jsonOutput bool) error
 		if strings.TrimSpace(warning) == "" {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "提示：%s\n", warning); err != nil {
+		if _, err := fmt.Fprintf(w, "Warning: %s\n", warning); err != nil {
 			return err
 		}
 	}

@@ -31,7 +31,7 @@ func (a *App) runReview(ctx context.Context, cfg Config, args []string) error {
 		return err
 	}
 	if job.FailBelow > 0 && result.OverallScore < job.FailBelow {
-		return fmt.Errorf("评估未通过：总分 %d 低于阈值 %d", result.OverallScore, job.FailBelow)
+		return fmt.Errorf("review failed: overall score %d is below threshold %d", result.OverallScore, job.FailBelow)
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func (a *App) buildReviewJobFromRequest(req bridgeInvokeParams) (ReviewJob, erro
 		return ReviewJob{}, fmt.Errorf("unsupported tool: %s", req.Tool)
 	}
 	if strings.ToLower(strings.TrimSpace(req.Args.DocumentType)) != "pptx" {
-		return ReviewJob{}, fmt.Errorf("review 目前只支持 pptx")
+		return ReviewJob{}, fmt.Errorf("review currently supports only pptx")
 	}
 	filePath := strings.TrimSpace(req.Args.FilePath)
 	if filePath == "" {

@@ -28,7 +28,7 @@ func BuildReviewJob(args []string) (ReviewJob, error) {
 		return ReviewJob{}, errors.New("document type is required")
 	}
 	if strings.ToLower(strings.TrimSpace(positionals[0])) != "pptx" {
-		return ReviewJob{}, fmt.Errorf("review 目前只支持 pptx")
+		return ReviewJob{}, fmt.Errorf("review currently supports only pptx")
 	}
 	if len(positionals) < 2 || strings.TrimSpace(positionals[1]) == "" {
 		return ReviewJob{}, errors.New("file is required")

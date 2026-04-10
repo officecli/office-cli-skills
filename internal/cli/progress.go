@@ -124,7 +124,7 @@ func (r *ProgressRenderer) Pause(message string) {
 	}
 	message = strings.TrimSpace(message)
 	if message == "" {
-		message = "等待进一步操作"
+		message = "Waiting for the next action"
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -185,29 +185,29 @@ func isTerminalWriter(w io.Writer) bool {
 func defaultProgressMessage(event engine.ProgressEvent) string {
 	switch event.Step {
 	case progressStepLicense:
-		return "正在校验授权"
+		return "Checking license"
 	case progressStepPlanPrepare:
-		return "正在准备生成计划"
+		return "Preparing generation plan"
 	case progressStepQuestion:
-		return "正在等待回答补充问题"
+		return "Waiting for additional input"
 	case progressStepPlanConfirm:
-		return "正在确认生成计划"
+		return "Confirming generation plan"
 	case progressStepGenerate, progressStepGenerateLLM:
-		return "正在生成文档内容"
+		return "Generating document content"
 	case progressStepAssemble:
-		return "正在组装文档文件"
+		return "Assembling document file"
 	case progressStepWriteFile:
-		return "正在写入本地文件"
+		return "Writing local file"
 	case progressStepPublish:
-		return "正在发布在线预览"
+		return "Publishing online preview"
 	case progressStepReviewLint:
-		return "正在执行 PPT 结构检查"
+		return "Running PPT structure checks"
 	case progressStepReviewPDF:
-		return "正在将 PPT 转为 PDF"
+		return "Converting PPT to PDF"
 	case progressStepReviewVisual:
-		return "正在执行视觉质量评审"
+		return "Running visual quality review"
 	case progressStepFinalize:
-		return "文档已生成"
+		return "Document generated"
 	default:
 		return strings.TrimSpace(event.Status)
 	}

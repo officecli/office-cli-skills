@@ -29,11 +29,11 @@ func (p *ConsolePrompter) Ask(question string, options []string, allowFreeform b
 		}
 	}
 	if allowFreeform {
-		if _, err := fmt.Fprintln(p.out, "请输入编号或直接输入内容："); err != nil {
+		if _, err := fmt.Fprintln(p.out, "Enter an option number or type your answer directly:"); err != nil {
 			return "", "", err
 		}
 	} else {
-		if _, err := fmt.Fprintln(p.out, "请输入编号："); err != nil {
+		if _, err := fmt.Fprintln(p.out, "Enter an option number:"); err != nil {
 			return "", "", err
 		}
 	}

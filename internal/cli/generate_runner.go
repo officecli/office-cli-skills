@@ -13,22 +13,22 @@ import (
 func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJob, isTTY bool, progress progressController, prompter Prompter) (GenerateResult, error) {
 	if missing := missingLLMConfig(cfg); missing != "" {
 		if !shouldSkipLocalLLM(job.RuntimeMode) {
-			return GenerateResult{}, fmt.Errorf("生成服务未完成配置：缺少%s。请先运行 `officecli config set-generation` 完成配置", missing)
+			return GenerateResult{}, fmt.Errorf("generation service is not fully configured: missing %s. Run `officecli config set-generation` to finish setup", missing)
 		}
 	}
 	if job.RuntimeMode == RuntimeModeHosted {
 		if missing := missingHostedConfig(cfg); missing != "" {
-			return GenerateResult{}, fmt.Errorf("平台服务未完成配置：缺少%s。请先运行 `officecli config set-license` 完成配置", missing)
+			return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
 		}
 	}
 
-	emitProgress(ctx, progress, progressStepLicense, "running", "正在校验授权")
+	emitProgress(ctx, progress, progressStepLicense, "running", "Checking license")
 	licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
 	if err != nil {
-		emitProgress(ctx, progress, progressStepLicense, "failed", "授权校验失败")
+		emitProgress(ctx, progress, progressStepLicense, "failed", "License check failed")
 		return GenerateResult{}, err
 	}
-	emitProgress(ctx, progress, progressStepLicense, "completed", "授权校验完成")
+	emitProgress(ctx, progress, progressStepLicense, "completed", "License check completed")
 	job.LicenseCheck = licenseCheck
 
 	var llmClient GeneratorLLMClient
@@ -47,7 +47,7 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 	if job.Mode == generateengine.ModeBest {
 		if prompter == nil {
 			if !isTTY {
-				return GenerateResult{}, fmt.Errorf("best 模式需要交互补问，请在 TTY 中运行或改用 --mode fast")
+				return GenerateResult{}, fmt.Errorf("best mode requires interactive follow-up questions. Run in a TTY or switch to --mode fast")
 			}
 			prompter = NewConsolePrompter(a.Stdin, a.Stdout)
 		}
@@ -101,7 +101,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		return GenerateJob{}, fmt.Errorf("unsupported mode: %s", mode)
 	}
 	if mode == "best" && !req.Interactive {
-		return GenerateJob{}, fmt.Errorf("interactive=false 时不支持 --mode best")
+		return GenerateJob{}, fmt.Errorf("--mode best is not supported when interactive=false")
 	}
 
 	runtimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(req.Args.RuntimeMode)))

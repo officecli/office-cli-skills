@@ -12,10 +12,10 @@ import (
 func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
-		return nil, fmt.Errorf("缺少平台服务地址，当前无法使用平台托管生成")
+		return nil, fmt.Errorf("platform service URL is missing, so hosted generation is unavailable")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		return nil, fmt.Errorf("缺少平台访问凭证，当前无法使用平台托管生成")
+		return nil, fmt.Errorf("platform access token is missing, so hosted generation is unavailable")
 	}
 	modelName := hostedModelName(job)
 	return llmprovider.NewClient(llmprovider.Config{
@@ -58,7 +58,7 @@ func buildHostedModeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("平台托管生成请求失败：%w", err)
+	return fmt.Errorf("hosted generation request failed: %w", err)
 }
 
 func shouldSkipLocalLLM(mode RuntimeMode) bool {
