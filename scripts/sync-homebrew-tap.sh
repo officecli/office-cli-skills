@@ -34,7 +34,7 @@ darwin_arm64_sha="$(curl -fsSL "${release_base}/checksums.txt" | awk '/officecli
 mkdir -p "$(dirname "${formula_path}")"
 find Formula -maxdepth 1 -type f ! -name 'officecli.rb' -delete 2>/dev/null || true
 cat > "${formula_path}" <<EOF
-class OfficeCli < Formula
+class Officecli < Formula
   desc "Closed-source Office document generation CLI"
   homepage "https://github.com/${DIST_REPO}"
   version "${version}"
