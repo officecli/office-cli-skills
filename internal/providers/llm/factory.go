@@ -280,7 +280,7 @@ func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]an
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("decode chat response: %w", err)
+		return "", llmInvalidJSONResponseError(body, err)
 	}
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("chat response is empty")
@@ -344,7 +344,7 @@ func (c *openAIClient) chatCompletionStream(ctx context.Context, payload map[str
 			} `json:"choices"`
 		}
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
-			return fmt.Errorf("decode streaming chat response: %w", err)
+			return llmInvalidStreamingPayloadError(payload, err)
 		}
 		if chunk.Error != nil {
 			return fmt.Errorf("streaming chat response failed: %s", strings.TrimSpace(chunk.Error.Message))
@@ -534,12 +534,20 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("decode internal completion response: %w", err)
+		return "", llmInvalidJSONResponseError(body, err)
 	}
 	if resp.Content == "" {
 		return "", fmt.Errorf("internal completion response is empty")
 	}
 	return resp.Content, nil
+}
+
+func llmInvalidJSONResponseError(body []byte, err error) error {
+	return fmt.Errorf("llm request failed: invalid json response: %w body=%s", err, strings.TrimSpace(string(body)))
+}
+
+func llmInvalidStreamingPayloadError(payload string, err error) error {
+	return fmt.Errorf("llm request failed: invalid streaming response: %w body=%s", err, strings.TrimSpace(payload))
 }
 
 func (c *internalClient) post(ctx context.Context, url string, payload map[string]any) ([]byte, error) {

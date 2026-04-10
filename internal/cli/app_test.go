@@ -115,6 +115,7 @@ func testCommitTokenPayload(token UsageCommitToken) string {
 
 type fakeAppLLMClient struct {
 	jsonResponse string
+	jsonErr      error
 	delay        time.Duration
 }
 
@@ -125,6 +126,9 @@ func (fakeAppLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (
 func (f fakeAppLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
 	if f.delay > 0 {
 		time.Sleep(f.delay)
+	}
+	if f.jsonErr != nil {
+		return "", f.jsonErr
 	}
 	if f.jsonResponse != "" {
 		return f.jsonResponse, nil
@@ -355,6 +359,38 @@ func TestAppRun_NewFailsWhenInstalledSkillPreflightFails(t *testing.T) {
 	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected preflight failure, got %v", err)
+	}
+}
+
+func TestAppRun_NewSurfacesLLMRequestFailureBody(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return fakeAppLLMClient{jsonErr: fmt.Errorf("llm request failed: invalid json response body=<html><body>bad gateway</body></html>")}, nil
+	}
+
+	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "介绍这款企业协作平台", "--json", "--no-publish"})
+	if err == nil {
+		t.Fatal("expected llm failure")
+	}
+	if !strings.Contains(err.Error(), "生成内容阶段失败：生成内容阶段失败：llm request failed: invalid json response body=<html><body>bad gateway</body></html>") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1023,6 +1059,9 @@ func TestAppRun_ConfigStatusShowsProductState(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "officecli.json")
 	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv("OFFICE_CLI_LLM_IMAGE_BASE_URL", "")
+	t.Setenv("OFFICE_CLI_LLM_IMAGE_API_KEY", "")
+	t.Setenv("OFFICE_CLI_LLM_IMAGE_MODEL", "")
 	_, err := WriteConfig("", Config{
 		Defaults: DefaultsConfig{OutputDir: "./out", Mode: "best", Publish: true},
 		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "sk-test", Model: "gpt-4.1"},

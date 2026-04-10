@@ -139,6 +139,122 @@ func TestOpenAIClient_CompleteTextFallsBackToStreamingWhenContentIsEmpty(t *test
 	}
 }
 
+func TestOpenAIClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testing.T) {
+	t.Parallel()
+
+	const responseBody = "<html><body>upstream unavailable</body></html>"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, responseBody)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "openai",
+		BaseURL:  server.URL,
+		Model:    "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{
+		{Role: "user", Content: "返回 JSON"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "llm request failed: invalid json response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), responseBody) {
+		t.Fatalf("expected full response body in error, got: %v", err)
+	}
+}
+
+func TestOpenAIClient_CompleteTextReturnsLLMRequestFailedForInvalidStreamingPayload(t *testing.T) {
+	t.Parallel()
+
+	const streamPayload = "<html><body>bad gateway</body></html>"
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		requestCount++
+		if requestCount == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"Stream must be set to true"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", streamPayload)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "openai",
+		BaseURL:  server.URL,
+		Model:    "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteText(context.Background(), []engine.LLMMessage{
+		{Role: "user", Content: "只回复测试"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "llm request failed: invalid streaming response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), streamPayload) {
+		t.Fatalf("expected full stream payload in error, got: %v", err)
+	}
+}
+
+func TestInternalClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testing.T) {
+	t.Parallel()
+
+	const responseBody = "<xml><error>proxy failure</error></xml>"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = fmt.Fprint(w, responseBody)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "internal",
+		BaseURL:  server.URL,
+		Model:    "internal-model",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{
+		{Role: "user", Content: "返回 JSON"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "llm request failed: invalid json response") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), responseBody) {
+		t.Fatalf("expected full response body in error, got: %v", err)
+	}
+}
+
 func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 	t.Parallel()
 
