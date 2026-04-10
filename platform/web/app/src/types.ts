@@ -44,4 +44,4 @@ export interface UsageEvent { id: number; mode: string; action: string; result: 
 export interface RewardGrant { source_type: string; amount_total: number; amount_used: number; remaining: number; reason: string; metadata_json: string; created_at: string; updated_at: string }
 export interface Referral { invite_code: string; registered_at: string; activated_at?: string; reward_granted_at?: string }
 export interface DiscordConnection { username: string; guild_member: boolean; connected_at: string; reward_granted_at?: string; verification_status: string; verification_blocked_reason?: string }
-export interface Envelope<T> { data: T }
+export interface Envelope<T> { data?: T; error?: string; request_id?: string }

@@ -1,6 +1,18 @@
 import type { ApiKey, AppGrowth, AppOverview, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, UsageEvent, User } from './types'
 import { buildGoogleLoginURL } from './analytics'
 
+export class ApiError extends Error {
+  status: number
+  requestId?: string
+
+  constructor(message: string, status: number, requestId?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.requestId = requestId
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     credentials: 'include',
@@ -12,11 +24,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error('UNAUTHORIZED')
   }
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: response.statusText }))
-    throw new Error(payload.error || response.statusText)
+    const payload = await response.json().catch(() => ({ error: response.statusText })) as Partial<Envelope<unknown>>
+    throw new ApiError(payload.error || response.statusText, response.status, payload.request_id)
   }
 
   const payload = (await response.json()) as Envelope<T>
+  if (payload.data === undefined) {
+    throw new Error('empty response payload')
+  }
   return payload.data
 }
 

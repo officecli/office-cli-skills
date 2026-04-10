@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, CreditCard } from 'lucide-react'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
@@ -39,6 +39,7 @@ export default function BillingPage() {
   const { data: pricing = [] } = useQuery({ queryKey: ['pricing'], queryFn: api.pricing })
   const { data: keys = [] } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
   const { data: orders = [] } = useQuery({ queryKey: ['app-orders'], queryFn: api.orders })
+  const activeKeys = useMemo(() => keys.filter((item) => item.status === 'active'), [keys])
   const [selectedKey, setSelectedKey] = useState<number | null>(null)
 
   const checkout = useMutation({
@@ -49,7 +50,10 @@ export default function BillingPage() {
     },
   })
 
-  const activeKey = useMemo(() => keys.find((item) => item.id === selectedKey), [keys, selectedKey])
+  const activeKey = useMemo(() => activeKeys.find((item) => item.id === selectedKey), [activeKeys, selectedKey])
+  const checkoutError = checkout.error instanceof ApiError
+    ? `${checkout.error.message}${checkout.error.requestId ? ` (request_id: ${checkout.error.requestId})` : ''}`
+    : checkout.error?.message
 
   return (
     <div className="space-y-8">
@@ -59,10 +63,16 @@ export default function BillingPage() {
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
             <select className="surface-console mt-4 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={selectedKey ?? ''} onChange={(event) => setSelectedKey(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">Choose a key</option>
-              {keys.map((key) => <option key={key.id} value={key.id}>{key.key_prefix} / {key.plan_name}</option>)}
+              <option value="">{activeKeys.length ? 'Choose an active key' : 'No active key available'}</option>
+              {activeKeys.map((key) => <option key={key.id} value={key.id}>{key.key_prefix} / {key.plan_name}</option>)}
             </select>
-            <div className="mt-4 text-sm text-outline">{activeKey ? `${activeKey.key_prefix} has external ${activeKey.quota_remaining ?? activeKey.quota_total ?? 0} / hosted ${activeKey.credit_balance ?? 0}.` : 'Pick the production destination before starting checkout.'}</div>
+            <div className="mt-4 text-sm text-outline">
+              {activeKey
+                ? `${activeKey.key_prefix} has external ${activeKey.quota_remaining ?? activeKey.quota_total ?? 0} / hosted ${activeKey.credit_balance ?? 0}.`
+                : activeKeys.length
+                  ? 'Pick an active production key before starting checkout.'
+                  : 'No active API key is available for billing. Re-enable a key in API Keys first.'}
+            </div>
           </div>
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-tertiary">Billing flow</div>
@@ -73,6 +83,11 @@ export default function BillingPage() {
             </ol>
           </div>
         </div>
+        {checkoutError ? (
+          <div className="mb-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
+            Checkout failed: {checkoutError}
+          </div>
+        ) : null}
         {pricing.length ? (
           <div className="grid gap-4 lg:grid-cols-3">
             {pricing.map((pack) => (

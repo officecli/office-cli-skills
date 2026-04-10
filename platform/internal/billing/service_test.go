@@ -11,10 +11,12 @@ import (
 
 type fakeGateway struct {
 	called bool
+	lastCustomerID string
 }
 
-func (f *fakeGateway) CreateCheckoutSession(_ context.Context, _ CheckoutRequest, _ model.PricingPack, _ string) (*CheckoutSession, error) {
+func (f *fakeGateway) CreateCheckoutSession(_ context.Context, _ CheckoutRequest, _ model.PricingPack, customerID string) (*CheckoutSession, error) {
 	f.called = true
+	f.lastCustomerID = customerID
 	return &CheckoutSession{
 		ID:         "cs_test_123",
 		URL:        "https://checkout.stripe.test/session/cs_test_123",
@@ -207,6 +209,41 @@ func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
 	require.Contains(t, err.Error(), "disabled")
 	require.Empty(t, store.orders)
 	require.False(t, gateway.called)
+}
+
+func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
+	t.Parallel()
+
+	quota := 10
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+		stripeCustomer: &model.StripeCustomer{
+			UserID:           42,
+			StripeCustomerID: "cus_existing_123",
+		},
+	}
+	gateway := &fakeGateway{}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 1900, QuotaAmount: 100}})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
+		UserID:         42,
+		PackCode:       "pack_100",
+		TargetAPIKeyID: 7,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.True(t, gateway.called)
+	require.Equal(t, "cus_existing_123", gateway.lastCustomerID)
 }
 
 func uint64Ptr(v uint64) *uint64 {

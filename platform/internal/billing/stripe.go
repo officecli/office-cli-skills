@@ -25,6 +25,22 @@ func NewStripeGateway(secretKey, webhookSecret, successURL, cancelURL string) *S
 }
 
 func (g *StripeGateway) CreateCheckoutSession(ctx context.Context, req CheckoutRequest, pack model.PricingPack, customerID string) (*CheckoutSession, error) {
+	if g.secretKey == "" {
+		return nil, fmt.Errorf("stripe secret key is not configured")
+	}
+	params := g.checkoutSessionParams(req, pack, customerID)
+	created, err := session.New(params)
+	if err != nil {
+		return nil, err
+	}
+	result := &CheckoutSession{ID: created.ID, URL: created.URL}
+	if created.Customer != nil {
+		result.CustomerID = created.Customer.ID
+	}
+	return result, nil
+}
+
+func (g *StripeGateway) checkoutSessionParams(req CheckoutRequest, pack model.PricingPack, customerID string) *stripe.CheckoutSessionParams {
 	params := &stripe.CheckoutSessionParams{
 		Mode:       stripe.String(string(stripe.CheckoutSessionModePayment)),
 		SuccessURL: stripe.String(g.successURL),
@@ -48,17 +64,10 @@ func (g *StripeGateway) CreateCheckoutSession(ctx context.Context, req CheckoutR
 	}
 	if customerID != "" {
 		params.Customer = stripe.String(customerID)
+	} else {
 		params.CustomerCreation = stripe.String(string(stripe.CheckoutSessionCustomerCreationAlways))
 	}
-	created, err := session.New(params)
-	if err != nil {
-		return nil, err
-	}
-	result := &CheckoutSession{ID: created.ID, URL: created.URL}
-	if created.Customer != nil {
-		result.CustomerID = created.Customer.ID
-	}
-	return result, nil
+	return params
 }
 
 func (g *StripeGateway) ParseWebhook(payload []byte, signature string) (*WebhookEvent, error) {

@@ -90,7 +90,7 @@ describe('billing page', () => {
               currency: 'usd',
               amount_total: 1900,
               quota_amount: 100,
-              pack_kind: 'external_quota',
+              pack_kind: 'external_generation',
             }],
           }),
         }
@@ -99,7 +99,19 @@ describe('billing page', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ data: [{ id: 7, key_prefix: 'cop_live_demo', plan_name: 'Production', quota_total: 100, quota_used: 0, quota_remaining: 100, credit_balance: 0 }] }),
+          json: async () => ({
+            data: [{
+              id: 7,
+              key_prefix: 'cop_live_demo',
+              status: 'active',
+              plan_name: 'Production',
+              quota_total: 100,
+              quota_used: 0,
+              quota_remaining: 100,
+              credit_balance: 0,
+              created_at: '2026-04-03T00:00:00Z',
+            }],
+          }),
         }
       }
       if (url === '/api/app/orders') {
@@ -134,5 +146,70 @@ describe('billing page', () => {
         method: 'POST',
       }))
     })
+  })
+
+  it('shows checkout error details and request id when checkout fails', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              code: 'external-100',
+              name: 'External 100',
+              description: '100 external generations for workflows that already bring their own LLM.',
+              currency: 'usd',
+              amount_total: 1900,
+              quota_amount: 100,
+              pack_kind: 'external_generation',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/api-keys') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 7,
+              key_prefix: 'cop_test',
+              status: 'active',
+              plan_name: 'Growth',
+              quota_used: 0,
+              quota_remaining: 100,
+              credit_balance: 0,
+              created_at: '2026-04-03T00:00:00Z',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/checkout' && init?.method === 'POST') {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: 'target api key is disabled',
+            request_id: 'req_checkout_123',
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    await screen.findByText(/cop_test \/ Growth/i)
+    const checkoutButton = await screen.findByRole('button', { name: /continue to stripe checkout/i })
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
+    fireEvent.click(checkoutButton)
+
+    expect(await screen.findByText(/Checkout failed: target api key is disabled \(request_id: req_checkout_123\)/i)).toBeInTheDocument()
   })
 })
