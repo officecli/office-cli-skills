@@ -81,7 +81,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
       <div className="max-w-3xl mx-auto">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Pricing Architecture</span>
         <h2 className={titleClass}>Simple Kinetic Billing</h2>
-        <p className="text-xl text-outline-variant mb-12">Start for free. Scale by the thousand. No monthly lock-ins for infrastructure teams.</p>
+        <p className="text-xl text-outline-variant mb-12">Start for free. Scale by the thousand. Production purchases run through the secure OfficeCLI billing workspace.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto mb-16">
           <motion.div
@@ -116,13 +116,16 @@ export default function Pricing({ standalone = false }: PricingProps) {
                 <li key={item} className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> {item}</li>
               ))}
             </ul>
+            <div className="mb-4 text-sm text-outline-variant">
+              Secure Stripe checkout starts in the billing workspace after sign-in and API key selection.
+            </div>
             <motion.a
               whileHover={{ scale: 0.98 }}
               className="w-full py-4 rounded-md bg-gradient-to-br from-primary to-primary-container text-[#002e6b] font-bold transition-all inline-flex items-center justify-center"
               href={platformBillingHref}
               onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.checkoutStart, { surface: 'site', placement: standalone ? 'pricing-page' : 'home-pricing', pack_code: productionPack.code, ...extractAttributionParams(location.search) })}
             >
-              Buy Pack
+              Open Secure Checkout
             </motion.a>
           </motion.div>
         </div>

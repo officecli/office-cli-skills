@@ -30,6 +30,8 @@ describe('marketing site shell', () => {
 
     expect((await screen.findAllByText('Starter Shell')).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Production Pack').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: /Open Secure Checkout/i })[0]).toHaveAttribute('href', 'https://platform.officecli.io/app/billing')
+    expect(screen.getAllByText(/Secure Stripe checkout starts in the billing workspace/i).length).toBeGreaterThan(0)
   })
 })
 

@@ -54,7 +54,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Simple kinetic billing" title="Attach new credits to a real key" body="Select the key that should receive fresh capacity, then move into Stripe checkout from the same shell." />
+        <SectionHeading eyebrow="Simple kinetic billing" title="Attach new credits to a real key" body="Select the key that should receive fresh capacity, then continue into secure Stripe Checkout from the same workspace." />
         <div className="billing-shell mb-6">
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
@@ -69,7 +69,7 @@ export default function BillingPage() {
             <ol className="mt-4 space-y-3 text-sm text-outline">
               <li>1. Choose the target API key.</li>
               <li>2. Pick a pricing pack below.</li>
-              <li>3. Complete checkout and land back in the billing view.</li>
+              <li>3. Continue to Stripe Checkout and land back in the billing view.</li>
             </ol>
           </div>
         </div>
@@ -99,7 +99,7 @@ export default function BillingPage() {
                           checkout.mutate({ packCode: pack.code, keyID: selectedKey })
                         }}
                       >
-                        <CreditCard size={16} /> Checkout pack
+                        <CreditCard size={16} /> Continue to Stripe Checkout
                       </button>
                     </>
                   )

@@ -17,10 +17,15 @@ function LoadingScreen() {
 }
 
 function ProtectedShell() {
+  const location = useLocation()
   const { data: user, isLoading, error } = useQuery({ queryKey: ['app-me'], queryFn: api.me, retry: false })
 
   if (isLoading) return <LoadingScreen />
-  if (error || !user) return <Navigate to="/login" replace />
+  if (error || !user) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`
+    const loginSearch = new URLSearchParams({ return_to: returnTo }).toString()
+    return <Navigate to={`/login?${loginSearch}`} replace />
+  }
 
   return (
     <div className="min-h-screen bg-background text-on-surface">

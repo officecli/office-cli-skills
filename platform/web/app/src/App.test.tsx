@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { api } from './api'
 
 const fetchMock = vi.fn()
 
@@ -36,6 +37,19 @@ describe('platform app shell', () => {
     expect(screen.queryByText(/Ship faster from the terminal/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/What unlocks after sign-in/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/\$ officecli auth status/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the requested billing destination through login', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const loginSpy = vi.spyOn(api, 'login').mockImplementation(() => {})
+
+    renderApp('/billing?status=success')
+
+    expect(await screen.findByRole('heading', { name: /Authorized Google accounts only/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Continue with Google/i }))
+
+    expect(loginSpy).toHaveBeenCalledWith('/billing?status=success')
   })
 
   it('renders the access denied route with the blocked email context', async () => {
