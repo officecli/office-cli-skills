@@ -1,0 +1,52 @@
+{
+  "name": "officecli",
+  "version": "0.2.3",
+  "description": "NPM wrapper that installs the OfficeCLI binary from GitHub Releases.",
+  "license": "UNLICENSED",
+  "private": false,
+  "bin": {
+    "officecli": "./bin/officecli.js"
+  },
+  "files": [
+    "README.md",
+    "bin",
+    "lib",
+    "scripts"
+  ],
+  "scripts": {
+    "postinstall": "node ./scripts/postinstall.js",
+    "smoke:version": "node ./bin/officecli.js --version",
+    "pack:dry-run": "npm pack --dry-run",
+    "check:release-version": "node ./scripts/check-release-version.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/officecli/officecli.git",
+    "directory": "packages/npm/officecli"
+  },
+  "homepage": "https://github.com/officecli/officecli",
+  "bugs": {
+    "url": "https://github.com/officecli/officecli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "officecli",
+    "cli",
+    "pptx",
+    "docx",
+    "xlsx"
+  ]
+}

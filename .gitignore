@@ -2,7 +2,7 @@
 .worktrees/
 *.test
 coverage.out
-officecli
+/officecli
 !cmd/officecli/
 !cmd/officecli/main.go
 !skills/officecli/
