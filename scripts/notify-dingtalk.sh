@@ -43,7 +43,7 @@ for root, _, files in os.walk(report_root):
                     "detail": row["detail"],
                 })
 
-lines = ["officecli 生产巡检失败"]
+lines = ["officecli production inspection failed"]
 if run_url:
     lines.append(f"Run: {run_url}")
 
@@ -55,7 +55,7 @@ if failed:
             f"request_id={item['request_id'] or '-'} detail={item['detail']}"
         )
 else:
-    lines.append("- 未找到失败明细，请查看 workflow artifact")
+    lines.append("- No failure details were found. Check the workflow artifact.")
 
 print("\n".join(lines))
 PY

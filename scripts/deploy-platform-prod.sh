@@ -39,19 +39,19 @@ RSYNC_SSH_CMD=(ssh -p "${SSH_PORT}" "${SSH_OPTS[@]}")
 
 usage() {
   cat <<'EOF'
-用法：
+Usage:
   scripts/deploy-platform-prod.sh [tag]
 
-说明：
-  - 不传 tag 时，会自动生成类似 v0.1.0-prod-YYYYMMDD-N 的 tag。
-  - 会在本地执行 go test、构建 web/site + web/app + web/admin。
-  - 会构建 linux/amd64 镜像，打包后上传到生产服务器并导入 k3s containerd。
-  - 会同步官网、app、admin 静态资源到 Nginx 目录。
-  - 会把 Deployment 强制设为 imagePullPolicy=Never + strategy=Recreate。
-  - 若目标 namespace / service / deployment 不存在，会自动执行首次 bootstrap。
-  - 若首次 bootstrap 且缺少 Secret，可传 PLATFORM_ENV_FILE=<本地 env 文件路径> 自动创建 Secret。
+Notes:
+  - If no tag is provided, a tag like v0.1.0-prod-YYYYMMDD-N is generated automatically.
+  - Runs local Go tests and builds web/site + web/app + web/admin.
+  - Builds a linux/amd64 image, uploads the archive to the production server, and imports it into k3s containerd.
+  - Syncs site, app, and admin static assets into the Nginx directories.
+  - Forces the Deployment to imagePullPolicy=Never and strategy=Recreate.
+  - If the target namespace / service / deployment does not exist, the script runs first-time bootstrap automatically.
+  - If bootstrap needs a Secret and none exists yet, pass PLATFORM_ENV_FILE=<local env file path> to create it automatically.
 
-可覆盖环境变量：
+Overridable environment variables:
   SERVER_HOST SERVER_USER SSH_PORT SSH_OPTS REMOTE_WORKDIR REMOTE_SITE_DIR REMOTE_APP_DIR REMOTE_ADMIN_DIR
   KUBE_NAMESPACE DEPLOYMENT_NAME CONTAINER_NAME IMAGE_REPO SECRET_NAME PLATFORM_ENV_FILE
 EOF
@@ -62,7 +62,7 @@ log() {
 }
 
 die() {
-  echo "错误: $*" >&2
+  echo "Error: $*" >&2
   exit 1
 }
 
@@ -79,13 +79,13 @@ rsync_cmd() {
 }
 
 require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "缺少命令: $1"
+  command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
 require_env_keys_in_file() {
   local env_file="$1"
   shift
-  [[ -f "${env_file}" ]] || die "未找到 env 文件: ${env_file}"
+  [[ -f "${env_file}" ]] || die "Env file not found: ${env_file}"
   local missing=()
   local key
   for key in "$@"; do
@@ -94,7 +94,7 @@ require_env_keys_in_file() {
     fi
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
-    die "env 文件缺少必填项: ${missing[*]} (${env_file})"
+    die "Env file is missing required keys: ${missing[*]} (${env_file})"
   fi
 }
 
@@ -139,16 +139,16 @@ detect_next_tag() {
 }
 
 run_local_builds() {
-  log "运行 Go 测试"
+  log "Running Go tests"
   (cd "$PLATFORM_DIR" && go test ./...)
 
-  log "构建 web/app"
+  log "Building web/app"
   (cd "${PLATFORM_DIR}/web/app" && npm run build)
 
-  log "构建 web/admin"
+  log "Building web/admin"
   (cd "${PLATFORM_DIR}/web/admin" && npm run build)
 
-  log "构建 web/site"
+  log "Building web/site"
   (cd "${PLATFORM_DIR}/web/site" && npm run build)
 }
 
@@ -178,7 +178,7 @@ EXPOSE 8080
 ENTRYPOINT ["/app/officecli-platform"]
 EOF
 
-  log "构建镜像 ${image_ref}"
+  log "Building image ${image_ref}"
   (
     cd "$PLATFORM_DIR"
     docker buildx build \
@@ -189,18 +189,18 @@ EOF
       .
   )
 
-  log "导出镜像归档 ${archive_path}"
+  log "Exporting image archive ${archive_path}"
   docker save "${image_ref}" | gzip >"${archive_path}"
 }
 
 sync_static_assets() {
-  log "同步官网静态资源 -> ${REMOTE_SITE_DIR}"
+  log "Syncing site assets -> ${REMOTE_SITE_DIR}"
   rsync_cmd -az --delete "${PLATFORM_DIR}/web/site/dist/" "${SERVER}:${REMOTE_SITE_DIR}/"
 
-  log "同步 app 静态资源 -> ${REMOTE_APP_DIR}"
+  log "Syncing app assets -> ${REMOTE_APP_DIR}"
   rsync_cmd -az --delete "${PLATFORM_DIR}/web/app/dist/" "${SERVER}:${REMOTE_APP_DIR}/"
 
-  log "同步 admin 静态资源 -> ${REMOTE_ADMIN_DIR}"
+  log "Syncing admin assets -> ${REMOTE_ADMIN_DIR}"
   rsync_cmd -az --delete "${PLATFORM_DIR}/web/admin/dist/" "${SERVER}:${REMOTE_ADMIN_DIR}/"
 }
 
@@ -211,21 +211,21 @@ deploy_remote() {
   local remote_env_file=""
   local remote_postgres_manifest_dir="${REMOTE_WORKDIR}/postgres-manifests"
 
-  log "确保远端工作目录存在 -> ${REMOTE_WORKDIR}"
+  log "Ensuring the remote work directory exists -> ${REMOTE_WORKDIR}"
   ssh_cmd "$SERVER" "sudo mkdir -p '${REMOTE_WORKDIR}' && sudo chown '${SERVER_USER}:${SERVER_USER}' '${REMOTE_WORKDIR}'"
 
-  log "上传镜像归档 -> ${REMOTE_WORKDIR}/$(basename "$archive_path")"
+  log "Uploading image archive -> ${REMOTE_WORKDIR}/$(basename "$archive_path")"
   scp_cmd "${archive_path}" "${SERVER}:${REMOTE_WORKDIR}/"
 
   if [[ -n "${PLATFORM_ENV_FILE}" ]]; then
-    [[ -f "${PLATFORM_ENV_FILE}" ]] || die "未找到 PLATFORM_ENV_FILE: ${PLATFORM_ENV_FILE}"
+    [[ -f "${PLATFORM_ENV_FILE}" ]] || die "PLATFORM_ENV_FILE was not found: ${PLATFORM_ENV_FILE}"
     remote_env_file="${REMOTE_WORKDIR}/$(basename "${PLATFORM_ENV_FILE}")"
-    log "上传 bootstrap env 文件 -> ${remote_env_file}"
+    log "Uploading bootstrap env file -> ${remote_env_file}"
     scp_cmd "${PLATFORM_ENV_FILE}" "${SERVER}:${remote_env_file}"
   fi
 
   if [[ -d "${POSTGRES_MANIFEST_DIR}" ]]; then
-    log "上传 PostgreSQL k8s 清单 -> ${remote_postgres_manifest_dir}"
+    log "Uploading PostgreSQL k8s manifests -> ${remote_postgres_manifest_dir}"
     ssh_cmd "$SERVER" "mkdir -p '${remote_postgres_manifest_dir}'"
     scp_cmd "${POSTGRES_MANIFEST_DIR}/service-headless.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
     scp_cmd "${POSTGRES_MANIFEST_DIR}/service.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
@@ -233,7 +233,7 @@ deploy_remote() {
     scp_cmd "${POSTGRES_MANIFEST_DIR}/backup-cronjob.yaml" "${SERVER}:${remote_postgres_manifest_dir}/"
   fi
 
-  log "在服务器导入镜像并更新 Deployment"
+  log "Importing the image on the server and updating the Deployment"
   ssh_cmd "$SERVER" \
     TAG="$tag" \
     IMAGE_REF="$image_ref" \
@@ -256,7 +256,7 @@ deploy_remote() {
 set -euo pipefail
 
 die() {
-  echo "错误: $*" >&2
+  echo "Error: $*" >&2
   exit 1
 }
 
@@ -270,14 +270,14 @@ ensure_secret() {
   if kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     return
   fi
-  [[ -n "${REMOTE_ENV_FILE:-}" ]] || die "缺少 Secret: ${KUBE_NAMESPACE}/${SECRET_NAME}，且未提供 PLATFORM_ENV_FILE"
-  [[ -f "$REMOTE_ENV_FILE" ]] || die "未找到 bootstrap env 文件: $REMOTE_ENV_FILE"
+  [[ -n "${REMOTE_ENV_FILE:-}" ]] || die "Missing Secret ${KUBE_NAMESPACE}/${SECRET_NAME}, and PLATFORM_ENV_FILE was not provided"
+  [[ -f "$REMOTE_ENV_FILE" ]] || die "Bootstrap env file was not found: $REMOTE_ENV_FILE"
   kubectl -n "$KUBE_NAMESPACE" create secret generic "$SECRET_NAME" --from-env-file="$REMOTE_ENV_FILE"
 }
 
 sync_secret_from_env_file() {
   [[ -n "${REMOTE_ENV_FILE:-}" ]] || return
-  [[ -f "$REMOTE_ENV_FILE" ]] || die "未找到 bootstrap env 文件: $REMOTE_ENV_FILE"
+  [[ -f "$REMOTE_ENV_FILE" ]] || die "Bootstrap env file was not found: $REMOTE_ENV_FILE"
 
   payload="$(
     python3 - <<'PY' "$REMOTE_ENV_FILE"
@@ -301,7 +301,7 @@ for raw in path.read_text(encoding="utf-8").splitlines():
 print(json.dumps({"stringData": data}, ensure_ascii=False))
 PY
   )"
-  [[ -n "${payload}" ]] || die "无法从 env 文件生成 Secret patch: ${REMOTE_ENV_FILE}"
+  [[ -n "${payload}" ]] || die "Unable to generate a Secret patch from the env file: ${REMOTE_ENV_FILE}"
   kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "${payload}" >/dev/null
 }
 
@@ -331,7 +331,7 @@ assert_secret_keys() {
     fi
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
-    die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} 缺少必填项: ${missing[*]}"
+    die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} is missing required keys: ${missing[*]}"
   fi
 }
 
@@ -358,7 +358,7 @@ sync_platform_secret_postgres_dsn() {
 }
 
 apply_postgres_manifests() {
-  [[ -d "${REMOTE_POSTGRES_MANIFEST_DIR}" ]] || die "未找到 PostgreSQL 清单目录: ${REMOTE_POSTGRES_MANIFEST_DIR}"
+  [[ -d "${REMOTE_POSTGRES_MANIFEST_DIR}" ]] || die "PostgreSQL manifest directory was not found: ${REMOTE_POSTGRES_MANIFEST_DIR}"
   kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/service-headless.yaml"
   kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/service.yaml"
   kubectl apply -f "${REMOTE_POSTGRES_MANIFEST_DIR}/statefulset.yaml"
@@ -392,7 +392,7 @@ run_db_pod() {
   if ! kubectl -n "$KUBE_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$pod_name" --timeout=600s; then
     kubectl -n "$KUBE_NAMESPACE" logs "$pod_name" || true
     kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
-    die "任务失败: ${pod_name}"
+    die "Job failed: ${pod_name}"
   fi
   kubectl -n "$KUBE_NAMESPACE" logs "$pod_name"
   kubectl -n "$KUBE_NAMESPACE" delete pod "$pod_name" --ignore-not-found=true >/dev/null 2>&1 || true
@@ -607,7 +607,7 @@ EOF
 }
 
 verify_public_endpoints() {
-  log "验证公网入口"
+  log "Verifying public endpoints"
   curl -fsS -o /dev/null -D - https://officecli.io/
   curl -fsS -o /dev/null -D - https://officecli.io/api/pricing
   curl -fsS -o /dev/null -D - https://officecli.io/app
@@ -620,9 +620,9 @@ verify_public_endpoints() {
 main() {
   local tag base_version image_ref archive_path archive_name
 
-  [[ -d "$PLATFORM_DIR" ]] || die "未找到 platform 目录: ${PLATFORM_DIR}"
+  [[ -d "$PLATFORM_DIR" ]] || die "Platform directory was not found: ${PLATFORM_DIR}"
   [[ $# -le 1 ]] || { usage; exit 1; }
-  [[ -f "${ROOT_DIR}/AGENTS.md" ]] || die "请从仓库根目录或其子目录执行此脚本"
+  [[ -f "${ROOT_DIR}/AGENTS.md" ]] || die "Run this script from the repository root or one of its subdirectories"
 
   require_cmd go
   require_cmd npm
@@ -644,8 +644,8 @@ main() {
   archive_path="${TMPDIR:-/tmp}/officecli-platform-${tag}.tar.gz"
   archive_name="$(basename "$archive_path")"
 
-  log "发布 tag: ${tag}"
-  log "镜像引用: ${image_ref}"
+  log "Release tag: ${tag}"
+  log "Image reference: ${image_ref}"
 
   run_local_builds
   build_image_archive "$image_ref" "$archive_path"
@@ -653,7 +653,7 @@ main() {
   deploy_remote "$tag" "$archive_path" "$image_ref"
   verify_public_endpoints
 
-  log "发布完成"
+  log "Release completed"
   echo "tag=${tag}"
   echo "image=${image_ref}"
   echo "archive=${archive_path}"

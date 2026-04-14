@@ -23,7 +23,7 @@ func NewService(cfg Config) (*Service, error) {
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
-		return nil, fmt.Errorf("缺少平台服务地址，请先完成 officecli 配置")
+		return nil, fmt.Errorf("missing platform service URL. Complete the officecli configuration first")
 	}
 	return &Service{
 		baseURL: baseURL,
@@ -106,7 +106,7 @@ func (s *Service) post(ctx context.Context, path string, payload any) ([]byte, e
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("请求平台服务失败: %w", err)
+		return nil, fmt.Errorf("platform service request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)

@@ -37,7 +37,7 @@ func (w *Workflow) synthesizeQuestions(ctx context.Context, req engine.PrepareEx
 	}
 	structuredReq := engine.StructuredCompletionRequest{
 		Messages: []engine.LLMMessage{
-			{Role: "system", Content: "你是一个资深中文办公文档 AI 助手，负责在执行前通过少量高价值问题补齐信息。你只返回符合 schema 的 JSON，不要输出任何额外说明。"},
+			{Role: "system", Content: "You are a senior office-document AI assistant. Before execution, ask a small number of high-value clarification questions. Return JSON that matches the schema exactly, with no extra text."},
 			{Role: "user", Content: buildQuestionContext(req, documentType)},
 		},
 		Schema: engine.StructuredSchema{
@@ -93,7 +93,7 @@ func (w *Workflow) fallbackQuestions(ctx context.Context, req engine.PrepareExec
 		return nil, errors.New("llm unavailable")
 	}
 	response, err := w.llm.CompleteJSON(ctx, []engine.LLMMessage{
-		{Role: "system", Content: "你是一个资深中文办公文档 AI 助手。请只输出 JSON。"},
+		{Role: "system", Content: "You are a senior office-document AI assistant. Return JSON only."},
 		{Role: "user", Content: buildQuestionContext(req, documentType)},
 	})
 	if err != nil {
@@ -133,37 +133,37 @@ func truncateRawPreview(raw string) string {
 
 func buildQuestionContext(req engine.PrepareExecutionPlanRequest, documentType string) string {
 	var sb strings.Builder
-	sb.WriteString("请根据以下信息生成有针对性的澄清问题。\n")
-	sb.WriteString("用户原始输入：")
+	sb.WriteString("Generate focused clarification questions based on the information below.\n")
+	sb.WriteString("Original user prompt: ")
 	sb.WriteString(strings.TrimSpace(req.UserPrompt))
 	sb.WriteString("\n")
-	sb.WriteString("任务类型：新建文档\n")
-	sb.WriteString("文档类型：")
+	sb.WriteString("Task type: create a new document\n")
+	sb.WriteString("Document type: ")
 	sb.WriteString(documentType)
 	sb.WriteString("\n")
-	sb.WriteString("生成模式：")
+	sb.WriteString("Generation mode: ")
 	sb.WriteString(strings.TrimSpace(req.GenerationMode))
 	sb.WriteString("\n")
 	sb.WriteString(buildQuestionGoal(documentType))
 	sb.WriteString("\n\n")
-	sb.WriteString(`要求：
-1. 只问对内容质量最敏感、最能缩小生成空间的问题。
-2. 输出 1 到 3 个问题，优先少而准。
-3. 每个问题提供 2 到 4 个可点击选项，并且恰好 1 个选项标记 recommended=true。
-4. allowFreeform 通常为 true。
-5. 所有文案必须用中文，不要出现英文问题标题。
-6. 问题之间不要重复，避免泛泛地问“还有什么补充”。`)
+	sb.WriteString(`Requirements:
+1. Ask only the questions that most improve content quality and narrow the generation space.
+2. Return 1 to 3 questions, favoring fewer but sharper questions.
+3. Each question must include 2 to 4 selectable options, with exactly 1 option marked recommended=true.
+4. allowFreeform should usually be true.
+5. Write all question text in English.
+6. Avoid overlap between questions and avoid vague catch-all prompts.`)
 	return sb.String()
 }
 
 func buildQuestionGoal(documentType string) string {
 	switch normalizeDocumentType(documentType) {
 	case "docx":
-		return "本次目标：通过最少问题补齐文档用途、目标读者、篇幅与论证深度，让后续文档结构更完整、表达更专业。"
+		return "Goal: fill in document purpose, target readers, length, and argument depth with the fewest questions so the final document structure is complete and professional."
 	case "xlsx":
-		return "本次目标：通过最少问题补齐分析目标、数据粒度、指标口径和输出视角，让后续工作簿结构更适合分析场景。"
+		return "Goal: fill in analysis goal, data granularity, metric definitions, and reporting perspective with the fewest questions so the workbook structure fits the analysis scenario."
 	default:
-		return "本次目标：通过最少问题补齐受众、汇报目标、结构方式和页数密度，让后续 PPT 更适合咨询风汇报。"
+		return "Goal: fill in audience, presentation goal, structural approach, and page density with the fewest questions so the PPT is better suited for a consulting-style deck."
 	}
 }
 
@@ -343,31 +343,31 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 		return []engine.PlanQuestion{
 			{
 				ID:       "docx_goal",
-				Question: "这份文档最重要的用途是什么？",
+				Question: "What is the most important purpose of this document?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "report", Label: "分析报告", Description: "强调结论、分析链路和建议。", Recommended: true},
-					{ID: "proposal", Label: "方案文档", Description: "强调行动方案、路径和落地。"},
-					{ID: "memo", Label: "纪要/总结", Description: "强调事实归纳、决定和后续事项。"},
+					{ID: "report", Label: "Analytical report", Description: "Emphasize conclusions, reasoning, and recommendations.", Recommended: true},
+					{ID: "proposal", Label: "Proposal", Description: "Emphasize action plans, path, and execution."},
+					{ID: "memo", Label: "Memo or recap", Description: "Emphasize facts, decisions, and follow-up items."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "docx_audience",
-				Question: "这份文档主要给谁看？",
+				Question: "Who is the primary audience for this document?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "management", Label: "管理层", Description: "更强调结论、判断和建议。", Recommended: true},
-					{ID: "client", Label: "客户/外部伙伴", Description: "更强调价值表达和可读性。"},
-					{ID: "team", Label: "团队内部", Description: "更强调背景、方法和执行细节。"},
+					{ID: "management", Label: "Leadership", Description: "Emphasize conclusions, judgment, and recommendations.", Recommended: true},
+					{ID: "client", Label: "Client or partner", Description: "Emphasize value communication and readability."},
+					{ID: "team", Label: "Internal team", Description: "Emphasize background, method, and execution detail."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "docx_depth",
-				Question: "这份文档希望写到什么深度？",
+				Question: "How deep should this document go?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "concise", Label: "短版结论型", Description: "控制篇幅，先给结论和关键分析。", Recommended: true},
-					{ID: "balanced", Label: "平衡型", Description: "兼顾结论、分析和建议。"},
-					{ID: "deep", Label: "深度展开", Description: "允许更完整的论证、背景和细节。"},
+					{ID: "concise", Label: "Concise", Description: "Keep it short and lead with conclusions and key analysis.", Recommended: true},
+					{ID: "balanced", Label: "Balanced", Description: "Balance conclusions, analysis, and recommendations."},
+					{ID: "deep", Label: "Deep dive", Description: "Allow fuller argumentation, background, and detail."},
 				},
 				AllowFreeform: true,
 			},
@@ -376,31 +376,31 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 		return []engine.PlanQuestion{
 			{
 				ID:       "xlsx_goal",
-				Question: "这份表格最重要的分析目标是什么？",
+				Question: "What is the main analysis goal of this workbook?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "summary", Label: "经营摘要", Description: "先给核心 KPI、偏差与摘要。", Recommended: true},
-					{ID: "trend", Label: "趋势分析", Description: "强调时间维度变化和走势。"},
-					{ID: "detail", Label: "明细核对", Description: "强调明细表、核对与追溯。"},
+					{ID: "summary", Label: "Business summary", Description: "Lead with core KPIs, variance, and summary.", Recommended: true},
+					{ID: "trend", Label: "Trend analysis", Description: "Emphasize time-based changes and trajectories."},
+					{ID: "detail", Label: "Detail audit", Description: "Emphasize detailed tables, checking, and traceability."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "xlsx_granularity",
-				Question: "结果展示更偏向哪种粒度？",
+				Question: "What level of granularity should the output emphasize?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "monthly", Label: "按月", Description: "适合经营分析和趋势对比。", Recommended: true},
-					{ID: "quarterly", Label: "按季度", Description: "适合高层汇总和阶段复盘。"},
-					{ID: "custom", Label: "自定义维度", Description: "自己指定时间段、区域或产品维度。"},
+					{ID: "monthly", Label: "Monthly", Description: "Fits business analysis and trend comparison.", Recommended: true},
+					{ID: "quarterly", Label: "Quarterly", Description: "Fits executive summaries and stage reviews."},
+					{ID: "custom", Label: "Custom", Description: "Use custom time, region, or product dimensions."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "xlsx_view",
-				Question: "这份表格希望优先呈现哪种视角？",
+				Question: "Which perspective should this workbook prioritize?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "variance", Label: "预算偏差", Description: "强调实际值、预算值和差异。", Recommended: true},
-					{ID: "composition", Label: "结构拆分", Description: "强调地区、产品或渠道构成。"},
-					{ID: "pipeline", Label: "进度跟踪", Description: "强调状态、负责人和时间节点。"},
+					{ID: "variance", Label: "Budget variance", Description: "Emphasize actuals, budget, and variance.", Recommended: true},
+					{ID: "composition", Label: "Composition split", Description: "Emphasize regional, product, or channel mix."},
+					{ID: "pipeline", Label: "Progress tracking", Description: "Emphasize status, owner, and timeline milestones."},
 				},
 				AllowFreeform: true,
 			},
@@ -409,31 +409,31 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 		return []engine.PlanQuestion{
 			{
 				ID:       "ppt_audience",
-				Question: "这份内容主要给谁看？",
+				Question: "Who is the main audience for this deck?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "management", Label: "管理层", Description: "更强调结论、判断和决策建议。", Recommended: true},
-					{ID: "client", Label: "客户/外部伙伴", Description: "更强调价值、成果和说服力。"},
-					{ID: "team", Label: "团队内部", Description: "更强调背景、过程和执行细节。"},
+					{ID: "management", Label: "Leadership", Description: "Emphasize conclusions, judgment, and decisions.", Recommended: true},
+					{ID: "client", Label: "Client or partner", Description: "Emphasize value, outcomes, and persuasion."},
+					{ID: "team", Label: "Internal team", Description: "Emphasize background, process, and execution detail."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "ppt_goal",
-				Question: "这次汇报最希望先解决什么？",
+				Question: "What should this presentation solve first?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "decision", Label: "快速决策", Description: "优先呈现结论、依据和建议动作。", Recommended: true},
-					{ID: "alignment", Label: "统一认知", Description: "优先交代背景、现状和判断框架。"},
-					{ID: "progress", Label: "同步进展", Description: "优先说明结果、风险和下一步。"},
+					{ID: "decision", Label: "Fast decision", Description: "Prioritize conclusions, rationale, and recommended actions.", Recommended: true},
+					{ID: "alignment", Label: "Alignment", Description: "Prioritize background, current state, and the reasoning frame."},
+					{ID: "progress", Label: "Progress sync", Description: "Prioritize results, risks, and next steps."},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "ppt_shape",
-				Question: "你希望这份 PPT 更偏向哪种组织方式？",
+				Question: "What structure should this PPT lean toward?",
 				Options: []engine.PlanQuestionOption{
-					{ID: "concise", Label: "短而结论先行", Description: "页数更少，适合 6-8 页短汇报。", Recommended: true},
-					{ID: "balanced", Label: "平衡型", Description: "兼顾背景、过程和结论。"},
-					{ID: "detailed", Label: "内容更完整", Description: "允许更多页和更细解释。"},
+					{ID: "concise", Label: "Concise and conclusion-first", Description: "Use fewer slides and fit a 6-8 slide short deck.", Recommended: true},
+					{ID: "balanced", Label: "Balanced", Description: "Balance background, process, and conclusions."},
+					{ID: "detailed", Label: "More complete", Description: "Allow more slides and finer explanation."},
 				},
 				AllowFreeform: true,
 			},
@@ -447,100 +447,100 @@ func buildDynamicFallbackQuestions(req engine.PrepareExecutionPlanRequest, docum
 	case "docx":
 		questions := buildExecutionPlanQuestions("docx")
 		switch {
-		case containsAnyKeyword(prompt, "报告", "分析", "研究", "洞察"):
-			questions[0].Question = "这份分析文档最需要突出什么价值？"
+		case containsAnyKeyword(prompt, "report", "analysis", "research", "insight", "\u62a5\u544a", "\u5206\u6790", "\u7814\u7a76", "\u6d1e\u5bdf"):
+			questions[0].Question = "What value should this analytical document emphasize most?"
 			questions[0].Options = []engine.PlanQuestionOption{
-				{ID: "insight", Label: "关键洞察", Description: "先给结论、趋势和判断。", Recommended: true},
-				{ID: "strategy", Label: "策略建议", Description: "先给建议、路径和动作。"},
-				{ID: "evidence", Label: "论据依据", Description: "先给事实、数据和分析链路。"},
+				{ID: "insight", Label: "Key insights", Description: "Lead with conclusions, trends, and judgment.", Recommended: true},
+				{ID: "strategy", Label: "Strategic recommendations", Description: "Lead with recommendations, path, and actions."},
+				{ID: "evidence", Label: "Evidence base", Description: "Lead with facts, data, and analytical reasoning."},
 			}
-		case containsAnyKeyword(prompt, "方案", "规划", "建议书"):
-			questions[0].Question = "这份方案文档最该突出哪部分？"
+		case containsAnyKeyword(prompt, "proposal", "plan", "recommendation", "\u65b9\u6848", "\u89c4\u5212", "\u5efa\u8bae\u4e66"):
+			questions[0].Question = "Which part should this proposal emphasize most?"
 			questions[0].Options = []engine.PlanQuestionOption{
-				{ID: "path", Label: "实施路径", Description: "先讲目标、阶段和落地步骤。", Recommended: true},
-				{ID: "value", Label: "业务价值", Description: "先讲收益、影响和优先级。"},
-				{ID: "risk", Label: "风险与保障", Description: "先讲依赖、风险和兜底。"},
+				{ID: "path", Label: "Execution path", Description: "Lead with goals, phases, and rollout steps.", Recommended: true},
+				{ID: "value", Label: "Business value", Description: "Lead with benefits, impact, and priorities."},
+				{ID: "risk", Label: "Risk and safeguards", Description: "Lead with dependencies, risks, and mitigation."},
 			}
 		}
 		return questions
 	case "xlsx":
 		questions := buildExecutionPlanQuestions("xlsx")
 		switch {
-		case containsAnyKeyword(prompt, "预算", "偏差", "费用", "收入"):
-			questions[2].Question = "这份经营分析表最想先看到什么偏差视角？"
+		case containsAnyKeyword(prompt, "budget", "variance", "expense", "revenue", "\u9884\u7b97", "\u504f\u5dee", "\u8d39\u7528", "\u6536\u5165"):
+			questions[2].Question = "Which variance angle should this business-analysis workbook show first?"
 			questions[2].Options = []engine.PlanQuestionOption{
-				{ID: "budget", Label: "预算 vs 实际", Description: "先看偏差金额与原因。", Recommended: true},
-				{ID: "region", Label: "区域差异", Description: "先看地区间差异和表现。"},
-				{ID: "product", Label: "产品结构", Description: "先看产品线贡献和拖累。"},
+				{ID: "budget", Label: "Budget vs actual", Description: "Show variance amount and root causes first.", Recommended: true},
+				{ID: "region", Label: "Regional difference", Description: "Show performance gaps across regions first."},
+				{ID: "product", Label: "Product mix", Description: "Show product-line contribution and drag first."},
 			}
-		case containsAnyKeyword(prompt, "项目", "进度", "台账", "跟踪"):
-			questions[0].Question = "这份台账最重要的是哪类管理目标？"
+		case containsAnyKeyword(prompt, "project", "progress", "tracker", "tracking", "\u9879\u76ee", "\u8fdb\u5ea6", "\u53f0\u8d26", "\u8ddf\u8e2a"):
+			questions[0].Question = "What management goal matters most for this tracker?"
 			questions[0].Options = []engine.PlanQuestionOption{
-				{ID: "risk", Label: "风险预警", Description: "优先标记逾期、阻塞和异常。", Recommended: true},
-				{ID: "milestone", Label: "里程碑进度", Description: "优先跟踪关键节点达成情况。"},
-				{ID: "resource", Label: "资源协调", Description: "优先呈现负责人、依赖和资源状态。"},
+				{ID: "risk", Label: "Risk warning", Description: "Prioritize overdue, blocked, and abnormal items.", Recommended: true},
+				{ID: "milestone", Label: "Milestone progress", Description: "Prioritize the status of key milestones."},
+				{ID: "resource", Label: "Resource coordination", Description: "Prioritize owners, dependencies, and resource state."},
 			}
 		}
 		return questions
 	default:
 		questions := buildExecutionPlanQuestions("pptx")
 		switch {
-		case containsAnyKeyword(prompt, "融资", "路演", "投资人", "商业模式", "估值"):
+		case containsAnyKeyword(prompt, "fundraising", "roadshow", "investor", "business model", "valuation", "\u878d\u8d44", "\u8def\u6f14", "\u6295\u8d44\u4eba", "\u5546\u4e1a\u6a21\u5f0f", "\u4f30\u503c"):
 			return []engine.PlanQuestion{
 				{
 					ID:       "ppt_pitch_audience",
-					Question: "这次融资路演主要面对哪类听众？",
+					Question: "What audience is this fundraising deck primarily for?",
 					Options: []engine.PlanQuestionOption{
-						{ID: "vc", Label: "财务投资人", Description: "更关注市场空间、增长与回报。", Recommended: true},
-						{ID: "strategic", Label: "产业投资人", Description: "更关注协同价值和行业位置。"},
-						{ID: "mixed", Label: "混合受众", Description: "既要讲市场，也要讲产品和商业化。"},
+						{ID: "vc", Label: "Financial investors", Description: "Care more about market size, growth, and returns.", Recommended: true},
+						{ID: "strategic", Label: "Strategic investors", Description: "Care more about synergies and industry position."},
+						{ID: "mixed", Label: "Mixed audience", Description: "Need both market story and product/commercial story."},
 					},
 					AllowFreeform: true,
 				},
 				{
 					ID:       "ppt_pitch_focus",
-					Question: "这次路演最想先打动对方哪一点？",
+					Question: "What should this roadshow win the audience on first?",
 					Options: []engine.PlanQuestionOption{
-						{ID: "market", Label: "市场机会", Description: "先放大赛道空间、痛点和窗口期。", Recommended: true},
-						{ID: "product", Label: "产品与壁垒", Description: "先讲产品能力、差异化和护城河。"},
-						{ID: "business", Label: "商业模式", Description: "先讲收入逻辑、增长路径和融资用途。"},
+						{ID: "market", Label: "Market opportunity", Description: "Lead with market size, pain points, and timing window.", Recommended: true},
+						{ID: "product", Label: "Product and moat", Description: "Lead with capability, differentiation, and defensibility."},
+						{ID: "business", Label: "Business model", Description: "Lead with revenue logic, growth path, and use of funds."},
 					},
 					AllowFreeform: true,
 				},
 				questions[1],
 				questions[2],
 			}
-		case containsAnyKeyword(prompt, "项目", "汇报", "进度", "里程碑", "复盘", "计划", "季度"):
+		case containsAnyKeyword(prompt, "project", "update", "progress", "milestone", "review", "plan", "quarterly", "\u9879\u76ee", "\u6c47\u62a5", "\u8fdb\u5ea6", "\u91cc\u7a0b\u7891", "\u590d\u76d8", "\u8ba1\u5212", "\u5b63\u5ea6"):
 			return []engine.PlanQuestion{
 				{
 					ID:            "ppt_report_audience",
-					Question:      "这次项目汇报主要给谁看？",
+					Question:      "Who is the main audience for this project update?",
 					Options:       questions[0].Options,
 					AllowFreeform: true,
 				},
 				{
 					ID:       "ppt_report_focus",
-					Question: "这次项目汇报最该突出什么？",
+					Question: "What should this project update emphasize most?",
 					Options: []engine.PlanQuestionOption{
-						{ID: "progress", Label: "当前进度", Description: "优先说明里程碑推进到哪里。", Recommended: true},
-						{ID: "achievements", Label: "阶段成果", Description: "优先强调已经拿到的结果和亮点。"},
-						{ID: "next_plan", Label: "后续计划与风险", Description: "优先讲下一步安排、风险和资源诉求。"},
+						{ID: "progress", Label: "Current progress", Description: "Prioritize milestone status and advancement.", Recommended: true},
+						{ID: "achievements", Label: "Stage achievements", Description: "Prioritize results and highlights already delivered."},
+						{ID: "next_plan", Label: "Next plan and risks", Description: "Prioritize next steps, risks, and resource asks."},
 					},
 					AllowFreeform: true,
 				},
 				questions[1],
 				questions[2],
 			}
-		case containsAnyKeyword(prompt, "培训", "课堂", "教学", "分享"):
+		case containsAnyKeyword(prompt, "training", "class", "teaching", "sharing", "\u57f9\u8bad", "\u8bfe\u5802", "\u6559\u5b66", "\u5206\u4eab"):
 			return []engine.PlanQuestion{
 				questions[0],
 				{
 					ID:       "ppt_share_focus",
-					Question: "这次分享最希望听众先记住什么？",
+					Question: "What should the audience remember first from this session?",
 					Options: []engine.PlanQuestionOption{
-						{ID: "framework", Label: "核心框架", Description: "先建立概念和结构。", Recommended: true},
-						{ID: "case", Label: "案例示例", Description: "先用案例帮助理解。"},
-						{ID: "practice", Label: "实操步骤", Description: "先讲可落地的方法和动作。"},
+						{ID: "framework", Label: "Core framework", Description: "Establish the concept and structure first.", Recommended: true},
+						{ID: "case", Label: "Case example", Description: "Use examples first to improve understanding."},
+						{ID: "practice", Label: "Practical steps", Description: "Lead with actionable methods and steps."},
 					},
 					AllowFreeform: true,
 				},

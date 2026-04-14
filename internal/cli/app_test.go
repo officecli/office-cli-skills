@@ -213,16 +213,16 @@ func TestRenderProgress_TTYAnimatesAndFinalizesStage(t *testing.T) {
 
 	out := &terminalBuffer{}
 	renderer := NewProgressRenderer(out, false, true)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "正在生成文档内容"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "Generating document content"})
 	time.Sleep(30 * time.Millisecond)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "completed", Content: "已生成文档内容"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "completed", Content: "Generated document content"})
 
 	raw := out.String()
 	if !strings.Contains(raw, "⠋") || !strings.Contains(raw, "⠙") {
 		t.Fatalf("expected multiple spinner frames, got %q", raw)
 	}
 	history := strings.Join(out.History(), "\n")
-	if !strings.Contains(history, "✔ 已生成文档内容") {
+	if !strings.Contains(history, "✔ Generated document content") {
 		t.Fatalf("expected finalized success line, got %q", history)
 	}
 }
@@ -253,10 +253,10 @@ func TestAppRun_NewInvokesInstalledSkillPreflight(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "介绍这款企业协作平台", "--json", "--no-publish"}); err != nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "Introduce this enterprise collaboration platform", "--json", "--no-publish"}); err != nil {
 		t.Fatalf("Run(new): %v", err)
 	}
 	if _, err := os.Stat(markerPath); err != nil {
@@ -289,10 +289,10 @@ func TestAppRun_NewPreflightSetsSkipEnvForScriptChildren(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"}); err != nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--json", "--no-publish"}); err != nil {
 		t.Fatalf("Run(new): %v", err)
 	}
 	raw, err := os.ReadFile(markerPath)
@@ -329,10 +329,10 @@ func TestAppRun_NewNoPublishSetsSkipPublishEnvForPreflight(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"}); err != nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--json", "--no-publish"}); err != nil {
 		t.Fatalf("Run(new): %v", err)
 	}
 	raw, err := os.ReadFile(markerPath)
@@ -363,7 +363,7 @@ func TestAppRun_NewFailsWhenInstalledSkillPreflightFails(t *testing.T) {
 	app.officeTaskPreflight = func(ctx context.Context, command string, args []string) error {
 		return fmt.Errorf("boom")
 	}
-	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"})
+	err = app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--json", "--no-publish"})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected preflight failure, got %v", err)
 	}
@@ -392,11 +392,11 @@ func TestAppRun_NewSurfacesLLMRequestFailureBody(t *testing.T) {
 		return fakeAppLLMClient{jsonErr: fmt.Errorf("llm request failed: invalid json response body=<html><body>bad gateway</body></html>")}, nil
 	}
 
-	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "介绍这款企业协作平台", "--json", "--no-publish"})
+	err = app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "Introduce this enterprise collaboration platform", "--json", "--no-publish"})
 	if err == nil {
 		t.Fatal("expected llm failure")
 	}
-	if !strings.Contains(err.Error(), "生成内容阶段失败：生成内容阶段失败：llm request failed: invalid json response body=<html><body>bad gateway</body></html>") {
+	if !strings.Contains(err.Error(), "content generation failed: content generation failed: llm request failed: invalid json response body=<html><body>bad gateway</body></html>") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -427,10 +427,10 @@ func TestAppRun_NewReloadsConfigAfterInstalledSkillPreflight(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--no-publish"}); err != nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--no-publish"}); err != nil {
 		t.Fatalf("Run(new): %v", err)
 	}
 	entries, err := os.ReadDir(updatedOutDir)
@@ -470,10 +470,10 @@ func TestAppRun_NewRetriesPreflightAfterSkillRefresh(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	if err := app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "--json", "--no-publish"}); err != nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--json", "--no-publish"}); err != nil {
 		t.Fatalf("Run(new): %v", err)
 	}
 	raw, err := os.ReadFile(counterPath)
@@ -492,17 +492,17 @@ func TestRenderProgress_TTYClearsTrailingCharactersForShorterMessage(t *testing.
 
 	out := &terminalBuffer{}
 	renderer := NewProgressRenderer(out, false, true)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "这是一个非常非常长的阶段文案"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "This is a very long stage message"})
 	time.Sleep(10 * time.Millisecond)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "短文案"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "Short line"})
 	time.Sleep(10 * time.Millisecond)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "completed", Content: "已完成短文案"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "completed", Content: "Short line completed"})
 
 	history := strings.Join(out.History(), "\n")
-	if strings.Contains(history, "短文案常") || strings.Contains(history, "短文案阶段") {
+	if strings.Contains(history, "Short linege") || strings.Contains(history, "Short linessage") {
 		t.Fatalf("expected trailing characters to be cleared, got %q", history)
 	}
-	if !strings.Contains(history, "✔ 已完成短文案") {
+	if !strings.Contains(history, "✔ Short line completed") {
 		t.Fatalf("expected completed short line, got %q", history)
 	}
 }
@@ -514,9 +514,9 @@ func TestRenderProgress_PauseStopsSpinnerAndPrintsWaitingLine(t *testing.T) {
 
 	out := &terminalBuffer{}
 	renderer := NewProgressRenderer(out, false, true)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "question", Status: "running", Content: "正在等待你回答补充问题"})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "question", Status: "running", Content: "Waiting for your answer to a follow-up question"})
 	time.Sleep(15 * time.Millisecond)
-	renderer.Pause("等待你输入答案")
+	renderer.Pause("Waiting for your input")
 	rawAfterPause := out.String()
 	time.Sleep(20 * time.Millisecond)
 
@@ -524,7 +524,7 @@ func TestRenderProgress_PauseStopsSpinnerAndPrintsWaitingLine(t *testing.T) {
 		t.Fatalf("expected spinner to stop after pause")
 	}
 	history := strings.Join(out.History(), "\n")
-	if !strings.Contains(history, "… 等待你输入答案") {
+	if !strings.Contains(history, "… Waiting for your input") {
 		t.Fatalf("expected waiting line after pause, got %q", history)
 	}
 }
@@ -532,14 +532,14 @@ func TestRenderProgress_PauseStopsSpinnerAndPrintsWaitingLine(t *testing.T) {
 func TestRenderProgress_NonTTYPrintsStageLines(t *testing.T) {
 	var out bytes.Buffer
 	renderer := NewProgressRenderer(&out, false, false)
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "license", Status: "running", Content: "正在校验授权", ElapsedMs: 5})
-	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "正在生成文档内容", ElapsedMs: 15})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "license", Status: "running", Content: "Checking access status", ElapsedMs: 5})
+	renderer.Emit(context.Background(), engine.ProgressEvent{Step: "generate", Status: "running", Content: "Generating document content", ElapsedMs: 15})
 
 	output := out.String()
 	if strings.Contains(output, "%") {
 		t.Fatalf("progress output should not contain percent: %s", output)
 	}
-	for _, needle := range []string{"正在校验授权", "正在生成文档内容"} {
+	for _, needle := range []string{"Checking access status", "Generating document content"} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("progress output missing %q: %s", needle, output)
 		}
@@ -567,21 +567,21 @@ func TestAppRun_NewShowsProgressBeforeFinalResult(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},"slides":[{"title":"企业协作平台介绍","layout":"title","subtitle":"产品和企业状况","isTitle":true},{"title":"产品能力","layout":"content","points":["多人协作","实时编辑","企业管理"]}]}`, delay: 25 * time.Millisecond}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},"slides":[{"title":"Enterprise Collaboration Platform Overview","layout":"title","subtitle":"Product context and business status","isTitle":true},{"title":"Product Capabilities","layout":"content","points":["Multi-user collaboration","Real-time editing","Enterprise administration"]}]}`, delay: 25 * time.Millisecond}, nil
 	}
 
-	err = app.Run(t.Context(), []string{"new", "pptx", "企业协作平台介绍", "介绍这款企业协作平台的产品能力、客户价值与应用场景", "--no-publish"})
+	err = app.Run(t.Context(), []string{"new", "pptx", "Enterprise Collaboration Platform Overview", "Describe the product capabilities, customer value, and use cases of this collaboration platform.", "--no-publish"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
 	output := stdout.String()
-	for _, needle := range []string{"正在校验授权", "正在生成文档内容", "正在写入本地文件", "生成完成！已保存至"} {
+	for _, needle := range []string{"Checking access status", "Generating document content", "Writing local files", "Generation completed. Saved to"} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("stdout missing %q: %s", needle, output)
 		}
 	}
-	if strings.Index(output, "正在生成文档内容") > strings.Index(output, "生成完成！已保存至") {
+	if strings.Index(output, "Generating document content") > strings.Index(output, "Generation completed. Saved to") {
 		t.Fatalf("progress should appear before final result: %s", output)
 	}
 }
@@ -611,10 +611,10 @@ func TestAppRun_NewTTYShowsSpinnerFrames(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},"slides":[{"title":"企业协作平台介绍","layout":"title","subtitle":"产品和企业状况","isTitle":true},{"title":"产品能力","layout":"content","points":["多人协作","实时编辑","企业管理"]}]}`, delay: 25 * time.Millisecond}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},"slides":[{"title":"Enterprise Collaboration Platform Overview","layout":"title","subtitle":"Product context and business status","isTitle":true},{"title":"Product Capabilities","layout":"content","points":["Multi-user collaboration","Real-time editing","Enterprise administration"]}]}`, delay: 25 * time.Millisecond}, nil
 	}
 
-	err = app.Run(t.Context(), []string{"new", "pptx", "企业协作平台介绍", "介绍这款企业协作平台的产品能力、客户价值与应用场景", "--no-publish"})
+	err = app.Run(t.Context(), []string{"new", "pptx", "Enterprise Collaboration Platform Overview", "Describe the product capabilities, customer value, and use cases of this collaboration platform.", "--no-publish"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -624,7 +624,7 @@ func TestAppRun_NewTTYShowsSpinnerFrames(t *testing.T) {
 		t.Fatalf("expected spinner frames in tty output, got %q", raw)
 	}
 	history := strings.Join(stdout.History(), "\n")
-	for _, needle := range []string{"✔ 授权校验完成", "✔ 文档已生成", "生成完成！已保存至"} {
+	for _, needle := range []string{"✔ Access check completed", "✔ Document generated", "Generation completed. Saved to"} {
 		if !strings.Contains(history, needle) {
 			t.Fatalf("tty history missing %q: %s", needle, history)
 		}
@@ -652,10 +652,10 @@ func TestAppRun_NewJSONSkipsProgressOutput(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
 	}
 
-	err = app.Run(t.Context(), []string{"new", "docx", "企业协作平台介绍", "介绍这款企业协作平台", "--json", "--no-publish"})
+	err = app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "Introduce this enterprise collaboration platform", "--json", "--no-publish"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -683,8 +683,8 @@ func TestBuildGenerateJob_PromptPrecedence(t *testing.T) {
 	cfg := Config{}
 	job, err := BuildGenerateJob([]string{
 		"pptx",
-		"位置标题",
-		"位置描述",
+		"Positional Title",
+		"Positional Description",
 		"--prompt-file", promptFile,
 		"--prompt", "from flag",
 	}, cfg, InputSources{
@@ -699,7 +699,7 @@ func TestBuildGenerateJob_PromptPrecedence(t *testing.T) {
 	if job.Prompt != "from flag" {
 		t.Fatalf("prompt = %q, want flag value", job.Prompt)
 	}
-	if job.Topic != "位置标题" {
+	if job.Topic != "Positional Title" {
 		t.Fatalf("topic = %q", job.Topic)
 	}
 }
@@ -713,8 +713,8 @@ func TestBuildGenerateJob_UsesPromptFileBeforeStdinAndPositionals(t *testing.T) 
 
 	job, err := BuildGenerateJob([]string{
 		"docx",
-		"文档标题",
-		"位置描述",
+		"Document Title",
+		"Positional Description",
 		"--prompt-file", promptFile,
 	}, Config{}, InputSources{
 		Stdin: "from stdin",
@@ -736,7 +736,7 @@ func TestBuildGenerateJob_PublishFlagsOverrideConfig(t *testing.T) {
 
 	job, err := BuildGenerateJob([]string{
 		"xlsx",
-		"报表",
+		"Report",
 		"--no-publish",
 	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
 	if err != nil {
@@ -750,7 +750,7 @@ func TestBuildGenerateJob_PublishFlagsOverrideConfig(t *testing.T) {
 func TestBuildGenerateJob_ImagesEnabledByDefault(t *testing.T) {
 	job, err := BuildGenerateJob([]string{
 		"pptx",
-		"带图演示",
+		"Illustrated Demo",
 	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
@@ -763,7 +763,7 @@ func TestBuildGenerateJob_ImagesEnabledByDefault(t *testing.T) {
 func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 	job, err := BuildGenerateJob([]string{
 		"pptx",
-		"带图演示",
+		"Illustrated Demo",
 		"--no-images",
 	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
 	if err != nil {
@@ -780,7 +780,7 @@ func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T)
 
 	job, err := BuildGenerateJob([]string{
 		"pptx",
-		"董事会汇报",
+		"Board Presentation",
 		"--local-preview",
 	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
 	if err != nil {
@@ -846,20 +846,20 @@ func TestAppRun_HelpOutput(t *testing.T) {
 	output := stdout.String()
 	for _, needle := range []string{
 		"officecli",
-		"config                  查看或更新本地配置",
-		"auth                    查看或设置授权信息",
-		"score                   按需开启本地 PPTX 评分",
+		"config                  View or update local configuration",
+		"auth                    View or update access settings",
+		"score                   Run PPTX scoring on demand",
 		"new <pptx|docx|xlsx> <topic> [brief]",
 		"officecli config status",
 		"officecli score --help",
 		"officecli auth --help",
 		"officecli new --help",
-		"子命令：",
-		"默认行为：",
-		"配置文件：",
+		"Commands:",
+		"Default behavior:",
+		"Config file:",
 		"macOS   ~/Library/Application Support/officecli/config.json",
 		"Linux   ~/.config/officecli/config.json",
-		"officecli new pptx \"企业协作平台介绍\" \"介绍这款企业协作平台的产品能力、客户价值与应用场景\"",
+		"officecli new pptx \"Enterprise Collaboration Platform Overview\" \"Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform\"",
 	} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("help output missing %q: %s", needle, output)
@@ -875,10 +875,10 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		args    []string
 		needles []string
 	}{
-		{args: []string{"config", "--help"}, needles: []string{"用法：", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
-		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "查看额度状态"}},
-		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "评分默认不会在生成后自动执行"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best", "默认会尝试自动配图", "officecli config set-generation"}},
+		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
+		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
+		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best", "automatic PPT images", "officecli config set-generation"}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
@@ -976,7 +976,7 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	if !updated || !restarted {
 		t.Fatalf("updated=%t restarted=%t", updated, restarted)
 	}
-	if !strings.Contains(stdout.String(), "检测到 officecli 有可用更新") {
+	if !strings.Contains(stdout.String(), "Update available for officecli") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if stderr.Len() != 0 {
@@ -1019,10 +1019,10 @@ func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "检测到 officecli 有可用更新") {
+	if !strings.Contains(output, "Update available for officecli") {
 		t.Fatalf("stdout = %q", output)
 	}
-	if !strings.Contains(output, "配置文件路径：") {
+	if !strings.Contains(output, "Config file:") {
 		t.Fatalf("expected command to continue, got %q", output)
 	}
 }
@@ -1055,7 +1055,7 @@ func TestAppRun_UpdateCheckSkipsJSONAndHelp(t *testing.T) {
 		t.Fatal("checkForUpdates should not be called")
 		return UpdateInfo{}, nil
 	}
-	if err := app.Run(t.Context(), []string{"new", "docx", "季度复盘", "--json", "--no-publish"}); err == nil {
+	if err := app.Run(t.Context(), []string{"new", "docx", "Quarterly Retrospective", "--json", "--no-publish"}); err == nil {
 		t.Fatal("expected config-related error for missing setup")
 	}
 }
@@ -1102,7 +1102,7 @@ func TestAppRun_ConfigSetGenerationWritesConfig(t *testing.T) {
 	if strings.Contains(content, "\"image_base_url\"") {
 		t.Fatalf("config should reuse text generation service by default: %s", content)
 	}
-	if !strings.Contains(stdout.String(), "已更新生成服务配置") {
+	if !strings.Contains(stdout.String(), "Updated generation service config") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "--no-images") {
@@ -1154,7 +1154,7 @@ func TestAppRun_ConfigSetLicenseUsesFixedPlatformURL(t *testing.T) {
 	if !strings.Contains(content, "https://platform.officecli.io") {
 		t.Fatalf("config = %s", content)
 	}
-	if strings.Contains(stdout.String(), "请输入额度服务地址") {
+	if strings.Contains(stdout.String(), "Enter the license service URL") {
 		t.Fatalf("stdout should not prompt for license base url: %s", stdout.String())
 	}
 }
@@ -1205,7 +1205,7 @@ func TestAppRun_ConfigSetDefaultsWritesConfig(t *testing.T) {
 			t.Fatalf("config missing %q: %s", needle, content)
 		}
 	}
-	if !strings.Contains(stdout.String(), "已更新默认配置") {
+	if !strings.Contains(stdout.String(), "Updated default config") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -1233,7 +1233,7 @@ func TestAppRun_ConfigStatusShowsProductState(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	output := stdout.String()
-	for _, needle := range []string{"配置文件路径：", "生成服务已配置：true", "图片生成配置：未单独配置（默认复用生成服务）", "额度校验已启用：true", "默认输出目录：./out", "默认生成模式：best", "生成后默认发布：true"} {
+	for _, needle := range []string{"Config file:", "Generation service configured: true", "Image generation config: Not configured separately (reuses the generation service by default)", "Access checks enabled: true", "Default output directory: ./out", "Default generation mode: best", "Publish by default after generation: true"} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("status missing %q: %s", needle, output)
 		}
@@ -1249,7 +1249,7 @@ func TestAppRun_MissingGenerationConfigShowsConfigGuidance(t *testing.T) {
 	var stderr bytes.Buffer
 	app := NewApp(&stdout, &stderr, bytes.NewBuffer(nil))
 
-	err := app.Run(t.Context(), []string{"new", "pptx", "企业协作平台介绍", "介绍这款企业协作平台"})
+	err := app.Run(t.Context(), []string{"new", "pptx", "Enterprise Collaboration Platform Overview", "Introduce this enterprise collaboration platform"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1287,7 +1287,7 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 				Allowed:       false,
 				AccessMode:    LicenseAccessModeBlocked,
 				FreeRemaining: 0,
-				Message:       "免费额度已用完，请在配置文件中填写 license.api_key 后重试。",
+				Message:       "Free quota is exhausted. Add license.api_key to the config file and try again.",
 			},
 		}, nil
 	}
@@ -1296,11 +1296,11 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 		return fakeAppLLMClient{}, nil
 	}
 
-	err = app.Run(t.Context(), []string{"new", "pptx", "主题"})
+	err = app.Run(t.Context(), []string{"new", "pptx", "Topic"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "免费额度已用完") {
+	if !strings.Contains(err.Error(), "Free quota is exhausted") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if llmCalled {
@@ -1347,7 +1347,7 @@ func TestAppRun_AuthSetKeyWritesConfig(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-license\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "已写入付费额度密钥") {
+	if !strings.Contains(stdout.String(), "Saved the paid API key") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -1391,7 +1391,7 @@ func TestAppRun_AuthSetKeyPromptsWhenArgMissing(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-interactive\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "请输入付费额度密钥") {
+	if !strings.Contains(stdout.String(), "Enter the paid API key") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -1450,7 +1450,7 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "当前授权状态：paid") || !strings.Contains(output, "剩余付费次数：8") {
+	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Paid generations remaining: 8") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -1467,10 +1467,10 @@ func TestAppRun_AuthStatusShowsDisabledWhenLicenseServiceNotEnabled(t *testing.T
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "当前授权状态：未启用") {
+	if !strings.Contains(output, "Current access mode: disabled") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if strings.Contains(output, "当前授权状态：paid") {
+	if strings.Contains(output, "Current access mode: paid") {
 		t.Fatalf("stdout should not pretend to be paid: %s", output)
 	}
 }
@@ -1493,7 +1493,7 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "当前授权状态：reward") || !strings.Contains(output, "剩余奖励次数：5") {
+	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward generations remaining: 5") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -1511,7 +1511,7 @@ func TestCheckLicensePaidQuotaExhaustedShowsPaidMessage(t *testing.T) {
 	}
 
 	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
-	if err == nil || !strings.Contains(err.Error(), "次数已耗尽") {
+	if err == nil || !strings.Contains(err.Error(), "out of quota") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -1536,7 +1536,7 @@ func TestCheckLicenseRejectsTamperedReplayProof(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "license proof 校验失败") {
+	if !strings.Contains(err.Error(), "license proof validation failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1591,7 +1591,7 @@ func TestCheckLicenseRejectsExpiredProof(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "license proof 校验失败") {
+	if !strings.Contains(err.Error(), "license proof validation failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1621,7 +1621,7 @@ func TestCheckLicenseOfflineWithPaidKeyRequiresOnlineValidation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "当前付费模式要求在线校验") {
+	if !strings.Contains(err.Error(), "Paid access requires online validation") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1639,7 +1639,7 @@ func TestCheckLicenseWhenDisabledReturnsBypassMessage(t *testing.T) {
 	if !result.Allowed || result.AccessMode != LicenseAccessModeDisabled {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-	if !strings.Contains(result.Message, "未接入额度校验服务") {
+	if !strings.Contains(result.Message, "Access checks are not configured") {
 		t.Fatalf("unexpected message: %+v", result)
 	}
 }
@@ -1667,7 +1667,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 				Allowed:       true,
 				AccessMode:    LicenseAccessModeFree,
 				FreeRemaining: 3,
-				Message:       "当前为免费模式",
+				Message:       "Current mode: free.",
 			},
 		}, nil
 	}
@@ -1677,16 +1677,16 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "当前授权状态：free") {
+	if !strings.Contains(output, "Current access mode: free") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "剩余免费次数：3") {
+	if !strings.Contains(output, "Free generations remaining: 3") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "额度校验已启用：true") {
+	if !strings.Contains(output, "Access checks enabled: true") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "付费额度密钥已配置：false") {
+	if !strings.Contains(output, "Paid API key configured: false") {
 		t.Fatalf("stdout = %s", output)
 	}
 }

@@ -7,12 +7,12 @@ import (
 
 func TestBuildDOCXClassifyPrompt_IncludesParagraphContext(t *testing.T) {
 	prompt := BuildDOCXClassifyPrompt(DOCXClassifyPromptInput{
-		DocumentName:     "项目方案",
-		Paragraphs:       []string{"第一段原文", "第二段原文"},
-		UserPrompt:       "把第二段改成更正式的语气",
+		DocumentName:     "Project Proposal",
+		Paragraphs:       []string{"Original first paragraph", "Original second paragraph"},
+		UserPrompt:       "Rewrite the second paragraph in a more formal tone",
 		SelectionContext: map[string]any{"selectionKind": "text"},
 	})
-	for _, needle := range []string{"项目方案", "第一段原文", "第二段原文", "把第二段改成更正式的语气", "selectionKind"} {
+	for _, needle := range []string{"Project Proposal", "Original first paragraph", "Original second paragraph", "Rewrite the second paragraph in a more formal tone", "selectionKind"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q: %s", needle, prompt)
 		}
@@ -21,12 +21,12 @@ func TestBuildDOCXClassifyPrompt_IncludesParagraphContext(t *testing.T) {
 
 func TestBuildXLSXClassifyPrompt_IncludesWorksheetContext(t *testing.T) {
 	prompt := BuildXLSXClassifyPrompt(XLSXClassifyPromptInput{
-		DocumentName:       "销售报表",
-		WorksheetSummaries: []map[string]any{{"worksheetKey": "sheet1", "rows": [][]string{{"区域", "金额"}, {"华东", "100"}}}},
-		UserPrompt:         "把华东金额调高",
+		DocumentName:       "Sales Report",
+		WorksheetSummaries: []map[string]any{{"worksheetKey": "sheet1", "rows": [][]string{{"Region", "Amount"}, {"East", "100"}}}},
+		UserPrompt:         "Increase the amount for East",
 		SelectionContext:   map[string]any{"selectionKind": "cell"},
 	})
-	for _, needle := range []string{"销售报表", "sheet1", "华东", "100", "把华东金额调高"} {
+	for _, needle := range []string{"Sales Report", "sheet1", "East", "100", "Increase the amount for East"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q: %s", needle, prompt)
 		}
@@ -34,7 +34,7 @@ func TestBuildXLSXClassifyPrompt_IncludesWorksheetContext(t *testing.T) {
 }
 
 func TestParseDOCXClassifyIntentResult_ParsesAndValidates(t *testing.T) {
-	result, err := ParseAndValidateDOCXClassifyIntent(`{"action":"modify_current_document","modifyIntent":"replace_docx_paragraph","targetMetadata":{"scope":"paragraph","paragraphIndex":2,"elementType":"paragraph"},"confidence":0.95,"reason":"用户明确要求修改第二段内容"}`)
+	result, err := ParseAndValidateDOCXClassifyIntent(`{"action":"modify_current_document","modifyIntent":"replace_docx_paragraph","targetMetadata":{"scope":"paragraph","paragraphIndex":2,"elementType":"paragraph"},"confidence":0.95,"reason":"The user explicitly asked to revise the second paragraph"}`)
 	if err != nil {
 		t.Fatalf("ParseAndValidateDOCXClassifyIntent: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestParseDOCXClassifyIntentResult_ParsesAndValidates(t *testing.T) {
 }
 
 func TestParseXLSXClassifyIntentResult_ParsesAndValidates(t *testing.T) {
-	result, err := ParseAndValidateXLSXClassifyIntent(`{"action":"modify_current_document","modifyIntent":"update_xlsx_cells","targetMetadata":{"scope":"worksheet","worksheetIndex":1,"elementType":"cells"},"confidence":0.88,"reason":"用户要求更新表格数值"}`)
+	result, err := ParseAndValidateXLSXClassifyIntent(`{"action":"modify_current_document","modifyIntent":"update_xlsx_cells","targetMetadata":{"scope":"worksheet","worksheetIndex":1,"elementType":"cells"},"confidence":0.88,"reason":"The user asked to update worksheet values"}`)
 	if err != nil {
 		t.Fatalf("ParseAndValidateXLSXClassifyIntent: %v", err)
 	}

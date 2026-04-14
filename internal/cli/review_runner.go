@@ -31,7 +31,7 @@ func (a *App) runReview(ctx context.Context, cfg Config, args []string) error {
 		return err
 	}
 	if job.FailBelow > 0 && result.OverallScore < job.FailBelow {
-		return fmt.Errorf("评估失败：总分 %d 低于阈值 %d", result.OverallScore, job.FailBelow)
+		return fmt.Errorf("review failed: total score %d is below the threshold %d", result.OverallScore, job.FailBelow)
 	}
 	return nil
 }

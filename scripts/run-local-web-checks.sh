@@ -17,23 +17,23 @@ case "${MODE}" in
     ;;
 esac
 
-phase "前端检查 (${MODE})"
+phase "Frontend checks (${MODE})"
 
 phase "platform-app tests"
 run_cmd bash -lc "cd '${REPO_ROOT}/platform/web/app' && npm test -- --run"
-pass "platform-app tests 完成"
+pass "platform-app tests completed"
 
 phase "platform-admin tests"
 run_cmd bash -lc "cd '${REPO_ROOT}/platform/web/admin' && npm test -- --run"
-pass "platform-admin tests 完成"
+pass "platform-admin tests completed"
 
 if [[ "${MODE}" == "full" ]]; then
   if [[ "${SKIP_SITE}" != "1" ]]; then
     phase "platform-site tests"
     run_cmd bash -lc "cd '${REPO_ROOT}/platform/web/site' && npm test -- --run"
-    pass "platform-site tests 完成"
+    pass "platform-site tests completed"
   else
-    warn "LOCAL_TEST_SKIP_SITE=1，跳过 platform-site tests"
+    warn "LOCAL_TEST_SKIP_SITE=1, skipping platform-site tests"
   fi
 
   if [[ "${SKIP_BUILD}" != "1" ]]; then
@@ -43,10 +43,10 @@ if [[ "${MODE}" == "full" ]]; then
     if [[ "${SKIP_SITE}" != "1" ]]; then
       run_cmd bash -lc "cd '${REPO_ROOT}/platform/web/site' && npm run build"
     fi
-    pass "platform web builds 完成"
+    pass "platform web builds completed"
   else
-    warn "LOCAL_TEST_SKIP_BUILD=1，跳过前端 build"
+    warn "LOCAL_TEST_SKIP_BUILD=1, skipping frontend builds"
   fi
 fi
 
-phase "前端检查完成 (${MODE})"
+phase "Frontend checks completed (${MODE})"

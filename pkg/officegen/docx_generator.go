@@ -8,30 +8,30 @@ import (
 	"time"
 )
 
-// DocxParagraph 表示文档中的一个段落
+// DocxParagraph represents a paragraph in the document.
 type DocxParagraph struct {
-	Text    string `json:"text"`    // 段落文本
-	Level   int    `json:"level"`   // 标题级别: 0=正文, 1-6=标题级别
-	IsBold  bool   `json:"isBold"`  // 是否加粗
-	IsList  bool   `json:"isList"`  // 是否列表项
-	ListNum int    `json:"listNum"` // 列表序号(0 表示无序列表)
+	Text    string `json:"text"`    // Paragraph text.
+	Level   int    `json:"level"`   // Heading level: 0=body, 1-6=heading.
+	IsBold  bool   `json:"isBold"`  // Whether the paragraph is bold.
+	IsList  bool   `json:"isList"`  // Whether the paragraph is a list item.
+	ListNum int    `json:"listNum"` // List index; 0 means unordered list.
 }
 
-// DOCXOptions 配置生成选项
+// DOCXOptions configures DOCX generation.
 type DOCXOptions struct {
-	Title   string // 文档标题
-	Creator string // 作者
+	Title   string // Document title.
+	Creator string // Document creator.
 }
 
-// DOCXGenerator DOCX 生成器
+// DOCXGenerator builds DOCX files.
 type DOCXGenerator struct{}
 
-// NewDOCXGenerator 创建 DOCX 生成器实例
+// NewDOCXGenerator creates a DOCX generator instance.
 func NewDOCXGenerator() *DOCXGenerator {
 	return &DOCXGenerator{}
 }
 
-// Generate 生成 DOCX 并返回字节流
+// Generate builds a DOCX file and returns its bytes.
 func (g *DOCXGenerator) Generate(paragraphs []DocxParagraph, opts DOCXOptions) ([]byte, error) {
 	if len(paragraphs) == 0 {
 		return nil, fmt.Errorf("paragraphs cannot be empty")
@@ -118,16 +118,16 @@ func (g *DOCXGenerator) generateDocumentXML(paragraphs []DocxParagraph) string {
 }
 
 func (g *DOCXGenerator) createParagraphXML(p DocxParagraph) string {
-	// 段落属性
+	// Paragraph properties.
 	pPr := ""
 	rPr := ""
 
 	if p.Level >= 1 && p.Level <= 6 {
-		// 标题段落
+		// Heading paragraph.
 		pPr = fmt.Sprintf(`            <w:pPr><w:pStyle w:val="Heading%d"/></w:pPr>
 `, p.Level)
 	} else if p.IsList {
-		// 列表项
+		// List item.
 		numFmt := "bullet"
 		if p.ListNum > 0 {
 			numFmt = "decimal"
@@ -147,7 +147,7 @@ func (g *DOCXGenerator) createParagraphXML(p DocxParagraph) string {
 `
 	}
 
-	// 处理多行文本：每行一个 run，中间用换行符分隔
+	// Split multi-line text into separate runs with line breaks.
 	lines := strings.Split(p.Text, "\n")
 	var runs strings.Builder
 	for i, line := range lines {
@@ -166,7 +166,7 @@ func (g *DOCXGenerator) createParagraphXML(p DocxParagraph) string {
 `, pPr, runs.String())
 }
 
-// ---- 静态模板 ----
+// ---- Static templates ----
 
 const docxContentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">

@@ -50,9 +50,9 @@ func TestAppRun_ReviewJSONOutput(t *testing.T) {
 		FilePath:       deckPath,
 		OverallScore:   82,
 		StructureScore: 82,
-		Summary:        "结构检查通过。",
-		Strengths:      []string{"结构清晰"},
-		Warnings:       []string{"已显式关闭视觉评审，当前结果仅包含结构检查。"},
+		Summary:        "Structural checks passed.",
+		Strengths:      []string{"Clear structure"},
+		Warnings:       []string{"Visual review was disabled explicitly. The result only contains structural checks."},
 	}}
 	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
 		return stub, nil
@@ -87,7 +87,7 @@ func TestAppRun_ScoreJSONOutput(t *testing.T) {
 		FilePath:       deckPath,
 		OverallScore:   90,
 		StructureScore: 90,
-		Summary:        "结构良好。",
+		Summary:        "The deck is structurally solid.",
 	}}
 	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
 		return stub, nil
@@ -115,7 +115,7 @@ func TestAppRun_ReviewFailBelowReturnsError(t *testing.T) {
 			FilePath:       deckPath,
 			OverallScore:   60,
 			StructureScore: 60,
-			Summary:        "问题较多。",
+			Summary:        "Several issues need attention.",
 		}}, nil
 	}
 
@@ -123,10 +123,10 @@ func TestAppRun_ReviewFailBelowReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected fail-below error")
 	}
-	if !strings.Contains(err.Error(), "低于阈值 80") {
+	if !strings.Contains(err.Error(), "below the threshold 80") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "评估完成：总分 60") {
+	if !strings.Contains(stdout.String(), "Review completed: total score 60") {
 		t.Fatalf("expected rendered output, got %q", stdout.String())
 	}
 }

@@ -115,7 +115,7 @@ func OfficePromptTargetsTextSelection(prompt string) bool {
 	if normalized == "" {
 		return false
 	}
-	for _, keyword := range []string{"当前选中", "选中的", "框选", "选区"} {
+	for _, keyword := range []string{"currently selected", "selected text", "selection", "highlighted text"} {
 		if strings.Contains(normalized, keyword) {
 			return true
 		}

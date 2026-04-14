@@ -22,13 +22,13 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
-		emitProgress(ctx, progress, progressStepLicense, "running", "正在校验授权")
-		licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
-		if err != nil {
-			emitProgress(ctx, progress, progressStepLicense, "failed", "授权校验失败")
-			return GenerateResult{}, err
-		}
-		emitProgress(ctx, progress, progressStepLicense, "completed", "授权校验完成")
+	emitProgress(ctx, progress, progressStepLicense, "running", "Checking access status")
+	licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
+	if err != nil {
+		emitProgress(ctx, progress, progressStepLicense, "failed", "Access check failed")
+		return GenerateResult{}, err
+	}
+	emitProgress(ctx, progress, progressStepLicense, "completed", "Access check completed")
 	job.LicenseCheck = licenseCheck
 
 	var llmClient GeneratorLLMClient

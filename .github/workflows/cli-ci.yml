@@ -53,6 +53,9 @@ jobs:
       - name: Run CLI tests
         run: go test ./...
 
+      - name: Enforce English-only tracked text
+        run: python3 ./scripts/check-no-han.py
+
       - name: Build CLI binary
         run: make build
 

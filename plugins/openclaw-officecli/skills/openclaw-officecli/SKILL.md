@@ -13,9 +13,9 @@ This skill lets an OpenClaw agent generate local `pptx`, `docx`, and `xlsx` file
 
 Trigger when the user clearly wants a file artifact, for example:
 
-- `生成一个五页的 PPT，介绍企业协作平台`
-- `帮我写一份给客户的 docx`
-- `做一个预算 excel 表`
+- `generate a five-slide PPT about an enterprise collaboration platform`
+- `write a customer-facing docx for me`
+- `create a budget excel sheet`
 - `turn this into slides`
 - `write a docx for customers`
 

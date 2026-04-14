@@ -80,10 +80,10 @@ func ValidateConfig(cfg Config) error {
 		return nil
 	}
 	if strings.TrimSpace(effectiveBaseURL(cfg)) == "" {
-		return errors.New("缺少必填环境变量，请补全在线预览发布服务地址")
+		return errors.New("missing required configuration: online preview publishing service URL")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" && !canUseEmbeddedDynamicAuth(cfg) {
-		return errors.New("缺少必填环境变量，请补全在线预览发布访问凭证")
+		return errors.New("missing required configuration: online preview publishing credential")
 	}
 	return nil
 }

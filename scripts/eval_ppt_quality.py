@@ -11,93 +11,93 @@ from pathlib import Path
 CASES = [
     {
         "id": "company",
-        "category": "公司介绍",
-        "topic": "企业协作平台介绍",
-        "brief": "为潜在企业客户介绍企业协作平台的核心能力、客户价值、典型场景与落地方式。",
-        "audience": "潜在企业客户",
-        "style": "专业克制",
-        "lang": "zh-CN",
+        "category": "Company Overview",
+        "topic": "Enterprise Collaboration Platform Overview",
+        "brief": "Introduce the core capabilities, customer value, typical scenarios, and rollout path of an enterprise collaboration platform to prospective enterprise customers.",
+        "audience": "Prospective enterprise customers",
+        "style": "Professional and restrained",
+        "lang": "en-US",
     },
     {
         "id": "market",
-        "category": "行业/市场分析",
-        "topic": "AI 办公出海市场机会分析",
-        "brief": "面向管理层分析 AI 办公出海的市场空间、区域机会、竞争格局、进入策略与风险提示。",
-        "audience": "管理层",
-        "style": "结论先行",
-        "lang": "zh-CN",
+        "category": "Industry / Market Analysis",
+        "topic": "Global Expansion Opportunity Analysis for AI Productivity",
+        "brief": "Analyze market size, regional opportunities, competitive landscape, market-entry strategy, and key risks for AI productivity going global, aimed at leadership.",
+        "audience": "Leadership",
+        "style": "Conclusion first",
+        "lang": "en-US",
     },
     {
         "id": "ops",
-        "category": "经营/数据汇报",
-        "topic": "SaaS 季度经营复盘",
-        "brief": "面向经营团队复盘季度收入、获客、留存、成本与下季度经营动作，要求数据驱动。",
-        "audience": "经营团队",
-        "style": "数据驱动",
-        "lang": "zh-CN",
+        "category": "Operations / Data Review",
+        "topic": "SaaS Quarterly Business Review",
+        "brief": "Review quarterly revenue, acquisition, retention, cost structure, and next-quarter operating actions for the operating team with a data-driven narrative.",
+        "audience": "Operations team",
+        "style": "Data-driven",
+        "lang": "en-US",
     },
     {
         "id": "launch",
-        "category": "产品发布方案",
-        "topic": "OfficeCLI 新版本发布方案",
-        "brief": "面向跨部门项目组给出新版本发布目标、节奏、资源分工、风险预案与里程碑。",
-        "audience": "跨部门项目组",
-        "style": "行动导向",
-        "lang": "zh-CN",
+        "category": "Product Launch Plan",
+        "topic": "OfficeCLI New Release Plan",
+        "brief": "Provide release goals, cadence, ownership split, risk mitigation, and milestones for a cross-functional launch team.",
+        "audience": "Cross-functional launch team",
+        "style": "Action-oriented",
+        "lang": "en-US",
     },
     {
         "id": "training",
-        "category": "培训/教程",
-        "topic": "OfficeCLI 新员工上手培训",
-        "brief": "面向新员工说明 OfficeCLI 的定位、常用命令、典型流程、注意事项与上手建议。",
-        "audience": "新员工",
-        "style": "清晰易学",
-        "lang": "zh-CN",
+        "category": "Training / Tutorial",
+        "topic": "OfficeCLI New Hire Onboarding",
+        "brief": "Explain positioning, common commands, standard workflows, key cautions, and onboarding advice for new hires using OfficeCLI.",
+        "audience": "New hires",
+        "style": "Clear and easy to learn",
+        "lang": "en-US",
     },
     {
         "id": "company_exec",
-        "category": "公司介绍",
-        "topic": "企业协作平台管理层介绍",
-        "brief": "面向企业管理层介绍协作平台的业务价值、治理能力、投入产出与分阶段推进建议。",
-        "audience": "企业管理层",
-        "style": "结论先行",
-        "lang": "zh-CN",
+        "category": "Company Overview",
+        "topic": "Enterprise Collaboration Platform for Leadership",
+        "brief": "Explain business value, governance capabilities, ROI, and phased rollout recommendations for an enterprise leadership audience.",
+        "audience": "Enterprise leadership",
+        "style": "Conclusion first",
+        "lang": "en-US",
     },
     {
         "id": "market_finance",
-        "category": "行业/市场分析",
-        "topic": "AI 办公行业竞争格局与进入窗口",
-        "brief": "面向投资与战略团队分析 AI 办公行业竞争格局、进入窗口、区域优先级与风险边界。",
-        "audience": "投资与战略团队",
-        "style": "结论先行",
-        "lang": "zh-CN",
+        "category": "Industry / Market Analysis",
+        "topic": "AI Productivity Competitive Landscape and Entry Window",
+        "brief": "Analyze the competitive landscape, entry window, regional priorities, and risk boundaries of the AI productivity market for investment and strategy teams.",
+        "audience": "Investment and strategy team",
+        "style": "Conclusion first",
+        "lang": "en-US",
     },
     {
         "id": "ops_board",
-        "category": "经营/数据汇报",
-        "topic": "SaaS 月度经营看板复盘",
-        "brief": "面向经营管理层复盘月度新增、续费、回款、交付效率与下月纠偏动作，要求数据驱动。",
-        "audience": "经营管理层",
-        "style": "数据驱动",
-        "lang": "zh-CN",
+        "category": "Operations / Data Review",
+        "topic": "SaaS Monthly Operating Dashboard Review",
+        "brief": "Review monthly new business, renewals, collections, delivery efficiency, and next-month corrective actions for operating leadership with a data-driven narrative.",
+        "audience": "Operating leadership",
+        "style": "Data-driven",
+        "lang": "en-US",
     },
     {
         "id": "launch_gtm",
-        "category": "产品发布方案",
-        "topic": "OfficeCLI 新版本 GTM 协同方案",
-        "brief": "面向产品、销售、运营和客服团队制定新版本上市节奏、资源分工、风险预案与上线后跟踪机制。",
-        "audience": "产品销售运营客服联合团队",
-        "style": "行动导向",
-        "lang": "zh-CN",
+        "category": "Product Launch Plan",
+        "topic": "OfficeCLI New Release GTM Coordination Plan",
+        "brief": "Define launch cadence, ownership split, contingency plans, and post-launch tracking for product, sales, operations, and support teams.",
+        "audience": "Product, sales, operations, and support team",
+        "style": "Action-oriented",
+        "lang": "en-US",
     },
     {
         "id": "training_ops",
-        "category": "培训/教程",
-        "topic": "OfficeCLI 日常使用入门培训",
-        "brief": "面向一线同学讲解 OfficeCLI 的安装检查、常用命令、生成与 review 配合方式，以及常见误区。",
-        "audience": "一线业务同学",
-        "style": "清晰易学",
-        "lang": "zh-CN",
+        "category": "Training / Tutorial",
+        "topic": "OfficeCLI Daily Usage Basics",
+        "brief": "Teach frontline users the install checks, common commands, generate/review workflow, and common pitfalls of OfficeCLI.",
+        "audience": "Frontline business users",
+        "style": "Clear and easy to learn",
+        "lang": "en-US",
     },
 ]
 
@@ -140,29 +140,29 @@ def select_cases(suite):
 def normalize_bin_cmd(value):
     parts = shlex.split(value)
     if not parts:
-        raise ValueError("--bin 不能为空")
+        raise ValueError("--bin cannot be empty")
     return parts
 
 
 def build_summary_markdown(report):
     lines = [
-        "# PPT 质量评测汇总",
+        "# PPT Quality Evaluation Summary",
         "",
-        f"- 套件：{report['suite']}",
-        f"- 安装版本：{report['installed_version']}",
-        f"- 整体状态：{report['status']}",
-        f"- 样例数：{len(report['cases'])}",
-        f"- 通过线：overall >= {report['pass_score']} / visual >= {report['min_visual_score']} / medium <= {report['max_medium_count']} / 必须无 high",
+        f"- Suite: {report['suite']}",
+        f"- Installed version: {report['installed_version']}",
+        f"- Overall status: {report['status']}",
+        f"- Case count: {len(report['cases'])}",
+        f"- Pass threshold: overall >= {report['pass_score']} / visual >= {report['min_visual_score']} / medium <= {report['max_medium_count']} / high must be 0",
         "",
-        "| 样例 | 发布 | 总分 | 视觉分 | 结构分 | high | medium | 结果 | 视觉 | 在线预览 | 关键问题 |",
+        "| Case | Published | Overall | Visual | Structure | high | medium | Result | Visual Review | Online Preview | Top Issues |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
     ]
     for item in report["cases"]:
-        issues = "；".join(item["top_issues"]) if item["top_issues"] else "-"
+        issues = "; ".join(item["top_issues"]) if item["top_issues"] else "-"
         preview = item.get("access_url") or "-"
-        publish_state = "已发布" if item.get("published") else "未发布"
-        result = "通过" if item["passed"] else "未通过"
-        visual = "已检查" if item.get("used_visual") else "跳过"
+        publish_state = "yes" if item.get("published") else "no"
+        result = "passed" if item["passed"] else "failed"
+        visual = "used" if item.get("used_visual") else "skipped"
         lines.append(
             f"| {item['category']} | {publish_state} | {item['overall_score']} | {item['visual_score']} | {item['structure_score']} | "
             f"{item['high_count']} | {item['medium_count']} | {result} | {visual} | {preview} | {issues} |"
@@ -171,18 +171,18 @@ def build_summary_markdown(report):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="批量生成并评审固定 PPT 质量样例。")
-    parser.add_argument("--date", default="2026-04-07", help="输出日期目录，例如 2026-04-07")
-    parser.add_argument("--round", dest="round_name", default="baseline", help="轮次名称，例如 baseline / round-1")
-    parser.add_argument("--suite", choices=sorted(SUITES.keys()), default="full", help="评测套件")
-    parser.add_argument("--bin", default="go run ./cmd/officecli", help="officecli 执行命令")
-    parser.add_argument("--root", default=".", help="仓库根目录")
-    parser.add_argument("--publish", action="store_true", help="生成后发布在线预览")
-    parser.add_argument("--version-label", default="unknown", help="安装版本标识")
-    parser.add_argument("--pass-score", type=int, default=None, help="通过所需最低 overall 分")
-    parser.add_argument("--min-visual-score", type=int, default=None, help="通过所需最低 visual 分")
-    parser.add_argument("--max-medium-count", type=int, default=None, help="通过允许的 medium 问题上限")
-    parser.add_argument("--require-visual", action="store_true", help="要求所有样例都必须完成视觉评审")
+    parser = argparse.ArgumentParser(description="Generate and review a fixed set of PPT quality cases in batch.")
+    parser.add_argument("--date", default="2026-04-07", help="Output date directory, for example 2026-04-07")
+    parser.add_argument("--round", dest="round_name", default="baseline", help="Round name, for example baseline or round-1")
+    parser.add_argument("--suite", choices=sorted(SUITES.keys()), default="full", help="Evaluation suite")
+    parser.add_argument("--bin", default="go run ./cmd/officecli", help="officecli execution command")
+    parser.add_argument("--root", default=".", help="Repository root")
+    parser.add_argument("--publish", action="store_true", help="Publish online previews after generation")
+    parser.add_argument("--version-label", default="unknown", help="Installed version label")
+    parser.add_argument("--pass-score", type=int, default=None, help="Minimum overall score required to pass")
+    parser.add_argument("--min-visual-score", type=int, default=None, help="Minimum visual score required to pass")
+    parser.add_argument("--max-medium-count", type=int, default=None, help="Maximum allowed medium issue count")
+    parser.add_argument("--require-visual", action="store_true", help="Require visual review for every case")
     args = parser.parse_args()
 
     repo = Path(args.root).resolve()
@@ -205,20 +205,20 @@ def main():
         write_json(blocked_path, payload)
 
     if shutil.which("soffice") is None:
-        write_blocker("未找到 soffice，无法执行 PDF 视觉评审。", "")
-        print("阻塞：未找到 soffice，无法执行 PDF 视觉评审。", file=sys.stderr)
+        write_blocker("soffice was not found, so PDF visual review cannot run.", "")
+        print("Blocked: soffice was not found, so PDF visual review cannot run.", file=sys.stderr)
         return 2
 
     bin_cmd = normalize_bin_cmd(args.bin)
     config_status = run_text(bin_cmd + ["config", "status"], repo)
-    if "生成服务已配置：true" not in config_status:
-        write_blocker("当前 generation 服务未配置，无法执行真实生成闭环。", config_status.strip())
-        print("阻塞：当前 generation 服务未配置，无法执行真实生成闭环。", file=sys.stderr)
+    if "Generation service configured: true" not in config_status:
+        write_blocker("The generation service is not configured, so the end-to-end generation flow cannot run.", config_status.strip())
+        print("Blocked: the generation service is not configured, so the end-to-end generation flow cannot run.", file=sys.stderr)
         print(config_status.strip(), file=sys.stderr)
         return 2
-    if args.publish and "在线预览发布已启用：true" not in config_status:
-        write_blocker("当前在线预览发布未启用，无法验证 ClaudeOffice 预览地址。", config_status.strip())
-        print("阻塞：当前在线预览发布未启用。", file=sys.stderr)
+    if args.publish and "Online preview publishing enabled: true" not in config_status:
+        write_blocker("Online preview publishing is not enabled, so the ClaudeOffice preview URL cannot be validated.", config_status.strip())
+        print("Blocked: online preview publishing is not enabled.", file=sys.stderr)
         print(config_status.strip(), file=sys.stderr)
         return 2
 
@@ -335,8 +335,8 @@ def main():
                 }
             )
     except Exception as exc:
-        write_blocker("生成或 review 链路执行失败。", str(exc))
-        print(f"阻塞：{exc}", file=sys.stderr)
+        write_blocker("The generate or review flow failed.", str(exc))
+        print(f"Blocked: {exc}", file=sys.stderr)
         return 2
 
     write_json(summary_path, report)

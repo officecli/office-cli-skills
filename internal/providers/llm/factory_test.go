@@ -66,8 +66,8 @@ func TestOpenAIClient_CompleteTextFallsBackToStreaming(t *testing.T) {
 			t.Fatalf("expected json request, got %q", r.Header.Get("Content-Type"))
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"测试\"}}]}\n\n")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"成功\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\" success\"}}]}\n\n")
 		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -82,12 +82,12 @@ func TestOpenAIClient_CompleteTextFallsBackToStreaming(t *testing.T) {
 	}
 
 	content, err := client.CompleteText(context.Background(), []engine.LLMMessage{
-		{Role: "user", Content: "只回复测试成功"},
+		{Role: "user", Content: "Reply with test success only"},
 	})
 	if err != nil {
 		t.Fatalf("CompleteText: %v", err)
 	}
-	if content != "测试成功" {
+	if content != "test success" {
 		t.Fatalf("unexpected content: %q", content)
 	}
 	if requestCount != 2 {
@@ -110,8 +110,8 @@ func TestOpenAIClient_CompleteTextFallsBackToStreamingWhenContentIsEmpty(t *test
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"流式\"}}]}\n\n")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"补救\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"stream\"}}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\" fallback\"}}]}\n\n")
 		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -126,12 +126,12 @@ func TestOpenAIClient_CompleteTextFallsBackToStreamingWhenContentIsEmpty(t *test
 	}
 
 	content, err := client.CompleteText(context.Background(), []engine.LLMMessage{
-		{Role: "user", Content: "只回复流式补救"},
+		{Role: "user", Content: "Reply with stream fallback only"},
 	})
 	if err != nil {
 		t.Fatalf("CompleteText: %v", err)
 	}
-	if content != "流式补救" {
+	if content != "stream fallback" {
 		t.Fatalf("unexpected content: %q", content)
 	}
 	if requestCount != 2 {
@@ -162,7 +162,7 @@ func TestOpenAIClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testi
 	}
 
 	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{
-		{Role: "user", Content: "返回 JSON"},
+		{Role: "user", Content: "Return JSON"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -206,7 +206,7 @@ func TestOpenAIClient_CompleteTextReturnsLLMRequestFailedForInvalidStreamingPayl
 	}
 
 	_, err = client.CompleteText(context.Background(), []engine.LLMMessage{
-		{Role: "user", Content: "只回复测试"},
+		{Role: "user", Content: "Reply with test only"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -242,7 +242,7 @@ func TestInternalClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *tes
 	}
 
 	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{
-		{Role: "user", Content: "返回 JSON"},
+		{Role: "user", Content: "Return JSON"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -284,7 +284,7 @@ func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 	}
 
 	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
-		Prompt: "生成一张蓝色文件夹插图",
+		Prompt: "Generate an illustration of a blue folder",
 	})
 	if err != nil {
 		t.Fatalf("GenerateImage: %v", err)

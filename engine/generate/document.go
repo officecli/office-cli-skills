@@ -13,155 +13,155 @@ type DOCXTarget = PromptTarget
 type XLSXTarget = PromptTarget
 
 func BuildDOCXPrompt(description string, target DOCXTarget) string {
-	return fmt.Sprintf(`请根据以下需求生成一个Word文档的JSON结构。
+	return fmt.Sprintf(`Generate a JSON structure for a Word document based on the following request.
 
-需求：%s
+Request: %s
 %s
 
-请严格按照以下JSON格式输出（不要包含任何其他内容）：
+Return only valid JSON in exactly this shape:
 {
-  "title": "文档标题",
+  "title": "Document title",
   "sections": [
     {
-      "heading": "章节标题",
+      "heading": "Section heading",
       "level": 1,
-      "paragraphs": ["段落内容1", "段落内容2"]
+      "paragraphs": ["Paragraph 1", "Paragraph 2"]
     }
   ]
 }
 
-要求：
-- 生成结构完整的文档
-- 包含标题、正文、结论等部分
-- 内容专业、逻辑清晰`, description, FormatDocumentPromptTarget(target))
+Requirements:
+- Build a complete document structure
+- Include title, body, conclusion, and other relevant sections
+- Keep the content professional and logically structured`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildDOCXBestSpecPrompt(description string, target DOCXTarget) string {
-	return fmt.Sprintf(`请先为以下 Word 文档需求生成“结构蓝图”。
+	return fmt.Sprintf(`First produce a structural blueprint for the following Word document request.
 
-需求：%s
+Request: %s
 %s
 
-请只输出 JSON：
+Return JSON only:
 {
-  "title":"文档标题",
-  "goal":"文档目标",
-  "audience":"读者对象",
-  "tone":"写作风格",
+  "title":"Document title",
+  "goal":"Document goal",
+  "audience":"Target readers",
+  "tone":"Writing tone",
   "sections":[
-    {"heading":"章节标题","summary":"该章节要覆盖的核心内容"}
+    {"heading":"Section heading","summary":"Core content this section should cover"}
   ]
 }
 
-要求：
-- 只定义结构，不写完整正文
-- 章节顺序要完整，适合后续扩写`, description, FormatDocumentPromptTarget(target))
+Requirements:
+- Define the structure only, not the full prose
+- Keep the section order complete and ready for expansion`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildDOCXBestDraftPrompt(description string, target DOCXTarget, spec string) string {
-	return fmt.Sprintf(`请根据以下需求和结构蓝图，生成最终 Word 文档 JSON。
+	return fmt.Sprintf(`Generate the final Word document JSON from the request and blueprint below.
 
-需求：%s
+Request: %s
 %s
 
-结构蓝图：
+Blueprint:
 %s
 
-请严格按照以下 JSON 输出：
+Return JSON in exactly this shape:
 {
-  "title": "文档标题",
+  "title": "Document title",
   "sections": [
     {
-      "heading": "章节标题",
+      "heading": "Section heading",
       "level": 1,
-      "paragraphs": ["段落内容1", "段落内容2"]
+      "paragraphs": ["Paragraph 1", "Paragraph 2"]
     }
   ]
 }
 
-要求：
-- 每个章节都要补全成可直接交付的正文
-- 内容避免空话，信息密度高
-- 不要输出 JSON 之外的任何文字`, description, FormatDocumentPromptTarget(target), spec)
+Requirements:
+- Expand every section into delivery-ready prose
+- Avoid filler and keep the information density high
+- Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
 func BuildXLSXPrompt(description string, target XLSXTarget) string {
-	return fmt.Sprintf(`请根据以下需求生成一个Excel表格的JSON结构。
+	return fmt.Sprintf(`Generate a JSON structure for an Excel workbook based on the following request.
 
-需求：%s
+Request: %s
 %s
 
-请严格按照以下JSON格式输出（不要包含任何其他内容）：
+Return only valid JSON in exactly this shape:
 {
-  "title": "表格标题",
+  "title": "Workbook title",
   "sheets": [
     {
       "name": "Sheet1",
-      "headers": ["列1", "列2", "列3"],
+      "headers": ["Column 1", "Column 2", "Column 3"],
       "rows": [
-        ["数据1", "数据2", "数据3"],
-        ["数据4", "数据5", "数据6"]
+        ["Value 1", "Value 2", "Value 3"],
+        ["Value 4", "Value 5", "Value 6"]
       ]
     }
   ]
 }
 
-要求：
-- 生成有意义的数据
-- 包含表头和数据行
-- 数据格式规范`, description, FormatDocumentPromptTarget(target))
+Requirements:
+- Generate meaningful data
+- Include headers and data rows
+- Keep the data format clean and consistent`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildXLSXBestSpecPrompt(description string, target XLSXTarget) string {
-	return fmt.Sprintf(`请先为以下 Excel 需求生成“工作簿蓝图”。
+	return fmt.Sprintf(`First produce a workbook blueprint for the following Excel request.
 
-需求：%s
+Request: %s
 %s
 
-请只输出 JSON：
+Return JSON only:
 {
-  "title":"表格标题",
-  "goal":"分析目标",
-  "audience":"使用对象",
-  "analysisDimensions":["维度1","维度2"],
+  "title":"Workbook title",
+  "goal":"Analysis goal",
+  "audience":"Target users",
+  "analysisDimensions":["Dimension 1","Dimension 2"],
   "sheets":[
-    {"name":"Sheet1","columns":["列1","列2"],"summary":"该工作表负责什么分析"}
+    {"name":"Sheet1","columns":["Column 1","Column 2"],"summary":"What analysis this sheet covers"}
   ]
 }
 
-要求：
-- 先规划工作表结构，再补数据
-- 工作表命名和列设计要与需求匹配`, description, FormatDocumentPromptTarget(target))
+Requirements:
+- Plan the workbook structure before filling in data
+- Align sheet names and columns with the request`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildXLSXBestDraftPrompt(description string, target XLSXTarget, spec string) string {
-	return fmt.Sprintf(`请根据以下需求和工作簿蓝图，生成最终 Excel JSON。
+	return fmt.Sprintf(`Generate the final Excel JSON from the request and workbook blueprint below.
 
-需求：%s
+Request: %s
 %s
 
-工作簿蓝图：
+Workbook blueprint:
 %s
 
-请严格按照以下 JSON 输出：
+Return JSON in exactly this shape:
 {
-  "title": "表格标题",
+  "title": "Workbook title",
   "sheets": [
     {
       "name": "Sheet1",
-      "headers": ["列1", "列2", "列3"],
+      "headers": ["Column 1", "Column 2", "Column 3"],
       "rows": [
-        ["数据1", "数据2", "数据3"],
-        ["数据4", "数据5", "数据6"]
+        ["Value 1", "Value 2", "Value 3"],
+        ["Value 4", "Value 5", "Value 6"]
       ]
     }
   ]
 }
 
-要求：
-- 数据要和蓝图中的列定义一致
-- 每个 sheet 至少提供 2 行有效数据
-- 不要输出 JSON 之外的任何文字`, description, FormatDocumentPromptTarget(target), spec)
+Requirements:
+- Match the blueprint's column definitions
+- Provide at least 2 valid data rows per sheet
+- Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
 func FormatDocumentPromptTarget(target PromptTarget) string {
@@ -170,18 +170,18 @@ func FormatDocumentPromptTarget(target PromptTarget) string {
 	}
 	parts := make([]string, 0, 4)
 	if target.DocType != "" {
-		parts = append(parts, "文档类型="+target.DocType)
+		parts = append(parts, "document_type="+target.DocType)
 	}
 	if target.Language != "" {
-		parts = append(parts, "语言="+target.Language)
+		parts = append(parts, "language="+target.Language)
 	}
 	if target.Style != "" {
-		parts = append(parts, "风格="+target.Style)
+		parts = append(parts, "style="+target.Style)
 	}
 	if target.Audience != "" {
-		parts = append(parts, "受众="+target.Audience)
+		parts = append(parts, "audience="+target.Audience)
 	}
-	return "补充要求：" + strings.Join(parts, "；")
+	return "Additional requirements: " + strings.Join(parts, "; ")
 }
 
 func BuildDOCXFromJSON(content, fallbackDescription string) ([]byte, string, error) {

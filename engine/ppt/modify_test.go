@@ -18,13 +18,13 @@ func TestSanitizeHexColor(t *testing.T) {
 }
 
 func TestApplyModification_ReplaceSlideTitle(t *testing.T) {
-	base, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{{Title: "旧标题", Layout: "title", IsTitle: true}}, officegen.PPTXOptions{Title: "deck", Creator: "test"})
+	base, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{{Title: "Old title", Layout: "title", IsTitle: true}}, officegen.PPTXOptions{Title: "deck", Creator: "test"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	modified, err := ApplyModification("replace_slide_title", base, &ModifyOperation{
 		SlideIndex: 1,
-		Operation:  ModifyOperationPayload{NewTitle: "新标题"},
+		Operation:  ModifyOperationPayload{NewTitle: "Updated title"},
 	})
 	if err != nil {
 		t.Fatalf("ApplyModification: %v", err)
@@ -33,7 +33,7 @@ func TestApplyModification_ReplaceSlideTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractContentXML: %v", err)
 	}
-	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "新标题") {
+	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Updated title") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
 	}
 }

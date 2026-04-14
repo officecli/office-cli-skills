@@ -33,10 +33,10 @@ func TestParseRewriteSlideBlueprintAndRenderOperation(t *testing.T) {
 }
 
 func TestRewriteOutputContainsOOXMLJargon(t *testing.T) {
-	if !RewriteOutputContainsOOXMLJargon(`<a:t>geometry</a:t><a:t>正常内容</a:t>`) {
+	if !RewriteOutputContainsOOXMLJargon(`<a:t>geometry</a:t><a:t>Normal content</a:t>`) {
 		t.Fatal("expected jargon detection")
 	}
-	if RewriteOutputContainsOOXMLJargon(`<a:t>正常内容</a:t>`) {
+	if RewriteOutputContainsOOXMLJargon(`<a:t>Normal content</a:t>`) {
 		t.Fatal("expected non-jargon content")
 	}
 }

@@ -18,7 +18,7 @@ import (
 var (
 	slideNumPattern        = regexp.MustCompile(`slide(\d+)\.xml$`)
 	paragraphPattern       = regexp.MustCompile(`(?s)<a:p\b`)
-	placeholderTextPattern = regexp.MustCompile(`(?i)(IMG_PLACEHOLDER_|click to add|单击此处添加|点击此处添加|placeholder)`) //nolint:lll
+	placeholderTextPattern = regexp.MustCompile(`(?i)(IMG_PLACEHOLDER_|click to add|placeholder)`) //nolint:lll
 	fontFamilyPattern      = regexp.MustCompile(`typeface="([^"]+)"`)
 )
 
@@ -58,10 +58,10 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			issues = append(issues, Issue{
 				Severity:     "high",
 				Code:         "EMPTY_SLIDE",
-				Title:        "存在空白页",
-				Message:      fmt.Sprintf("第 %d 页没有可见文本内容，容易给受众留下未完成的印象。", slideNumber),
+				Title:        "Empty slide detected",
+				Message:      fmt.Sprintf("Slide %d has no visible text content and may look unfinished to the audience.", slideNumber),
 				SlideNumbers: []int{slideNumber},
-				Suggestion:   "补充该页核心信息，或直接删除该空白页。",
+				Suggestion:   "Add the core message for this slide, or remove the empty slide.",
 			})
 			continue
 		}
@@ -75,10 +75,10 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			issues = append(issues, Issue{
 				Severity:     "medium",
 				Code:         "TEXT_DENSITY_HIGH",
-				Title:        "单页文字密度偏高",
-				Message:      fmt.Sprintf("第 %d 页文本量较大，当前约 %d 个字符，阅读负担偏重。", slideNumber, totalChars),
+				Title:        "Text density is too high",
+				Message:      fmt.Sprintf("Slide %d contains a large amount of text, currently about %d characters, which increases reading load.", slideNumber, totalChars),
 				SlideNumbers: []int{slideNumber},
-				Suggestion:   "压缩句子长度，拆分成两页，或改成图表/指标表达。",
+				Suggestion:   "Shorten the sentences, split the content into two slides, or convert it into charts or metrics.",
 			})
 		}
 
@@ -88,10 +88,10 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			issues = append(issues, Issue{
 				Severity:     "medium",
 				Code:         "BULLET_OVERLOAD",
-				Title:        "项目符号过多",
-				Message:      fmt.Sprintf("第 %d 页包含较多分点（约 %d 段），重点容易失焦。", slideNumber, maxInt(paragraphs, len(nonEmptyRuns))),
+				Title:        "Too many bullet points",
+				Message:      fmt.Sprintf("Slide %d contains too many bullet points (about %d paragraphs), which makes the main point harder to follow.", slideNumber, maxInt(paragraphs, len(nonEmptyRuns))),
 				SlideNumbers: []int{slideNumber},
-				Suggestion:   "保留 3-5 个主结论，其余内容下沉到备注或下一页。",
+				Suggestion:   "Keep 3-5 main takeaways and move the rest into speaker notes or a follow-up slide.",
 			})
 		}
 
@@ -100,10 +100,10 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			issues = append(issues, Issue{
 				Severity:     "high",
 				Code:         "PLACEHOLDER_RESIDUE",
-				Title:        "疑似残留模板占位符",
-				Message:      fmt.Sprintf("第 %d 页包含占位符或模板痕迹，说明内容可能未完全收口。", slideNumber),
+				Title:        "Template placeholder residue",
+				Message:      fmt.Sprintf("Slide %d still contains placeholder or template residue, which suggests the content may be unfinished.", slideNumber),
 				SlideNumbers: []int{slideNumber},
-				Suggestion:   "清理模板文案、占位框和测试素材，确保所有元素都为最终内容。",
+				Suggestion:   "Remove template copy, placeholders, and test assets so every element reflects final content.",
 			})
 		}
 	}
@@ -116,25 +116,25 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 		issues = append(issues, Issue{
 			Severity:   "medium",
 			Code:       "FONT_INCONSISTENT",
-			Title:      "字体体系不够统一",
-			Message:    fmt.Sprintf("当前文档检测到 %d 种字体族，视觉一致性可能受影响。", len(fonts)),
-			Suggestion: "收敛到 1 组中英文字体组合，避免同一套 deck 出现过多字体。",
+			Title:      "Font system is inconsistent",
+			Message:    fmt.Sprintf("The document uses %d font families, which may weaken visual consistency.", len(fonts)),
+			Suggestion: "Limit the deck to one coordinated font system instead of mixing many fonts.",
 		})
 	} else {
-		strengths = append(strengths, "字体使用基本收敛，没有明显的字体滥用迹象")
+		strengths = append(strengths, "Font usage is mostly consistent without obvious overuse.")
 	}
 
 	if !hasEmptySlide {
-		strengths = append(strengths, "所有页面都有明确文本内容，没有出现明显空白页")
+		strengths = append(strengths, "Every slide contains visible text content and there are no obvious blank slides.")
 	}
 	if !hasDenseSlide {
-		strengths = append(strengths, "页面文字密度整体可控，适合演示场景阅读")
+		strengths = append(strengths, "Text density stays within a readable range for presentation use.")
 	}
 	if !hasBulletOverflow {
-		strengths = append(strengths, "页面分点数量整体克制，重点相对集中")
+		strengths = append(strengths, "Bullet usage stays restrained and the main points remain focused.")
 	}
 	if !hasPlaceholderResidue {
-		strengths = append(strengths, "没有检测到明显的模板占位符残留")
+		strengths = append(strengths, "No obvious template placeholder residue was detected.")
 	}
 
 	score := 100
@@ -145,9 +145,9 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 		score = 0
 	}
 
-	summary := fmt.Sprintf("共检查 %d 页，发现 %d 个结构问题。", len(paths), len(issues))
+	summary := fmt.Sprintf("Checked %d slides and found %d structural issues.", len(paths), len(issues))
 	if len(issues) == 0 {
-		summary = fmt.Sprintf("共检查 %d 页，结构规则未发现明显问题。", len(paths))
+		summary = fmt.Sprintf("Checked %d slides and found no obvious structural issues.", len(paths))
 	}
 
 	return StructureReport{

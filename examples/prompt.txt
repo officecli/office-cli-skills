@@ -1,7 +1,7 @@
-请生成一份企业协作平台产品介绍 PPT：
+Please generate a PPT introducing an enterprise collaboration platform:
 
-- 面向中大型企业客户
-- 重点讲协作能力、权限管理、知识沉淀和安全性
-- 风格专业、克制、结论先行
-- 控制在 6 页以内
-- 希望结构包含：封面、产品定位、核心能力、企业价值、安全与管控、总结
+- Target mid-size and large enterprise customers
+- Focus on collaboration features, permission management, knowledge retention, and security
+- Keep the tone professional, restrained, and conclusion-first
+- Limit the deck to 6 slides or fewer
+- Use this structure: cover, product positioning, core capabilities, business value, security and governance, summary

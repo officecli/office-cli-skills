@@ -116,8 +116,8 @@ func TestExtractAndReplaceSlideTextRuns(t *testing.T) {
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
     <p:spTree>
-      <p:sp><p:txBody><a:p><a:r><a:t>植物世界</a:t></a:r></a:p></p:txBody></p:sp>
-      <p:sp><p:txBody><a:p><a:r><a:t>探索森林与花卉</a:t></a:r></a:p></p:txBody></p:sp>
+      <p:sp><p:txBody><a:p><a:r><a:t>Plant World</a:t></a:r></a:p></p:txBody></p:sp>
+      <p:sp><p:txBody><a:p><a:r><a:t>Explore forests and flowers</a:t></a:r></a:p></p:txBody></p:sp>
       <p:sp><p:txBody><a:p><a:r><a:t>Page 01</a:t></a:r></a:p></p:txBody></p:sp>
     </p:spTree>
   </p:cSld>
@@ -127,18 +127,18 @@ func TestExtractAndReplaceSlideTextRuns(t *testing.T) {
 	if len(runs) != 3 {
 		t.Fatalf("run count = %d, want 3", len(runs))
 	}
-	if runs[0] != "植物世界" || runs[1] != "探索森林与花卉" || runs[2] != "Page 01" {
+	if runs[0] != "Plant World" || runs[1] != "Explore forests and flowers" || runs[2] != "Page 01" {
 		t.Fatalf("unexpected runs: %#v", runs)
 	}
 
-	replaced, err := ReplaceSlideTextRuns(xml, []string{"Plant World", "Explore forests and flowers", "Page 01"})
+	replaced, err := ReplaceSlideTextRuns(xml, []string{"Animal World", "Explore forests and flowers in depth", "Page 01"})
 	if err != nil {
 		t.Fatalf("ReplaceSlideTextRuns failed: %v", err)
 	}
-	if !contains(replaced, "Plant World") || !contains(replaced, "Explore forests and flowers") {
+	if !contains(replaced, "Animal World") || !contains(replaced, "Explore forests and flowers in depth") {
 		t.Fatalf("expected translated text in xml: %s", replaced)
 	}
-	if contains(replaced, "植物世界") || contains(replaced, "探索森林与花卉") {
+	if contains(replaced, "Plant World") || contains(replaced, "Explore forests and flowers</a:t>") {
 		t.Fatalf("expected source text to be replaced: %s", replaced)
 	}
 }
@@ -164,7 +164,7 @@ func TestStripNonContentAttributes(t *testing.T) {
           <a:p>
             <a:r>
               <a:rPr lang="zh-CN" sz="4400" b="1"><a:solidFill><a:srgbClr val="3A5A7C"/></a:solidFill></a:rPr>
-              <a:t>动物世界</a:t>
+              <a:t>Animal World</a:t>
             </a:r>
           </a:p>
         </p:txBody>
@@ -175,7 +175,7 @@ func TestStripNonContentAttributes(t *testing.T) {
 
 	sanitized := StripNonContentAttributes(xml)
 
-	if !contains(sanitized, "动物世界") {
+	if !contains(sanitized, "Animal World") {
 		t.Fatalf("expected visible text to remain: %s", sanitized)
 	}
 	if !contains(sanitized, `name="Title"`) {

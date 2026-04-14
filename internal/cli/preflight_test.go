@@ -29,17 +29,17 @@ func TestPreflightOutputFilter_PreservesNormalPromptAndErrors(t *testing.T) {
 	var out bytes.Buffer
 	filter := newPreflightOutputFilter(&out)
 
-	if _, err := filter.Write([]byte("请输入生成服务地址: ")); err != nil {
+	if _, err := filter.Write([]byte("Enter the generation service URL: ")); err != nil {
 		t.Fatalf("Write(prompt): %v", err)
 	}
-	if _, err := filter.Write([]byte("生成服务配置缺失\n")); err != nil {
+	if _, err := filter.Write([]byte("Generation service configuration is missing\n")); err != nil {
 		t.Fatalf("Write(error): %v", err)
 	}
 	if err := filter.Flush(); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
 	got := out.String()
-	if got != "请输入生成服务地址: 生成服务配置缺失\n" {
+	if got != "Enter the generation service URL: Generation service configuration is missing\n" {
 		t.Fatalf("unexpected output: %q", got)
 	}
 }

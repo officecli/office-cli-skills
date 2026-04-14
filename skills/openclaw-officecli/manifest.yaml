@@ -16,9 +16,9 @@ tags:
   - slack
   - openclaw
 intent_examples:
-  - 生成一个五页的 PPT，介绍企业协作平台
-  - 帮我写一个给客户的 docx，介绍我们的协作平台
-  - 做一个项目预算 excel 表
+  - generate a five-slide PPT about an enterprise collaboration platform
+  - write a customer-facing docx about our collaboration platform
+  - create a project budget excel sheet
 config:
   schema:
     type: object

@@ -29,8 +29,8 @@ describe('billing page', () => {
           json: async () => ({
             data: [{
               code: 'hosted-300',
-              name: '托管 300',
-              description: '300 credits，适合托管 LLM 试用和低频文档生成。',
+              name: 'Hosted 300',
+              description: '300 credits for low-volume runs on the hosted LLM runtime.',
               currency: 'usd',
               amount_total: 2900,
               quota_amount: 0,
@@ -54,7 +54,7 @@ describe('billing page', () => {
               currency: 'usd',
               amount_total: 2900,
               pack_code: 'hosted-300',
-              pack_name: '托管 300',
+              pack_name: 'Hosted 300',
               pack_kind: 'hosted_credits',
               quota_amount: 0,
               credit_amount: 300,

@@ -64,9 +64,9 @@ assert_body_contains() {
 
 info "platform=${PLATFORM_BASE_URL}"
 info "fingerprint=${FINGERPRINT_HASH}"
-info "说明：建议先在后台或数据库中将该 fingerprint 的 free_limit 设为 ${FREE_LIMIT}"
+info "Recommendation: set the free_limit for this fingerprint to ${FREE_LIMIT} in the admin backend or database first"
 
-info "1) 免费首次 check"
+info "1) First free check"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
@@ -77,13 +77,13 @@ JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "免费首次 check 返回 200"
-assert_body_contains "$body" '"access_mode":"free"' "免费首次 check 返回 free 模式"
-assert_body_contains "$body" '"allowed":true' "免费首次 check 允许继续"
+assert_status "$status" "200" "First free check returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "First free check returns free mode"
+assert_body_contains "$body" '"allowed":true' "First free check is allowed"
 commit_token_1="$(extract_json "$body" '.data.commit_token')"
 request_id_1="$(extract_json "$body" '.data.commit_token.request_id')"
 
-info "2) 免费 consume 第 1 次"
+info "2) First free consume"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
@@ -96,10 +96,10 @@ JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "免费 consume 第 1 次返回 200"
-assert_body_contains "$body" '"access_mode":"free"' "免费 consume 第 1 次返回 free 模式"
+assert_status "$status" "200" "First free consume returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "First free consume returns free mode"
 
-info "3) 免费第 2 次 check"
+info "3) Second free check"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
@@ -110,13 +110,13 @@ JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "免费第 2 次 check 返回 200"
-assert_body_contains "$body" '"access_mode":"free"' "免费第 2 次 check 返回 free 模式"
-assert_body_contains "$body" '"allowed":true' "免费第 2 次 check 允许继续"
+assert_status "$status" "200" "Second free check returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "Second free check returns free mode"
+assert_body_contains "$body" '"allowed":true' "Second free check is allowed"
 commit_token_2="$(extract_json "$body" '.data.commit_token')"
 request_id_2="$(extract_json "$body" '.data.commit_token.request_id')"
 
-info "4) 免费 consume 第 2 次"
+info "4) Second free consume"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
@@ -130,12 +130,12 @@ JSON
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
 if [[ "$FREE_LIMIT" -ge 2 ]]; then
-  assert_status "$status" "200" "免费 consume 第 2 次返回 200"
+  assert_status "$status" "200" "Second free consume returns 200"
 else
-  assert_status "$status" "409" "免费 consume 第 2 次返回 409"
+  assert_status "$status" "409" "Second free consume returns 409"
 fi
 
-info "5) 再次 check，验证额度耗尽后被阻止"
+info "5) Check again and verify blocking after free quota exhaustion"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
@@ -146,15 +146,15 @@ JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "免费额度耗尽时 check 仍返回 200"
-assert_body_contains "$body" '"allowed":false' "免费额度耗尽时 check 返回 blocked"
-assert_body_contains "$body" '"reason_code":"free_quota_exhausted"' "免费额度耗尽原因码正确"
+assert_status "$status" "200" "Quota-exhausted check still returns 200"
+assert_body_contains "$body" '"allowed":false' "Quota-exhausted check returns blocked"
+assert_body_contains "$body" '"reason_code":"free_quota_exhausted"' "Quota-exhausted reason code is correct"
 
-info "6) 非法 JSON 请求返回 400"
+info "6) Invalid JSON returns 400"
 tmp="$(mktemp)"
 status="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST "${PLATFORM_BASE_URL}/api/license/check" -H 'Content-Type: application/json' -d '{invalid')"
 body="$(cat "$tmp")"
 rm -f "$tmp"
-assert_status "$status" "400" "非法 JSON 返回 400"
+assert_status "$status" "400" "Invalid JSON returns 400"
 
-pass "usage limits smoke 完成"
+pass "usage limits smoke completed"

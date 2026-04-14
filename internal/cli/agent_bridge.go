@@ -234,13 +234,13 @@ func (a *App) runAgentBridge(ctx context.Context, cfg Config, args []string) err
 }
 
 func AgentBridgeHelpText() string {
-	return `用法：
+	return `Usage:
   officecli agent-bridge
 
-说明：
-  通过 JSON-RPC 2.0 over stdio 暴露面向 agent client 的结构化接口。
+Description:
+  Exposes a structured interface for agent clients over JSON-RPC 2.0 via stdio.
 
-支持方法：
+Supported methods:
   initialize
   capabilities/get
   session/open
@@ -382,9 +382,9 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 						"config_command":  "officecli config set-generation",
 						"config_fields":   []string{"image_base_url", "image_api_key", "image_model"},
 						"notes": []string{
-							"pptx 默认会尝试自动配图并将图片嵌入最终文件",
-							"如果没有图片，优先检查图片模型 url、ak 和模型名配置",
-							"如只需纯文本版，可显式关闭图片",
+							"pptx generation tries to add images automatically and embed them in the final file by default.",
+							"If no images appear, first check the image model URL, API key, and model name configuration.",
+							"If you only want a text-only deck, disable images explicitly.",
 						},
 					},
 				},
@@ -665,7 +665,7 @@ func (s *agentBridgeServer) respondTask(params bridgeRespondParams) error {
 		return fmt.Errorf("task not found: %s", params.TaskID)
 	}
 	if task.Prompt == nil || task.CurrentQ == nil {
-		return fmt.Errorf("task %s 当前没有待回答问题", params.TaskID)
+		return fmt.Errorf("task %s has no pending question", params.TaskID)
 	}
 	if params.QuestionID != "" && task.CurrentQ.ID != params.QuestionID {
 		return fmt.Errorf("question mismatch: want %s got %s", task.CurrentQ.ID, params.QuestionID)
@@ -675,7 +675,7 @@ func (s *agentBridgeServer) respondTask(params bridgeRespondParams) error {
 		Answer:   strings.TrimSpace(params.Answer),
 	}
 	if answer.OptionID == "" && answer.Answer == "" {
-		return fmt.Errorf("option_id 或 answer 至少提供一个")
+		return fmt.Errorf("either option_id or answer is required")
 	}
 	select {
 	case task.Prompt.answer <- answer:
@@ -686,7 +686,7 @@ func (s *agentBridgeServer) respondTask(params bridgeRespondParams) error {
 		})
 		return nil
 	default:
-		return fmt.Errorf("task %s 当前不接受新的回答", params.TaskID)
+		return fmt.Errorf("task %s is not accepting new answers", params.TaskID)
 	}
 }
 
@@ -721,7 +721,7 @@ func (s *agentBridgeServer) cancelTask(taskID string) error {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
 	if task.Cancel == nil {
-		return fmt.Errorf("task %s 无法取消", taskID)
+		return fmt.Errorf("task %s cannot be cancelled", taskID)
 	}
 	task.Cancel()
 	return nil
@@ -788,7 +788,7 @@ func buildGenerateBridgeMeta(result GenerateResult) map[string]any {
 	}
 	if attentionRequired {
 		imageSupport["reason"] = "image_generation_degraded"
-		imageSupport["message"] = "PPT 已降级为无图版本；请检查图片模型 url、ak 和模型名配置，或直接使用 --no-images。"
+		imageSupport["message"] = "The PPT output was downgraded to a text-only version. Check the image model URL, API key, and model name, or use --no-images."
 	}
 	return map[string]any{
 		"image_support": imageSupport,
@@ -801,8 +801,8 @@ func hasPPTImageGuidanceWarning(warnings []string) bool {
 		if text == "" {
 			continue
 		}
-		if strings.Contains(text, "图片生成失败") ||
-			strings.Contains(text, "无图版本") ||
+		if strings.Contains(text, "image generation failed") ||
+			strings.Contains(text, "text-only version") ||
 			strings.Contains(text, "set-generation") ||
 			strings.Contains(text, "--no-images") {
 			return true
@@ -916,28 +916,28 @@ func classifyBridgeError(err error) bridgeErrorPayload {
 	}
 
 	switch {
-	case strings.Contains(message, "缺少") && strings.Contains(message, "配置"):
+	case strings.Contains(message, "missing") && strings.Contains(message, "config"):
 		payload.Type = "configuration_error"
 		payload.Code = "configuration_missing"
-	case strings.Contains(message, "平台服务未完成配置"):
+	case strings.Contains(message, "platform service is not fully configured"):
 		payload.Type = "configuration_error"
 		payload.Code = "platform_configuration_missing"
-	case strings.Contains(message, "生成服务未完成配置"):
+	case strings.Contains(message, "generation service is not fully configured"):
 		payload.Type = "configuration_error"
 		payload.Code = "llm_configuration_missing"
-	case strings.Contains(message, "api-key 校验失败"), strings.Contains(message, "授权校验失败"), strings.Contains(message, "license"):
+	case strings.Contains(message, "api-key validation failed"), strings.Contains(message, "access check failed"), strings.Contains(message, "license"):
 		payload.Type = "auth_error"
 		payload.Code = "license_check_failed"
-	case strings.Contains(message, "topic is required"), strings.Contains(message, "file_path is required"), strings.Contains(message, "file is required"), strings.Contains(message, "unsupported"), strings.Contains(message, "暂不支持 review"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"), strings.Contains(message, "invalid fail_below"):
+	case strings.Contains(message, "topic is required"), strings.Contains(message, "file_path is required"), strings.Contains(message, "file is required"), strings.Contains(message, "unsupported"), strings.Contains(message, "review is currently only supported"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"), strings.Contains(message, "invalid fail_below"):
 		payload.Type = "validation_error"
 		payload.Code = "invalid_request"
-	case strings.Contains(message, "文档组装阶段失败"), strings.Contains(message, "parse llm response"), strings.Contains(message, "slides cannot be empty"):
+	case strings.Contains(message, "document assembly failed"), strings.Contains(message, "parse llm response"), strings.Contains(message, "slides cannot be empty"):
 		payload.Type = "assembly_error"
 		payload.Code = "document_assembly_failed"
-	case strings.Contains(message, "读取本地 PPT 失败"):
+	case strings.Contains(message, "failed to read local PPT"):
 		payload.Type = "io_error"
 		payload.Code = "file_read_failed"
-	case strings.Contains(message, "生成内容阶段失败"), strings.Contains(message, "llm request failed"), strings.Contains(message, "internal llm request failed"):
+	case strings.Contains(message, "content generation failed"), strings.Contains(message, "llm request failed"), strings.Contains(message, "internal llm request failed"):
 		payload.Type = "llm_error"
 		payload.Code = "llm_request_failed"
 		payload.Retryable = true

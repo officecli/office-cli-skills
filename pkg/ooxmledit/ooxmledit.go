@@ -1,5 +1,5 @@
-// Package ooxmledit 提供 OOXML (Office Open XML) 文件的 ZIP 解压、内容 XML 提取和重打包功能。
-// 支持 PPTX、DOCX、XLSX 三种 Office 文件类型。
+// Package ooxmledit provides ZIP unpacking, content XML extraction, and repacking helpers for OOXML files.
+// It supports PPTX, DOCX, and XLSX Office formats.
 package ooxmledit
 
 import (
@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// FileType 表示 OOXML 文件类型
+// FileType represents an OOXML file type.
 type FileType string
 
 const (
@@ -23,7 +23,7 @@ const (
 	FileTypeXLSX FileType = "xlsx"
 )
 
-// contentPathPatterns 定义每种文件类型中需要提取的内容 XML 路径模式
+// contentPathPatterns defines the content XML path patterns to extract for each file type.
 var contentPathPatterns = map[FileType][]*regexp.Regexp{
 	FileTypePPTX: {
 		regexp.MustCompile(`^ppt/slides/slide\d+\.xml$`),
@@ -37,7 +37,7 @@ var contentPathPatterns = map[FileType][]*regexp.Regexp{
 	},
 }
 
-// GetFileType 根据文件名后缀返回 OOXML 文件类型
+// GetFileType returns the OOXML file type based on the file extension.
 func GetFileType(fileName string) (FileType, error) {
 	ext := strings.ToLower(filepath.Ext(fileName))
 	switch ext {
@@ -52,9 +52,8 @@ func GetFileType(fileName string) (FileType, error) {
 	}
 }
 
-// ExtractContentXML 从 OOXML ZIP 字节流中提取内容 XML 文件。
-// 返回 map[路径]XML内容 的映射。
-// fileType: "pptx" / "docx" / "xlsx"
+// ExtractContentXML extracts content XML files from OOXML ZIP bytes.
+// It returns a map from file path to XML content.
 func ExtractContentXML(ooxmlBytes []byte, fileType FileType) (map[string]string, error) {
 	patterns, ok := contentPathPatterns[fileType]
 	if !ok {
@@ -84,9 +83,8 @@ func ExtractContentXML(ooxmlBytes []byte, fileType FileType) (map[string]string,
 	return result, nil
 }
 
-// ReplaceContentXML 用修改后的 XML 内容替换原 OOXML ZIP 中对应的文件，
-// 保持其他文件（样式、主题、媒体等）不变。
-// 返回新的 OOXML ZIP 字节流。
+// ReplaceContentXML swaps the specified XML files in an OOXML ZIP payload while
+// preserving all other files such as styles, themes, and media.
 func ReplaceContentXML(ooxmlBytes []byte, modifiedXMLs map[string]string) ([]byte, error) {
 	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
 	if err != nil {
@@ -98,7 +96,7 @@ func ReplaceContentXML(ooxmlBytes []byte, modifiedXMLs map[string]string) ([]byt
 
 	for _, f := range reader.File {
 		if modifiedContent, ok := modifiedXMLs[f.Name]; ok {
-			// 用修改后的内容替换
+			// Replace with modified content.
 			newFile, err := writer.CreateHeader(&zip.FileHeader{
 				Name:   f.Name,
 				Method: zip.Deflate,
@@ -110,7 +108,7 @@ func ReplaceContentXML(ooxmlBytes []byte, modifiedXMLs map[string]string) ([]byt
 				return nil, fmt.Errorf("failed to write modified content for %s: %w", f.Name, err)
 			}
 		} else {
-			// 保持原文件不变 — 使用 CreateRaw 以保留原始压缩数据
+			// Keep the original file unchanged and preserve raw compressed data.
 			if err := copyZipFile(writer, f); err != nil {
 				return nil, fmt.Errorf("failed to copy %s: %w", f.Name, err)
 			}
@@ -124,10 +122,10 @@ func ReplaceContentXML(ooxmlBytes []byte, modifiedXMLs map[string]string) ([]byt
 	return buf.Bytes(), nil
 }
 
-// FormatContentForPrompt 将提取的 XML 内容格式化为适合放入 prompt 的文本。
-// 返回按文件路径排序的、带路径标记的 XML 文本。
+// FormatContentForPrompt formats extracted XML as prompt-ready text.
+// The output is sorted by file path and includes path markers.
 func FormatContentForPrompt(contentXMLs map[string]string) string {
-	// 按路径排序，确保输出稳定
+	// Sort by path to keep output stable.
 	paths := make([]string, 0, len(contentXMLs))
 	for path := range contentXMLs {
 		paths = append(paths, path)
@@ -139,13 +137,13 @@ func FormatContentForPrompt(contentXMLs map[string]string) string {
 		if i > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(fmt.Sprintf("=== 文件: %s ===\n", path))
+		sb.WriteString(fmt.Sprintf("=== File: %s ===\n", path))
 		sb.WriteString(contentXMLs[path])
 	}
 	return sb.String()
 }
 
-// atTagRegex 匹配 PPTX slide XML 中的 <a:t>...</a:t> 文本标签
+// atTagRegex matches <a:t>...</a:t> text tags in PPTX slide XML.
 var atTagRegex = regexp.MustCompile(`<a:t[^>]*>(.*?)</a:t>`)
 
 var (
@@ -225,12 +223,12 @@ func ReplaceSlideTextRuns(xmlContent string, newTexts []string) (string, error) 
 	return out.String(), nil
 }
 
-// ExtractSlideTextSummary 从单个 slide XML 内容中提取 <a:t> 标签的纯文本。
-// 返回以 " | " 分隔的文本片段拼接，用于 Phase 1 分析阶段的轻量摘要。
+// ExtractSlideTextSummary extracts plain text from <a:t> tags in a single slide XML.
+// It returns a lightweight summary joined with " | " for phase-1 analysis.
 func ExtractSlideTextSummary(xmlContent string) string {
 	textRuns := ExtractSlideTextRuns(xmlContent)
 	if len(textRuns) == 0 {
-		return "(空白幻灯片)"
+		return "(blank slide)"
 	}
 
 	var texts []string
@@ -242,19 +240,19 @@ func ExtractSlideTextSummary(xmlContent string) string {
 	}
 
 	if len(texts) == 0 {
-		return "(空白幻灯片)"
+		return "(blank slide)"
 	}
 
 	summary := strings.Join(texts, " | ")
-	// 截断过长的摘要，避免 prompt 过大
+	// Trim long summaries to keep prompts compact.
 	if len(summary) > 500 {
 		summary = summary[:500] + "..."
 	}
 	return summary
 }
 
-// FormatSlideSummariesForPrompt 将所有 slide 的文本摘要格式化为 prompt 文本。
-// 按路径排序，每行一个 slide：`ppt/slides/slide1.xml: 标题文本 | 内容文本...`
+// FormatSlideSummariesForPrompt formats all slide summaries for prompt use.
+// The output is sorted by path, one slide per line.
 func FormatSlideSummariesForPrompt(contentXMLs map[string]string) string {
 	paths := make([]string, 0, len(contentXMLs))
 	for path := range contentXMLs {
@@ -273,12 +271,12 @@ func FormatSlideSummariesForPrompt(contentXMLs map[string]string) string {
 	return sb.String()
 }
 
-// FormatSingleSlideForPrompt 将单个 slide 的 XML 内容格式化为 prompt 文本。
+// FormatSingleSlideForPrompt formats one slide's XML content for prompt use.
 func FormatSingleSlideForPrompt(path string, xmlContent string) string {
-	return fmt.Sprintf("=== 文件: %s ===\n%s", path, xmlContent)
+	return fmt.Sprintf("=== File: %s ===\n%s", path, xmlContent)
 }
 
-// ExtractThemeXML 从 PPTX ZIP 字节流中提取 ppt/theme/theme1.xml 的内容。
+// ExtractThemeXML extracts ppt/theme/theme1.xml from PPTX ZIP bytes.
 func ExtractThemeXML(ooxmlBytes []byte) (string, error) {
 	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
 	if err != nil {
@@ -297,10 +295,10 @@ func ExtractThemeXML(ooxmlBytes []byte) (string, error) {
 	return "", fmt.Errorf("ppt/theme/theme1.xml not found in PPTX")
 }
 
-// slideNumRegex 从 slide 文件路径中提取数字编号
+// slideNumRegex extracts the numeric index from a slide file path.
 var slideNumRegex = regexp.MustCompile(`slide(\d+)\.xml$`)
 
-// MaxSlideNum 返回 PPTX 中最大的 slide 编号。
+// MaxSlideNum returns the highest slide index in a PPTX file.
 func MaxSlideNum(ooxmlBytes []byte) (int, error) {
 	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
 	if err != nil {
@@ -319,14 +317,15 @@ func MaxSlideNum(ooxmlBytes []byte) (int, error) {
 	return maxNum, nil
 }
 
-// ReplaceAndResizeSlides 综合操作：替换现有 slide 内容 + 添加/删除 slide。
+// ReplaceAndResizeSlides updates slide XML and supports adding or removing slides in one pass.
 //
-// modifiedXMLs: 已修改的 slide XML 内容（key 为路径如 ppt/slides/slide1.xml）
-// addSlideXMLs: 需要新增的 slide XML（有序列表，会分配新编号）
-// removeSlidePaths: 需要删除的 slide 路径列表
+// modifiedXMLs: updated slide XML keyed by paths such as ppt/slides/slide1.xml
+// addSlideXMLs: new slide XML payloads in order; new slide numbers are assigned automatically
+// removeSlidePaths: slide paths to remove
 //
-// 添加 slide 时自动更新 [Content_Types].xml、ppt/presentation.xml、ppt/_rels/presentation.xml.rels。
-// 新 slide 的 layout 引用复制自模板中最后一个 slide 的 rels。
+// Adding slides also updates [Content_Types].xml, ppt/presentation.xml,
+// and ppt/_rels/presentation.xml.rels. New slide layout references are copied
+// from the last existing slide rels payload.
 func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, addSlideXMLs []string, removeSlidePaths []string) ([]byte, error) {
 	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
 	if err != nil {
@@ -339,7 +338,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 		removeSet[strings.Replace(p, "ppt/slides/", "ppt/slides/_rels/", 1)+".rels"] = true
 	}
 
-	// 找到现有最大 slide 编号和最后一个 slide 的 rels 内容
+	// Find the highest existing slide index and the final slide rels payload.
 	maxSlideNum := 0
 	var lastSlideRelsContent string
 	for _, f := range reader.File {
@@ -351,7 +350,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 			}
 		}
 	}
-	// 读取最大编号 slide 的 rels
+	// Read the rels file for the highest-numbered slide.
 	lastSlideRelsPath := fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", maxSlideNum)
 	for _, f := range reader.File {
 		if f.Name == lastSlideRelsPath {
@@ -363,7 +362,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 	var buf bytes.Buffer
 	writer := zip.NewWriter(&buf)
 
-	// 收集需要在元数据中更新的信息
+	// Track metadata files that need to be rewritten later.
 	var contentTypesFile *zip.File
 	var presentationFile *zip.File
 	var presentationRelsFile *zip.File
@@ -403,7 +402,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 		}
 	}
 
-	// 添加新 slide 文件和对应的 rels
+	// Add new slide files and their rels.
 	newSlideNames := make([]string, 0, len(addSlideXMLs))
 	for i, slideXML := range addSlideXMLs {
 		newNum := maxSlideNum + i + 1
@@ -421,7 +420,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 			return nil, fmt.Errorf("failed to write new slide %s: %w", slidePath, err)
 		}
 
-		// 复制最后一个 slide 的 rels 给新 slide
+		// Copy the last slide rels to the new slide.
 		if lastSlideRelsContent != "" {
 			relsPath := fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", newNum)
 			relsFile, err := writer.CreateHeader(&zip.FileHeader{
@@ -437,7 +436,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 		}
 	}
 
-	// 更新 [Content_Types].xml
+	// Update [Content_Types].xml.
 	if contentTypesFile != nil {
 		content, err := readZipFile(contentTypesFile)
 		if err != nil {
@@ -456,7 +455,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 		}
 	}
 
-	// 更新 ppt/presentation.xml
+	// Update ppt/presentation.xml.
 	if presentationFile != nil {
 		content, err := readZipFile(presentationFile)
 		if err != nil {
@@ -475,7 +474,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 		}
 	}
 
-	// 更新 ppt/_rels/presentation.xml.rels
+	// Update ppt/_rels/presentation.xml.rels.
 	if presentationRelsFile != nil {
 		content, err := readZipFile(presentationRelsFile)
 		if err != nil {
@@ -501,7 +500,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 	return buf.Bytes(), nil
 }
 
-// updateContentTypes 在 [Content_Types].xml 中添加/删除 slide 条目。
+// updateContentTypes adds or removes slide entries in [Content_Types].xml.
 func updateContentTypes(content string, addSlides []string, removeSlides []string) string {
 	for _, slidePath := range removeSlides {
 		partName := "/" + slidePath
@@ -517,19 +516,19 @@ func updateContentTypes(content string, addSlides []string, removeSlides []strin
 	return content
 }
 
-// rIdNumRegex 从 rId 中提取数字
+// rIdNumRegex extracts the numeric suffix from an rId value.
 var rIdNumRegex = regexp.MustCompile(`rId(\d+)`)
 
-// updatePresentationRels 在 ppt/_rels/presentation.xml.rels 中添加/删除 slide 关系。
+// updatePresentationRels adds or removes slide relationships in presentation.xml.rels.
 func updatePresentationRels(content string, addSlides []string, removeSlides []string, baseSlideNum int) string {
 	for _, slidePath := range removeSlides {
 		slideFileName := filepath.Base(slidePath)
-		// 删除包含该 slide 的 Relationship 行
+		// Remove relationship rows that reference this slide.
 		relPattern := regexp.MustCompile(`<Relationship[^>]*Target="slides/` + regexp.QuoteMeta(slideFileName) + `"[^/]*/>\s*`)
 		content = relPattern.ReplaceAllString(content, "")
 	}
 
-	// 找到最大的 rId 编号
+	// Find the highest rId index.
 	matches := rIdNumRegex.FindAllStringSubmatch(content, -1)
 	maxRId := 0
 	for _, m := range matches {
@@ -549,23 +548,22 @@ func updatePresentationRels(content string, addSlides []string, removeSlides []s
 	return content
 }
 
-// sldIdRegex 匹配 presentation.xml 中的 <p:sldId> 条目
+// sldIdRegex matches <p:sldId> entries in presentation.xml.
 var sldIdRegex = regexp.MustCompile(`<p:sldId\s+id="(\d+)"\s+r:id="(rId\d+)"\s*/>`)
 
-// updatePresentationXML 在 ppt/presentation.xml 中添加/删除 slide 引用。
+// updatePresentationXML adds or removes slide references in ppt/presentation.xml.
 func updatePresentationXML(content string, addSlides []string, removeSlides []string, baseSlideNum int) string {
-	// 删除被移除的 slide 引用
+	// Remove references for deleted slides.
 	for _, slidePath := range removeSlides {
 		slideFileName := filepath.Base(slidePath)
-		// 通过 rels 中的映射找到对应的 rId，这里简化处理：直接删除匹配的 sldId 行
-		// 由于 sldId 通过 rId 关联，而我们已经从 rels 中删除了，这里先跳过
+		// This simplified path skips the rId remapping step because the rels cleanup
+		// already removed the corresponding relationship.
 		_ = slideFileName
 	}
 
-	// 为新 slide 查找/添加 rId 和 sldId
-	// 首先找到最大的 sldId
+	// Allocate rId and sldId values for the new slides.
 	sldMatches := sldIdRegex.FindAllStringSubmatch(content, -1)
-	maxSldId := 256 // OOXML 默认起始值
+	maxSldId := 256 // OOXML default starting value.
 	for _, m := range sldMatches {
 		n := 0
 		fmt.Sscanf(m[1], "%d", &n)
@@ -574,7 +572,7 @@ func updatePresentationXML(content string, addSlides []string, removeSlides []st
 		}
 	}
 
-	// 找到最大 rId（与 rels 文件中的一致）
+	// Find the highest rId value, aligned with the rels file.
 	rIdMatches := rIdNumRegex.FindAllStringSubmatch(content, -1)
 	maxRId := 0
 	for _, m := range rIdMatches {
@@ -589,13 +587,13 @@ func updatePresentationXML(content string, addSlides []string, removeSlides []st
 		newSldId := maxSldId + i + 1
 		newRId := maxRId + i + 1
 		newEntry := fmt.Sprintf(`<p:sldId id="%d" r:id="rId%d"/>`, newSldId, newRId)
-		// 插入到 </p:sldIdLst> 之前
+		// Insert before </p:sldIdLst>.
 		content = strings.Replace(content, "</p:sldIdLst>", newEntry+"\n</p:sldIdLst>", 1)
 	}
 	return content
 }
 
-// isContentFile 检查给定路径是否匹配任一内容 XML 模式
+// isContentFile reports whether the path matches any content XML pattern.
 func isContentFile(path string, patterns []*regexp.Regexp) bool {
 	for _, p := range patterns {
 		if p.MatchString(path) {
@@ -605,7 +603,7 @@ func isContentFile(path string, patterns []*regexp.Regexp) bool {
 	return false
 }
 
-// readZipFile 读取 ZIP 文件条目的全部内容为字符串
+// readZipFile reads the full content of a ZIP entry as a string.
 func readZipFile(f *zip.File) (string, error) {
 	rc, err := f.Open()
 	if err != nil {
@@ -620,9 +618,9 @@ func readZipFile(f *zip.File) (string, error) {
 	return string(data), nil
 }
 
-// copyZipFile 将原 ZIP 条目原样复制到新的 ZIP writer 中
+// copyZipFile copies a ZIP entry into the new ZIP writer unchanged.
 func copyZipFile(writer *zip.Writer, original *zip.File) error {
-	// 尝试使用 CreateRaw 以避免重新压缩（保持原始数据完整）
+	// Try CreateRaw to avoid recompression and preserve the original payload.
 	header := original.FileHeader
 	targetFile, err := writer.CreateHeader(&header)
 	if err != nil {

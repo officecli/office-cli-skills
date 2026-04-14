@@ -95,15 +95,15 @@ run_config_status() {
 }
 
 check_generation_ready() {
-  [[ "$1" == *"生成服务已配置：true"* ]]
+  [[ "$1" == *"Generation service configured: true"* ]]
 }
 
 check_license_ready() {
-  [[ "$1" == *"额度校验已启用：true"* ]]
+  [[ "$1" == *"Quota validation enabled: true"* ]]
 }
 
 check_publish_ready() {
-  [[ "$1" == *"在线预览发布已启用：true"* ]]
+  [[ "$1" == *"Online preview publishing enabled: true"* ]]
 }
 
 check_bridge_ready() {

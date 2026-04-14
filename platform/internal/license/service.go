@@ -107,7 +107,7 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 			Allowed:             false,
 			AccessMode:          model.AccessModeBlocked,
 			ReasonCode:          "hosted_requires_api_key",
-			Message:             "hosted 模式要求先配置有效的 officecli API key",
+			Message:             "Hosted mode requires a valid officecli API key to be configured first.",
 			AllowedModes:        []string{"external"},
 			SelectedRuntimeMode: "hosted",
 		}, nil

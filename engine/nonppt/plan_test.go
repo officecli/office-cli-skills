@@ -7,7 +7,7 @@ func TestCompileDOCXOfficeActionPlan_ForSelectionReplacement(t *testing.T) {
 		ModifyIntent: "replace_docx_paragraph",
 		Target:       ModifyTargetMetadataWithScope{Scope: "selection", ElementType: "text"},
 		Selection:    &SelectionContext{HasTextSelection: true},
-		Operation:    &DocxModifyOperation{Operation: DocxOperation{NewText: "替换后的选中文本"}},
+		Operation:    &DocxModifyOperation{Operation: DocxOperation{NewText: "Replacement for the selected text"}},
 	})
 	if plan == nil || plan.Scope != "selection" {
 		t.Fatalf("unexpected plan: %+v", plan)
@@ -15,7 +15,7 @@ func TestCompileDOCXOfficeActionPlan_ForSelectionReplacement(t *testing.T) {
 	if len(plan.Actions) != 1 || plan.Actions[0].Type != "replace_selected_text" {
 		t.Fatalf("unexpected actions: %+v", plan)
 	}
-	if plan.Actions[0].Text != "替换后的选中文本" {
+	if plan.Actions[0].Text != "Replacement for the selected text" {
 		t.Fatalf("text = %q", plan.Actions[0].Text)
 	}
 }
@@ -24,7 +24,7 @@ func TestCompileDOCXOfficeActionPlan_ForParagraphAppend(t *testing.T) {
 	plan := CompileDOCXOfficeActionPlan(DOCXPlanInput{
 		ModifyIntent: "append_docx_paragraph",
 		Target:       ModifyTargetMetadataWithScope{ParagraphIndex: 3},
-		Operation:    &DocxModifyOperation{ParagraphIndex: 3, Operation: DocxOperation{NewText: "新增段落"}},
+		Operation:    &DocxModifyOperation{ParagraphIndex: 3, Operation: DocxOperation{NewText: "Appended paragraph"}},
 	})
 	if plan == nil || plan.Scope != "paragraph" {
 		t.Fatalf("unexpected plan: %+v", plan)

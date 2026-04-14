@@ -62,7 +62,7 @@ func TestNewPublisherUsesEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 	result, err := publisher.Publish(context.Background(), PublishRequest{
 		LocalFilePath: filePath,
 		DocumentType:  "pptx",
-		DocumentName:  "上海和北京",
+		DocumentName:  "Shanghai and Beijing",
 	})
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -100,7 +100,7 @@ func TestValidateConfigStillRequiresAPIKeyWithoutEmbeddedDynamicAuth(t *testing.
 	EmbeddedPublishAuthKey = ""
 
 	err := ValidateConfig(Config{Enabled: true, BaseURL: "https://publish.example.com"})
-	if err == nil || !strings.Contains(err.Error(), "在线预览发布访问凭证") {
+	if err == nil || !strings.Contains(err.Error(), "online preview publishing credentials") {
 		t.Fatalf("expected API key validation error, got %v", err)
 	}
 }

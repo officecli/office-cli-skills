@@ -43,17 +43,17 @@ func samplePNGWithSize(t *testing.T, width, height int) []byte {
 func TestPPTXWithChart(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:   "测试图表",
+			Title:   "Chart Test",
 			IsTitle: true,
 			Layout:  "title",
 		},
 		{
-			Title:  "柱状图示例",
+			Title:  "Bar Chart Example",
 			Layout: "chart",
-			Points: []string{"关键发现1", "关键发现2"},
+			Points: []string{"Key finding 1", "Key finding 2"},
 			Chart: &ChartData{
 				Type:       "bar",
-				Title:      "季度销售额",
+				Title:      "Quarterly Revenue",
 				Categories: []string{"Q1", "Q2", "Q3", "Q4"},
 				Values:     []float64{120, 180, 150, 210},
 			},
@@ -62,14 +62,14 @@ func TestPPTXWithChart(t *testing.T) {
 
 	gen := NewPPTXGenerator()
 	data, err := gen.Generate(slides, PPTXOptions{
-		Title:   "图表测试",
+		Title:   "Chart Test",
 		Creator: "Test",
 	})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	// 保存到临时文件
+	// Save to a temporary file for manual inspection when needed.
 	tmpFile := "/tmp/test_chart.pptx"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		t.Fatalf("Write file failed: %v", err)
@@ -80,11 +80,11 @@ func TestPPTXWithChart(t *testing.T) {
 
 func TestPPTXNoChart(t *testing.T) {
 	slides := []Slide{
-		{Title: "标题页", IsTitle: true, Layout: "title"},
-		{Title: "内容页", Layout: "content", Points: []string{"要点1", "要点2"}},
+		{Title: "Title Slide", IsTitle: true, Layout: "title"},
+		{Title: "Content Slide", Layout: "content", Points: []string{"Point 1", "Point 2"}},
 	}
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "无图表测试", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "No Chart Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -98,9 +98,9 @@ func TestPPTXNoChart(t *testing.T) {
 func TestPPTXWithEmbeddedImageAssets(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:     "图片页",
+			Title:     "Image Slide",
 			Layout:    "content",
-			Points:    []string{"要点一", "要点二"},
+			Points:    []string{"Point one", "Point two"},
 			HasImage:  true,
 			ImagePos:  "right",
 			ImageData: samplePNG,
@@ -108,7 +108,7 @@ func TestPPTXWithEmbeddedImageAssets(t *testing.T) {
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "图片测试", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Image Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -133,9 +133,9 @@ func TestPPTXWithEmbeddedImageAssets(t *testing.T) {
 func TestPPTXWithEmbeddedJPEGAssets(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:     "图片页",
+			Title:     "Image Slide",
 			Layout:    "content",
-			Points:    []string{"要点一"},
+			Points:    []string{"Point one"},
 			HasImage:  true,
 			ImagePos:  "right",
 			ImageData: []byte("fake-jpeg"),
@@ -144,7 +144,7 @@ func TestPPTXWithEmbeddedJPEGAssets(t *testing.T) {
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "JPEG 图片测试", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "JPEG Image Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -169,9 +169,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "title background",
 			slide: Slide{
-				Title:     "封面",
+				Title:     "Cover",
 				Layout:    "title",
-				Subtitle:  "配图封面",
+				Subtitle:  "Illustrated cover",
 				HasImage:  true,
 				ImagePos:  "background",
 				ImageData: samplePNG,
@@ -181,9 +181,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "content left",
 			slide: Slide{
-				Title:     "左图右文",
+				Title:     "Image Left Text Right",
 				Layout:    "content",
-				Content:   "说明文字",
+				Content:   "Supporting copy",
 				HasImage:  true,
 				ImagePos:  "left",
 				ImageData: samplePNG,
@@ -193,9 +193,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "content center",
 			slide: Slide{
-				Title:     "居中图片",
+				Title:     "Centered Image",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "center",
 				ImageData: samplePNG,
@@ -205,9 +205,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "content top",
 			slide: Slide{
-				Title:     "顶部横幅",
+				Title:     "Top Banner",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "top",
 				ImageData: samplePNG,
@@ -217,9 +217,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "content bottom",
 			slide: Slide{
-				Title:     "底部横幅",
+				Title:     "Bottom Banner",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "bottom",
 				ImageData: samplePNG,
@@ -229,9 +229,9 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "content diagonal",
 			slide: Slide{
-				Title:     "对角图",
+				Title:     "Diagonal Image",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "diagonal",
 				ImageData: samplePNG,
@@ -241,14 +241,14 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 		{
 			name: "chart ignores image",
 			slide: Slide{
-				Title:     "图表页",
+				Title:     "Chart Slide",
 				Layout:    "chart",
 				HasImage:  true,
 				ImagePos:  "right",
 				ImageData: samplePNG,
 				Chart: &ChartData{
 					Type:       "bar",
-					Title:      "销量",
+					Title:      "Sales",
 					Categories: []string{"Q1"},
 					Values:     []float64{1},
 				},
@@ -292,9 +292,9 @@ func TestPPTXImageLayoutsApplyCropForMismatchedAspectRatio(t *testing.T) {
 		{
 			name: "wide image in diagonal frame crops horizontally",
 			slide: Slide{
-				Title:     "对角图",
+				Title:     "Diagonal Image",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "diagonal",
 				ImageData: wideImage,
@@ -304,9 +304,9 @@ func TestPPTXImageLayoutsApplyCropForMismatchedAspectRatio(t *testing.T) {
 		{
 			name: "tall image in top banner crops vertically",
 			slide: Slide{
-				Title:     "顶部横幅",
+				Title:     "Top Banner",
 				Layout:    "content",
-				Points:    []string{"说明"},
+				Points:    []string{"Notes"},
 				HasImage:  true,
 				ImagePos:  "top",
 				ImageData: tallImage,
@@ -345,13 +345,13 @@ func TestTargetAspectRatioForSlide(t *testing.T) {
 
 func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 	slides := []Slide{
-		{Title: "标题页", IsTitle: true, Layout: "title"},
+		{Title: "Title Slide", IsTitle: true, Layout: "title"},
 		{
-			Title:  "图表页",
+			Title:  "Chart Slide",
 			Layout: "chart",
 			Chart: &ChartData{
 				Type:       "bar",
-				Title:      "销量",
+				Title:      "Sales",
 				Categories: []string{"Q1", "Q2", "Q3"},
 				Values:     []float64{10, 20, 30},
 			},
@@ -359,7 +359,7 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "兼容性测试", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Compatibility Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 		}
 	}
 
-	// 本地可成功预览的样本包含 externalData
+	// The locally previewable sample includes externalData.
 	if !strings.Contains(chartXML, `externalData`) {
 		t.Fatalf("chart1.xml must contain externalData for local OfficeSDK compatibility")
 	}

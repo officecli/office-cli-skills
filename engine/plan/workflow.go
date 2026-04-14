@@ -89,7 +89,7 @@ func (w *Workflow) PrepareExecutionPlan(ctx context.Context, req engine.PrepareE
 			if err != nil {
 				questions = buildExecutionPlanQuestions(documentType)
 				questionSource = "static_fallback"
-				questionFallbackReason = "动态澄清题生成失败，已降级为固定澄清题。"
+				questionFallbackReason = "Dynamic clarification generation failed, so the workflow fell back to static clarification questions."
 			}
 		}
 	}
@@ -187,7 +187,7 @@ func (w *Workflow) ReviseExecutionPlan(ctx context.Context, req engine.ReviseExe
 	}
 	session.Answers = append(session.Answers, engine.PlanAnswer{
 		QuestionID: "revision",
-		Answer:     "计划修订：" + strings.TrimSpace(req.Instruction),
+		Answer:     "Plan revision: " + strings.TrimSpace(req.Instruction),
 		Source:     "freeform",
 	})
 	session.Revision++
@@ -277,18 +277,18 @@ func buildExecutionPlanMarkdown(session *engine.PlanSession) string {
 		return session.CurrentQuestion.Question
 	}
 	var sb strings.Builder
-	sb.WriteString("# 执行计划\n\n")
-	sb.WriteString("## 目标理解\n")
-	sb.WriteString("- 本次任务：新建一份")
+	sb.WriteString("# Execution Plan\n\n")
+	sb.WriteString("## Objective\n")
+	sb.WriteString("- Task: create a new ")
 	sb.WriteString(buildDocumentLabel(session.DocumentType))
-	sb.WriteString("。\n")
+	sb.WriteString(".\n")
 	if prompt := strings.TrimSpace(session.UserPrompt); prompt != "" {
-		sb.WriteString("- 原始需求：")
+		sb.WriteString("- Original request: ")
 		sb.WriteString(prompt)
 		sb.WriteString("\n")
 	}
 	if session.EditTarget != "" {
-		sb.WriteString("- 优先编辑区域：")
+		sb.WriteString("- Preferred edit target: ")
 		sb.WriteString(strings.TrimSpace(session.EditTarget))
 		sb.WriteString("\n")
 	}
@@ -297,25 +297,25 @@ func buildExecutionPlanMarkdown(session *engine.PlanSession) string {
 		sb.WriteString(strings.TrimSpace(session.FrameworkBlueprint))
 		sb.WriteString("\n")
 	}
-	sb.WriteString("\n## 执行步骤\n")
+	sb.WriteString("\n## Steps\n")
 	if generateengine.NormalizeGenerationMode(session.GenerationMode) == generateengine.ModeBest {
-		sb.WriteString("1. **主题识别**：先明确核心主线、受众和输出目标。\n")
-		sb.WriteString("2. **整体框架蓝图**：先规划结构骨架，再确定重点分布与表达方式。\n")
-		sb.WriteString("3. **逐步展开内容**：按确认后的详略、结构和质量约束展开内容。\n")
-		sb.WriteString("4. **确认后正式生成**：在你确认计划后，再进入实际生成。\n")
+		sb.WriteString("1. **Theme Identification**: clarify the core storyline, audience, and output goal.\n")
+		sb.WriteString("2. **Framework Blueprint**: define the structure first, then decide emphasis, order, and expression.\n")
+		sb.WriteString("3. **Content Expansion**: build the content according to the confirmed level of detail, structure, and quality constraints.\n")
+		sb.WriteString("4. **Generate After Approval**: start actual generation only after you approve the plan.\n")
 	} else {
-		sb.WriteString("1. 先明确文档主线、受众和输出方式。\n")
-		sb.WriteString("2. 再组织整体结构并展开内容。\n")
-		sb.WriteString("3. 在你确认计划后，再进入实际生成。\n")
+		sb.WriteString("1. Clarify the document's main thread, audience, and output form.\n")
+		sb.WriteString("2. Organize the structure and expand the content.\n")
+		sb.WriteString("3. Start generation only after you approve the plan.\n")
 	}
-	sb.WriteString("\n## 关键约束\n")
+	sb.WriteString("\n## Constraints\n")
 	for _, line := range buildConstraintLines(session) {
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 	if strings.TrimSpace(session.ExecutionPrompt) != "" {
-		sb.WriteString("\n## 执行基线\n")
-		sb.WriteString("- 已生成结构化执行提示，后续生成将严格参考这份计划。\n")
+		sb.WriteString("\n## Execution Baseline\n")
+		sb.WriteString("- A structured execution prompt is ready. Later generation should follow this plan strictly.\n")
 	}
 	return strings.TrimSpace(sb.String())
 }
@@ -328,24 +328,24 @@ func buildConstraintLines(session *engine.PlanSession) []string {
 	for _, answer := range session.Answers {
 		question := findQuestion(session.Questions, answer.QuestionID)
 		if question != nil {
-			lines = append(lines, fmt.Sprintf("- %s：%s", strings.TrimSpace(question.Question), strings.TrimSpace(answer.Answer)))
+			lines = append(lines, fmt.Sprintf("- %s: %s", strings.TrimSpace(question.Question), strings.TrimSpace(answer.Answer)))
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- 补充要求：%s", strings.TrimSpace(answer.Answer)))
+		lines = append(lines, fmt.Sprintf("- Additional requirement: %s", strings.TrimSpace(answer.Answer)))
 	}
-	lines = append(lines, "- 以用户原始需求为主线组织内容，不扩写无关部分。")
-	lines = append(lines, "- 在你确认之前，这份计划只用于审阅，不会直接进入生成。")
+	lines = append(lines, "- Keep the original user request as the main thread and avoid expanding unrelated content.")
+	lines = append(lines, "- Until you approve it, this plan is for review only and will not be executed directly.")
 	return lines
 }
 
 func buildDocumentLabel(documentType string) string {
 	switch normalizeDocumentType(documentType) {
 	case "docx":
-		return "Word 文档"
+		return "Word document"
 	case "xlsx":
-		return "Excel 表格"
+		return "Excel workbook"
 	default:
-		return "PPT 演示文稿"
+		return "PPT presentation"
 	}
 }
 
@@ -362,32 +362,32 @@ func buildExecutionPrompt(session *engine.PlanSession) string {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("请严格按照以下已确认计划生成新文档，不要偏离范围。\n")
-	sb.WriteString("原始需求：")
+	sb.WriteString("Generate the new document strictly according to the approved plan below. Do not drift beyond scope.\n")
+	sb.WriteString("Original request: ")
 	sb.WriteString(strings.TrimSpace(session.UserPrompt))
 	sb.WriteString("\n")
-	sb.WriteString("文档类型：")
+	sb.WriteString("Document type: ")
 	sb.WriteString(normalizeDocumentType(session.DocumentType))
 	sb.WriteString("\n")
 	for i, answer := range session.Answers {
-		sb.WriteString("补充说明 ")
+		sb.WriteString("Additional note ")
 		sb.WriteString(strconv.Itoa(i + 1))
-		sb.WriteString("：")
+		sb.WriteString(": ")
 		sb.WriteString(strings.TrimSpace(answer.Answer))
 		sb.WriteString("\n")
 	}
 	if blueprint := strings.TrimSpace(session.FrameworkBlueprint); blueprint != "" {
-		sb.WriteString("结构蓝图摘要：\n")
+		sb.WriteString("Framework blueprint summary:\n")
 		sb.WriteString(blueprint)
 		sb.WriteString("\n")
 	}
-	sb.WriteString("质量约束：\n")
+	sb.WriteString("Quality constraints:\n")
 	for _, line := range buildExecutionQualityConstraints(session.DocumentType) {
 		sb.WriteString("- ")
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
-	sb.WriteString("请确保最终内容与结构蓝图、补充说明、质量约束完全一致，不扩写无关内容。")
+	sb.WriteString("Ensure the final content stays fully aligned with the framework blueprint, additional notes, and quality constraints. Do not expand unrelated content.")
 	return strings.TrimSpace(sb.String())
 }
 
@@ -402,7 +402,7 @@ func shouldBuildFrameworkBlueprint(session *engine.PlanSession) bool {
 func injectFrameworkBlueprint(planMarkdown, blueprint string) string {
 	planMarkdown = strings.TrimSpace(planMarkdown)
 	blueprint = strings.TrimSpace(blueprint)
-	if blueprint == "" || strings.Contains(planMarkdown, "## 框架蓝图") {
+	if blueprint == "" || strings.Contains(planMarkdown, "## Framework Blueprint") {
 		return planMarkdown
 	}
 	if planMarkdown == "" {
@@ -472,43 +472,43 @@ func buildExecutionPlanSynthesisMessages(session *engine.PlanSession) []engine.L
 		if question != nil {
 			answers.WriteString("- ")
 			answers.WriteString(strings.TrimSpace(question.Question))
-			answers.WriteString("：")
+			answers.WriteString(": ")
 			answers.WriteString(strings.TrimSpace(answer.Answer))
 			answers.WriteString("\n")
 			continue
 		}
-		answers.WriteString("- 补充要求：")
+		answers.WriteString("- Additional requirement: ")
 		answers.WriteString(strings.TrimSpace(answer.Answer))
 		answers.WriteString("\n")
 	}
 	if answers.Len() == 0 {
-		answers.WriteString("- 无额外补充\n")
+		answers.WriteString("- No additional notes\n")
 	}
 	var blueprintSection string
 	if strings.TrimSpace(session.FrameworkBlueprint) != "" {
-		blueprintSection = "\n现有框架蓝图：\n" + strings.TrimSpace(session.FrameworkBlueprint) + "\n"
+		blueprintSection = "\nExisting framework blueprint:\n" + strings.TrimSpace(session.FrameworkBlueprint) + "\n"
 	}
 	constraints := strings.Join(buildExecutionQualityConstraints(session.DocumentType), "\n- ")
 	if constraints != "" {
 		constraints = "- " + constraints
 	}
-	userPrompt := fmt.Sprintf(`请基于以下信息，整理一份给用户审阅的执行计划，并同时输出后续执行基线。
+	userPrompt := fmt.Sprintf(`Based on the information below, prepare a user-facing execution plan for review and also produce the execution baseline for later generation.
 
-任务类型：新建文档
-文档类型：%s
-原始需求：%s
-修订版本：%d
+Task type: create a new document
+Document type: %s
+Original request: %s
+Revision: %d
 
-澄清结果：
+Clarification results:
 %s
 %s
 
-输出要求：
-1. plan_markdown 必须是 markdown。
-2. 如果存在现有框架蓝图，plan_markdown 必须保留一个“## 框架蓝图”章节，并吸收其中的结构规划要点。
-3. 如果是最佳效果的新建文档计划，要在实施方案里明确体现并高亮前两步标题：**主题识别**、**整体框架蓝图**。
-4. execution_prompt 必须是严格的执行基线，供后续真正生成复用。
-5. execution_prompt 必须明确写入以下质量约束：
+Output requirements:
+1. plan_markdown must be markdown.
+2. If an existing framework blueprint is present, plan_markdown must keep a section named "## Framework Blueprint" and absorb its structural guidance.
+3. For best-mode new-document plans, the implementation section must explicitly include and highlight the first two step titles: **Theme Identification** and **Framework Blueprint**.
+4. execution_prompt must be a strict execution baseline for the real generation step.
+5. execution_prompt must explicitly include the following quality constraints:
 %s`,
 		buildDocumentLabel(session.DocumentType),
 		strings.TrimSpace(session.UserPrompt),
@@ -518,7 +518,7 @@ func buildExecutionPlanSynthesisMessages(session *engine.PlanSession) []engine.L
 		constraints,
 	)
 	return []engine.LLMMessage{
-		{Role: "system", Content: "你是办公文档执行计划整理器。你必须只输出符合 schema 的 JSON。"},
+		{Role: "system", Content: "You organize execution plans for office documents. You must return JSON that matches the schema exactly."},
 		{Role: "user", Content: userPrompt},
 	}
 }
@@ -527,21 +527,21 @@ func buildExecutionQualityConstraints(documentType string) []string {
 	switch normalizeDocumentType(documentType) {
 	case "docx":
 		return []string{
-			"章节顺序清晰，先结论后分析，避免结构跳跃。",
-			"段落表达正式专业，避免空话、套话和无信息量表述。",
-			"每节都要围绕用途和读者层级控制论证深度与篇幅。",
+			"Keep the section order clear. Lead with conclusions before analysis, and avoid structural jumps.",
+			"Use a formal, professional tone. Avoid filler, empty phrases, and low-information writing.",
+			"Control argument depth and length according to the document purpose and reader level.",
 		}
 	case "xlsx":
 		return []string{
-			"sheet 职责清晰，摘要与明细分工明确。",
-			"字段一致性和指标口径必须统一，避免同义字段混用。",
-			"结果优先服务分析目标，必要时先给管理摘要再展开明细。",
+			"Give each sheet a clear role, with a clean split between summary and detail.",
+			"Keep fields and metric definitions consistent, and avoid mixing near-duplicate labels.",
+			"Prioritize the analysis goal; provide an executive summary first when useful before expanding into detail.",
 		}
 	default:
 		return []string{
-			"控制页数与信息密度，优先形成 6-8 页结论先行的短 deck。",
-			"每页只承担一个清晰职责，避免重复页和无效铺陈。",
-			"页间叙事要递进，标题和要点必须服务于核心结论。",
+			"Control page count and information density, favoring a concise 6-8 slide conclusion-first deck.",
+			"Give each slide one clear job and avoid repetitive or low-value slides.",
+			"Keep the slide-to-slide narrative progressive, and make titles and points serve the core conclusion.",
 		}
 	}
 }

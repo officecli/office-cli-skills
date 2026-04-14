@@ -10,8 +10,8 @@ import (
 
 func TestApplyDOCXModification_ReplacesParagraph(t *testing.T) {
 	base, err := officegen.NewDOCXGenerator().Generate([]officegen.DocxParagraph{
-		{Text: "第一段"},
-		{Text: "第二段"},
+		{Text: "First paragraph"},
+		{Text: "Second paragraph"},
 	}, officegen.DOCXOptions{Title: "test", Creator: "test"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -22,7 +22,7 @@ func TestApplyDOCXModification_ReplacesParagraph(t *testing.T) {
 		Target: ModifyTargetMetadata{ParagraphIndex: 2},
 	}, base, &DocxModifyOperation{
 		ParagraphIndex: 2,
-		Operation:      DocxOperation{NewText: "第二段已改写"},
+		Operation:      DocxOperation{NewText: "Second paragraph rewritten"},
 	})
 	if err != nil {
 		t.Fatalf("ApplyDOCXModification: %v", err)
@@ -32,7 +32,7 @@ func TestApplyDOCXModification_ReplacesParagraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExtractContentXML: %v", err)
 	}
-	if !strings.Contains(contentXMLs["word/document.xml"], "第二段已改写") {
+	if !strings.Contains(contentXMLs["word/document.xml"], "Second paragraph rewritten") {
 		t.Fatalf("document xml = %q, want replaced text", contentXMLs["word/document.xml"])
 	}
 }
@@ -40,7 +40,7 @@ func TestApplyDOCXModification_ReplacesParagraph(t *testing.T) {
 func TestApplyXLSXModification_UpdatesCells(t *testing.T) {
 	base, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{{
 		Name: "Sheet1",
-		Rows: [][]string{{"区域", "金额"}, {"华东", "100"}, {"华南", "200"}},
+		Rows: [][]string{{"Region", "Amount"}, {"East", "100"}, {"South", "200"}},
 	}}, officegen.XLSXOptions{Title: "test", Creator: "test"})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)

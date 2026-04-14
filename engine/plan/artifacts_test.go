@@ -11,18 +11,18 @@ import (
 func TestAnswerExecutionPlanQuestion_DOCXBuildsBlueprintAndExecutionPrompt(t *testing.T) {
 	client := &fakeLLMClient{
 		structuredResponses: []string{
-			`{"questions":[{"id":"doc_goal","question":"这份文档最重要的用途是什么？","allowFreeform":true,"options":[{"id":"report","label":"分析报告","description":"突出结论与分析。","recommended":true},{"id":"proposal","label":"方案文档","description":"突出建议与行动。"}]}]}`,
-			`{"plan_markdown":"# 执行计划\n\n## 目标理解\n- 形成正式分析报告。","execution_prompt":"按照正式分析报告结构生成文档，先结论后分析，避免空话。"}`,
+			`{"questions":[{"id":"doc_goal","question":"What is the most important purpose of this document?","allowFreeform":true,"options":[{"id":"report","label":"Analytical report","description":"Emphasize conclusions and analysis.","recommended":true},{"id":"proposal","label":"Proposal","description":"Emphasize recommendations and action."}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Objective\n- Produce a formal analytical report.","execution_prompt":"Generate the document as a formal analytical report. Lead with conclusions before analysis and avoid filler."}`,
 		},
 		jsonResponses: []string{
-			`{"documentType":"分析报告","targetAudience":"管理层","writingGoal":"说明市场变化并提出建议","tone":"正式专业","lengthHint":"约 3000 字","contentGuideline":"先结论后分析","sections":[{"sectionIndex":1,"heading":"摘要","purpose":"先给核心结论","keyPoints":["结论","建议"],"lengthHint":"300 字"}]}`,
+			`{"documentType":"Analytical report","targetAudience":"Leadership","writingGoal":"Explain market changes and recommend actions","tone":"Formal and professional","lengthHint":"Around 3000 words","contentGuideline":"Lead with conclusions before analysis","sections":[{"sectionIndex":1,"heading":"Executive summary","purpose":"Present the core conclusion first","keyPoints":["Conclusion","Recommendation"],"lengthHint":"300 words"}]}`,
 		},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-docx",
-		UserPrompt:     "写一份 AI 行业分析报告",
+		UserPrompt:     "Write an AI industry analysis report",
 		DocumentType:   "docx",
 		RequestID:      "req-docx-prepare",
 		GenerationMode: "best",
@@ -43,10 +43,10 @@ func TestAnswerExecutionPlanQuestion_DOCXBuildsBlueprintAndExecutionPrompt(t *te
 	if err != nil {
 		t.Fatalf("AnswerExecutionPlanQuestion error: %v", err)
 	}
-	if !strings.Contains(session.FrameworkBlueprint, "### 章节规划") {
+	if !strings.Contains(session.FrameworkBlueprint, "### Section Plan") {
 		t.Fatalf("framework blueprint = %q", session.FrameworkBlueprint)
 	}
-	if !strings.Contains(session.ExecutionPrompt, "避免空话") {
+	if !strings.Contains(session.ExecutionPrompt, "avoid filler") {
 		t.Fatalf("execution prompt = %q", session.ExecutionPrompt)
 	}
 }
@@ -54,13 +54,13 @@ func TestAnswerExecutionPlanQuestion_DOCXBuildsBlueprintAndExecutionPrompt(t *te
 func TestBuildExecutionPrompt_IncludesBlueprintAndTypeSpecificConstraints(t *testing.T) {
 	session := &engine.PlanSession{
 		DocumentType:       "xlsx",
-		UserPrompt:         "做一份销售经营分析表",
+		UserPrompt:         "Build a sales business-analysis workbook",
 		GenerationMode:     "best",
-		Answers:            []engine.PlanAnswer{{QuestionID: "focus", Answer: "按月跟踪收入与预算偏差", Source: "freeform"}},
-		FrameworkBlueprint: "## 框架蓝图\n\n### 工作簿规划\n- Summary sheet 先给摘要",
+		Answers:            []engine.PlanAnswer{{QuestionID: "focus", Answer: "Track revenue and budget variance monthly", Source: "freeform"}},
+		FrameworkBlueprint: "## Framework Blueprint\n\n### Workbook Plan\n- Summary sheet leads with an executive summary",
 	}
 	prompt := buildExecutionPrompt(session)
-	for _, needle := range []string{"原始需求：做一份销售经营分析表", "按月跟踪收入与预算偏差", "Summary sheet 先给摘要", "字段一致性", "指标口径"} {
+	for _, needle := range []string{"Original request: Build a sales business-analysis workbook", "Track revenue and budget variance monthly", "Summary sheet leads with an executive summary", "metric definitions", "Keep fields and metric definitions consistent"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q: %s", needle, prompt)
 		}

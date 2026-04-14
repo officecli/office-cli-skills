@@ -50,7 +50,7 @@ func TestOpenAIReviewer_ReviewPDF(t *testing.T) {
 			if payload["model"] != "gpt-review-test" {
 				t.Fatalf("model = %v", payload["model"])
 			}
-			_, _ = w.Write([]byte(`{"output_text":"{\"score\":88,\"summary\":\"整体表现良好。\",\"strengths\":[\"层级清晰\"],\"issues\":[{\"severity\":\"medium\",\"code\":\"VISUAL_ALIGNMENT\",\"title\":\"对齐略松散\",\"message\":\"第 2 页元素间距不均。\",\"slide_numbers\":[2],\"suggestion\":\"统一模块边距。\"}]}"}`))
+			_, _ = w.Write([]byte(`{"output_text":"{\"score\":88,\"summary\":\"Overall execution is strong.\",\"strengths\":[\"Clear hierarchy\"],\"issues\":[{\"severity\":\"medium\",\"code\":\"VISUAL_ALIGNMENT\",\"title\":\"Alignment is slightly loose\",\"message\":\"Elements on slide 2 use inconsistent spacing.\",\"slide_numbers\":[2],\"suggestion\":\"Use a consistent module margin.\"}]}"}`))
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -63,7 +63,7 @@ func TestOpenAIReviewer_ReviewPDF(t *testing.T) {
 	}
 
 	reviewer := NewOpenAIReviewer(server.URL, "", "gpt-review-test", 30)
-	result, err := reviewer.ReviewPDF(context.Background(), pdfPath, StructureReport{Score: 92, Summary: "结构良好"})
+	result, err := reviewer.ReviewPDF(context.Background(), pdfPath, StructureReport{Score: 92, Summary: "Structure is solid"})
 	if err != nil {
 		t.Fatalf("ReviewPDF: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestOpenAIReviewer_FallsBackToInlinePDFWhenFilesUnsupported(t *testing.T) {
 				t.Fatalf("file_data = %v", filePart["file_data"])
 			}
 			sawInline = true
-			_, _ = w.Write([]byte(`{"output_text":"{\"score\":86,\"summary\":\"支持 inline PDF。\",\"strengths\":[],\"issues\":[]}"}`))
+			_, _ = w.Write([]byte(`{"output_text":"{\"score\":86,\"summary\":\"Inline PDF is supported.\",\"strengths\":[],\"issues\":[]}"}`))
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -175,7 +175,7 @@ func TestOpenAIReviewer_FallsBackToImageChatReviewWhenResponsesHasNoText(t *test
 				// no-op, keep branch for future debugging
 			}
 			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"score\\\":91,\\\"summary\\\":\\\"视觉层级清晰。\\\",\\\"strengths\\\":[\\\"层级明确\\\"],\\\"issues\\\":[]}\"}}]}\n\n")
+			_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"score\\\":91,\\\"summary\\\":\\\"The visual hierarchy is clear.\\\",\\\"strengths\\\":[\\\"Clear hierarchy\\\"],\\\"issues\\\":[]}\"}}]}\n\n")
 			_, _ = io.WriteString(w, "data: [DONE]\n\n")
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -193,7 +193,7 @@ func TestOpenAIReviewer_FallsBackToImageChatReviewWhenResponsesHasNoText(t *test
 		return []visualPageImage{{Page: 1, MIME: "image/png", Data: []byte("png-bytes")}}, nil
 	}
 
-	result, err := reviewer.ReviewPDF(context.Background(), pdfPath, StructureReport{Score: 88, Summary: "结构良好"})
+	result, err := reviewer.ReviewPDF(context.Background(), pdfPath, StructureReport{Score: 88, Summary: "Structure is solid"})
 	if err != nil {
 		t.Fatalf("ReviewPDF: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestOpenAIReviewer_FallsBackToImageChatReviewWhenResponsesHasNoText(t *test
 	if result.Score != 91 {
 		t.Fatalf("score = %d", result.Score)
 	}
-	if result.Summary != "视觉层级清晰。" {
+	if result.Summary != "The visual hierarchy is clear." {
 		t.Fatalf("summary = %q", result.Summary)
 	}
 }
@@ -268,23 +268,23 @@ func TestParseVisualResultJSON_SupportsLooseChatSchema(t *testing.T) {
 	raw := `{
 		"score": 63,
 		"summary": {
-			"overall": "整体表达较完整，但仍有明显遮挡问题。"
+			"overall": "The deck is fairly complete overall, but obvious occlusion issues remain."
 		},
 		"strengths": [
-			"主题明确",
-			"配色统一"
+			"Clear theme",
+			"Consistent color palette"
 		],
 		"issues": [
 			{
 				"page": 5,
 				"severity": "high",
-				"problem": "大面积图片遮挡正文。"
+				"problem": "Large images occlude the main body text."
 			},
 			{
 				"pages": [2, 6],
 				"severity": "medium",
-				"message": "多页文本被截断。",
-				"suggestion": "缩短句子并增加留白。"
+				"message": "Text is truncated on multiple slides.",
+				"suggestion": "Shorten sentences and add more whitespace."
 			}
 		]
 	}`
@@ -296,7 +296,7 @@ func TestParseVisualResultJSON_SupportsLooseChatSchema(t *testing.T) {
 	if result.Score != 63 {
 		t.Fatalf("score = %d", result.Score)
 	}
-	if result.Summary != "整体表达较完整，但仍有明显遮挡问题。" {
+	if result.Summary != "The deck is fairly complete overall, but obvious occlusion issues remain." {
 		t.Fatalf("summary = %q", result.Summary)
 	}
 	if len(result.Issues) != 2 {

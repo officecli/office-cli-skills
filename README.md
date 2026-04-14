@@ -1,8 +1,8 @@
 # OfficeCLI
 
-OfficeCLI 是一个面向人类用户的命令行工具：你用自然语言描述你想要的内容，它会帮你生成 `PPTX / DOCX / XLSX` 文件，并在配置了发布端时自动返回在线预览地址。
+OfficeCLI is a command-line tool for human users: describe what you want in natural language, and it will generate `PPTX / DOCX / XLSX` files and optionally return an online preview URL when publishing is configured.
 
-其中 `PPTX` 生成默认会为合适页面自动配图并把图片嵌进最终文件；如果你只想生成纯文本版 PPT，可以显式加 `--no-images`。
+For `PPTX`, OfficeCLI automatically generates and embeds images for suitable slides by default. If you want a text-only deck, pass `--no-images`.
 
 ## Claude marketplace 安装
 

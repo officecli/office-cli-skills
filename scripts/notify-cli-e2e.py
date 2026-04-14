@@ -23,7 +23,7 @@ def summarize_status(report_root):
             "status": "blocked",
             "suite": blocked.get("suite", "unknown"),
             "installed_version": blocked.get("installed_version", "unknown"),
-            "message": blocked.get("message", "阻塞"),
+            "message": blocked.get("message", "Blocked"),
             "details": blocked.get("details", ""),
             "cases": [],
         }
@@ -58,67 +58,67 @@ def build_subject(report):
 
 def build_text(report, run_url):
     lines = [
-        "OfficeCLI 安装式 E2E 定时测试结果",
-        f"状态: {report.get('status', 'unknown')}",
-        f"套件: {report.get('suite', 'unknown')}",
-        f"安装版本: {report.get('installed_version', 'unknown')}",
+        "OfficeCLI installed E2E scheduled test result",
+        f"Status: {report.get('status', 'unknown')}",
+        f"Suite: {report.get('suite', 'unknown')}",
+        f"Installed version: {report.get('installed_version', 'unknown')}",
     ]
     if run_url:
-        lines.append(f"运行地址: {run_url}")
+        lines.append(f"Run URL: {run_url}")
 
     if report.get("status") == "blocked":
-        lines.append(f"阻塞原因: {report.get('message', '-')}")
+        lines.append(f"Blocked reason: {report.get('message', '-')}")
         details = (report.get("details") or "").strip()
         if details:
-            lines.append(f"详情: {details}")
+            lines.append(f"Details: {details}")
         return "\n".join(lines)
 
     case = pick_case(report)
     cases = report.get("cases") or []
     if case is None:
-        lines.append("未找到案例结果，请查看 workflow artifact。")
+        lines.append("No case result was found. Check the workflow artifact.")
         return "\n".join(lines)
 
     lines.extend(
         [
-            f"案例数量: {len(cases)}",
-            f"主案例: {case.get('category', '-')}/{case.get('topic', '-')}",
-            f"主案例总分: {case.get('overall_score', 0)}",
-            f"主案例视觉分: {case.get('visual_score', 0)}",
-            f"主案例结构分: {case.get('structure_score', 0)}",
-            f"主案例 High 问题数: {case.get('high_count', 0)}",
-            f"主案例 Medium 问题数: {case.get('medium_count', 0)}",
-            f"主案例在线预览: {case.get('access_url') or 'preview unavailable'}",
-            f"主案例访问密码: {case.get('password') or '-'}",
-            f"主案例过期时间: {case.get('expires_at') or '-'}",
+            f"Case count: {len(cases)}",
+            f"Primary case: {case.get('category', '-')}/{case.get('topic', '-')}",
+            f"Primary overall score: {case.get('overall_score', 0)}",
+            f"Primary visual score: {case.get('visual_score', 0)}",
+            f"Primary structure score: {case.get('structure_score', 0)}",
+            f"Primary high issue count: {case.get('high_count', 0)}",
+            f"Primary medium issue count: {case.get('medium_count', 0)}",
+            f"Primary online preview: {case.get('access_url') or 'preview unavailable'}",
+            f"Primary access password: {case.get('password') or '-'}",
+            f"Primary expiration time: {case.get('expires_at') or '-'}",
         ]
     )
-    lines.append("案例汇总:")
+    lines.append("Case summary:")
     lines.extend(summarize_cases(report))
     top_issues = case.get("top_issues") or []
     if top_issues:
-        lines.append("关键问题: " + "；".join(top_issues[:3]))
+        lines.append("Top issues: " + "; ".join(top_issues[:3]))
     review_summary = (case.get("review_summary") or "").strip()
     if review_summary:
-        lines.append(f"评审结论: {review_summary}")
+        lines.append(f"Review summary: {review_summary}")
     return "\n".join(lines)
 
 
 def build_dingtalk_text(report, run_url):
-    base = ["officecli 安装式 E2E"]
-    base.append(f"状态: {report.get('status', 'unknown')}")
-    base.append(f"套件: {report.get('suite', 'unknown')}")
-    base.append(f"版本: {report.get('installed_version', 'unknown')}")
+    base = ["officecli installed E2E"]
+    base.append(f"Status: {report.get('status', 'unknown')}")
+    base.append(f"Suite: {report.get('suite', 'unknown')}")
+    base.append(f"Version: {report.get('installed_version', 'unknown')}")
     case = pick_case(report)
     if case is not None:
-        base.append(f"主案例总分: {case.get('overall_score', 0)}")
-        base.append(f"主案例预览: {case.get('access_url') or 'preview unavailable'}")
+        base.append(f"Primary overall score: {case.get('overall_score', 0)}")
+        base.append(f"Primary preview: {case.get('access_url') or 'preview unavailable'}")
         extra = summarize_cases(report)
         if extra:
-            base.append("案例汇总:")
+            base.append("Case summary:")
             base.extend(extra[:5])
     if report.get("status") == "blocked":
-        base.append(f"阻塞: {report.get('message', '-')}")
+        base.append(f"Blocked: {report.get('message', '-')}")
     if run_url:
         base.append(f"Run: {run_url}")
     return "\n".join(base)
@@ -183,9 +183,9 @@ def send_dingtalk(report, run_url):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="发送 officecli 安装式 E2E 邮件与钉钉通知")
-    parser.add_argument("report_root", help="评测结果目录")
-    parser.add_argument("--run-url", default=os.environ.get("RUN_URL", ""), help="GitHub Actions run 链接")
+    parser = argparse.ArgumentParser(description="Send email and DingTalk notifications for officecli installed E2E results")
+    parser.add_argument("report_root", help="Evaluation result directory")
+    parser.add_argument("--run-url", default=os.environ.get("RUN_URL", ""), help="GitHub Actions run URL")
     args = parser.parse_args()
 
     report = summarize_status(Path(args.report_root).resolve())

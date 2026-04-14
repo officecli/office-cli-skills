@@ -17,26 +17,26 @@ const (
 
 func (s *Service) Review(ctx context.Context, req Request) (*Result, error) {
 	if strings.TrimSpace(req.DocumentType) != "pptx" {
-		return nil, fmt.Errorf("review 目前只支持 pptx")
+		return nil, fmt.Errorf("review is currently only supported for pptx")
 	}
 	if strings.TrimSpace(req.RuntimeMode) != "" && strings.TrimSpace(req.RuntimeMode) != "external" {
-		return nil, fmt.Errorf("runtime_mode=%s 暂不支持 review", strings.TrimSpace(req.RuntimeMode))
+		return nil, fmt.Errorf("review does not currently support runtime_mode=%s", strings.TrimSpace(req.RuntimeMode))
 	}
 	if strings.TrimSpace(req.LLMProvider) != "" && strings.TrimSpace(req.LLMProvider) != "openai" {
-		return nil, fmt.Errorf("provider=%s 暂不支持 review", strings.TrimSpace(req.LLMProvider))
+		return nil, fmt.Errorf("review does not currently support provider=%s", strings.TrimSpace(req.LLMProvider))
 	}
 	deck, err := os.ReadFile(req.FilePath)
 	if err != nil {
-		return nil, fmt.Errorf("读取本地 PPT 失败：%w", err)
+		return nil, fmt.Errorf("failed to read local PPT: %w", err)
 	}
 
-	s.emit(ctx, "review_lint", "running", "正在执行 PPT 结构检查")
+	s.emit(ctx, "review_lint", "running", "Running PPT structural checks")
 	structure, err := lintPPTX(req.FilePath, deck)
 	if err != nil {
-		s.emit(ctx, "review_lint", "failed", "PPT 结构检查失败")
-		return nil, fmt.Errorf("PPT 结构检查失败：%w", err)
+		s.emit(ctx, "review_lint", "failed", "PPT structural checks failed")
+		return nil, fmt.Errorf("PPT structural checks failed: %w", err)
 	}
-	s.emit(ctx, "review_lint", "completed", "PPT 结构检查完成")
+	s.emit(ctx, "review_lint", "completed", "PPT structural checks completed")
 
 	result := &Result{
 		Status:         statusPartial,
@@ -50,31 +50,31 @@ func (s *Service) Review(ctx context.Context, req Request) (*Result, error) {
 	}
 
 	if !req.EnableVisual {
-		result.Warnings = append(result.Warnings, "已显式关闭视觉评审，当前结果仅包含结构检查。")
+		result.Warnings = append(result.Warnings, "Visual review was disabled explicitly. The result only contains structural checks.")
 		return finalizeResult(result, nil), nil
 	}
 	if s.converter == nil || s.visual == nil {
-		result.Warnings = append(result.Warnings, "视觉评审组件未启用，当前结果仅包含结构检查。")
+		result.Warnings = append(result.Warnings, "Visual review is not available. The result only contains structural checks.")
 		return finalizeResult(result, nil), nil
 	}
 
-	s.emit(ctx, "review_pdf", "running", "正在将 PPT 转换为 PDF")
+	s.emit(ctx, "review_pdf", "running", "Converting PPT to PDF")
 	pdfPath, err := s.converter.Convert(ctx, req.FilePath)
 	if err != nil {
-		s.emit(ctx, "review_pdf", "failed", "PPT 转 PDF 失败，已降级为结构检查")
-		result.Warnings = append(result.Warnings, fmt.Sprintf("视觉评审已跳过：%s；当前为结构检查结果。", err.Error()))
+		s.emit(ctx, "review_pdf", "failed", "PPT to PDF conversion failed. Falling back to structural checks")
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Visual review was skipped: %s. Returning structural checks only.", err.Error()))
 		return finalizeResult(result, nil), nil
 	}
-	s.emit(ctx, "review_pdf", "completed", "PPT 转 PDF 完成")
+	s.emit(ctx, "review_pdf", "completed", "PPT to PDF conversion completed")
 
-	s.emit(ctx, "review_visual", "running", "正在执行视觉质量评审")
+	s.emit(ctx, "review_visual", "running", "Running visual quality review")
 	visual, err := s.visual.ReviewPDF(ctx, pdfPath, structure)
 	if err != nil {
-		s.emit(ctx, "review_visual", "failed", "视觉评审失败，已降级为结构检查")
-		result.Warnings = append(result.Warnings, fmt.Sprintf("视觉评审失败：%s；当前为结构检查结果。", err.Error()))
+		s.emit(ctx, "review_visual", "failed", "Visual review failed. Falling back to structural checks")
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Visual review failed: %s. Returning structural checks only.", err.Error()))
 		return finalizeResult(result, nil), nil
 	}
-	s.emit(ctx, "review_visual", "completed", "视觉质量评审完成")
+	s.emit(ctx, "review_visual", "completed", "Visual quality review completed")
 
 	result.UsedVisual = true
 	result.VisualScore = visual.Score
@@ -99,9 +99,9 @@ func finalizeResult(result *Result, visual *VisualResult) *Result {
 		if result.UsedVisual && visual != nil && strings.TrimSpace(visual.Summary) != "" {
 			result.Summary = strings.TrimSpace(visual.Summary)
 		} else if len(result.Issues) == 0 {
-			result.Summary = "结构检查未发现明显问题。"
+			result.Summary = "Structural checks did not find any obvious issues."
 		} else {
-			result.Summary = fmt.Sprintf("共发现 %d 个需要优先修正的问题。", len(result.Issues))
+			result.Summary = fmt.Sprintf("Found %d issues that should be addressed first.", len(result.Issues))
 		}
 	}
 	result.Strengths = compactStrings(result.Strengths, 4)

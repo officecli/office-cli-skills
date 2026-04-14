@@ -96,8 +96,8 @@ func TestExecutorGenerateAndPublish(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      true,
 	})
@@ -122,8 +122,8 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LocalPreview: true,
@@ -149,8 +149,8 @@ func TestExecutorConsumesUsageAfterSuccess(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -185,8 +185,8 @@ func TestExecutorEmitsProgressEvents(t *testing.T) {
 
 	_, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      true,
 	})
@@ -200,10 +200,10 @@ func TestExecutorEmitsProgressEvents(t *testing.T) {
 	}
 	output := strings.Join(joined, "\n")
 	for _, needle := range []string{
-		"generate:running:正在生成文档内容",
-		"write_file:running:正在写入本地文件",
-		"publish:running:正在发布在线预览",
-		"finalize:completed:文档已生成",
+		"generate:running:Generating document content",
+		"write_file:running:Writing local files",
+		"publish:running:Publishing online preview",
+		"finalize:completed:Document generated",
 	} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("progress output missing %q:\n%s", needle, output)
@@ -221,8 +221,8 @@ func TestExecutorFailsWhenConsumeFails(t *testing.T) {
 
 	_, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -237,7 +237,7 @@ func TestExecutorFailsWhenConsumeFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "额度同步失败") {
+	if !strings.Contains(err.Error(), "quota sync failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if entries, statErr := os.ReadDir(tmpDir); statErr != nil {
@@ -260,8 +260,8 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -278,7 +278,7 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "当前为免费模式，剩余 3 次生成额度") {
+	if !strings.Contains(warnings, "Current mode: free. 3 generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeFree) {
@@ -299,8 +299,8 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -317,7 +317,7 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "当前为付费模式，剩余 7 次生成额度") {
+	if !strings.Contains(warnings, "Current mode: paid. 7 generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModePaid) {
@@ -338,8 +338,8 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -356,7 +356,7 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "当前为奖励模式，剩余 4 次生成额度") {
+	if !strings.Contains(warnings, "Current mode: reward. 4 generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeReward) {
@@ -371,8 +371,8 @@ func TestExecutorCarriesAccessModeWithoutConsumeRequestID(t *testing.T) {
 
 	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -401,8 +401,8 @@ func TestExecutorDoesNotConsumeWhenGenerationFails(t *testing.T) {
 
 	_, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      false,
 		LicenseCheck: &LicenseCheckResult{
@@ -429,8 +429,8 @@ func TestExecutorDoesNotConsumeWhenPublishFails(t *testing.T) {
 
 	_, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		Topic:        "企业协作平台介绍",
-		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
 		OutputDir:    tmpDir,
 		Publish:      true,
 		LicenseCheck: &LicenseCheckResult{
@@ -445,7 +445,7 @@ func TestExecutorDoesNotConsumeWhenPublishFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "发布阶段失败") {
+	if !strings.Contains(err.Error(), "publishing failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if manager.consumeCalls != 1 {

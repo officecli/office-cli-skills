@@ -91,13 +91,13 @@ release-linux-arm64:
 	GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP)_$(VERSION)_linux_arm64 ./cmd/officecli
 
 demo-ppt: build
-	./$(APP) new pptx "企业协作平台介绍" --prompt-file ./examples/prompt.txt
+	./$(APP) new pptx "Enterprise Collaboration Platform Overview" --prompt-file ./examples/prompt.txt
 
 demo-docx: build
-	./$(APP) new docx "季度复盘" --prompt-file ./examples/docx-prompt.txt
+	./$(APP) new docx "Quarterly Retrospective" --prompt-file ./examples/docx-prompt.txt
 
 demo-xlsx: build
-	./$(APP) new xlsx "销售分析表" --prompt-file ./examples/xlsx-prompt.txt
+	./$(APP) new xlsx "Sales Analysis Workbook" --prompt-file ./examples/xlsx-prompt.txt
 
 usage-limits-smoke:
 	bash ./scripts/usage-limits-smoke.sh

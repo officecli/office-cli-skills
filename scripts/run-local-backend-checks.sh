@@ -15,24 +15,24 @@ case "${MODE}" in
     ;;
 esac
 
-phase "后端与 CLI 检查 (${MODE})"
+phase "Backend and CLI checks (${MODE})"
 
 phase "CLI Go tests"
 run_cmd bash -lc "cd '${REPO_ROOT}' && go test ./..."
-pass "CLI Go tests 完成"
+pass "CLI Go tests completed"
 
 phase "Platform Go tests"
 run_cmd bash -lc "cd '${REPO_ROOT}/platform' && go test ./..."
-pass "Platform Go tests 完成"
+pass "Platform Go tests completed"
 
 if [[ "${MODE}" == "full" ]]; then
   phase "CLI build"
   run_cmd bash -lc "cd '${REPO_ROOT}' && make build"
-  pass "CLI build 完成"
+  pass "CLI build completed"
 
   phase "Platform build"
   run_cmd bash -lc "cd '${REPO_ROOT}/platform' && make build"
-  pass "Platform build 完成"
+  pass "Platform build completed"
 fi
 
-phase "后端与 CLI 检查完成 (${MODE})"
+phase "Backend and CLI checks completed (${MODE})"

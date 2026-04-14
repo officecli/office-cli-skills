@@ -70,7 +70,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
 	}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		return fakeAppLLMClient{jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`}, nil
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is built for enterprise teams."]}]}`}, nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -125,8 +125,8 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 			"output_format": "json",
 			"args": map[string]any{
 				"document_type": "docx",
-				"topic":         "企业协作平台介绍",
-				"prompt":        "介绍这款企业协作平台",
+				"topic":         "Enterprise Collaboration Platform Overview",
+				"prompt":        "Introduce this enterprise collaboration platform",
 				"mode":          "fast",
 				"out":           tmpDir,
 				"publish":       false,
@@ -254,7 +254,7 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 	wait := make(chan struct{})
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
 		return blockingLLMClient{
-			jsonResponse: `{"title":"企业协作平台介绍","sections":[{"heading":"产品概述","level":1,"paragraphs":["这是一款面向企业的协作平台产品。"]}]}`,
+			jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`,
 			wait:         wait,
 		}, nil
 	}
@@ -278,8 +278,8 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 		"output_format": "json",
 		"args": map[string]any{
 			"document_type": "docx",
-			"topic":         "企业协作平台介绍",
-			"prompt":        "介绍这款企业协作平台",
+			"topic":         "Enterprise Collaboration Platform Overview",
+			"prompt":        "Introduce this enterprise collaboration platform",
 			"mode":          "fast",
 			"out":           tmpDir,
 			"publish":       false,
@@ -359,7 +359,7 @@ func TestBridgePrompterRespondsThroughTaskRespond(t *testing.T) {
 
 	done := make(chan bridgePromptResponse, 1)
 	go func() {
-		optionID, answer, err := prompter.Ask("请选择输出风格", []string{"简洁", "详细"}, true)
+		optionID, answer, err := prompter.Ask("Choose an output style", []string{"Concise", "Detailed"}, true)
 		if err != nil {
 			t.Errorf("Ask returned error: %v", err)
 			return
@@ -402,7 +402,7 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 		FilePath:     "/tmp/demo.pptx",
 		DocumentType: "pptx",
 		DocumentName: "demo.pptx",
-		Warnings:     []string{"部分图片生成失败，已自动降级为无图版本。"},
+		Warnings:     []string{"Image generation failed, and the PPT output was downgraded to a text-only version."},
 	})
 
 	for _, key := range []string{"format", "status", "file_path", "document_type", "document_name", "warnings", "result", "result_meta"} {
@@ -445,7 +445,7 @@ func TestAgentBridgeTaskStatusIncludesResultMeta(t *testing.T) {
 			DocumentType: "pptx",
 			DocumentName: "demo.pptx",
 			Warnings: []string{
-				"部分图片生成失败，已自动降级为无图版本。请检查生成服务是否支持图片接口，或运行 `officecli config set-generation` 配置图片模型地址（image url）、访问凭证（image ak）和模型名；如只需纯文本版可直接使用 `--no-images`。",
+				"Image generation failed, and the PPT output was downgraded to a text-only version. Check the image model URL, API key, and model name, or run `officecli config set-generation`; use `--no-images` for a text-only deck.",
 			},
 		},
 	}
@@ -475,9 +475,9 @@ func TestClassifyBridgeError(t *testing.T) {
 		retryable bool
 	}{
 		{name: "config", err: io.EOF, wantType: "execution_error", wantCode: "execution_failed"},
-		{name: "missing config", err: errString("生成服务未完成配置：缺少生成服务地址"), wantType: "configuration_error", wantCode: "configuration_missing"},
-		{name: "llm", err: errString("生成内容阶段失败：llm request failed"), wantType: "llm_error", wantCode: "llm_request_failed", retryable: true},
-		{name: "assembly", err: errString("文档组装阶段失败：parse llm response"), wantType: "assembly_error", wantCode: "document_assembly_failed"},
+		{name: "missing config", err: errString("generation service is not fully configured: missing base url"), wantType: "configuration_error", wantCode: "configuration_missing"},
+		{name: "llm", err: errString("content generation failed: llm request failed"), wantType: "llm_error", wantCode: "llm_request_failed", retryable: true},
+		{name: "assembly", err: errString("document assembly failed: parse llm response"), wantType: "assembly_error", wantCode: "document_assembly_failed"},
 		{name: "validation", err: errString("unsupported tool: foo"), wantType: "validation_error", wantCode: "invalid_request"},
 	}
 
@@ -562,7 +562,7 @@ func TestAgentBridgeReviewTask(t *testing.T) {
 			OverallScore:   78,
 			VisualScore:    80,
 			StructureScore: 72,
-			Summary:        "整体可用，但还有优化空间。",
+			Summary:        "Overall quality is acceptable, but there is still room to improve.",
 			UsedVisual:     true,
 		}}, nil
 	}

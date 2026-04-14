@@ -196,9 +196,9 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 	}
 	if len(missing) > 0 {
 		if cfg.RuntimeModeOrDefault() == RuntimeModeHosted {
-			return Config{}, fmt.Errorf("缺少必填环境变量，请先补全平台访问凭证，或改用 `officecli config set-license`")
+			return Config{}, fmt.Errorf("missing required environment variables. Complete the platform access settings first or run `officecli config set-license`")
 		}
-		return Config{}, fmt.Errorf("缺少必填环境变量，请先补全生成服务配置，或改用 `officecli config set-generation`")
+		return Config{}, fmt.Errorf("missing required environment variables. Complete the generation service settings first or run `officecli config set-generation`")
 	}
 	if err := publishprovider.ValidateConfig(cfg.Publish); err != nil {
 		return Config{}, err
@@ -261,17 +261,17 @@ func isVersionArg(value string) bool {
 func HelpText() string {
 	return `officecli
 
-用自然语言生成 Office 文档的命令行工具。
+Generate Office documents from natural language.
 
-子命令：
-  config                  查看或更新本地配置
-  auth                    查看或设置授权信息
-  new                     生成新的 PPTX / DOCX / XLSX 文件
-  score                   按需开启本地 PPTX 评分
-  review                  评估本地 PPTX 文件质量
-  agent-bridge            通过 JSON-RPC over stdio 提供 agent 接口
+Commands:
+  config                  View or update local configuration
+  auth                    View or update access settings
+  new                     Generate a new PPTX / DOCX / XLSX file
+  score                   Run PPTX scoring on demand
+  review                  Review the quality of a local PPTX file
+  agent-bridge            Expose an agent interface over JSON-RPC via stdio
 
-用法：
+Usage:
   officecli new <pptx|docx|xlsx> <topic> [brief]
   officecli config status
   officecli auth status
@@ -279,34 +279,34 @@ func HelpText() string {
   officecli score pptx ./deck.pptx
   officecli review pptx ./deck.pptx
 
-常用选项：
-  --prompt <text>         直接提供完整提示词
-  --prompt-file <path>    从文件读取提示词
-  --mode fast|best        选择快速生成或补问增强模式
-  --lang <value>          指定语言
-  --style <value>         指定风格
-  --audience <value>      指定受众
-  --out <dir>             指定输出目录
-  --local-preview         额外生成本地 HTML/JSON 预览 sidecar（仅 pptx）
-  --publish               强制发布在线预览
-  --no-publish            禁止发布在线预览
-  --no-images             关闭 PPT 自动配图
-  --json                  输出 JSON 结果
-  --version               显示当前版本
+Common options:
+  --prompt <text>         Provide the full prompt directly
+  --prompt-file <path>    Read the prompt from a file
+  --mode fast|best        Choose fast generation or interactive refinement
+  --lang <value>          Set the output language
+  --style <value>         Set the style
+  --audience <value>      Set the audience
+  --out <dir>             Set the output directory
+  --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --publish               Force online preview publishing
+  --no-publish            Disable online preview publishing
+  --no-images             Disable automatic PPT images
+  --json                  Output JSON
+  --version               Show the current version
 
-默认行为：
-  - 默认输出目录：./output
-  - 默认模式：fast
-  - 若已接入额度服务，则生成前会先校验可用额度
-  - 如果 defaults.publish=true 且发布端已配置，则生成后自动发布
-  - 如果发布端未配置，则只保存本地文件并提示跳过在线预览
+Default behavior:
+  - Default output directory: ./output
+  - Default mode: fast
+  - If access checks are enabled, availability is verified before generation
+  - If defaults.publish=true and publishing is configured, output is published automatically
+  - If publishing is not configured, files are saved locally and online preview is skipped
 
-配置文件：
+Config file:
   macOS   ~/Library/Application Support/officecli/config.json
   Linux   ~/.config/officecli/config.json
   Windows %AppData%\officecli\config.json
 
-示例：
+Examples:
   officecli config status
   officecli config set-generation
   officecli config set-license
@@ -315,79 +315,79 @@ func HelpText() string {
   officecli auth status
   officecli auth --help
   officecli auth set-key <your-api-key>
-  officecli new pptx "企业协作平台介绍" "介绍这款企业协作平台的产品能力、客户价值与应用场景"
-  officecli score pptx ./output/企业协作平台介绍.pptx
-  officecli review pptx ./output/企业协作平台介绍.pptx
+  officecli new pptx "Enterprise Collaboration Platform Overview" "Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform"
+  officecli score pptx ./output/enterprise_collaboration_platform_overview.pptx
+  officecli review pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli new --help
   officecli score --help
   officecli review --help
-  officecli new docx "季度复盘" --prompt-file ./examples/prompt.txt
-  officecli new xlsx "销售分析表" --json
+  officecli new docx "Quarterly Review" --prompt-file ./examples/prompt.txt
+  officecli new xlsx "Sales Analysis" --json
   officecli --version
 `
 }
 
 func ConfigHelpText() string {
-	return `用法：
+	return `Usage:
   officecli config status
   officecli config set-generation
   officecli config set-license
   officecli config set-publish
   officecli config set-defaults
 
-说明：
-  查看当前配置状态，或分别更新生成服务、图片生成、额度服务、在线预览发布和默认值。
+Description:
+  View the current configuration status, or update the generation service, image service, access checks, preview publishing, and defaults.
 `
 }
 
 func AuthHelpText() string {
-	return `用法：
+	return `Usage:
   officecli auth status
   officecli auth set-key <api-key>
 
-说明：
-  查看额度状态，或写入付费额度密钥。
+Description:
+  View access status or save a paid API key.
 `
 }
 
 func NewHelpText() string {
-	return `用法：
+	return `Usage:
   officecli new <pptx|docx|xlsx> <topic> [brief]
 
-常用选项：
-  --prompt <text>         直接提供完整提示词
-  --prompt-file <path>    从文件读取提示词
-  --mode fast|best        选择快速生成或补问增强模式
-  --lang <value>          指定语言
-  --style <value>         指定风格
-  --audience <value>      指定受众
-  --out <dir>             指定输出目录
-  --local-preview         额外生成本地 HTML/JSON 预览 sidecar（仅 pptx）
-  --publish               强制发布在线预览
-  --no-publish            禁止发布在线预览
-  --no-images             关闭 PPT 自动配图
-  --json                  输出 JSON 结果
+Common options:
+  --prompt <text>         Provide the full prompt directly
+  --prompt-file <path>    Read the prompt from a file
+  --mode fast|best        Choose fast generation or interactive refinement
+  --lang <value>          Set the output language
+  --style <value>         Set the style
+  --audience <value>      Set the audience
+  --out <dir>             Set the output directory
+  --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --publish               Force online preview publishing
+  --no-publish            Disable online preview publishing
+  --no-images             Disable automatic PPT images
+  --json                  Output JSON
 
-说明：
-  - ` + "`pptx`" + ` 默认会尝试自动配图并把图片嵌入最终文件
-  - 如果只想生成纯文本版 PPT，可显式加 ` + "`--no-images`" + `
-  - 如果一直没有图片，请运行 ` + "`officecli config set-generation`" + ` 检查图片模型地址 / 凭证 / 模型名配置
+Description:
+  - ` + "`pptx`" + ` generation tries to add images and embed them in the final file by default
+  - For a text-only PPT, pass ` + "`--no-images`" + `
+  - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
 `
 }
 
 func ReviewHelpText() string {
-	return `用法：
+	return `Usage:
   officecli score pptx <file>
   officecli review pptx <file>
 
-常用选项：
-  --json                  输出 JSON 结果
-  --no-visual             只执行结构检查，不调用视觉评审
-  --fail-below <0-100>    当总分低于阈值时返回非零退出码
+Common options:
+  --json                  Output JSON
+  --no-visual             Run structural checks only
+  --fail-below <0-100>    Exit non-zero when the total score is below the threshold
 
-说明：
-  - 评分默认不会在生成后自动执行
-  - 如需手动开启评分，请显式运行 ` + "`officecli score ...`" + ` 或 ` + "`officecli review ...`" + `
+Description:
+  - Scoring does not run automatically after generation
+  - To run it manually, use ` + "`officecli score ...`" + ` or ` + "`officecli review ...`" + `
 `
 }
 
@@ -421,37 +421,37 @@ func (a *App) runConfigStatus(cfg Config) error {
 	if configPath == "" {
 		return fmt.Errorf("unable to resolve config path")
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "配置文件路径：%s\n", configPath); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Config file: %s\n", configPath); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "生成服务已配置：%t\n", hasGenerationConfig(cfg)); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Generation service configured: %t\n", hasGenerationConfig(cfg)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "图片生成配置：%s\n", imageConfigSummary(cfg)); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Image generation config: %s\n", imageConfigSummary(cfg)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "额度校验已启用：%t\n", cfg.License.Enabled); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Access checks enabled: %t\n", cfg.License.Enabled); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "付费额度密钥已配置：%t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Paid API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "在线预览发布已启用：%t\n", cfg.Publish.Enabled); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Online preview publishing enabled: %t\n", cfg.Publish.Enabled); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "默认输出目录：%s\n", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Default output directory: %s\n", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "默认生成模式：%s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Default generation mode: %s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "默认 PPT 风格预设：%s\n", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Default PPT style preset: %s\n", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "视觉评审模型：%s\n", fallbackString(cfg.LLM.ReviewModel, "gpt-5.4-mini")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Visual review model: %s\n", fallbackString(cfg.LLM.ReviewModel, "gpt-5.4-mini")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "生成后默认发布：%t\n", cfg.Defaults.Publish); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Publish by default after generation: %t\n", cfg.Defaults.Publish); err != nil {
 		return err
 	}
 	return nil
@@ -460,28 +460,28 @@ func (a *App) runConfigStatus(cfg Config) error {
 func (a *App) runConfigSetGeneration(cfg Config) error {
 	reader := bufio.NewReader(a.Stdin)
 	var err error
-	if cfg.LLM.BaseURL, err = a.promptRequiredLine(reader, "请输入生成服务地址", cfg.LLM.BaseURL); err != nil {
+	if cfg.LLM.BaseURL, err = a.promptRequiredLine(reader, "Enter the generation service URL", cfg.LLM.BaseURL); err != nil {
 		return err
 	}
-	if cfg.LLM.APIKey, err = a.promptRequiredLine(reader, "请输入生成服务访问凭证", cfg.LLM.APIKey); err != nil {
+	if cfg.LLM.APIKey, err = a.promptRequiredLine(reader, "Enter the generation service credential", cfg.LLM.APIKey); err != nil {
 		return err
 	}
 	if strings.TrimSpace(cfg.LLM.Model) == "" {
 		cfg.LLM.Model = defaultInitConfig().LLM.Model
 	}
-	useSeparateImageService, err := a.promptYesNo(reader, "PPT 自动配图是否使用独立图片模型服务？(yes/no)", hasSeparateImageConfig(cfg))
+	useSeparateImageService, err := a.promptYesNo(reader, "Use a separate image model service for automatic PPT images? (yes/no)", hasSeparateImageConfig(cfg))
 	if err != nil {
 		return err
 	}
 	if useSeparateImageService {
 		defaultImageBaseURL := fallbackString(cfg.LLM.ImageBaseURL, cfg.LLM.BaseURL)
-		if cfg.LLM.ImageBaseURL, err = a.promptRequiredLine(reader, "请输入图片模型服务地址（image url）", defaultImageBaseURL); err != nil {
+		if cfg.LLM.ImageBaseURL, err = a.promptRequiredLine(reader, "Enter the image model service URL (image url)", defaultImageBaseURL); err != nil {
 			return err
 		}
-		if cfg.LLM.ImageAPIKey, err = a.promptRequiredLine(reader, "请输入图片模型访问凭证（image ak）", fallbackString(cfg.LLM.ImageAPIKey, cfg.LLM.APIKey)); err != nil {
+		if cfg.LLM.ImageAPIKey, err = a.promptRequiredLine(reader, "Enter the image model credential (image ak)", fallbackString(cfg.LLM.ImageAPIKey, cfg.LLM.APIKey)); err != nil {
 			return err
 		}
-		if cfg.LLM.ImageModel, err = a.promptRequiredLine(reader, "请输入图片模型名称", fallbackString(cfg.LLM.ImageModel, defaultInitConfig().LLM.ImageModel)); err != nil {
+		if cfg.LLM.ImageModel, err = a.promptRequiredLine(reader, "Enter the image model name", fallbackString(cfg.LLM.ImageModel, defaultInitConfig().LLM.ImageModel)); err != nil {
 			return err
 		}
 	} else {
@@ -495,20 +495,20 @@ func (a *App) runConfigSetGeneration(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已更新生成服务配置：%s\n提示：pptx 默认会自动配图；如需纯文本版可使用 `--no-images`。\n", path)
+	_, err = fmt.Fprintf(a.Stdout, "Updated generation service config: %s\nNote: pptx generation adds images automatically by default. Use `--no-images` for a text-only deck.\n", path)
 	return err
 }
 
 func (a *App) runConfigSetLicense(cfg Config) error {
 	reader := bufio.NewReader(a.Stdin)
 	var err error
-	cfg.License.Enabled, err = a.promptYesNo(reader, "是否启用额度校验？(yes/no)", cfg.License.Enabled)
+	cfg.License.Enabled, err = a.promptYesNo(reader, "Enable access checks? (yes/no)", cfg.License.Enabled)
 	if err != nil {
 		return err
 	}
 	cfg.License.BaseURL = defaultInitConfig().License.BaseURL
 	if cfg.License.Enabled {
-		if cfg.License.APIKey, err = a.promptLine(reader, "请输入付费额度密钥（可留空，默认先走免费额度）", cfg.License.APIKey); err != nil {
+		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the paid API key (optional; free quota will be used first)", cfg.License.APIKey); err != nil {
 			return err
 		}
 	} else {
@@ -518,29 +518,29 @@ func (a *App) runConfigSetLicense(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已更新额度配置：%s\n", path)
+	_, err = fmt.Fprintf(a.Stdout, "Updated access config: %s\n", path)
 	return err
 }
 
 func (a *App) runConfigSetPublish(cfg Config) error {
 	reader := bufio.NewReader(a.Stdin)
 	var err error
-	cfg.Publish.Enabled, err = a.promptYesNo(reader, "是否启用在线预览发布？(yes/no)", cfg.Publish.Enabled)
+	cfg.Publish.Enabled, err = a.promptYesNo(reader, "Enable online preview publishing? (yes/no)", cfg.Publish.Enabled)
 	if err != nil {
 		return err
 	}
 	cfg.Defaults.Publish = cfg.Publish.Enabled
 	if cfg.Publish.Enabled {
 		defaultBaseURL := fallbackString(cfg.Publish.BaseURL, publishprovider.EmbeddedPublishBaseURL)
-		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", defaultBaseURL); err != nil {
+		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "Enter the publishing service URL", defaultBaseURL); err != nil {
 			return err
 		}
 		if publishprovider.SupportsEmbeddedDynamicAuth() {
-			if cfg.Publish.APIKey, err = a.promptLine(reader, "请输入发布服务访问凭证（可留空，默认使用内置动态认证）", cfg.Publish.APIKey); err != nil {
+			if cfg.Publish.APIKey, err = a.promptLine(reader, "Enter the publishing service credential (optional when built-in dynamic auth is available)", cfg.Publish.APIKey); err != nil {
 				return err
 			}
 		} else {
-			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
+			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
 				return err
 			}
 		}
@@ -552,17 +552,17 @@ func (a *App) runConfigSetPublish(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已更新在线预览发布配置：%s\n", path)
+	_, err = fmt.Fprintf(a.Stdout, "Updated online preview publishing config: %s\n", path)
 	return err
 }
 
 func (a *App) runConfigSetDefaults(cfg Config) error {
 	reader := bufio.NewReader(a.Stdin)
 	var err error
-	if cfg.Defaults.OutputDir, err = a.promptLine(reader, "请输入默认输出目录", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
+	if cfg.Defaults.OutputDir, err = a.promptLine(reader, "Enter the default output directory", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
 		return err
 	}
-	modeChoice, err := a.promptChoice(reader, "请选择默认生成模式", []string{"fast", "best"})
+	modeChoice, err := a.promptChoice(reader, "Choose the default generation mode", []string{"fast", "best"})
 	if err != nil {
 		return err
 	}
@@ -571,18 +571,18 @@ func (a *App) runConfigSetDefaults(cfg Config) error {
 	} else {
 		cfg.Defaults.Mode = "fast"
 	}
-	cfg.Defaults.Publish, err = a.promptYesNo(reader, "生成后默认发布在线预览？(yes/no)", cfg.Defaults.Publish)
+	cfg.Defaults.Publish, err = a.promptYesNo(reader, "Publish online preview by default after generation? (yes/no)", cfg.Defaults.Publish)
 	if err != nil {
 		return err
 	}
-	if cfg.Defaults.PPTXStylePreset, err = a.promptLine(reader, "请输入默认 PPT 风格预设", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
+	if cfg.Defaults.PPTXStylePreset, err = a.promptLine(reader, "Enter the default PPT style preset", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
 		return err
 	}
 	path, err := WriteConfig("", cfg, true)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已更新默认配置：%s\n", path)
+	_, err = fmt.Fprintf(a.Stdout, "Updated default config: %s\n", path)
 	return err
 }
 
@@ -599,9 +599,9 @@ func hasSeparateImageConfig(cfg Config) bool {
 
 func imageConfigSummary(cfg Config) string {
 	if hasSeparateImageConfig(cfg) {
-		return "已配置独立图片模型服务"
+		return "Separate image model service configured"
 	}
-	return "未单独配置（默认复用生成服务）"
+	return "Not configured separately (reuses the generation service by default)"
 }
 
 func fallbackString(value, fallback string) string {
@@ -618,11 +618,11 @@ func VersionText() string {
 func missingLLMConfig(cfg Config) string {
 	switch {
 	case strings.TrimSpace(cfg.LLM.BaseURL) == "":
-		return "生成服务地址"
+		return "generation service URL"
 	case strings.TrimSpace(cfg.LLM.APIKey) == "":
-		return "生成服务访问凭证"
+		return "generation service credential"
 	case strings.TrimSpace(cfg.LLM.Model) == "":
-		return "生成能力默认配置"
+		return "generation model configuration"
 	default:
 		return ""
 	}
@@ -631,9 +631,9 @@ func missingLLMConfig(cfg Config) string {
 func missingHostedConfig(cfg Config) string {
 	switch {
 	case strings.TrimSpace(cfg.License.BaseURL) == "":
-		return "平台服务地址"
+		return "platform service URL"
 	case strings.TrimSpace(cfg.License.APIKey) == "":
-		return "平台访问凭证"
+		return "platform service credential"
 	default:
 		return ""
 	}
@@ -644,35 +644,35 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 
 	var err error
 	if cfg.Runtime.Mode == RuntimeModeExternal {
-		if cfg.LLM.BaseURL, err = a.promptRequiredLine(reader, "请输入生成服务地址", cfg.LLM.BaseURL); err != nil {
+		if cfg.LLM.BaseURL, err = a.promptRequiredLine(reader, "Enter the generation service URL", cfg.LLM.BaseURL); err != nil {
 			return Config{}, err
 		}
-		if cfg.LLM.APIKey, err = a.promptRequiredLine(reader, "请输入生成服务访问凭证", cfg.LLM.APIKey); err != nil {
+		if cfg.LLM.APIKey, err = a.promptRequiredLine(reader, "Enter the generation service credential", cfg.LLM.APIKey); err != nil {
 			return Config{}, err
 		}
 		if strings.TrimSpace(cfg.LLM.Model) == "" {
 			cfg.LLM.Model = defaultInitConfig().LLM.Model
 		}
 	}
-	if cfg.License.APIKey, err = a.promptLine(reader, "请输入付费额度密钥（可留空，默认先走免费额度）", cfg.License.APIKey); err != nil {
+	if cfg.License.APIKey, err = a.promptLine(reader, "Enter the paid API key (optional; free quota will be used first)", cfg.License.APIKey); err != nil {
 		return Config{}, err
 	}
-	cfg.Publish.Enabled, err = a.promptYesNo(reader, "是否启用在线预览发布？(yes/no)", cfg.Publish.Enabled)
+	cfg.Publish.Enabled, err = a.promptYesNo(reader, "Enable online preview publishing? (yes/no)", cfg.Publish.Enabled)
 	if err != nil {
 		return Config{}, err
 	}
 	cfg.Defaults.Publish = cfg.Publish.Enabled
 	if cfg.Publish.Enabled {
 		defaultBaseURL := fallbackString(cfg.Publish.BaseURL, publishprovider.EmbeddedPublishBaseURL)
-		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "请输入发布服务地址", defaultBaseURL); err != nil {
+		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "Enter the publishing service URL", defaultBaseURL); err != nil {
 			return Config{}, err
 		}
 		if publishprovider.SupportsEmbeddedDynamicAuth() {
-			if cfg.Publish.APIKey, err = a.promptLine(reader, "请输入发布服务访问凭证（可留空，默认使用内置动态认证）", cfg.Publish.APIKey); err != nil {
+			if cfg.Publish.APIKey, err = a.promptLine(reader, "Enter the publishing service credential (optional when built-in dynamic auth is available)", cfg.Publish.APIKey); err != nil {
 				return Config{}, err
 			}
 		} else {
-			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "请输入发布服务访问凭证", cfg.Publish.APIKey); err != nil {
+			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
 				return Config{}, err
 			}
 		}
@@ -680,7 +680,7 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 		cfg.Publish.BaseURL = ""
 		cfg.Publish.APIKey = ""
 	}
-	if outputDir, err := a.promptLine(reader, "请输入默认输出目录", cfg.Defaults.OutputDir); err == nil {
+	if outputDir, err := a.promptLine(reader, "Enter the default output directory", cfg.Defaults.OutputDir); err == nil {
 		cfg.Defaults.OutputDir = outputDir
 	} else {
 		return Config{}, err
@@ -789,7 +789,7 @@ func (a *App) promptRequiredLine(reader *bufio.Reader, label, defaultValue strin
 		if strings.TrimSpace(line) != "" {
 			return line, nil
 		}
-		if _, err := fmt.Fprintln(a.Stdout, "该字段不能为空，请重新输入。"); err != nil {
+		if _, err := fmt.Fprintln(a.Stdout, "This field cannot be empty. Please try again."); err != nil {
 			return "", err
 		}
 	}
@@ -811,7 +811,7 @@ func (a *App) promptYesNo(reader *bufio.Reader, label string, defaultValue bool)
 		case "no", "n", "false", "0", "off":
 			return false, nil
 		default:
-			if _, err := fmt.Fprintln(a.Stdout, "请输入 yes 或 no。"); err != nil {
+			if _, err := fmt.Fprintln(a.Stdout, "Please enter yes or no."); err != nil {
 				return false, err
 			}
 		}
@@ -843,7 +843,7 @@ func (a *App) promptChoice(reader *bufio.Reader, label string, options []string)
 				return 3, nil
 			}
 		}
-		if _, err := fmt.Fprintln(a.Stdout, "请输入有效编号。"); err != nil {
+		if _, err := fmt.Fprintln(a.Stdout, "Please enter a valid option number."); err != nil {
 			return 0, err
 		}
 	}
@@ -881,7 +881,7 @@ func (a *App) runAuth(ctx context.Context, cfg Config, args []string) error {
 		return a.runAuthStatus(ctx, cfg)
 	case "set-key":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			key, err := a.promptLine(bufio.NewReader(a.Stdin), "请输入付费额度密钥", "")
+			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the paid API key", "")
 			if err != nil {
 				return err
 			}
@@ -901,33 +901,33 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "当前授权状态：%s\n", displayAccessMode(result.AccessMode)); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Current access mode: %s\n", displayAccessMode(result.AccessMode)); err != nil {
 		return err
 	}
 	if result.PlanName != "" {
-		if _, err := fmt.Fprintf(a.Stdout, "当前套餐：%s\n", result.PlanName); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Current plan: %s\n", result.PlanName); err != nil {
 			return err
 		}
 	}
 	if result.AccessMode == LicenseAccessModeFree {
-		if _, err := fmt.Fprintf(a.Stdout, "剩余免费次数：%d\n", result.FreeRemaining); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Free generations remaining: %d\n", result.FreeRemaining); err != nil {
 			return err
 		}
 	}
 	if result.AccessMode == LicenseAccessModeReward {
-		if _, err := fmt.Fprintf(a.Stdout, "剩余奖励次数：%d\n", result.RewardRemaining); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Reward generations remaining: %d\n", result.RewardRemaining); err != nil {
 			return err
 		}
 	}
 	if result.AccessMode == LicenseAccessModePaid {
-		if _, err := fmt.Fprintf(a.Stdout, "剩余付费次数：%d\n", result.PaidQuotaRemaining); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Paid generations remaining: %d\n", result.PaidQuotaRemaining); err != nil {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "额度校验已启用：%t\n", cfg.License.Enabled); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Access checks enabled: %t\n", cfg.License.Enabled); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "付费额度密钥已配置：%t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Paid API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
 		return err
 	}
 	if strings.TrimSpace(result.Message) != "" {
@@ -949,12 +949,12 @@ func (a *App) runAuthSetKey(ctx context.Context, cfg Config, key string) error {
 		return err
 	}
 	if !result.Allowed || result.AccessMode == LicenseAccessModeBlocked {
-		return fmt.Errorf("付费额度密钥校验失败：%s", fallbackMessage(result.Message, "密钥无效、已过期、次数已耗尽或额度服务不可用"))
+		return fmt.Errorf("paid API key validation failed: %s", fallbackMessage(result.Message, "the key is invalid, expired, depleted, or the access service is unavailable"))
 	}
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "已写入付费额度密钥，当前授权状态：%s\n", displayAccessMode(result.AccessMode))
+	_, err = fmt.Fprintf(a.Stdout, "Saved the paid API key. Current access mode: %s\n", displayAccessMode(result.AccessMode))
 	return err
 }
 
@@ -971,7 +971,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		return &LicenseCheckResult{
 			Allowed:    true,
 			AccessMode: LicenseAccessModeDisabled,
-			Message:    "当前未接入额度校验服务。",
+			Message:    "Access checks are not configured.",
 		}, nil
 	}
 	fingerprintHash := licenseprovider.ComputeFingerprintHash()
@@ -1007,7 +1007,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 			LastError:       err.Error(),
 		})
 		if strings.TrimSpace(cfg.APIKey) != "" {
-			return nil, fmt.Errorf("api-key 校验失败：%w。当前付费模式要求在线校验", err)
+			return nil, fmt.Errorf("api-key validation failed: %w. Paid access requires online validation", err)
 		}
 		return nil, err
 	}
@@ -1018,29 +1018,29 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		LastMode:        string(result.AccessMode),
 	})
 	if err := licenseprovider.ValidateCheckResult(result, checkReq); err != nil {
-		return nil, fmt.Errorf("license proof 校验失败：%w", err)
+		return nil, fmt.Errorf("license proof validation failed: %w", err)
 	}
 	if !result.Allowed {
-		fallback := "免费额度已用完，请在配置文件中填写 license.api_key 后重试。"
+		fallback := "Free quota is exhausted. Add license.api_key to the config file and try again."
 		if result.ReasonCode == "hosted_credit_exhausted" {
-			fallback = "当前托管 credits 已耗尽，请先充值 credits。"
+			fallback = "Hosted credits are exhausted. Please top up credits first."
 		}
 		if strings.TrimSpace(cfg.APIKey) != "" || result.ReasonCode == "paid_quota_exhausted" {
-			fallback = "当前 key 次数已耗尽，请更换或充值次数包。"
+			fallback = "The current key is out of quota. Replace it or purchase more quota."
 		}
 		return nil, fmt.Errorf("%s", fallbackMessage(result.Message, fallback))
 	}
 	if result.AccessMode == LicenseAccessModeFree && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("当前为免费模式，剩余 %d 次生成额度。", result.FreeRemaining)
+		result.Message = fmt.Sprintf("Current mode: free. %d generations remaining.", result.FreeRemaining)
 	}
 	if result.AccessMode == LicenseAccessModeReward && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("当前为奖励模式，剩余 %d 次生成额度。", result.RewardRemaining)
+		result.Message = fmt.Sprintf("Current mode: reward. %d generations remaining.", result.RewardRemaining)
 	}
 	if result.AccessMode == LicenseAccessModePaid && strings.TrimSpace(result.Message) == "" && result.PaidQuotaTotal > 0 {
-		result.Message = fmt.Sprintf("当前为付费模式，剩余 %d 次生成额度。", result.PaidQuotaRemaining)
+		result.Message = fmt.Sprintf("Current mode: paid. %d generations remaining.", result.PaidQuotaRemaining)
 	}
 	if result.AccessMode == LicenseAccessModeHosted && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("当前为托管模式，剩余 %d credits。", result.CreditBalance)
+		result.Message = fmt.Sprintf("Current mode: hosted. %d credits remaining.", result.CreditBalance)
 	}
 	return result, nil
 }
@@ -1048,7 +1048,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 func displayAccessMode(mode LicenseAccessMode) string {
 	switch mode {
 	case LicenseAccessModeDisabled:
-		return "未启用"
+		return "disabled"
 	default:
 		return string(mode)
 	}
@@ -1070,7 +1070,7 @@ func boolLabel(value bool) string {
 
 func (a *App) completeBestMode(ctx context.Context, llm engine.LLMClient, prompter Prompter, job GenerateJob, isTTY bool, progress engine.ProgressEmitter) (GenerateJob, error) {
 	if !isTTY {
-		return job, fmt.Errorf("best 模式需要交互补问，请在 TTY 中运行或改用 --mode fast")
+		return job, fmt.Errorf("best mode requires interactive follow-up questions. Run in a TTY or switch to --mode fast")
 	}
 	return a.completeBestModeWithPrompter(ctx, llm, prompter, job, progress)
 }
@@ -1089,28 +1089,28 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 		BlueprintTimeout:        30 * time.Second,
 		ExecutionAttemptTimeout: 60 * time.Second,
 	})
-	emitProgress(ctx, progress, progressStepPlanPrepare, "running", "正在准备生成计划")
+	emitProgress(ctx, progress, progressStepPlanPrepare, "running", "Preparing the execution plan")
 	session, err := workflow.PrepareExecutionPlan(ctx, engine.PrepareExecutionPlanRequest{
 		DocumentType:   string(job.DocumentType),
 		UserPrompt:     job.Prompt,
 		GenerationMode: job.Mode,
 	})
 	if err != nil {
-		emitProgress(ctx, progress, progressStepPlanPrepare, "failed", "生成计划准备失败")
+		emitProgress(ctx, progress, progressStepPlanPrepare, "failed", "Failed to prepare the execution plan")
 		return job, err
 	}
-	emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "生成计划准备完成")
+	emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Execution plan prepared")
 	for session != nil && session.Status == "questioning" && session.CurrentQuestion != nil {
-		emitProgress(ctx, progress, progressStepQuestion, "running", "正在等待你回答补充问题")
+		emitProgress(ctx, progress, progressStepQuestion, "running", "Waiting for follow-up answers")
 		if pauser, ok := progress.(interface{ Pause(string) }); ok {
-			pauser.Pause("等待你回答补充问题")
+			pauser.Pause("Waiting for follow-up answers")
 		}
 		optionID, answer, err := prompter.Ask(session.CurrentQuestion.Question, optionLabels(session.CurrentQuestion), session.CurrentQuestion.AllowFreeform)
 		if err != nil {
-			emitProgress(ctx, progress, progressStepQuestion, "failed", "补充问题回答失败")
+			emitProgress(ctx, progress, progressStepQuestion, "failed", "Failed to capture follow-up answers")
 			return job, err
 		}
-		emitProgress(ctx, progress, progressStepQuestion, "completed", "已收到补充问题答案")
+		emitProgress(ctx, progress, progressStepQuestion, "completed", "Received follow-up answers")
 		req := engine.AnswerExecutionPlanQuestionRequest{
 			PlanID:     session.PlanID,
 			QuestionID: session.CurrentQuestion.ID,
@@ -1126,18 +1126,18 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 		}
 		session, err = workflow.AnswerExecutionPlanQuestion(ctx, req)
 		if err != nil {
-			emitProgress(ctx, progress, progressStepQuestion, "failed", "更新生成计划失败")
+			emitProgress(ctx, progress, progressStepQuestion, "failed", "Failed to update the execution plan")
 			return job, err
 		}
 	}
 	if session != nil && session.Status != "approved" {
-		emitProgress(ctx, progress, progressStepPlanConfirm, "running", "正在确认生成计划")
+		emitProgress(ctx, progress, progressStepPlanConfirm, "running", "Confirming the execution plan")
 		session, err = workflow.ApproveExecutionPlan(ctx, engine.ApproveExecutionPlanRequest{PlanID: session.PlanID})
 		if err != nil {
-			emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "确认生成计划失败")
+			emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "Failed to confirm the execution plan")
 			return job, err
 		}
-		emitProgress(ctx, progress, progressStepPlanConfirm, "completed", "生成计划确认完成")
+		emitProgress(ctx, progress, progressStepPlanConfirm, "completed", "Execution plan confirmed")
 	}
 	if session != nil && strings.TrimSpace(session.ExecutionPrompt) != "" {
 		job.Prompt = session.ExecutionPrompt

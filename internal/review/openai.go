@@ -55,7 +55,7 @@ func (c *OpenAIReviewer) ReviewPDF(ctx context.Context, pdfPath string, structur
 		if shouldRetryInlinePDF(err) {
 			data, readErr := os.ReadFile(pdfPath)
 			if readErr != nil {
-				return nil, fmt.Errorf("打开 PDF 失败：%w", readErr)
+				return nil, fmt.Errorf("failed to open PDF: %w", readErr)
 			}
 			visual, inlineErr := c.requestInlineReview(ctx, filepath.Base(pdfPath), data, structure)
 			if inlineErr == nil {
@@ -80,7 +80,7 @@ func (c *OpenAIReviewer) ReviewPDF(ctx context.Context, pdfPath string, structur
 func (c *OpenAIReviewer) uploadPDF(ctx context.Context, pdfPath string) (string, error) {
 	file, err := os.Open(pdfPath)
 	if err != nil {
-		return "", fmt.Errorf("打开 PDF 失败：%w", err)
+		return "", fmt.Errorf("failed to open PDF: %w", err)
 	}
 	defer file.Close()
 
@@ -94,7 +94,7 @@ func (c *OpenAIReviewer) uploadPDF(ctx context.Context, pdfPath string) (string,
 		return "", err
 	}
 	if _, err := io.Copy(part, file); err != nil {
-		return "", fmt.Errorf("写入上传内容失败：%w", err)
+		return "", fmt.Errorf("failed to write upload payload: %w", err)
 	}
 	if err := writer.Close(); err != nil {
 		return "", err
@@ -118,16 +118,16 @@ func (c *OpenAIReviewer) uploadPDF(ctx context.Context, pdfPath string) (string,
 		return "", err
 	}
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("上传 PDF 到 OpenAI 失败：status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return "", fmt.Errorf("failed to upload PDF to OpenAI: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	var payload struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return "", fmt.Errorf("解析 files 响应失败：%w", err)
+		return "", fmt.Errorf("failed to parse files response: %w", err)
 	}
 	if strings.TrimSpace(payload.ID) == "" {
-		return "", fmt.Errorf("files 响应缺少 file id")
+		return "", fmt.Errorf("files response is missing file id")
 	}
 	return payload.ID, nil
 }
@@ -229,7 +229,7 @@ func (c *OpenAIReviewer) requestReview(ctx context.Context, fileInputs []map[str
 		return nil, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("OpenAI visual review 失败：status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("OpenAI visual review failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	text, err := extractResponseText(body)
 	if err != nil {
@@ -237,7 +237,7 @@ func (c *OpenAIReviewer) requestReview(ctx context.Context, fileInputs []map[str
 	}
 	parsed, err := parseVisualResultJSON(text)
 	if err != nil {
-		return nil, fmt.Errorf("解析 visual review JSON 失败：%w", err)
+		return nil, fmt.Errorf("failed to parse visual review JSON: %w", err)
 	}
 	return &parsed, nil
 }
@@ -249,7 +249,7 @@ func (c *OpenAIReviewer) requestImageReview(ctx context.Context, pdfPath string,
 	images, err := c.rasterize(ctx, pdfPath, 8)
 	if err != nil {
 		if upstreamErr != nil {
-			return nil, fmt.Errorf("%w；图片回退失败：%v", upstreamErr, err)
+			return nil, fmt.Errorf("%w; image fallback failed: %v", upstreamErr, err)
 		}
 		return nil, err
 	}
@@ -257,11 +257,11 @@ func (c *OpenAIReviewer) requestImageReview(ctx context.Context, pdfPath string,
 		if upstreamErr != nil {
 			return nil, upstreamErr
 		}
-		return nil, fmt.Errorf("未生成可用于视觉评审的页面图片")
+		return nil, fmt.Errorf("no page images were generated for visual review")
 	}
 	visual, err := c.requestChatImageReview(ctx, images, structure)
 	if err != nil && upstreamErr != nil {
-		return nil, fmt.Errorf("%w；图片回退失败：%v", upstreamErr, err)
+		return nil, fmt.Errorf("%w; image fallback failed: %v", upstreamErr, err)
 	}
 	return visual, err
 }
@@ -303,11 +303,11 @@ func (c *OpenAIReviewer) requestChatImageReview(ctx context.Context, images []vi
 	}
 	text, err := c.chatCompletionStream(ctx, payload)
 	if err != nil {
-		return nil, fmt.Errorf("chat visual review 失败：%w", err)
+		return nil, fmt.Errorf("chat visual review failed: %w", err)
 	}
 	parsed, err := parseVisualResultJSON(text)
 	if err != nil {
-		return nil, fmt.Errorf("解析 chat visual review JSON 失败：%w", err)
+		return nil, fmt.Errorf("failed to parse chat visual review JSON: %w", err)
 	}
 	return &parsed, nil
 }
@@ -434,13 +434,13 @@ func shouldRetryInlinePDF(err error) bool {
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	return strings.Contains(msg, "status=404") ||
 		strings.Contains(msg, "404 page not found") ||
-		strings.Contains(msg, "files 响应缺少 file id")
+		strings.Contains(msg, "files response is missing file id")
 }
 
 func extractResponseText(body []byte) (string, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return "", fmt.Errorf("解析 responses 响应失败：%w", err)
+		return "", fmt.Errorf("failed to parse responses payload: %w", err)
 	}
 	if text := pickResponseText(payload["output_text"]); text != "" {
 		return text, nil
@@ -487,7 +487,7 @@ func extractResponseText(body []byte) (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("responses 响应缺少文本结果")
+	return "", fmt.Errorf("responses payload did not contain text output")
 }
 
 func pickResponseText(value any) string {
@@ -511,29 +511,29 @@ func pickResponseText(value any) string {
 }
 
 func visualSystemPrompt() string {
-	return strings.TrimSpace(`你是一名严格的 PPT 质量审稿人。
+	return strings.TrimSpace(`You are a strict PPT quality reviewer.
 
-请从以下五个维度给出 0-100 的总分，并输出结构化结论：
-1. 叙事与受众匹配（25）
-2. 信息层级与可读性（25）
-3. 版式一致性与对齐（20）
-4. 单页信息密度控制（15）
-5. 图表/数据表达清晰度（15）
+Score the deck from 0-100 across these five dimensions and return a structured conclusion:
+1. Narrative fit for the audience (25)
+2. Information hierarchy and readability (25)
+3. Layout consistency and alignment (20)
+4. Single-slide density control (15)
+5. Chart and data communication clarity (15)
 
-要求：
-- 只输出 JSON，不要输出额外解释。
-- 问题必须具体，尽量指出页码。
-- severity 只允许 high / medium / low。
-- strengths 控制在 2-4 条。
-- issues 只保留最影响成品质量的问题。`)
+Requirements:
+- Return JSON only with no extra explanation.
+- Issues must be specific and should mention slide numbers when possible.
+- severity must be one of high, medium, or low.
+- strengths should contain 2-4 items.
+- issues should keep only the problems that most affect production quality.`)
 }
 
 func visualUserPrompt(structure StructureReport) string {
-	return fmt.Sprintf("请评估这份 PPT 的视觉与表达质量。结构 lint 仅作为辅助上下文，不要机械复述。\n\n结构分：%d\n结构摘要：%s\n结构问题数：%d\n", structure.Score, structure.Summary, len(structure.Issues))
+	return fmt.Sprintf("Evaluate the visual and communication quality of this PPT. The structural lint is only supporting context, so do not restate it mechanically.\n\nStructure score: %d\nStructure summary: %s\nStructure issue count: %d\n", structure.Score, structure.Summary, len(structure.Issues))
 }
 
 func visualImageUserPrompt(structure StructureReport, pageCount int) string {
-	return fmt.Sprintf("下面按页顺序提供这份 PPT 的页面截图，共 %d 页。请基于整套页面截图评估视觉与表达质量，页码按截图顺序从 1 开始。结构 lint 仅作为辅助上下文，不要机械复述。\n\n结构分：%d\n结构摘要：%s\n结构问题数：%d\n\n必须只输出一个 JSON 对象，字段固定为 score、summary、strengths、issues。", pageCount, structure.Score, structure.Summary, len(structure.Issues))
+	return fmt.Sprintf("The following images show the PPT pages in order, for a total of %d slides. Evaluate visual and communication quality based on the full set of page images. Slide numbers start at 1 in the image order. The structural lint is only supporting context, so do not restate it mechanically.\n\nStructure score: %d\nStructure summary: %s\nStructure issue count: %d\n\nReturn exactly one JSON object with these fields: score, summary, strengths, issues.", pageCount, structure.Score, structure.Summary, len(structure.Issues))
 }
 
 func clamp(value, minValue, maxValue int) int {

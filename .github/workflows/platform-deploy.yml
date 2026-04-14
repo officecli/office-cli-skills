@@ -7,21 +7,21 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '要发布的 tag，例如 v0.2.0-prod-20260402-1'
+        description: 'Tag to deploy, for example v0.2.0-prod-20260402-1'
         required: true
         type: string
       claudeoffice_base_url:
-        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_BASE_URL；留空则回退到仓库变量或现网已有值'
+        description: 'Optional: sync CLAUDEOFFICE_BASE_URL to the production Secret before deployment; leave empty to fall back to the repo variable or the live value'
         required: false
         default: ''
         type: string
       claudeoffice_auth_key_id:
-        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_KEY_ID；留空则回退到仓库变量或默认 platform-prod'
+        description: 'Optional: sync CLAUDEOFFICE_AUTH_KEY_ID to the production Secret before deployment; leave empty to fall back to the repo variable or the default platform-prod'
         required: false
         default: ''
         type: string
       claudeoffice_auth_shared_secret:
-        description: '可选：发版前同步到生产 Secret 的 CLAUDEOFFICE_AUTH_SHARED_SECRET；留空则回退到仓库 Secret 或现网已有值'
+        description: 'Optional: sync CLAUDEOFFICE_AUTH_SHARED_SECRET to the production Secret before deployment; leave empty to fall back to the repo secret or the live value'
         required: false
         default: ''
         type: string

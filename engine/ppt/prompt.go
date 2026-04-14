@@ -41,33 +41,33 @@ func BuildModifyPrompt(input ModifyPromptInput) string {
 	if len(slidePreview) > 500 {
 		slidePreview = slidePreview[:500]
 	}
-	return fmt.Sprintf(`你是专业的PPT修改助手。请严格按以下JSON格式输出修改指令。
+	return fmt.Sprintf(`You are a professional PPT editing assistant. Return the modification instruction in JSON only.
 
-修改意图：%s
-目标幻灯片：第%d页
-目标元素类型：%s
-用户指令：%s
+Intent: %s
+Target slide: %d
+Target element type: %s
+User instruction: %s
 
-当前目标元素内容：
+Current target element content:
 %s
 
-输出格式（严格遵守）：
+Output format:
 {
   "intent": "%s",
   "slideIndex": %d,
   "operation": {
     "type": "replace_title | append_bullets | replace_paragraph | update_table_cell",
-    "newTitle": "（仅 replace_slide_title 时填写）",
-    "newBullets": ["（仅 append_slide_bullets 时填写）"],
-    "newParagraph": "（仅 replace_body_paragraph 时填写）",
-    "cellUpdates": [{"row": 1, "col": 1, "value": "（仅 update_table_cells 时填写）"}]
+    "newTitle": "(only for replace_slide_title)",
+    "newBullets": ["(only for append_slide_bullets)"],
+    "newParagraph": "(only for replace_body_paragraph)",
+    "cellUpdates": [{"row": 1, "col": 1, "value": "(only for update_table_cells)"}]
   }
 }
 
-约束：
-- intent 字段必须与输入的修改意图完全一致
-- slideIndex 必须与目标幻灯片一致
-- 只填写与 intent 对应的 operation 字段，其余置为空字符串或空数组`,
+Constraints:
+- The intent field must exactly match the input intent
+- slideIndex must match the target slide
+- Fill only the operation fields relevant to the intent and leave the others empty`,
 		input.Intent,
 		input.Target.SlideIndex,
 		input.Target.ElementType,
@@ -101,38 +101,38 @@ func ValidateModifyOperation(op *ModifyOperation, expectedIntent string, expecte
 
 func BuildRewriteSlideFallbackPrompt(input RewriteSlidePromptInput) string {
 	slideSummary := ooxmledit.ExtractSlideTextSummary(input.SlideXML)
-	return fmt.Sprintf(`你是专业的PPT单页改写助手。请只返回 JSON，不要返回 XML。
+	return fmt.Sprintf(`You are a professional single-slide PPT rewrite assistant. Return JSON only, not XML.
 
-修改意图：%s
-目标幻灯片：第%d页
-用户指令：%s
-当前目标页文本摘要：%s
+Intent: %s
+Target slide: %d
+User instruction: %s
+Current slide text summary: %s
 
-输出格式（严格遵守）：
+Output format:
 {
   "intent": "%s",
   "slideIndex": %d,
   "operation": {
     "type": "rewrite_slide",
     "layout": "title | content",
-    "title": "新的标题",
-    "subtitle": "仅 title 布局时填写",
-    "points": ["仅 content 布局时填写，2-5 条"],
-    "sections": [{"heading": "一级标题", "detail": "二级说明"}],
+    "title": "New title",
+    "subtitle": "Only for title layout",
+    "points": ["Only for content layout, 2-5 items"],
+    "sections": [{"heading": "Primary heading", "detail": "Secondary detail"}],
     "bgColor": "E8F5E9",
     "bgColor2": "C8E6C9"
   }
 }
 
-约束：
-- 只改这一页
-- 保持当前页的主题、语义、事实和主要结构，除非用户明确要求改成全新主题
-- 如果用户只是要求改成英文、中文、翻译或其他语言转换，请翻译当前页已有内容，不要替换成新的主题
-- 不要凭空新增与当前页无关的行业、公司、报告、数字、章节或结论
-- 如果用户要求英文，就把 title / subtitle / points / sections 改成英文
-- 如果用户要求绿色背景，请提供绿色系 bgColor / bgColor2
-- layout 只能是 title 或 content
-- intent 和 slideIndex 必须与输入完全一致`,
+Constraints:
+- Rewrite only this slide
+- Preserve the current slide's topic, semantics, facts, and main structure unless the user explicitly asks for a new topic
+- If the user asks for English, Chinese, translation, or another language conversion, translate the current content instead of inventing a new topic
+- Do not fabricate unrelated industries, companies, reports, numbers, sections, or conclusions
+- If the user asks for English, title / subtitle / points / sections must be in English
+- If the user asks for a green background, provide green-toned bgColor / bgColor2 values
+- layout must be either title or content
+- intent and slideIndex must exactly match the input`,
 		input.Intent,
 		input.SlideIndex,
 		input.Description,

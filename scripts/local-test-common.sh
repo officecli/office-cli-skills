@@ -31,6 +31,6 @@ phase() {
 }
 
 run_cmd() {
-  info "执行命令: $*"
+  info "Running command: $*"
   "$@"
 }

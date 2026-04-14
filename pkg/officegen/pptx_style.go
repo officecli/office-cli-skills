@@ -217,7 +217,7 @@ func BuildLocalPreviewHTML(title, preset string, theme *SlideTheme, slides []Sli
 			body.WriteString("</div>")
 		}
 		if slide.Chart != nil {
-			body.WriteString(fmt.Sprintf("<p class=\"meta\">图表：%s</p>", html.EscapeString(slide.Chart.Title)))
+			body.WriteString(fmt.Sprintf("<p class=\"meta\">Chart: %s</p>", html.EscapeString(slide.Chart.Title)))
 		}
 		if len(slide.Metrics) > 0 {
 			body.WriteString("<div class=\"metrics\">")

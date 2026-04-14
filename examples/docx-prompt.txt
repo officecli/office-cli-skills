@@ -1,7 +1,7 @@
-请生成一份季度项目复盘 Word 文档：
+Please generate a quarterly project retrospective Word document:
 
-- 面向公司管理层
-- 内容结构包含：背景、目标、结果、问题、经验、下一步计划
-- 风格专业、直接、避免空话
-- 强调关键成果和可以落地的改进建议
-- 适合直接作为内部复盘初稿使用
+- Target company leadership
+- Include these sections: background, goals, outcomes, issues, lessons learned, next-step plan
+- Keep the tone professional, direct, and free of filler
+- Emphasize key results and actionable improvement recommendations
+- Make it suitable as a first internal retrospective draft

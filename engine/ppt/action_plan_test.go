@@ -5,7 +5,7 @@ import "testing"
 func TestCompileOfficeActionPlan_ReplaceTitle(t *testing.T) {
 	plan, err := CompileOfficeActionPlan(TargetMetadata{SlideIndex: 2, ElementType: "title"}, &ModifyOperation{
 		Intent:    "replace_slide_title",
-		Operation: ModifyOperationPayload{NewTitle: "新标题"},
+		Operation: ModifyOperationPayload{NewTitle: "Updated title"},
 	}, nil, false)
 	if err != nil {
 		t.Fatalf("CompileOfficeActionPlan: %v", err)
@@ -18,7 +18,7 @@ func TestCompileOfficeActionPlan_ReplaceTitle(t *testing.T) {
 func TestCompileOfficeActionPlan_UsesSelectedTextWhenPromptTargetsSelection(t *testing.T) {
 	plan, err := CompileOfficeActionPlan(TargetMetadata{SlideIndex: 3, ElementType: "body"}, &ModifyOperation{
 		Intent:    "replace_body_paragraph",
-		Operation: ModifyOperationPayload{NewParagraph: "替换选中文本"},
+		Operation: ModifyOperationPayload{NewParagraph: "Replace selected text"},
 	}, &SelectionContext{HasTextSelection: true, SlideIndex: 5}, true)
 	if err != nil {
 		t.Fatalf("CompileOfficeActionPlan: %v", err)
@@ -32,10 +32,10 @@ func TestCompileOfficeActionPlan_UsesSelectedTextWhenPromptTargetsSelection(t *t
 }
 
 func TestOfficePromptTargetsTextSelection(t *testing.T) {
-	if !OfficePromptTargetsTextSelection("请修改当前选中的文字") {
+	if !OfficePromptTargetsTextSelection("Please rewrite the currently selected text") {
 		t.Fatal("expected selection-targeted prompt")
 	}
-	if OfficePromptTargetsTextSelection("请修改第二页标题") {
+	if OfficePromptTargetsTextSelection("Please update the title on slide 2") {
 		t.Fatal("expected non-selection prompt")
 	}
 }

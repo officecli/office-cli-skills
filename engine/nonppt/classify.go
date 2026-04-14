@@ -37,11 +37,11 @@ type XLSXClassifyPromptInput struct {
 }
 
 func BuildDOCXClassifyPrompt(input DOCXClassifyPromptInput) string {
-	return fmt.Sprintf(`你是一个商业化 Word 文档编辑意图分类器。
+	return fmt.Sprintf(`You are a classifier for commercial Word document editing requests.
 
-请基于段落上下文判断用户是在修改当前文档，还是要求重新生成新文档。
+Decide whether the user wants to edit the current document or regenerate a new one based on the paragraph context.
 
-输入上下文：
+Input:
 {
   "documentName": %q,
   "paragraphs": %s,
@@ -49,14 +49,14 @@ func BuildDOCXClassifyPrompt(input DOCXClassifyPromptInput) string {
   "selectionContext": %s
 }
 
-判定规则：
-- 用户要求改某一段、补一段、调整当前文档内容，优先判定为 modify_current_document
-- 只有明确提出“重新生成”“新建一份”时，才判定为 regenerate_new_document
-- modifyIntent 只允许输出：replace_docx_paragraph, append_docx_paragraph, rewrite_docx_document
-- 如果用户明确提到“第N段”，targetMetadata.paragraphIndex 必须返回 N
-- targetMetadata.scope 只能是 paragraph、document、selection
+Rules:
+- If the user asks to revise a paragraph, add a paragraph, or adjust the current document, prefer modify_current_document.
+- Only use regenerate_new_document when the user explicitly asks to regenerate or create a new document.
+- modifyIntent must be one of: replace_docx_paragraph, append_docx_paragraph, rewrite_docx_document.
+- If the user explicitly refers to paragraph N, targetMetadata.paragraphIndex must return N.
+- targetMetadata.scope must be one of: paragraph, document, selection.
 
-只返回符合 schema 的 JSON 对象。`,
+Return only a JSON object that matches the schema.`,
 		input.DocumentName,
 		MustJSON(DOCXParagraphSummaries(input.Paragraphs)),
 		input.UserPrompt,
@@ -65,11 +65,11 @@ func BuildDOCXClassifyPrompt(input DOCXClassifyPromptInput) string {
 }
 
 func BuildXLSXClassifyPrompt(input XLSXClassifyPromptInput) string {
-	return fmt.Sprintf(`你是一个商业化 Excel 表格编辑意图分类器。
+	return fmt.Sprintf(`You are a classifier for commercial Excel worksheet editing requests.
 
-请基于工作表结构判断用户是在修改当前表格，还是要求重新生成新文档。
+Decide whether the user wants to edit the current worksheet or regenerate a new document based on the worksheet structure.
 
-输入上下文：
+Input:
 {
   "documentName": %q,
   "worksheets": %s,
@@ -77,13 +77,13 @@ func BuildXLSXClassifyPrompt(input XLSXClassifyPromptInput) string {
   "selectionContext": %s
 }
 
-判定规则：
-- 用户要求改某个单元格、某一列、某个范围、当前表格内容，优先判定为 modify_current_document
-- 只有明确提出“重新生成”“新建一份”时，才判定为 regenerate_new_document
-- modifyIntent 只允许输出：update_xlsx_cells, append_xlsx_summary, rewrite_xlsx_sheet
-- targetMetadata.scope 只能是 worksheet、range、selection
+Rules:
+- If the user asks to revise a cell, a column, a range, or the current worksheet content, prefer modify_current_document.
+- Only use regenerate_new_document when the user explicitly asks to regenerate or create a new document.
+- modifyIntent must be one of: update_xlsx_cells, append_xlsx_summary, rewrite_xlsx_sheet.
+- targetMetadata.scope must be one of: worksheet, range, selection.
 
-只返回符合 schema 的 JSON 对象。`,
+Return only a JSON object that matches the schema.`,
 		input.DocumentName,
 		MustJSON(input.WorksheetSummaries),
 		input.UserPrompt,

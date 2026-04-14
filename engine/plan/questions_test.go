@@ -44,16 +44,16 @@ func TestBuildExecutionPlanQuestions_DOCXAndXLSXReturnThreeQuestions(t *testing.
 }
 
 func TestBuildDynamicFallbackQuestions_UsesScenarioSpecificQuestions(t *testing.T) {
-	reportQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "做一份季度项目复盘汇报"}, "pptx")
+	reportQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Prepare a quarterly project review deck"}, "pptx")
 	if len(reportQuestions) < 3 {
 		t.Fatalf("report question count = %d, want at least 3", len(reportQuestions))
 	}
-	if !strings.Contains(reportQuestions[1].Question, "突出") {
+	if !strings.Contains(reportQuestions[1].Question, "emphasize") {
 		t.Fatalf("question = %q, want report-specific focus", reportQuestions[1].Question)
 	}
 
-	pitchQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "做一份 AI 公司融资路演材料"}, "pptx")
-	if !strings.Contains(pitchQuestions[0].Question, "哪类听众") {
+	pitchQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Build a fundraising roadshow deck for an AI startup"}, "pptx")
+	if !strings.Contains(pitchQuestions[0].Question, "audience") {
 		t.Fatalf("question = %q, want pitch-specific audience", pitchQuestions[0].Question)
 	}
 }

@@ -8,27 +8,27 @@ import (
 	"time"
 )
 
-// XlsxSheet 表示工作表
+// XlsxSheet represents a worksheet.
 type XlsxSheet struct {
-	Name string     `json:"name"` // 工作表名称
-	Rows [][]string `json:"rows"` // 行数据，每行是一组单元格字符串
+	Name string     `json:"name"` // Worksheet name.
+	Rows [][]string `json:"rows"` // Row data; each row is a slice of cell strings.
 }
 
-// XLSXOptions 配置生成选项
+// XLSXOptions configures XLSX generation.
 type XLSXOptions struct {
-	Title   string // 文档标题
-	Creator string // 作者
+	Title   string // Document title.
+	Creator string // Document creator.
 }
 
-// XLSXGenerator XLSX 生成器
+// XLSXGenerator builds XLSX files.
 type XLSXGenerator struct{}
 
-// NewXLSXGenerator 创建 XLSX 生成器实例
+// NewXLSXGenerator creates an XLSX generator instance.
 func NewXLSXGenerator() *XLSXGenerator {
 	return &XLSXGenerator{}
 }
 
-// Generate 生成 XLSX 并返回字节流
+// Generate builds an XLSX file and returns its bytes.
 func (g *XLSXGenerator) Generate(sheets []XlsxSheet, opts XLSXOptions) ([]byte, error) {
 	if len(sheets) == 0 {
 		return nil, fmt.Errorf("sheets cannot be empty")
@@ -37,7 +37,7 @@ func (g *XLSXGenerator) Generate(sheets []XlsxSheet, opts XLSXOptions) ([]byte, 
 	buf := new(bytes.Buffer)
 	w := zip.NewWriter(buf)
 
-	// 收集所有字符串到 sharedStrings
+	// Collect all strings into sharedStrings.
 	ssTable, ssIndex, ssTotalCount := g.buildSharedStrings(sheets)
 
 	files := g.buildFiles(sheets, ssTable, ssIndex, ssTotalCount, opts)
@@ -93,7 +93,7 @@ func (g *XLSXGenerator) buildFiles(sheets []XlsxSheet, ssTable []string, ssIndex
 		"xl/theme/theme1.xml":        officeThemeXML,
 	}
 
-	// 每个 sheet 一个文件
+	// Each sheet gets its own XML file.
 	for i, sheet := range sheets {
 		sheetNum := i + 1
 		sheetPath := fmt.Sprintf("xl/worksheets/sheet%d.xml", sheetNum)
@@ -197,7 +197,7 @@ func (g *XLSXGenerator) generateSharedStringsXML(table []string, totalCount int)
 %s</sst>`, totalCount, len(table), items.String())
 }
 
-// colName 将列索引(0-based)转换为 Excel 列名 (A, B, ..., Z, AA, AB, ...)
+// colName converts a zero-based column index to an Excel column name.
 func colName(col int) string {
 	name := ""
 	for col >= 0 {
@@ -210,7 +210,7 @@ func colName(col int) string {
 func (g *XLSXGenerator) generateSheetXML(sheet XlsxSheet, ssIndex map[string]int) string {
 	var rows strings.Builder
 
-	// 计算数据范围用于 dimension
+	// Compute the data range for the dimension tag.
 	maxCol := 0
 	for _, row := range sheet.Rows {
 		if len(row) > maxCol {
@@ -219,7 +219,7 @@ func (g *XLSXGenerator) generateSheetXML(sheet XlsxSheet, ssIndex map[string]int
 	}
 	rowCount := len(sheet.Rows)
 
-	// 生成 dimension ref
+	// Generate the dimension ref.
 	dimensionRef := "A1"
 	if rowCount > 0 && maxCol > 0 {
 		dimensionRef = fmt.Sprintf("A1:%s%d", colName(maxCol-1), rowCount)
@@ -251,7 +251,7 @@ func (g *XLSXGenerator) generateSheetXML(sheet XlsxSheet, ssIndex map[string]int
 </worksheet>`, dimensionRef, rows.String())
 }
 
-// ---- 静态模板 ----
+// ---- Static templates ----
 
 const xlsxRootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -298,4 +298,4 @@ const xlsxStylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     </cellStyles>
 </styleSheet>`
 
-// xlsxThemeXML 已迁移到 theme.go 中的 officeThemeXML，三种格式共用
+// xlsxThemeXML lives in theme.go as officeThemeXML and is shared across formats.

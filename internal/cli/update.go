@@ -75,16 +75,16 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 	if err != nil || !info.Available {
 		return nil
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "检测到 officecli 有可用更新：当前 %s，最新 %s。\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "latest")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "latest")); err != nil {
 		return err
 	}
 	if strings.TrimSpace(info.UpdateCommand) != "" {
-		if _, err := fmt.Fprintf(a.Stdout, "建议更新命令：%s\n", info.UpdateCommand); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Suggested update command: %s\n", info.UpdateCommand); err != nil {
 			return err
 		}
 	}
 	reader := bufio.NewReader(a.Stdin)
-	confirm, err := a.promptYesNo(reader, "现在更新并继续执行当前命令？(yes/no)", true)
+	confirm, err := a.promptYesNo(reader, "Update now and continue with the current command? (yes/no)", true)
 	if err != nil {
 		return err
 	}
@@ -95,12 +95,12 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 		return nil
 	}
 	if err := a.performUpdate(ctx, info); err != nil {
-		if _, writeErr := fmt.Fprintf(a.Stderr, "自动更新失败，继续执行当前命令：%v\n", err); writeErr != nil {
+		if _, writeErr := fmt.Fprintf(a.Stderr, "Automatic update failed, continuing with the current command: %v\n", err); writeErr != nil {
 			return writeErr
 		}
 		return nil
 	}
-	if _, err := fmt.Fprintln(a.Stdout, "officecli 更新完成，正在继续执行当前命令..."); err != nil {
+	if _, err := fmt.Fprintln(a.Stdout, "officecli was updated. Continuing with the current command..."); err != nil {
 		return err
 	}
 	if a.restartCommand == nil {
@@ -277,7 +277,7 @@ func checkLatestReleaseForUpdates(ctx context.Context, execPath string) (UpdateI
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return UpdateInfo{}, fmt.Errorf("检查更新失败：%s %s", resp.Status, strings.TrimSpace(string(body)))
+		return UpdateInfo{}, fmt.Errorf("update check failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	var release releaseLookup
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
@@ -320,9 +320,9 @@ func defaultPerformUpdate(ctx context.Context, info UpdateInfo) error {
 		return runInstallScriptUpdate(ctx, info)
 	default:
 		if strings.TrimSpace(info.UpdateCommand) == "" {
-			return fmt.Errorf("当前安装方式不支持自动更新")
+			return fmt.Errorf("the current installation method does not support automatic updates")
 		}
-		return fmt.Errorf("当前安装方式未识别，请手动执行：%s", info.UpdateCommand)
+		return fmt.Errorf("the current installation method is not recognized. Run this manually: %s", info.UpdateCommand)
 	}
 }
 
@@ -342,7 +342,7 @@ func runInstallScriptUpdate(ctx context.Context, info UpdateInfo) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("下载安装脚本失败：%s %s", resp.Status, strings.TrimSpace(string(body)))
+		return fmt.Errorf("failed to download the install script: %s %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	scriptBody, err := io.ReadAll(resp.Body)
 	if err != nil {

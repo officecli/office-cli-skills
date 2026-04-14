@@ -13,80 +13,80 @@ import (
 	"time"
 )
 
-// SlideTheme 主题配色方案
+// SlideTheme defines the theme color palette.
 type SlideTheme struct {
-	PrimaryColor   string `json:"primaryColor"`             // 主色 hex (60%)
-	AccentColor    string `json:"accentColor"`              // 强调色 hex (30%)
-	HighlightColor string `json:"highlightColor,omitempty"` // 点缀色 hex (10%)
+	PrimaryColor   string `json:"primaryColor"`             // Primary hex color (60%).
+	AccentColor    string `json:"accentColor"`              // Accent hex color (30%).
+	HighlightColor string `json:"highlightColor,omitempty"` // Highlight hex color (10%).
 	BackgroundType string `json:"backgroundType"`           // "gradient" | "solid" | "dark"
-	BgColor1       string `json:"bgColor1"`                 // 背景色1
-	BgColor2       string `json:"bgColor2,omitempty"`       // 背景色2（渐变用）
-	TextColor      string `json:"textColor,omitempty"`      // 正文文字色 hex
-	TitleTextColor string `json:"titleTextColor,omitempty"` // 标题文字色 hex
-	FontFamily     string `json:"fontFamily,omitempty"`     // 西文字体（latin）
-	EAFontFamily   string `json:"eaFontFamily,omitempty"`   // 东亚字体（中日韩）
+	BgColor1       string `json:"bgColor1"`                 // Background color 1.
+	BgColor2       string `json:"bgColor2,omitempty"`       // Background color 2 for gradients.
+	TextColor      string `json:"textColor,omitempty"`      // Body text hex color.
+	TitleTextColor string `json:"titleTextColor,omitempty"` // Title text hex color.
+	FontFamily     string `json:"fontFamily,omitempty"`     // Latin font family.
+	EAFontFamily   string `json:"eaFontFamily,omitempty"`   // East Asian font family.
 }
 
-// ChartData 图表数据
+// ChartData defines chart content.
 type ChartData struct {
 	Type       string    `json:"type"`       // "bar" | "pie" | "line"
-	Categories []string  `json:"categories"` // X 轴标签
-	Values     []float64 `json:"values"`     // 数值
-	Title      string    `json:"title"`      // 图表标题
+	Categories []string  `json:"categories"` // X-axis labels.
+	Values     []float64 `json:"values"`     // Numeric values.
+	Title      string    `json:"title"`      // Chart title.
 }
 
-// MetricCard 指标卡片（大字 KPI 展示）
+// MetricCard represents a large KPI card.
 type MetricCard struct {
-	Label string `json:"label"` // 指标名称，如 "2025 市场规模"
-	Value string `json:"value"` // 指标数值，如 "$372.9 亿"
-	Note  string `json:"note"`  // 补充说明，如 "↑ CAGR 5.90%"
+	Label string `json:"label"` // Metric label.
+	Value string `json:"value"` // Metric value.
+	Note  string `json:"note"`  // Supplemental note.
 }
 
-// Slide 表示单张幻灯片的数据
-// SlideSection 两级标题结构：一级标题（短、带序号、染色）+ 二级描述（详细内容）
+// SlideSection represents a heading-detail pair.
 type SlideSection struct {
-	Heading string `json:"heading"` // 一级标题（如 "01 国际立法"），带序号，不超过5个字
-	Detail  string `json:"detail"`  // 二级描述，不超过10个字的小标题或详细说明
+	Heading string `json:"heading"` // Primary heading.
+	Detail  string `json:"detail"`  // Secondary detail.
 }
 
+// Slide represents a single slide.
 type Slide struct {
-	Title       string         `json:"title"`              // 幻灯片标题
-	Content     string         `json:"content"`            // 幻灯片内容
-	IsTitle     bool           `json:"isTitle"`            // 是否为封面标题页
+	Title       string         `json:"title"`              // Slide title.
+	Content     string         `json:"content"`            // Slide body content.
+	IsTitle     bool           `json:"isTitle"`            // Whether this is a title slide.
 	Layout      string         `json:"layout,omitempty"`   // "title" | "content" | "chart" | "dashboard"
-	Variant     string         `json:"variant,omitempty"`  // 具体视觉变体
-	Subtitle    string         `json:"subtitle,omitempty"` // 副标题（title 布局用）
-	Points      []string       `json:"points,omitempty"`   // 分点内容（简单列表）
-	Sections    []SlideSection `json:"sections,omitempty"` // 两级标题结构（罗列描述用）
-	Chart       *ChartData     `json:"chart,omitempty"`    // 图表数据
-	Metrics     []MetricCard   `json:"metrics,omitempty"`  // 指标卡片（dashboard 布局用）
-	Source      string         `json:"source,omitempty"`   // 数据来源脚注
-	BgColor     string         `json:"bgColor,omitempty"`  // 每页独立背景色（6位hex），覆盖 theme 默认背景
-	BgColor2    string         `json:"bgColor2,omitempty"` // 每页背景渐变色2（6位hex，可选）
-	HasImage    bool           `json:"hasImage,omitempty"` // 是否启用图片页
+	Variant     string         `json:"variant,omitempty"`  // Optional visual variant.
+	Subtitle    string         `json:"subtitle,omitempty"` // Subtitle for title layout.
+	Points      []string       `json:"points,omitempty"`   // Simple bullet points.
+	Sections    []SlideSection `json:"sections,omitempty"` // Structured heading-detail sections.
+	Chart       *ChartData     `json:"chart,omitempty"`    // Chart data.
+	Metrics     []MetricCard   `json:"metrics,omitempty"`  // Dashboard metric cards.
+	Source      string         `json:"source,omitempty"`   // Data source footnote.
+	BgColor     string         `json:"bgColor,omitempty"`  // Per-slide background color override.
+	BgColor2    string         `json:"bgColor2,omitempty"` // Optional second gradient color.
+	HasImage    bool           `json:"hasImage,omitempty"` // Whether the slide uses an image.
 	ImagePrompt string         `json:"imagePrompt,omitempty"`
 	ImagePos    string         `json:"imagePos,omitempty"` // "right" | "left" | "background" | "center" | "top" | "bottom" | "diagonal"
 	ImageData   []byte         `json:"-"`
 	ImageMIME   string         `json:"-"`
 }
 
-// PPTXOptions 配置生成选项
+// PPTXOptions configures PPTX generation.
 type PPTXOptions struct {
-	Title       string      // 文档标题
-	Creator     string      // 作者
-	Theme       *SlideTheme // 主题配色
-	StylePreset string      // 风格预设
+	Title       string      // Document title.
+	Creator     string      // Document creator.
+	Theme       *SlideTheme // Theme palette.
+	StylePreset string      // Style preset.
 }
 
-// PPTXGenerator PPTX 生成器
+// PPTXGenerator builds PPTX files.
 type PPTXGenerator struct{}
 
-// NewPPTXGenerator 创建 PPTX 生成器实例
+// NewPPTXGenerator creates a PPTX generator instance.
 func NewPPTXGenerator() *PPTXGenerator {
 	return &PPTXGenerator{}
 }
 
-// defaultTheme 默认主题配色
+// defaultTheme returns the default theme palette.
 func defaultTheme() *SlideTheme {
 	return &SlideTheme{
 		PrimaryColor:   "1A73E8",
@@ -99,7 +99,7 @@ func defaultTheme() *SlideTheme {
 	}
 }
 
-// getTheme 获取有效的主题（合并默认值）
+// getTheme resolves a theme by filling in missing defaults.
 func getTheme(theme *SlideTheme) *SlideTheme {
 	def := defaultTheme()
 	if theme == nil {
@@ -255,7 +255,7 @@ func imageExtensionFromMIME(mime string) string {
 	}
 }
 
-// Generate 生成 PPTX 并返回字节流
+// Generate builds a PPTX file and returns its bytes.
 func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, error) {
 	if len(slides) == 0 {
 		return nil, fmt.Errorf("slides cannot be empty")
@@ -282,10 +282,10 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 	buf := new(bytes.Buffer)
 	w := zip.NewWriter(buf)
 
-	// 构建所有必要的文件
+	// Build all required package files.
 	files := g.buildBaseFiles(opts, len(slides), chartCount, imageCount > 0, theme)
 
-	// 添加幻灯片文件和图表文件（含嵌入 xlsx 二进制）
+	// Add slide files and chart files, including embedded XLSX binaries.
 	slideFiles, binaryFiles, err := g.generateSlidesWithEmbeds(slides, theme, stylePreset)
 	if err != nil {
 		return nil, err
@@ -294,7 +294,7 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 		files[path] = content
 	}
 
-	// 写入所有 XML 文件到 zip
+	// Write all XML files into the ZIP archive.
 	for path, content := range files {
 		f, err := w.Create(path)
 		if err != nil {
@@ -306,7 +306,7 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 		}
 	}
 
-	// 写入二进制嵌入文件（chart 数据 xlsx）
+	// Write embedded binary files such as chart XLSX payloads.
 	for path, data := range binaryFiles {
 		f, err := w.Create(path)
 		if err != nil {
@@ -324,7 +324,7 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 	return buf.Bytes(), nil
 }
 
-// buildBaseFiles 构建基础 XML 文件
+// buildBaseFiles builds the base XML package files.
 func (g *PPTXGenerator) buildBaseFiles(opts PPTXOptions, slideCount, chartCount int, hasImages bool, theme *SlideTheme) map[string]string {
 	return map[string]string{
 		"[Content_Types].xml":                          g.generateContentTypes(slideCount, chartCount, hasImages),
@@ -395,7 +395,7 @@ func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideThe
 	return result, binaries, nil
 }
 
-// generateContentTypes 动态生成 [Content_Types].xml
+// generateContentTypes builds [Content_Types].xml dynamically.
 func (g *PPTXGenerator) generateContentTypes(slideCount, chartCount int, hasImages ...bool) string {
 	slideOverrides := ""
 	for i := 1; i <= slideCount; i++ {
@@ -413,7 +413,7 @@ func (g *PPTXGenerator) generateContentTypes(slideCount, chartCount int, hasImag
 `, i)
 	}
 
-	// 如果有图片，添加 PNG 和 JPEG 的 Default Extension
+	// When images exist, register PNG and JPEG default extensions.
 	imageDefaults := ""
 	if len(hasImages) > 0 && hasImages[0] {
 		imageDefaults = `    <Default Extension="png" ContentType="image/png"/>
@@ -437,7 +437,7 @@ func (g *PPTXGenerator) generateContentTypes(slideCount, chartCount int, hasImag
 </Types>`, imageDefaults, slideOverrides, chartOverrides)
 }
 
-// generateCoreXML 生成 docProps/core.xml
+// generateCoreXML builds docProps/core.xml.
 func (g *PPTXGenerator) generateCoreXML(opts PPTXOptions) string {
 	title := opts.Title
 	if title == "" {
@@ -460,7 +460,7 @@ func (g *PPTXGenerator) generateCoreXML(opts PPTXOptions) string {
 </cp:coreProperties>`, escapeXML(title), escapeXML(creator), createdTime)
 }
 
-// generateAppXML 生成 docProps/app.xml
+// generateAppXML builds docProps/app.xml.
 func (g *PPTXGenerator) generateAppXML(slideCount int) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
@@ -469,7 +469,7 @@ func (g *PPTXGenerator) generateAppXML(slideCount int) string {
 </Properties>`, slideCount)
 }
 
-// generatePresentationXML 动态生成 ppt/presentation.xml
+// generatePresentationXML builds ppt/presentation.xml dynamically.
 func (g *PPTXGenerator) generatePresentationXML(slideCount int) string {
 	slideIdList := ""
 	for i := 1; i <= slideCount; i++ {
@@ -496,7 +496,7 @@ func (g *PPTXGenerator) generatePresentationXML(slideCount int) string {
 </p:presentation>`, slideIdList)
 }
 
-// generatePresentationRels 动态生成 ppt/_rels/presentation.xml.rels
+// generatePresentationRels builds ppt/_rels/presentation.xml.rels dynamically.
 func (g *PPTXGenerator) generatePresentationRels(slideCount int) string {
 	relationships := `    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
 `
@@ -516,27 +516,27 @@ func (g *PPTXGenerator) generatePresentationRels(slideCount int) string {
 %s</Relationships>`, relationships)
 }
 
-// isDarkTheme 判断是否为深色背景主题
+// isDarkTheme reports whether the theme uses a dark background.
 func isDarkTheme(theme *SlideTheme) bool {
 	return theme.BackgroundType == "dark"
 }
 
-// isDarkColor 判断一个 hex 颜色是否为深色（基于相对亮度）
+// isDarkColor reports whether a hex color is dark based on relative luminance.
 func isDarkColor(hexColor string) bool {
 	return colorLuminance(hexColor) < 128
 }
 
-// colorLuminance 计算颜色的相对亮度 (0-255)
+// colorLuminance computes the relative luminance of a color on a 0-255 scale.
 func colorLuminance(hexColor string) float64 {
 	if len(hexColor) != 6 {
-		return 128 // 未知颜色返回中等亮度
+		return 128 // Unknown colors fall back to mid luminance.
 	}
 	r, g, b := 0, 0, 0
 	fmt.Sscanf(hexColor, "%02x%02x%02x", &r, &g, &b)
 	return 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
 }
 
-// blendColor 将两个颜色按比例混合：ratio=0 返回 color1，ratio=1 返回 color2
+// blendColor mixes two colors by ratio: 0 keeps color1 and 1 keeps color2.
 func blendColor(hexColor1, hexColor2 string, ratio float64) string {
 	if len(hexColor1) != 6 || len(hexColor2) != 6 {
 		return hexColor1
@@ -560,9 +560,9 @@ func blendColor(hexColor1, hexColor2 string, ratio float64) string {
 	return fmt.Sprintf("%02X%02X%02X", r, g, b)
 }
 
-// sanitizeGradient 修复危险的渐变配色：如果 bgColor1 和 bgColor2 亮度差距过大
-// （一端浅色一端深色），会导致无论用什么文字颜色都在某一端不可读。
-// 修复策略：将 bgColor2 拉向 bgColor1，使整个渐变保持在同一亮度方向。
+// sanitizeGradient fixes unsafe gradients. When bgColor1 and bgColor2 differ too
+// much in luminance, text becomes unreadable on one side. The fix pulls bgColor2
+// toward bgColor1 so the gradient stays within the same luminance direction.
 func sanitizeGradient(bgColor1, bgColor2 string) (string, string) {
 	if bgColor1 == "" || bgColor2 == "" || len(bgColor1) != 6 || len(bgColor2) != 6 {
 		return bgColor1, bgColor2
@@ -574,21 +574,20 @@ func sanitizeGradient(bgColor1, bgColor2 string) (string, string) {
 		lumDiff = -lumDiff
 	}
 
-	// 亮度差 > 80 即认为跨度过大（例如白色~255 到深蓝~60，差值~195）
-	// 允许的最大亮度差为 80，超出部分将 bgColor2 拉向 bgColor1
+	// A luminance gap above 80 is treated as too large. Anything beyond that is
+	// pulled back toward bgColor1.
 	const maxLumDiff = 80.0
 	if lumDiff <= maxLumDiff {
-		return bgColor1, bgColor2 // 渐变安全，不修改
+		return bgColor1, bgColor2 // The gradient is safe as-is.
 	}
 
-	// 计算需要混合的比例，将 bgColor2 拉向 bgColor1
-	// ratio = 0 完全保留 bgColor2，ratio = 1 完全变成 bgColor1
+	// Compute the blend ratio that moves bgColor2 toward bgColor1.
 	ratio := 1.0 - maxLumDiff/lumDiff
 	newBgColor2 := blendColor(bgColor2, bgColor1, ratio)
 	return bgColor1, newBgColor2
 }
 
-// getTextColor 根据主题返回正文文字颜色
+// getTextColor returns the default body text color for the theme.
 func getTextColor(theme *SlideTheme) string {
 	if isDarkTheme(theme) {
 		return "EEEEEE"
@@ -596,8 +595,7 @@ func getTextColor(theme *SlideTheme) string {
 	return "333333"
 }
 
-// getSlideTextColor 根据 slide 背景色或 theme 返回正文文字颜色
-// 基于 bgColor1（渐变已通过 sanitizeGradient 保证亮度一致性）
+// getSlideTextColor returns the body text color based on the slide background or theme.
 func getSlideTextColor(slide Slide, theme *SlideTheme) string {
 	if slide.BgColor != "" && isDarkColor(slide.BgColor) {
 		return "EEEEEE"
@@ -605,8 +603,8 @@ func getSlideTextColor(slide Slide, theme *SlideTheme) string {
 	return getTextColor(theme)
 }
 
-// isSimilarHue 判断两个 hex 颜色是否属于同色系（色相相近且对比度不足）
-// 用于防止同色系文字放在同色系背景上导致不可读
+// isSimilarHue checks whether two colors are too close in hue and contrast.
+// It is used to avoid unreadable text on same-family backgrounds.
 func isSimilarHue(hexColor1, hexColor2 string) bool {
 	if len(hexColor1) != 6 || len(hexColor2) != 6 {
 		return false
@@ -616,37 +614,37 @@ func isSimilarHue(hexColor1, hexColor2 string) bool {
 	fmt.Sscanf(hexColor1, "%02x%02x%02x", &r1, &g1, &b1)
 	fmt.Sscanf(hexColor2, "%02x%02x%02x", &r2, &g2, &b2)
 
-	// 计算两个颜色的亮度差
+	// Compute the luminance gap between the colors.
 	lum1 := 0.299*float64(r1) + 0.587*float64(g1) + 0.114*float64(b1)
 	lum2 := 0.299*float64(r2) + 0.587*float64(g2) + 0.114*float64(b2)
 	lumDiff := lum1 - lum2
 	if lumDiff < 0 {
 		lumDiff = -lumDiff
 	}
-	// 如果亮度差足够大（>100），认为对比度充足，不算同色系冲突
+	// A large luminance gap is treated as sufficient contrast.
 	if lumDiff > 100 {
 		return false
 	}
 
-	// 计算 RGB 欧氏距离，距离过小说明颜色太相似
+	// Compute RGB Euclidean distance to catch overly similar colors.
 	dr := float64(r1 - r2)
 	dg := float64(g1 - g2)
 	db := float64(b1 - b2)
 	dist := dr*dr + dg*dg + db*db
-	// 距离阈值：sqrt(dist) < 120 即认为太相似（约等于各通道差 ~70）
+	// Distances below this threshold are considered too similar.
 	return dist < 14400
 }
 
-// getTitleColor 根据主题返回标题颜色
-// 会检查 primaryColor 是否与背景同色系，如是则回退到安全颜色
+// getTitleColor returns the title color for the theme and falls back when the
+// primary color is too close to the background.
 func getTitleColor(theme *SlideTheme) string {
 	if isDarkTheme(theme) {
 		return "FFFFFF"
 	}
-	// 检查 primaryColor 是否与背景色同色系
+	// Check whether primaryColor is too close to the background.
 	bgColor := theme.BgColor1
 	if bgColor != "" && isSimilarHue(theme.PrimaryColor, bgColor) {
-		// 同色系冲突：根据背景亮度选择安全颜色
+		// Resolve same-family conflicts with a safer fallback color.
 		if isDarkColor(bgColor) {
 			return "FFFFFF"
 		}
@@ -655,8 +653,7 @@ func getTitleColor(theme *SlideTheme) string {
 	return theme.PrimaryColor
 }
 
-// getSlideTitleColor 根据 slide 背景色或 theme 返回标题颜色
-// 基于 bgColor1 做同色系检测（渐变已通过 sanitizeGradient 保证亮度一致性）
+// getSlideTitleColor returns the title color based on the slide background or theme.
 func getSlideTitleColor(slide Slide, theme *SlideTheme) string {
 	effectiveBg := theme.BgColor1
 	if slide.BgColor != "" {
@@ -668,7 +665,7 @@ func getSlideTitleColor(slide Slide, theme *SlideTheme) string {
 	}
 
 	titleColor := getTitleColor(theme)
-	// 检查标题颜色是否与背景同色系
+	// Check whether the title color is too close to the background.
 	if effectiveBg != "" && isSimilarHue(titleColor, effectiveBg) {
 		if isDarkColor(effectiveBg) {
 			return "FFFFFF"
@@ -678,8 +675,7 @@ func getSlideTitleColor(slide Slide, theme *SlideTheme) string {
 	return titleColor
 }
 
-// getEffectiveBgColor 获取 slide 的主要背景色（用于文字对比度检测）
-// 渐变已通过 sanitizeGradient 保证亮度一致性，所以用 bgColor1 即可
+// getEffectiveBgColor returns the main slide background color for text-contrast checks.
 func getEffectiveBgColor(slide Slide, theme *SlideTheme) string {
 	if slide.BgColor != "" {
 		return slide.BgColor
@@ -687,8 +683,7 @@ func getEffectiveBgColor(slide Slide, theme *SlideTheme) string {
 	return theme.BgColor1
 }
 
-// getSafeTextColorForBg 检查文字颜色是否与背景色有足够对比度
-// 如果文字颜色与背景色同色系，则回退到安全颜色
+// getSafeTextColorForBg ensures that text color has enough contrast against the background.
 func getSafeTextColorForBg(textColor string, bgColor string) string {
 	if bgColor == "" {
 		return textColor
@@ -702,31 +697,31 @@ func getSafeTextColorForBg(textColor string, bgColor string) string {
 	return textColor
 }
 
-// generateBackgroundXML 根据主题生成幻灯片背景 XML
+// generateBackgroundXML builds the slide background XML from the theme.
 func generateBackgroundXML(theme *SlideTheme) string {
 	return generateBackgroundXMLWithColors(theme.BackgroundType, theme.BgColor1, theme.BgColor2)
 }
 
-// generateSlideBackgroundXML 根据 slide 独立背景色或 theme 默认背景生成 XML
-// 如果 slide 指定了 bgColor，则使用 slide 级别的背景色；否则回退到 theme 级别
+// generateSlideBackgroundXML builds background XML from either the slide override
+// or the theme default background.
 func generateSlideBackgroundXML(slide Slide, theme *SlideTheme) string {
 	if slide.BgColor != "" {
 		bgColor2 := slide.BgColor2
 		if bgColor2 != "" {
-			// slide 指定了两个背景色，使用渐变
+			// The slide provides two colors, so use a gradient.
 			return generateBackgroundXMLWithColors("gradient", slide.BgColor, bgColor2)
 		}
-		// slide 只指定了一个背景色，使用纯色
+		// The slide provides one color, so use a solid fill.
 		return generateBackgroundXMLWithColors("solid", slide.BgColor, "")
 	}
 	return generateBackgroundXML(theme)
 }
 
-// generateBackgroundXMLWithColors 根据背景类型和颜色生成背景 XML
+// generateBackgroundXMLWithColors builds background XML from background type and colors.
 func generateBackgroundXMLWithColors(bgType, bgColor1, bgColor2 string) string {
 	switch bgType {
 	case "gradient":
-		// 修复危险渐变：如果 bgColor1 和 bgColor2 亮度跨度过大，自动收敛
+		// Automatically converge unsafe gradients when luminance spread is too large.
 		safeBg1, safeBg2 := sanitizeGradient(bgColor1, bgColor2)
 		return fmt.Sprintf(`        <p:bg>
             <p:bgPr>
@@ -757,7 +752,7 @@ func generateBackgroundXMLWithColors(bgType, bgColor1, bgColor2 string) string {
 	}
 }
 
-// createSlideXMLEnhanced 根据布局创建增强的幻灯片 XML
+// createSlideXMLEnhanced builds richer slide XML based on the selected layout.
 func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int) string {
 	layout := resolvedLayout(slide)
 
@@ -779,8 +774,8 @@ func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, s
 	}
 }
 
-// generateSubtitleXML 生成二级标题 XML，放在一级标题下方
-// shapeID: 该 shape 的 id，y: 纵坐标位置
+// generateSubtitleXML builds subtitle XML below the main title.
+// shapeID is the shape id and y is the vertical offset.
 func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme) string {
 	if subtitle == "" {
 		return ""
@@ -820,13 +815,14 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
             </p:sp>`, shapeID, y, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
 }
 
-// generateFooterXML 生成幻灯片底部脚注（当前仅保留数据来源），起始 shape id 从 baseID 开始
+// generateFooterXML builds footer XML for the bottom of the slide.
+// It currently renders the data source only and starts shape ids from baseID.
 func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *SlideTheme) string {
 	_, _ = slideNum, totalSlides
 	textColor := getTextColor(theme)
 	result := ""
 
-	// 数据来源脚注（左下角）
+	// Data-source footnote in the lower-left corner.
 	if source != "" {
 		result += fmt.Sprintf(`
             <p:sp>
@@ -949,7 +945,7 @@ func createSolidOverlayXML(shapeID int, name, color string, alpha int, x, y, cx,
             </p:sp>`, shapeID, escapeXML(name), x, y, cx, cy, color, alpha)
 }
 
-// createTitleSlideXML 创建封面标题页 XML
+// createTitleSlideXML builds XML for the title slide.
 func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
@@ -1022,7 +1018,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
             </p:sp>`, subtitleX, subtitleY, subtitleCX, subtitleCY, subtitleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
 	}
 
-	// 装饰线条
+	// Decorative line.
 	accentColor := theme.AccentColor
 	decorLineXML := fmt.Sprintf(`
             <p:sp>
@@ -1318,7 +1314,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
 	return sb.String()
 }
 
-// createContentSlideXML 创建内容页 XML（支持分点）
+// createContentSlideXML builds XML for a content slide, including bullet support.
 func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
@@ -1364,7 +1360,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 		imageXML = createImagePictureXML(90, "DiagonalImage", "rId2", 6900000, 1200000, 4000000, 2600000, slide.ImageData)
 	}
 
-	// 标题左侧装饰色块
+	// Accent block on the left side of the title.
 	titleDecoXML := fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -1383,7 +1379,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                 </p:spPr>
             </p:sp>`, titleCY-200000, accentColor)
 
-	// 构建内容区域
+	// Build the main content area.
 	contentXML := ""
 	if len(slide.Sections) > 0 {
 		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
@@ -1391,13 +1387,13 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
 			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily)
 		} else {
-			// 分点布局：每个要点一个段落，带项目符号
-			// 根据 points 数量动态调整间距和字号
+			// Bullet layout: one paragraph per point with bullet markers.
+			// Adjust spacing and font size dynamically based on point count.
 			pointCount := len(slide.Points)
-			pointFontSize := 2000 // 默认 20pt
-			pointSpcBefore := 600 // 默认段前间距
+			pointFontSize := 2000 // Default 20pt.
+			pointSpcBefore := 600 // Default spacing before paragraph.
 			if pointCount <= 3 {
-				pointFontSize = 2200 // 少量要点用更大字号
+				pointFontSize = 2200 // Fewer bullets can use larger text.
 				pointSpcBefore = 1200
 			} else if pointCount <= 4 {
 				pointSpcBefore = 800
@@ -1442,15 +1438,15 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
             </p:sp>`, contentX, contentY, contentCX, contentCY, paragraphs)
 		}
 	} else if slide.Content != "" {
-		// 纯文本内容，根据内容长度自动调整字体大小（最小 14pt）
-		contentFontSize := 2000 // 默认 20pt
+		// Plain-text content: adjust font size based on length, with a lower bound.
+		contentFontSize := 2000 // Default 20pt.
 		contentLen := len([]rune(slide.Content))
 		if contentLen > 500 {
-			contentFontSize = 1600 // 16pt
+			contentFontSize = 1600 // 16pt.
 		} else if contentLen > 200 {
-			contentFontSize = 1800 // 18pt
+			contentFontSize = 1800 // 18pt.
 		}
-		// 字体下限保障：不低于 14pt
+		// Keep the font size at or above 14pt.
 		if contentFontSize < 1400 {
 			contentFontSize = 1400
 		}
@@ -1486,7 +1482,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
             </p:sp>`, contentX, contentY, contentCX, contentCY, contentFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Content))
 	}
 
-	// 二级标题
+	// Subtitle.
 	subtitleXML := generateSubtitleXML(slide.Subtitle, 5, subtitleY, theme)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1543,7 +1539,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 </p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, contentXML, imageXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
 }
 
-// createChartSlideXML 创建包含图表的幻灯片 XML
+// createChartSlideXML builds XML for a slide that contains an embedded chart.
 // createChartAsShapesSlideXML renders chart data as DrawingML shapes (colored bars + labels)
 // instead of embedded OOXML chart objects, for OfficeSDK compatibility.
 func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideTheme, _ PPTXStylePreset, slideNum, totalSlides int) string {
@@ -1856,7 +1852,7 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, styl
 	fontFamily := theme.FontFamily
 	eaFontFamily := theme.EAFontFamily
 
-	// 二级标题
+	// Subtitle
 	subtitleXML := generateSubtitleXML(slide.Subtitle, 6, 1000000, theme)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1932,7 +1928,8 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, styl
 </p:sld>`, bgXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, chartIndex, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
 }
 
-// createDashboardSlideXML 创建仪表盘布局 XML：指标卡片 + 可选图表 + 可选要点
+// createDashboardSlideXML builds dashboard-layout XML with metric cards,
+// an optional chart, and optional supporting points.
 func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
@@ -1943,7 +1940,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 	primaryColor := theme.PrimaryColor
 	accentColor := getSafeTextColorForBg(theme.AccentColor, bgColor)
 
-	// 标题左侧装饰色块
+	// Accent block on the left side of the title.
 	titleDecoXML := fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -1962,7 +1959,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:spPr>
             </p:sp>`, accentColor)
 
-	// 指标卡片区域（最多 4 个卡片，排成一行）
+	// Metric-card area, up to four cards in a single row.
 	metricsXML := ""
 	numMetrics := len(slide.Metrics)
 	if numMetrics > 4 {
@@ -1970,13 +1967,12 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 	}
 	hasLowerContent := hasChart || len(slide.Points) > 0
 	if numMetrics > 0 {
-		// 计算卡片位置：在 700000 ~ 11500000 范围内平均分布
+		// Spread cards evenly across the available horizontal range.
 		totalWidth := 10800000
 		cardGap := 150000
 		cardWidth := (totalWidth - (numMetrics-1)*cardGap) / numMetrics
 		cardHeight := 950000
-		// 如果没有下方内容（图表/要点），卡片在可用区域内垂直居中
-		// 可用区域：标题+副标题下方(1050000) 到 脚注上方(6400000)
+		// When there is no lower content, center the cards vertically in the usable area.
 		cardY := 1050000
 		if !hasLowerContent {
 			availTop := 1050000
@@ -1990,7 +1986,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 			cardX := 700000 + i*(cardWidth+cardGap)
 			shapeID := 20 + i*3
 
-			// 卡片背景（圆角矩形带轻微阴影效果）
+			// Card background with rounded corners.
 			metricsXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -2009,7 +2005,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:spPr>
             </p:sp>`, shapeID, i, cardX, cardY, cardWidth, cardHeight, primaryColor, primaryColor)
 
-			// 卡片文字内容
+			// Card text content.
 			noteXML := ""
 			if m.Note != "" {
 				noteXML = fmt.Sprintf(`
@@ -2073,7 +2069,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 		}
 	}
 
-	// 下半区内容：图表 + 要点
+	// Lower-half content: chart and/or points.
 	lowerContentXML := ""
 	lowerY := 2200000
 	if numMetrics > 0 {
@@ -2081,7 +2077,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 	}
 
 	if hasChart && len(slide.Points) > 0 {
-		// 左侧图表 + 右侧要点
+		// Chart on the left, points on the right.
 		lowerContentXML += fmt.Sprintf(`
             <p:graphicFrame>
                 <p:nvGraphicFramePr>
@@ -2102,7 +2098,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </a:graphic>
             </p:graphicFrame>`, lowerY)
 
-		// 右侧要点
+		// Right-side points.
 		pointsParagraphs := ""
 		for _, point := range slide.Points {
 			pointsParagraphs += fmt.Sprintf(`
@@ -2141,7 +2137,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:txBody>
             </p:sp>`, lowerY, pointsParagraphs)
 	} else if hasChart {
-		// 仅图表（居中）
+		// Chart only, centered.
 		lowerContentXML += fmt.Sprintf(`
             <p:graphicFrame>
                 <p:nvGraphicFramePr>
@@ -2162,7 +2158,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </a:graphic>
             </p:graphicFrame>`, lowerY)
 	} else if len(slide.Points) > 0 {
-		// 仅要点（全宽）
+		// Points only, full width.
 		pointsParagraphs := ""
 		for _, point := range slide.Points {
 			pointsParagraphs += fmt.Sprintf(`
@@ -2204,7 +2200,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 
 	footerXML := generateFooterXML(slide.Source, slideNum, totalSlides, 60, theme)
 
-	// 二级标题
+	// Subtitle.
 	dashSubtitleXML := generateSubtitleXML(slide.Subtitle, 55, 750000, theme)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2262,7 +2258,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 </p:sld>`, bgXML, titleDecoXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), dashSubtitleXML, metricsXML, lowerContentXML, footerXML)
 }
 
-// createSlideRelsWithChart 创建带有图表引用的幻灯片 rels
+// createSlideRelsWithChart builds slide rels with a chart reference.
 func (g *PPTXGenerator) createSlideRelsWithChart(chartIndex int) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart%d.xml"/></Relationships>`, chartIndex)
@@ -2273,16 +2269,16 @@ func (g *PPTXGenerator) createSlideRelsWithImage(imageIndex int, imageExt string
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image%d.%s"/></Relationships>`, imageIndex, imageExt)
 }
 
-// createChartRelsXML 创建图表自身的 rels
+// createChartRelsXML builds rels for the chart itself.
 func (g *PPTXGenerator) createChartRelsXML(chartIndex int) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors%d.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style%d.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="" TargetMode="External"/></Relationships>`, chartIndex, chartIndex)
 }
 
-// createChartEmbeddedXlsx 为图表生成嵌入的最小化 xlsx 数据文件
-// 包含与 chart XML 中 strCache/numCache 对应的 Sheet1 数据
+// createChartEmbeddedXlsx builds the minimal embedded XLSX data file for a chart.
+// It contains the Sheet1 data that matches the chart XML caches.
 func (g *PPTXGenerator) createChartEmbeddedXlsx(chart *ChartData) ([]byte, error) {
-	// 构建 Sheet1 数据：第一行是标题行，后续行是分类+数值
+	// Build Sheet1 data: title row first, then category/value rows.
 	rows := [][]string{{"Category", chart.Title}}
 	for i, cat := range chart.Categories {
 		val := ""
@@ -2299,44 +2295,44 @@ func (g *PPTXGenerator) createChartEmbeddedXlsx(chart *ChartData) ([]byte, error
 	})
 }
 
-// createChartXML 生成 OOXML chart XML（严格匹配 chart-demo 格式）
+// createChartXML builds OOXML chart XML aligned with the chart-demo format.
 func (g *PPTXGenerator) createChartXML(chart *ChartData) string {
 	switch chart.Type {
 	case "pie":
 		return g.createPieChartXML(chart)
 	case "line":
 		return g.createLineChartXML(chart)
-	default: // "bar" 或默认
+	default: // "bar" or default
 		return g.createBarChartXML(chart)
 	}
 }
 
-// chartCommonHeader 图表 XML 公共头部（严格匹配 chart-demo 命名空间和样式声明）
+// chartCommonHeader is the shared chart XML header aligned with chart-demo.
 const chartCommonHeader = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="c14" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart"><c14:style val="102"/></mc:Choice><mc:Fallback><c:style val="2"/></mc:Fallback></mc:AlternateContent>`
 
-// chartTitleXML 图表标题样式（与 chart-demo 一致，使用自动标题样式）
+// chartTitleXML is the chart title style aligned with chart-demo.
 const chartTitleXML = `<c:title><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1862" b="0" i="0" u="none" strike="noStrike" kern="1200" spc="0" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:pPr><a:endParaRPr lang="en-CN"/></a:p></c:txPr></c:title><c:autoTitleDeleted val="0"/>`
 
-// chartLegendXML 图表图例样式（与 chart-demo 一致）
+// chartLegendXML is the chart legend style aligned with chart-demo.
 const chartLegendXML = `<c:legend><c:legendPos val="b"/><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1197" b="0" i="0" u="none" strike="noStrike" kern="1200" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:pPr><a:endParaRPr lang="en-CN"/></a:p></c:txPr></c:legend>`
 
-// chartFooterXML 图表尾部属性（与 chart-demo 一致）
+// chartFooterXML is the chart footer block aligned with chart-demo.
 const chartFooterXML = `<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/><c:showDLblsOverMax val="0"/></c:chart><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:endParaRPr lang="en-CN"/></a:p></c:txPr><c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`
 
-// chartAxisLabelStyle 轴标签文字样式（与 chart-demo catAx/valAx 的 c:txPr 一致）
+// chartAxisLabelStyle is the axis-label text style aligned with chart-demo.
 const chartAxisLabelStyle = `<c:txPr><a:bodyPr rot="-60000000" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1197" b="0" i="0" u="none" strike="noStrike" kern="1200" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:pPr><a:endParaRPr lang="en-CN"/></a:p></c:txPr>`
 
-// chartAxisLineStyle 轴线条样式
+// chartAxisLineStyle defines the axis-line style.
 const chartAxisLineStyle = `<c:spPr><a:noFill/><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr>`
 
-// chartGridlineStyle 主网格线样式
+// chartGridlineStyle defines the major-gridline style.
 const chartGridlineStyle = `<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr></c:majorGridlines>`
 
-// accentColors scheme 颜色名列表（用于数据点/系列着色）
+// accentColors lists the scheme colors used for series and datapoint coloring.
 var accentColors = []string{"accent1", "accent2", "accent3", "accent4", "accent5", "accent6"}
 
-// createBarChartXML 生成柱状图 XML（严格匹配 chart-demo/chart3.xml 格式）
+// createBarChartXML builds bar-chart XML aligned with chart-demo/chart3.xml.
 func (g *PPTXGenerator) createBarChartXML(chart *ChartData) string {
 	var sb strings.Builder
 	sb.WriteString(chartCommonHeader)
@@ -2347,7 +2343,7 @@ func (g *PPTXGenerator) createBarChartXML(chart *ChartData) string {
 	// barChart
 	sb.WriteString(`<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>`)
 
-	// 单系列
+	// Single series.
 	accent := accentColors[0]
 	sb.WriteString(`<c:ser><c:idx val="0"/><c:order val="0"/>`)
 	sb.WriteString(fmt.Sprintf(`<c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>%s</c:v></c:pt></c:strCache></c:strRef></c:tx>`, escapeXML(chart.Title)))
@@ -2389,7 +2385,7 @@ func (g *PPTXGenerator) createBarChartXML(chart *ChartData) string {
 	return sb.String()
 }
 
-// createPieChartXML 生成饼图 XML（严格匹配 chart-demo/chart1.xml 格式）
+// createPieChartXML builds pie-chart XML aligned with chart-demo/chart1.xml.
 func (g *PPTXGenerator) createPieChartXML(chart *ChartData) string {
 	var sb strings.Builder
 	sb.WriteString(chartCommonHeader)
@@ -2402,7 +2398,7 @@ func (g *PPTXGenerator) createPieChartXML(chart *ChartData) string {
 	sb.WriteString(`<c:ser><c:idx val="0"/><c:order val="0"/>`)
 	sb.WriteString(fmt.Sprintf(`<c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>%s</c:v></c:pt></c:strCache></c:strRef></c:tx>`, escapeXML(chart.Title)))
 
-	// 每个数据点单独着色（与 chart-demo 一致，使用 scheme accent 色 + 白色边框）
+	// Color each datapoint individually, aligned with chart-demo.
 	numPts := len(chart.Values)
 	for i := 0; i < numPts; i++ {
 		accent := accentColors[i%len(accentColors)]
@@ -2425,7 +2421,7 @@ func (g *PPTXGenerator) createPieChartXML(chart *ChartData) string {
 	return sb.String()
 }
 
-// createLineChartXML 生成折线图 XML（严格匹配 chart-demo/chart2.xml 格式）
+// createLineChartXML builds line-chart XML aligned with chart-demo/chart2.xml.
 func (g *PPTXGenerator) createLineChartXML(chart *ChartData) string {
 	var sb strings.Builder
 	sb.WriteString(chartCommonHeader)
@@ -2436,7 +2432,7 @@ func (g *PPTXGenerator) createLineChartXML(chart *ChartData) string {
 	// lineChart
 	sb.WriteString(`<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>`)
 
-	// 单系列，线条样式与 chart-demo 一致
+	// Single series with chart-demo-aligned line styling.
 	accent := accentColors[0]
 	sb.WriteString(`<c:ser><c:idx val="0"/><c:order val="0"/>`)
 	sb.WriteString(fmt.Sprintf(`<c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>%s</c:v></c:pt></c:strCache></c:strRef></c:tx>`, escapeXML(chart.Title)))
@@ -2479,7 +2475,7 @@ func (g *PPTXGenerator) createLineChartXML(chart *ChartData) string {
 	return sb.String()
 }
 
-// buildCategoryXML 构建图表分类轴 XML（与 chart-demo 一致的紧凑格式）
+// buildCategoryXML builds category-axis XML in a compact chart-demo-compatible format.
 func (g *PPTXGenerator) buildCategoryXML(categories []string) string {
 	if len(categories) == 0 {
 		return ""
@@ -2493,7 +2489,7 @@ func (g *PPTXGenerator) buildCategoryXML(categories []string) string {
 	return sb.String()
 }
 
-// buildValueXML 构建图表数值轴 XML（与 chart-demo 一致的紧凑格式）
+// buildValueXML builds value-axis XML in a compact chart-demo-compatible format.
 func (g *PPTXGenerator) buildValueXML(values []float64) string {
 	if len(values) == 0 {
 		return ""
@@ -2507,7 +2503,7 @@ func (g *PPTXGenerator) buildValueXML(values []float64) string {
 	return sb.String()
 }
 
-// escapeXML 转义 XML 特殊字符
+// escapeXML escapes XML special characters.
 func escapeXML(s string) string {
 	result := ""
 	for _, c := range s {
@@ -2529,21 +2525,19 @@ func escapeXML(s string) string {
 	return result
 }
 
-// ======= Raw OOXML Assembly (LLM 直出 XML) =======
+// ======= Raw OOXML Assembly (LLM-generated XML) =======
 
-// RawSlideResult 保存 LLM 直接生成的单页 OOXML XML 内容
+// RawSlideResult stores one slide of OOXML XML generated directly by the LLM.
 type RawSlideResult struct {
-	SlideXML  string // 完整的 slideN.xml 内容
-	ChartXML  string // 可选，完整的 chartN.xml 内容（空字符串表示无图表）
-	ImageData []byte // 可选，图片二进制数据
-	ImageMIME string // 可选，图片 MIME，如 image/png 或 image/jpeg
-	ImagePos  string // 图片位置: "right" | "left" | "background" | "center"
+	SlideXML  string // Full slideN.xml payload.
+	ChartXML  string // Optional full chartN.xml payload; empty means no chart.
+	ImageData []byte // Optional image binary payload.
+	ImageMIME string // Optional image MIME such as image/png or image/jpeg.
+	ImagePos  string // Image position: "right" | "left" | "background" | "center".
 }
 
-// AssembleRawOOXML 将 LLM 生成的原始 XML（theme + slides）与 Go 生成的结构性文件组装为 PPTX zip 字节流
-// themeXML: LLM 生成的完整 theme1.xml 内容
-// slides: 按序排列的每页 slide XML、可选 chart XML 和可选图片数据
-// opts: 文档标题、作者等元信息
+// AssembleRawOOXML assembles a PPTX ZIP from raw LLM-generated XML plus
+// the structural files generated by Go.
 func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions) ([]byte, error) {
 	if len(slides) == 0 {
 		return nil, fmt.Errorf("slides cannot be empty")
@@ -2551,7 +2545,7 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 
 	slideCount := len(slides)
 
-	// 统计图表数量和图片数量
+	// Count charts and images.
 	chartCount := 0
 	imageCount := 0
 	for _, s := range slides {
@@ -2565,24 +2559,24 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 
 	g := NewPPTXGenerator()
 
-	// 构建结构性基础文件（复用现有逻辑）
+	// Build the structural base files using the existing generator logic.
 	theme := getTheme(opts.Theme)
 	files := g.buildBaseFiles(opts, slideCount, chartCount, imageCount > 0, theme)
 
-	// 如果有图片，重新生成 Content_Types（添加 png/jpeg Default）
+	// If images are present, regenerate Content_Types with PNG/JPEG defaults.
 	if imageCount > 0 {
 		files["[Content_Types].xml"] = g.generateContentTypes(slideCount, chartCount, true)
 	}
 
-	// 覆盖 theme 为 LLM 生成的内容
+	// Override the theme with the LLM-generated theme XML.
 	if themeXML != "" {
 		files["ppt/theme/theme1.xml"] = themeXML
 	}
 
-	// 二进制文件单独存储（不能放在 string map 里）
+	// Store binary payloads separately from the string map.
 	binaryFiles := make(map[string][]byte)
 
-	// 添加每页 slide XML、chart 辅助文件、图片文件
+	// Add slide XML, chart support files, and image files for each slide.
 	chartIndex := 0
 	imageIndex := 0
 	for i, slide := range slides {
@@ -2592,7 +2586,7 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 
 		slideXML := slide.SlideXML
 
-		// 确定该页需要多少个 relationship（始终有 rId1=slideLayout）
+		// Build the relationship set for this slide. rId1 is always the slideLayout.
 		hasChart := slide.ChartXML != ""
 		hasImage := len(slide.ImageData) > 0
 
@@ -2625,23 +2619,23 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 			imageRId := fmt.Sprintf("rIdImg%d", imageIndex)
 			rels = append(rels, fmt.Sprintf(`<Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image%d.%s"/>`, imageRId, imageIndex, imageExt))
 
-			// 替换 slide XML 中的占位 shape 为 <p:pic> 元素
+			// Replace the image placeholder shape with a <p:pic> element.
 			slideXML = replaceImagePlaceholder(slideXML, slideNum, imageRId)
 		}
 
 		files[slidePath] = slideXML
 
-		// 构建 slide rels
+		// Build slide rels.
 		relsXML := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` + strings.Join(rels, "") + `</Relationships>`
 		files[relsPath] = relsXML
 	}
 
-	// 打包为 zip
+	// Package the output as a ZIP archive.
 	buf := new(bytes.Buffer)
 	w := zip.NewWriter(buf)
 
-	// 先写 XML 文件
+	// Write XML files first.
 	for path, content := range files {
 		f, err := w.Create(path)
 		if err != nil {
@@ -2652,7 +2646,7 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 		}
 	}
 
-	// 再写二进制文件（图片）
+	// Then write binary files such as images.
 	for path, data := range binaryFiles {
 		f, err := w.Create(path)
 		if err != nil {
@@ -2670,30 +2664,28 @@ func AssembleRawOOXML(themeXML string, slides []RawSlideResult, opts PPTXOptions
 	return buf.Bytes(), nil
 }
 
-// replaceImagePlaceholder 将 slide XML 中的 ImagePlaceholder shape 替换为 <p:pic> 元素
-// 查找包含 IMG_PLACEHOLDER_{slideNum} 文本的 <p:sp> 并替换为 <p:pic>
+// replaceImagePlaceholder swaps an ImagePlaceholder shape in slide XML with a <p:pic> element.
 func replaceImagePlaceholder(slideXML string, slideNum int, imageRId string) string {
 	placeholderText := fmt.Sprintf("IMG_PLACEHOLDER_%d", slideNum)
 
-	// 如果 slide XML 中没有占位符文本，直接返回
+	// Return unchanged when the placeholder text is missing.
 	if !strings.Contains(slideXML, placeholderText) {
 		return slideXML
 	}
 
-	// 用正则匹配包含占位符的完整 <p:sp>...</p:sp> 块
-	// 匹配 name="ImagePlaceholder" 的 shape
+	// Match the full <p:sp> block that contains the placeholder.
 	re := regexp.MustCompile(`(?s)<p:sp>\s*<p:nvSpPr>\s*<p:cNvPr[^>]*name="ImagePlaceholder"[^/]*/>\s*<p:cNvSpPr[^/]*/>\s*<p:nvPr[^/]*/>\s*</p:nvSpPr>\s*<p:spPr>\s*<a:xfrm>\s*<a:off x="(\d+)" y="(\d+)"[^/]*/>\s*<a:ext cx="(\d+)" cy="(\d+)"[^/]*/>\s*</a:xfrm>[\s\S]*?</p:sp>`)
 
 	match := re.FindStringSubmatch(slideXML)
 	if match == nil {
-		// 回退：简单正则匹配包含 IMG_PLACEHOLDER 的 <p:sp> 块
+		// Fallback: match any <p:sp> block containing the placeholder text.
 		reSimple := regexp.MustCompile(`(?s)<p:sp>[\s\S]*?` + regexp.QuoteMeta(placeholderText) + `[\s\S]*?</p:sp>`)
 		simpleMatch := reSimple.FindString(slideXML)
 		if simpleMatch == "" {
 			return slideXML
 		}
 
-		// 使用默认位置
+		// Use a default placement when exact geometry is unavailable.
 		picXML := fmt.Sprintf(`<p:pic>
     <p:nvPicPr>
         <p:cNvPr id="100" name="Picture %d"/>
@@ -2716,7 +2708,7 @@ func replaceImagePlaceholder(slideXML string, slideNum int, imageRId string) str
 		return strings.Replace(slideXML, simpleMatch, picXML, 1)
 	}
 
-	// 提取占位符的位置和尺寸
+	// Extract placeholder position and size.
 	x := match[1]
 	y := match[2]
 	cx := match[3]
@@ -2744,8 +2736,7 @@ func replaceImagePlaceholder(slideXML string, slideNum int, imageRId string) str
 	return strings.Replace(slideXML, match[0], picXML, 1)
 }
 
-// GetThemeXMLSpec 返回 theme.xml 的规范模板（供 LLM prompt 引用）
-// 传入 primaryColor 和 accentColor（6位 hex），返回完整 theme XML 示例
+// GetThemeXMLSpec returns a theme.xml template suitable for LLM prompts.
 func GetThemeXMLSpec(primaryColor, accentColor string) string {
 	if primaryColor == "" {
 		primaryColor = "1A73E8"

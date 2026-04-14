@@ -37,14 +37,14 @@ func (s stubVisualReviewer) ReviewPDF(context.Context, string, StructureReport) 
 
 func TestLintPPTX_FlagsCommonQualityIssues(t *testing.T) {
 	deck := buildTestDeck(t, []officegen.Slide{
-		{Title: "封面", IsTitle: true, Subtitle: "演示"},
+		{Title: "Cover", IsTitle: true, Subtitle: "Demo"},
 		{
-			Title:  "问题页",
+			Title:  "Problem Slide",
 			Layout: "content",
 			Points: []string{
 				"IMG_PLACEHOLDER_1",
-				strings.Repeat("这是一段很长的说明文字", 20),
-				"要点 3", "要点 4", "要点 5", "要点 6", "要点 7", "要点 8", "要点 9",
+				strings.Repeat("This is a very long descriptive sentence. ", 20),
+				"Point 3", "Point 4", "Point 5", "Point 6", "Point 7", "Point 8", "Point 9",
 			},
 		},
 	})
@@ -69,8 +69,8 @@ func TestLintPPTX_FlagsCommonQualityIssues(t *testing.T) {
 
 func TestServiceReview_UsesVisualResultWhenAvailable(t *testing.T) {
 	deckPath := writeDeckFile(t, buildTestDeck(t, []officegen.Slide{
-		{Title: "封面", IsTitle: true, Subtitle: "演示"},
-		{Title: "概览", Layout: "content", Points: []string{"重点一", "重点二", "重点三"}},
+		{Title: "Cover", IsTitle: true, Subtitle: "Demo"},
+		{Title: "Overview", Layout: "content", Points: []string{"Key point one", "Key point two", "Key point three"}},
 	}))
 	pdfPath := filepath.Join(t.TempDir(), "deck.pdf")
 	if err := os.WriteFile(pdfPath, []byte("%PDF-1.4\n%%EOF\n"), 0o644); err != nil {
@@ -80,15 +80,15 @@ func TestServiceReview_UsesVisualResultWhenAvailable(t *testing.T) {
 		stubConverter{pdfPath: pdfPath},
 		stubVisualReviewer{result: &VisualResult{
 			Score:     90,
-			Summary:   "视觉表达清晰，层级明确。",
-			Strengths: []string{"页面层级清楚"},
+			Summary:   "Visual communication is clear and the hierarchy is well defined.",
+			Strengths: []string{"Page hierarchy is clear"},
 			Issues: []Issue{{
 				Severity:     "low",
 				Code:         "VISUAL_TIGHT_LAYOUT",
-				Title:        "个别页面留白偏少",
-				Message:      "第 2 页文字区域略拥挤。",
+				Title:        "Some slides have limited whitespace",
+				Message:      "The text area on slide 2 feels slightly crowded.",
 				SlideNumbers: []int{2},
-				Suggestion:   "增加边距或拆页。",
+				Suggestion:   "Increase margins or split the content across slides.",
 			}},
 		}},
 		nil,
@@ -119,8 +119,8 @@ func TestServiceReview_UsesVisualResultWhenAvailable(t *testing.T) {
 }
 
 func TestServiceReview_DegradesWhenPDFConversionFails(t *testing.T) {
-	deckPath := writeDeckFile(t, buildTestDeck(t, []officegen.Slide{{Title: "封面", IsTitle: true, Subtitle: "演示"}}))
-	service := NewService(stubConverter{err: fmt.Errorf("未找到 LibreOffice（soffice）")}, stubVisualReviewer{}, nil)
+	deckPath := writeDeckFile(t, buildTestDeck(t, []officegen.Slide{{Title: "Cover", IsTitle: true, Subtitle: "Demo"}}))
+	service := NewService(stubConverter{err: fmt.Errorf("LibreOffice (soffice) was not found")}, stubVisualReviewer{}, nil)
 
 	result, err := service.Review(context.Background(), Request{
 		DocumentType: "pptx",
@@ -138,14 +138,14 @@ func TestServiceReview_DegradesWhenPDFConversionFails(t *testing.T) {
 	if result.UsedVisual {
 		t.Fatal("expected visual review to be skipped")
 	}
-	if len(result.Warnings) == 0 || !strings.Contains(result.Warnings[0], "视觉评审已跳过") {
+	if len(result.Warnings) == 0 || !strings.Contains(result.Warnings[0], "Visual review was skipped") {
 		t.Fatalf("expected degradation warning, got %+v", result.Warnings)
 	}
 }
 
 func buildTestDeck(t *testing.T, slides []officegen.Slide) []byte {
 	t.Helper()
-	data, err := officegen.NewPPTXGenerator().Generate(slides, officegen.PPTXOptions{Title: "测试", Creator: "test"})
+	data, err := officegen.NewPPTXGenerator().Generate(slides, officegen.PPTXOptions{Title: "Test", Creator: "test"})
 	if err != nil {
 		t.Fatalf("Generate PPTX: %v", err)
 	}

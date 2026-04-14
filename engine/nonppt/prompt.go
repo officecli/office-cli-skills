@@ -31,21 +31,21 @@ type XLSXModifyPromptInput struct {
 }
 
 func BuildDOCXModifyPrompt(input DOCXModifyPromptInput) string {
-	return fmt.Sprintf(`你是专业的 Word 文档修改助手。请严格按 JSON 输出修改指令。
+	return fmt.Sprintf(`You are a professional Word document editing assistant. Return only JSON instructions.
 
-修改意图：%s
-目标元数据：%s
-用户指令：%s
-当前段落：%s
+Edit intent: %s
+Target metadata: %s
+User request: %s
+Current paragraphs: %s
 
-输出格式：
+Output schema:
 {
   "intent":"%s",
   "paragraphIndex": %d,
   "operation": {
     "type":"replace_paragraph | append_paragraph | rewrite_document",
-    "newText":"新的内容",
-    "paragraphs":["整文重写时填写"]
+    "newText":"new content",
+    "paragraphs":["fill this only for full-document rewrites"]
   }
 }
 `,
@@ -59,21 +59,21 @@ func BuildDOCXModifyPrompt(input DOCXModifyPromptInput) string {
 }
 
 func BuildXLSXModifyPrompt(input XLSXModifyPromptInput) string {
-	return fmt.Sprintf(`你是专业的 Excel 表格修改助手。请严格按 JSON 输出修改指令。
+	return fmt.Sprintf(`You are a professional Excel worksheet editing assistant. Return only JSON instructions.
 
-修改意图：%s
-目标元数据：%s
-用户指令：%s
-当前工作表：%s
+Edit intent: %s
+Target metadata: %s
+User request: %s
+Current worksheets: %s
 
-输出格式：
+Output schema:
 {
   "intent":"%s",
   "worksheetIndex": %d,
   "operation": {
     "type":"update_cells | append_summary | rewrite_sheet",
     "cellUpdates":[{"cell":"B2","value":"150"}],
-    "rows":[["列1","列2"]]
+    "rows":[["Column 1","Column 2"]]
   }
 }
 `,

@@ -112,13 +112,13 @@ func newWorkflowForTest(client engine.LLMClient) *Workflow {
 
 func TestPrepareExecutionPlan_BestStartsQuestioning(t *testing.T) {
 	client := &fakeLLMClient{
-		structuredResponses: []string{`{"questions":[{"id":"audience","question":"这份内容主要给谁看？","allowFreeform":true,"options":[{"id":"management","label":"管理层","description":"突出结论与判断。","recommended":true},{"id":"team","label":"团队内部","description":"突出执行细节。"}]}]}`},
+		structuredResponses: []string{`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail."}]}]}`},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "做一个关于 minecraft 的 ppt",
+		UserPrompt:     "Create a PPT about Minecraft",
 		DocumentType:   "pptx",
 		RequestID:      "req-1",
 		GenerationMode: "best",
@@ -142,7 +142,7 @@ func TestPrepareExecutionPlan_FastSkipsQuestions(t *testing.T) {
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "做一个关于 minecraft 的 ppt",
+		UserPrompt:     "Create a PPT about Minecraft",
 		DocumentType:   "pptx",
 		RequestID:      "req-fast",
 		GenerationMode: "fast",
@@ -167,13 +167,13 @@ func TestPrepareExecutionPlan_FallsBackToPromptJSONWhenStructuredFails(t *testin
 			errors.New("openai: invalid structured json response"),
 			errors.New("openai: invalid structured json response"),
 		},
-		jsonResponses: []string{`{"questions":[{"id":"audience","question":"这份内容主要给谁看？","allowFreeform":true,"options":[{"label":"管理层","description":"突出结论。","recommended":true},{"label":"团队内部","description":"突出执行细节。"}]}]}`},
+		jsonResponses: []string{`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"label":"Leadership","description":"Emphasize conclusions.","recommended":true},{"label":"Internal team","description":"Emphasize execution detail."}]}]}`},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "制作一份项目汇报 PPT",
+		UserPrompt:     "Create a project update PPT",
 		DocumentType:   "pptx",
 		RequestID:      "req-fallback",
 		GenerationMode: "best",
@@ -195,18 +195,18 @@ func TestPrepareExecutionPlan_FallsBackToPromptJSONWhenStructuredFails(t *testin
 func TestAnswerExecutionPlanQuestion_BestGeneratesPlanAndBlueprint(t *testing.T) {
 	client := &fakeLLMClient{
 		structuredResponses: []string{
-			`{"questions":[{"id":"audience","question":"这份内容主要给谁看？","allowFreeform":true,"options":[{"id":"management","label":"管理层","description":"突出结论与判断。","recommended":true},{"id":"team","label":"团队内部","description":"突出执行细节。"}]},{"id":"shape","question":"你更希望怎么组织？","allowFreeform":true,"options":[{"id":"concise","label":"结论先行","description":"适合短汇报。","recommended":true},{"id":"detailed","label":"完整展开","description":"适合详细介绍。"}]}]}`,
-			`{"plan_markdown":"# 执行计划\n\n## Summary\n- 面向管理层，结论先行。","execution_prompt":"按照 6 页以内、面向管理层、结论先行的方式生成 PPT。"}`,
+			`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail."}]},{"id":"shape","question":"How should the deck be structured?","allowFreeform":true,"options":[{"id":"concise","label":"Conclusion-first","description":"Fits a short deck.","recommended":true},{"id":"detailed","label":"Expanded","description":"Fits a more detailed explanation."}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- Conclusion-first for leadership.","execution_prompt":"Generate the PPT in 6 slides or fewer, for leadership, with a conclusion-first structure."}`,
 		},
 		jsonResponses: []string{
-			`{"presentationType":"介绍型","targetAudience":"管理层","presentationPurpose":"介绍 Minecraft","pageCount":6,"contentStyle":"结论先行","visualEffect":"简洁可信","slideOutline":[{"slideIndex":1,"purpose":"封面","contentFormat":"paragraph","suggestedLayout":"title","maxItems":1,"contentRequirements":"说明主题与对象","visualSuggestion":"hero"}],"contentGuideline":"每页只保留一个核心信息点"}`,
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":6,"contentStyle":"Conclusion-first","visualEffect":"Clean and credible","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph","suggestedLayout":"title","maxItems":1,"contentRequirements":"State the topic and audience","visualSuggestion":"hero"}],"contentGuideline":"Keep one core point per slide"}`,
 		},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "做一个关于 minecraft 的 ppt",
+		UserPrompt:     "Create a PPT about Minecraft",
 		DocumentType:   "pptx",
 		RequestID:      "req-prepare",
 		GenerationMode: "best",
@@ -228,7 +228,7 @@ func TestAnswerExecutionPlanQuestion_BestGeneratesPlanAndBlueprint(t *testing.T)
 	session, err = workflow.AnswerExecutionPlanQuestion(context.Background(), engine.AnswerExecutionPlanQuestionRequest{
 		PlanID:     session.PlanID,
 		QuestionID: session.CurrentQuestion.ID,
-		Answer:     "控制在 6 页以内，先讲结论",
+		Answer:     "Keep it within 6 slides and lead with conclusions",
 		RequestID:  "req-answer-2",
 	})
 	if err != nil {
@@ -238,13 +238,13 @@ func TestAnswerExecutionPlanQuestion_BestGeneratesPlanAndBlueprint(t *testing.T)
 	if session.Status != "review_pending" {
 		t.Fatalf("status = %q, want review_pending", session.Status)
 	}
-	if !strings.Contains(session.PlanMarkdown, "## 框架蓝图") {
+	if !strings.Contains(session.PlanMarkdown, "## Framework Blueprint") {
 		t.Fatalf("plan markdown = %q, want framework blueprint section", session.PlanMarkdown)
 	}
-	if !strings.Contains(session.FrameworkBlueprint, "第 1 页") {
+	if !strings.Contains(session.FrameworkBlueprint, "Slide 1") {
 		t.Fatalf("framework blueprint = %q", session.FrameworkBlueprint)
 	}
-	if session.ExecutionPrompt != "按照 6 页以内、面向管理层、结论先行的方式生成 PPT。" {
+	if session.ExecutionPrompt != "Generate the PPT in 6 slides or fewer, for leadership, with a conclusion-first structure." {
 		t.Fatalf("execution prompt = %q", session.ExecutionPrompt)
 	}
 }
@@ -252,20 +252,20 @@ func TestAnswerExecutionPlanQuestion_BestGeneratesPlanAndBlueprint(t *testing.T)
 func TestReviseExecutionPlan_RebuildsArtifacts(t *testing.T) {
 	client := &fakeLLMClient{
 		structuredResponses: []string{
-			`{"questions":[{"id":"audience","question":"这份内容主要给谁看？","allowFreeform":true,"options":[{"id":"management","label":"管理层","description":"突出结论与判断。","recommended":true},{"id":"team","label":"团队内部","description":"突出执行细节。"}]}]}`,
-			`{"plan_markdown":"# 执行计划\n\n## Summary\n- 第一版计划。","execution_prompt":"第一版执行提示。"}`,
-			`{"plan_markdown":"# 执行计划\n\n## Summary\n- 第二版计划，加入风险页。","execution_prompt":"第二版执行提示，加入风险页。"}`,
+			`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail."}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- First draft plan.","execution_prompt":"First execution prompt."}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- Second draft plan with a risk slide.","execution_prompt":"Second execution prompt with a risk slide."}`,
 		},
 		jsonResponses: []string{
-			`{"presentationType":"介绍型","targetAudience":"管理层","presentationPurpose":"介绍 Minecraft","pageCount":6,"contentStyle":"结论先行","slideOutline":[{"slideIndex":1,"purpose":"封面","contentFormat":"paragraph"}]}`,
-			`{"presentationType":"介绍型","targetAudience":"管理层","presentationPurpose":"介绍 Minecraft","pageCount":7,"contentStyle":"结论先行","slideOutline":[{"slideIndex":1,"purpose":"封面","contentFormat":"paragraph"},{"slideIndex":2,"purpose":"风险","contentFormat":"points"}]}`,
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":6,"contentStyle":"Conclusion-first","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph"}]}`,
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":7,"contentStyle":"Conclusion-first","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph"},{"slideIndex":2,"purpose":"Risk","contentFormat":"points"}]}`,
 		},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "做一个关于 minecraft 的 ppt",
+		UserPrompt:     "Create a PPT about Minecraft",
 		DocumentType:   "pptx",
 		RequestID:      "req-prepare",
 		GenerationMode: "best",
@@ -284,16 +284,16 @@ func TestReviseExecutionPlan_RebuildsArtifacts(t *testing.T) {
 	}
 	session, err = workflow.ReviseExecutionPlan(context.Background(), engine.ReviseExecutionPlanRequest{
 		PlanID:      session.PlanID,
-		Instruction: "增加一页风险与应对",
+		Instruction: "Add one slide for risks and mitigations",
 		RequestID:   "req-revise",
 	})
 	if err != nil {
 		t.Fatalf("ReviseExecutionPlan error: %v", err)
 	}
-	if !strings.Contains(session.PlanMarkdown, "第二版计划") {
+	if !strings.Contains(session.PlanMarkdown, "Second draft plan") {
 		t.Fatalf("plan markdown = %q", session.PlanMarkdown)
 	}
-	if !strings.Contains(session.ExecutionPrompt, "风险页") {
+	if !strings.Contains(session.ExecutionPrompt, "risk slide") {
 		t.Fatalf("execution prompt = %q", session.ExecutionPrompt)
 	}
 }
@@ -301,18 +301,18 @@ func TestReviseExecutionPlan_RebuildsArtifacts(t *testing.T) {
 func TestApproveExecutionPlan_UsesExistingArtifacts(t *testing.T) {
 	client := &fakeLLMClient{
 		structuredResponses: []string{
-			`{"questions":[{"id":"audience","question":"这份内容主要给谁看？","allowFreeform":true,"options":[{"id":"management","label":"管理层","description":"突出结论与判断。","recommended":true},{"id":"team","label":"团队内部","description":"突出执行细节。"}]}]}`,
-			`{"plan_markdown":"# 执行计划\n\n## Summary\n- 第一版计划。","execution_prompt":"第一版执行提示。"}`,
+			`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail."}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- First draft plan.","execution_prompt":"First execution prompt."}`,
 		},
 		jsonResponses: []string{
-			`{"presentationType":"介绍型","targetAudience":"管理层","presentationPurpose":"介绍 Minecraft","pageCount":6,"contentStyle":"结论先行","slideOutline":[{"slideIndex":1,"purpose":"封面","contentFormat":"paragraph"}]}`,
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":6,"contentStyle":"Conclusion-first","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph"}]}`,
 		},
 	}
 	workflow := newWorkflowForTest(client)
 
 	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
 		ConversationID: "conv-1",
-		UserPrompt:     "做一个关于 minecraft 的 ppt",
+		UserPrompt:     "Create a PPT about Minecraft",
 		DocumentType:   "pptx",
 		RequestID:      "req-prepare",
 		GenerationMode: "best",

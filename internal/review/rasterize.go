@@ -32,15 +32,15 @@ func rasterizePDFPagesWithSoffice(ctx context.Context, pdfPath string, maxPages 
 	}
 	absPath, err := filepath.Abs(pdfPath)
 	if err != nil {
-		return nil, fmt.Errorf("解析 PDF 路径失败：%w", err)
+		return nil, fmt.Errorf("failed to resolve PDF path: %w", err)
 	}
 	if _, err := os.Stat(absPath); err != nil {
-		return nil, fmt.Errorf("读取 PDF 失败：%w", err)
+		return nil, fmt.Errorf("failed to read PDF: %w", err)
 	}
 
 	workDir, err := os.MkdirTemp("", "officecli-review-raster-*")
 	if err != nil {
-		return nil, fmt.Errorf("创建临时目录失败：%w", err)
+		return nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	defer os.RemoveAll(workDir)
 
@@ -56,19 +56,19 @@ func rasterizePDFPagesWithSoffice(ctx context.Context, pdfPath string, maxPages 
 	cmd := exec.CommandContext(ctx, "python3", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("LibreOffice 页面截图失败：%w: %s", err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("LibreOffice page rasterization failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取截图清单失败：%w", err)
+		return nil, fmt.Errorf("failed to read rasterization manifest: %w", err)
 	}
 	var manifest rasterizeManifest
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, fmt.Errorf("解析截图清单失败：%w", err)
+		return nil, fmt.Errorf("failed to parse rasterization manifest: %w", err)
 	}
 	if len(manifest.Pages) == 0 {
-		return nil, fmt.Errorf("未导出任何页面图片")
+		return nil, fmt.Errorf("no page images were exported")
 	}
 	sort.SliceStable(manifest.Pages, func(i, j int) bool {
 		return manifest.Pages[i].Page < manifest.Pages[j].Page
@@ -78,7 +78,7 @@ func rasterizePDFPagesWithSoffice(ctx context.Context, pdfPath string, maxPages 
 	for _, item := range manifest.Pages {
 		imageBytes, err := os.ReadFile(item.Path)
 		if err != nil {
-			return nil, fmt.Errorf("读取页面图片失败：%w", err)
+			return nil, fmt.Errorf("failed to read page image: %w", err)
 		}
 		mime := strings.TrimSpace(item.MIME)
 		if mime == "" {
@@ -155,7 +155,7 @@ try:
             last_err = err
             time.sleep(0.1)
     if ctx is None:
-        raise RuntimeError("连接 LibreOffice UNO 失败: %s" % last_err)
+        raise RuntimeError("failed to connect to LibreOffice UNO: %s" % last_err)
 
     smgr = ctx.ServiceManager
     desktop = smgr.createInstanceWithContext("com.sun.star.frame.Desktop", ctx)

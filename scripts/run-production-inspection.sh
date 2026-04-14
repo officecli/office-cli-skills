@@ -10,18 +10,18 @@ Usage:
   bash ./scripts/run-production-inspection.sh <readonly|isolated>
 
 Modes:
-  readonly   只读生产巡检：首页、pricing、路由、app/admin、healthz
-  isolated   隔离写入巡检：专用 fingerprint + 专用测试 key 的 license 闭环
+  readonly   Read-only production inspection: homepage, pricing, routes, app/admin, healthz
+  isolated   Isolated write inspection: license flow with a dedicated fingerprint and test keys
 
 Environment:
-  REPORT_DIR=...                     巡检报告输出目录
-  SITE_BASE_URL=...                  只读巡检官网基址，默认 https://officecli.io
-  PLATFORM_BASE_URL=...              平台基址，默认 https://platform.officecli.io
-  INSPECTION_FINGERPRINT_HASH=...    隔离写入巡检专用 fingerprint，必须以 inspection- 或 cron- 开头
-  INSPECTION_API_KEY=...             隔离写入巡检专用可用 key
-  INSPECTION_BLOCKED_API_KEY=...     隔离写入巡检专用 blocked key
-  INSPECTION_USER_ID=...             可选，专用开发者 user_id
-  INSPECTION_REQUEST_PREFIX=...      默认 inspection
+  REPORT_DIR=...                     Output directory for inspection reports
+  SITE_BASE_URL=...                  Base URL for read-only site checks, default https://officecli.io
+  PLATFORM_BASE_URL=...              Platform base URL, default https://platform.officecli.io
+  INSPECTION_FINGERPRINT_HASH=...    Dedicated fingerprint for isolated checks; must start with inspection- or cron-
+  INSPECTION_API_KEY=...             Dedicated usable key for isolated checks
+  INSPECTION_BLOCKED_API_KEY=...     Dedicated blocked key for isolated checks
+  INSPECTION_USER_ID=...             Optional dedicated developer user_id
+  INSPECTION_REQUEST_PREFIX=...      Default: inspection
 EOF
 }
 

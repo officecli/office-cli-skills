@@ -72,7 +72,7 @@ func (w *Workflow) synthesizeFrameworkBlueprint(ctx context.Context, session *en
 	}
 	attemptCtx, cancel := w.withTimeout(ctx, w.blueprintTimeout)
 	response, err := w.llm.CompleteJSON(attemptCtx, []engine.LLMMessage{
-		{Role: "system", Content: "你是一个资深办公文档结构设计师。请只返回一个合法 JSON 对象。"},
+		{Role: "system", Content: "You are a senior office-document structure designer. Return one valid JSON object only."},
 		{Role: "user", Content: buildFrameworkBlueprintPrompt(session)},
 	})
 	cancel()
@@ -84,16 +84,16 @@ func (w *Workflow) synthesizeFrameworkBlueprint(ctx context.Context, session *en
 
 func buildFrameworkBlueprintPrompt(session *engine.PlanSession) string {
 	var sb strings.Builder
-	sb.WriteString("请先为以下需求生成结构蓝图，只输出 JSON。\n\n")
-	sb.WriteString("需求：")
+	sb.WriteString("Generate a framework blueprint for the request below. Return JSON only.\n\n")
+	sb.WriteString("Request: ")
 	sb.WriteString(strings.TrimSpace(session.UserPrompt))
 	sb.WriteString("\n")
 	for _, answer := range session.Answers {
 		question := findQuestion(session.Questions, answer.QuestionID)
 		if question != nil {
-			sb.WriteString("补充说明：")
+			sb.WriteString("Additional note: ")
 			sb.WriteString(strings.TrimSpace(question.Question))
-			sb.WriteString("：")
+			sb.WriteString(": ")
 			sb.WriteString(strings.TrimSpace(answer.Answer))
 			sb.WriteString("\n")
 		}
@@ -106,79 +106,79 @@ func buildFrameworkBlueprintPrompt(session *engine.PlanSession) string {
 func buildBlueprintSchemaPrompt(documentType string) string {
 	switch normalizeDocumentType(documentType) {
 	case "docx":
-		return `输出格式：
+		return `Output format:
 {
-  "documentType":"分析报告",
-  "targetAudience":"管理层",
-  "writingGoal":"说明结论与建议",
-  "tone":"正式专业",
-  "lengthHint":"约 3000 字",
-  "contentGuideline":"先结论后分析，避免空话",
+  "documentType":"Analytical report",
+  "targetAudience":"Leadership",
+  "writingGoal":"Explain conclusions and recommendations",
+  "tone":"Formal and professional",
+  "lengthHint":"Around 3000 words",
+  "contentGuideline":"Lead with conclusions before analysis and avoid filler",
   "sections":[
     {
       "sectionIndex":1,
-      "heading":"摘要",
-      "purpose":"先给核心结论",
-      "keyPoints":["结论","建议"],
-      "lengthHint":"300 字"
+      "heading":"Executive summary",
+      "purpose":"Present the core conclusion first",
+      "keyPoints":["Conclusion","Recommendation"],
+      "lengthHint":"300 words"
     }
   ]
 }
 
-要求：
-1. 章节顺序完整，适合直接扩写成正式文档。
-2. 每节都要写清楚作用，不要只列标题。
-3. contentGuideline 必须体现篇幅和表达质量要求。`
+Requirements:
+1. Keep the section order complete so the result can be expanded into a formal document directly.
+2. Explain the role of each section clearly instead of listing headings only.
+3. contentGuideline must include expectations for length and expression quality.`
 	case "xlsx":
-		return `输出格式：
+		return `Output format:
 {
-  "workbookType":"经营分析",
-  "targetAudience":"管理层",
-  "analysisGoal":"跟踪收入与预算偏差",
-  "summaryStyle":"先摘要后明细",
-  "contentGuideline":"字段口径统一，摘要与明细对应",
+  "workbookType":"Business analysis",
+  "targetAudience":"Leadership",
+  "analysisGoal":"Track revenue and budget variance",
+  "summaryStyle":"Summary first, details second",
+  "contentGuideline":"Keep field definitions consistent and align summary with detail",
   "sheets":[
     {
       "sheetIndex":1,
       "name":"Summary",
-      "purpose":"管理摘要",
-      "columns":["月份","收入","预算偏差"],
-      "notes":"保留核心 KPI"
+      "purpose":"Executive summary",
+      "columns":["Month","Revenue","Budget variance"],
+      "notes":"Keep only the core KPIs"
     }
   ]
 }
 
-要求：
-1. 先规划 workbook 和 sheet 职责，再补充字段设计。
-2. notes 要说明该 sheet 的重点和限制。
-3. contentGuideline 必须体现口径一致和摘要/明细关系。`
+Requirements:
+1. Define workbook and sheet responsibilities before finalizing columns.
+2. notes must describe the focus and limits of the sheet.
+3. contentGuideline must reflect consistency of definitions and the relationship between summary and detail.`
 	default:
-		return `输出格式：
+		return `Output format:
 {
-  "presentationType":"项目汇报",
-  "targetAudience":"管理层",
-  "presentationPurpose":"同步核心结论与建议",
+  "presentationType":"Project update",
+  "targetAudience":"Leadership",
+  "presentationPurpose":"Communicate core conclusions and recommendations",
   "pageCount":6,
-  "contentStyle":"结论先行",
-  "visualEffect":"简洁可信",
-  "contentGuideline":"每页只保留一个核心信息点，避免重复页",
+  "contentStyle":"Conclusion-first",
+  "visualEffect":"Clean and credible",
+  "contentGuideline":"Keep one core point per slide and avoid repetitive slides",
   "slideOutline":[
     {
       "slideIndex":1,
-      "purpose":"封面",
+      "purpose":"Cover",
       "suggestedLayout":"title",
       "contentFormat":"paragraph",
       "maxItems":1,
-      "contentRequirements":"说明主题与汇报对象",
+      "contentRequirements":"State the theme and audience",
       "visualSuggestion":"hero"
     }
   ]
 }
 
-要求：
-1. 优先输出咨询风短 deck，默认 6-8 页。
-2. slideOutline 必须体现页职责、叙事顺序、内容表达方式和信息上限。
-3. contentGuideline 必须体现结论先行、避免重复和单页信息密度限制。`
+Requirements:
+1. Favor a concise consulting-style deck, typically 6-8 slides.
+2. slideOutline must capture slide purpose, narrative order, expression style, and information cap.
+3. contentGuideline must reflect conclusion-first structure, anti-repetition, and per-slide density limits.`
 	}
 }
 
@@ -199,65 +199,65 @@ func buildPresentationBlueprintMarkdown(specJSON string) (string, error) {
 		return "", fmt.Errorf("decode framework blueprint: %w", err)
 	}
 	var sb strings.Builder
-	sb.WriteString("## 框架蓝图\n")
+	sb.WriteString("## Framework Blueprint\n")
 	overview := make([]string, 0, 7)
 	if value := strings.TrimSpace(blueprint.PresentationType); value != "" {
-		overview = append(overview, "- 演示类型："+value)
+		overview = append(overview, "- Presentation type: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.TargetAudience); value != "" {
-		overview = append(overview, "- 受众："+value)
+		overview = append(overview, "- Audience: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.PresentationPurpose); value != "" {
-		overview = append(overview, "- 输出目标："+value)
+		overview = append(overview, "- Goal: "+value)
 	}
 	if blueprint.PageCount > 0 {
-		overview = append(overview, "- 建议页数："+strconv.Itoa(blueprint.PageCount)+" 页")
+		overview = append(overview, "- Suggested pages: "+strconv.Itoa(blueprint.PageCount))
 	}
 	if value := strings.TrimSpace(blueprint.ContentStyle); value != "" {
-		overview = append(overview, "- 内容风格："+value)
+		overview = append(overview, "- Content style: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.VisualEffect); value != "" {
-		overview = append(overview, "- 视觉方向："+value)
+		overview = append(overview, "- Visual direction: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.ContentGuideline); value != "" {
-		overview = append(overview, "- 内容原则："+value)
+		overview = append(overview, "- Content guideline: "+value)
 	}
 	if len(overview) > 0 {
-		sb.WriteString("\n### 蓝图概览\n")
+		sb.WriteString("\n### Overview\n")
 		sb.WriteString(strings.Join(overview, "\n"))
 		sb.WriteString("\n")
 	}
 	if len(blueprint.SlideOutline) > 0 {
-		sb.WriteString("\n### 页级规划\n")
+		sb.WriteString("\n### Slide Plan\n")
 		for idx, slide := range blueprint.SlideOutline {
 			pageIndex := slide.SlideIndex
 			if pageIndex <= 0 {
 				pageIndex = idx + 1
 			}
-			sb.WriteString("- 第 ")
+			sb.WriteString("- Slide ")
 			sb.WriteString(strconv.Itoa(pageIndex))
-			sb.WriteString(" 页：")
-			sb.WriteString(strings.TrimSpace(fallbackText(slide.Purpose, "待定")))
+			sb.WriteString(": ")
+			sb.WriteString(strings.TrimSpace(fallbackText(slide.Purpose, "TBD")))
 			parts := make([]string, 0, 4)
 			if value := strings.TrimSpace(slide.ContentFormat); value != "" {
-				parts = append(parts, "表达 "+value)
+				parts = append(parts, "format "+value)
 			}
 			if value := strings.TrimSpace(slide.SuggestedLayout); value != "" {
-				parts = append(parts, "布局 "+value)
+				parts = append(parts, "layout "+value)
 			}
 			if slide.MaxItems > 0 {
-				parts = append(parts, "信息上限 "+strconv.Itoa(slide.MaxItems)+" 项")
+				parts = append(parts, "max items "+strconv.Itoa(slide.MaxItems))
 			}
 			if value := strings.TrimSpace(slide.ContentRequirements); value != "" {
-				parts = append(parts, "重点 "+value)
+				parts = append(parts, "focus "+value)
 			}
 			if value := strings.TrimSpace(slide.VisualSuggestion); value != "" {
-				parts = append(parts, "视觉 "+value)
+				parts = append(parts, "visual "+value)
 			}
 			if len(parts) > 0 {
-				sb.WriteString("（")
-				sb.WriteString(strings.Join(parts, "；"))
-				sb.WriteString("）")
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(parts, "; "))
+				sb.WriteString(")")
 			}
 			sb.WriteString("\n")
 		}
@@ -271,56 +271,56 @@ func buildDocumentBlueprintMarkdown(specJSON string) (string, error) {
 		return "", fmt.Errorf("decode document blueprint: %w", err)
 	}
 	var sb strings.Builder
-	sb.WriteString("## 框架蓝图\n")
+	sb.WriteString("## Framework Blueprint\n")
 	overview := make([]string, 0, 6)
 	if value := strings.TrimSpace(blueprint.DocumentType); value != "" {
-		overview = append(overview, "- 文档类型："+value)
+		overview = append(overview, "- Document type: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.TargetAudience); value != "" {
-		overview = append(overview, "- 受众："+value)
+		overview = append(overview, "- Audience: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.WritingGoal); value != "" {
-		overview = append(overview, "- 输出目标："+value)
+		overview = append(overview, "- Goal: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.Tone); value != "" {
-		overview = append(overview, "- 写作风格："+value)
+		overview = append(overview, "- Tone: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.LengthHint); value != "" {
-		overview = append(overview, "- 篇幅建议："+value)
+		overview = append(overview, "- Length hint: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.ContentGuideline); value != "" {
-		overview = append(overview, "- 内容原则："+value)
+		overview = append(overview, "- Content guideline: "+value)
 	}
 	if len(overview) > 0 {
-		sb.WriteString("\n### 蓝图概览\n")
+		sb.WriteString("\n### Overview\n")
 		sb.WriteString(strings.Join(overview, "\n"))
 		sb.WriteString("\n")
 	}
 	if len(blueprint.Sections) > 0 {
-		sb.WriteString("\n### 章节规划\n")
+		sb.WriteString("\n### Section Plan\n")
 		for idx, section := range blueprint.Sections {
 			sectionIndex := section.SectionIndex
 			if sectionIndex <= 0 {
 				sectionIndex = idx + 1
 			}
-			sb.WriteString("- 第 ")
+			sb.WriteString("- Section ")
 			sb.WriteString(strconv.Itoa(sectionIndex))
-			sb.WriteString(" 节：")
-			sb.WriteString(fallbackText(section.Heading, "待定章节"))
+			sb.WriteString(": ")
+			sb.WriteString(fallbackText(section.Heading, "TBD"))
 			parts := make([]string, 0, 3)
 			if value := strings.TrimSpace(section.Purpose); value != "" {
-				parts = append(parts, "作用 "+value)
+				parts = append(parts, "purpose "+value)
 			}
 			if len(section.KeyPoints) > 0 {
-				parts = append(parts, "要点 "+strings.Join(section.KeyPoints, "、"))
+				parts = append(parts, "key points "+strings.Join(section.KeyPoints, ", "))
 			}
 			if value := strings.TrimSpace(section.LengthHint); value != "" {
-				parts = append(parts, "篇幅 "+value)
+				parts = append(parts, "length "+value)
 			}
 			if len(parts) > 0 {
-				sb.WriteString("（")
-				sb.WriteString(strings.Join(parts, "；"))
-				sb.WriteString("）")
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(parts, "; "))
+				sb.WriteString(")")
 			}
 			sb.WriteString("\n")
 		}
@@ -334,30 +334,30 @@ func buildWorkbookBlueprintMarkdown(specJSON string) (string, error) {
 		return "", fmt.Errorf("decode workbook blueprint: %w", err)
 	}
 	var sb strings.Builder
-	sb.WriteString("## 框架蓝图\n")
+	sb.WriteString("## Framework Blueprint\n")
 	overview := make([]string, 0, 5)
 	if value := strings.TrimSpace(blueprint.WorkbookType); value != "" {
-		overview = append(overview, "- 工作簿类型："+value)
+		overview = append(overview, "- Workbook type: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.TargetAudience); value != "" {
-		overview = append(overview, "- 受众："+value)
+		overview = append(overview, "- Audience: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.AnalysisGoal); value != "" {
-		overview = append(overview, "- 分析目标："+value)
+		overview = append(overview, "- Analysis goal: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.SummaryStyle); value != "" {
-		overview = append(overview, "- 输出方式："+value)
+		overview = append(overview, "- Output style: "+value)
 	}
 	if value := strings.TrimSpace(blueprint.ContentGuideline); value != "" {
-		overview = append(overview, "- 内容原则："+value)
+		overview = append(overview, "- Content guideline: "+value)
 	}
 	if len(overview) > 0 {
-		sb.WriteString("\n### 蓝图概览\n")
+		sb.WriteString("\n### Overview\n")
 		sb.WriteString(strings.Join(overview, "\n"))
 		sb.WriteString("\n")
 	}
 	if len(blueprint.Sheets) > 0 {
-		sb.WriteString("\n### 工作簿规划\n")
+		sb.WriteString("\n### Workbook Plan\n")
 		for idx, sheet := range blueprint.Sheets {
 			sheetIndex := sheet.SheetIndex
 			if sheetIndex <= 0 {
@@ -365,21 +365,21 @@ func buildWorkbookBlueprintMarkdown(specJSON string) (string, error) {
 			}
 			sb.WriteString("- Sheet ")
 			sb.WriteString(strconv.Itoa(sheetIndex))
-			sb.WriteString("（")
-			sb.WriteString(fallbackText(sheet.Name, "未命名"))
-			sb.WriteString("）：")
-			sb.WriteString(fallbackText(sheet.Purpose, "待定职责"))
+			sb.WriteString(" (")
+			sb.WriteString(fallbackText(sheet.Name, "Unnamed"))
+			sb.WriteString("): ")
+			sb.WriteString(fallbackText(sheet.Purpose, "TBD"))
 			parts := make([]string, 0, 2)
 			if len(sheet.Columns) > 0 {
-				parts = append(parts, "字段 "+strings.Join(sheet.Columns, "、"))
+				parts = append(parts, "columns "+strings.Join(sheet.Columns, ", "))
 			}
 			if value := strings.TrimSpace(sheet.Notes); value != "" {
-				parts = append(parts, "说明 "+value)
+				parts = append(parts, "notes "+value)
 			}
 			if len(parts) > 0 {
-				sb.WriteString("（")
-				sb.WriteString(strings.Join(parts, "；"))
-				sb.WriteString("）")
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(parts, "; "))
+				sb.WriteString(")")
 			}
 			sb.WriteString("\n")
 		}

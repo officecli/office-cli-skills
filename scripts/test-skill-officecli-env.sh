@@ -82,11 +82,11 @@ case "${1:-}" in
     shift
     case "${1:-}" in
       status)
-        echo "配置文件路径：${OFFICE_CLI_CONFIG:-${STATE_DIR}/config.json}"
-        echo "生成服务已配置：$([[ ${GENERATION_READY} -eq 1 ]] && echo true || echo false)"
-        echo "额度校验已启用：$([[ ${LICENSE_READY} -eq 1 ]] && echo true || echo false)"
-        echo "付费额度密钥已配置：false"
-        echo "在线预览发布已启用：$([[ ${PUBLISH_READY} -eq 1 ]] && echo true || echo false)"
+        echo "Config file path: ${OFFICE_CLI_CONFIG:-${STATE_DIR}/config.json}"
+        echo "Generation service configured: $([[ ${GENERATION_READY} -eq 1 ]] && echo true || echo false)"
+        echo "Quota validation enabled: $([[ ${LICENSE_READY} -eq 1 ]] && echo true || echo false)"
+        echo "Paid quota key configured: false"
+        echo "Online preview publishing enabled: $([[ ${PUBLISH_READY} -eq 1 ]] && echo true || echo false)"
         ;;
       set-generation)
         read -r _base_url
@@ -211,9 +211,9 @@ case "${1:-}" in
   config)
     shift
     if [[ "${1:-}" == "status" ]]; then
-      echo "生成服务已配置：true"
-      echo "额度校验已启用：true"
-      echo "在线预览发布已启用：false"
+      echo "Generation service configured: true"
+      echo "Quota validation enabled: true"
+      echo "Online preview publishing enabled: false"
       exit 0
     fi
     ;;
