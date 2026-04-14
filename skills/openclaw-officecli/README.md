@@ -1,54 +1,54 @@
 # OpenClaw OfficeCLI Skill
 
-`openclaw-officecli` 让 OpenClaw 用户在现有 Telegram、Discord、Slack 等 channel 中，直接通过自然语言生成本地 `pptx`、`docx`、`xlsx` 文件。
+`openclaw-officecli` lets OpenClaw users generate local `pptx`, `docx`, and `xlsx` files with natural language from existing Telegram, Discord, Slack, and similar channels.
 
-这个 skill 的运行方式是：
+This skill works as follows:
 
-- OpenClaw 负责理解用户消息、在聊天里完成补问，并把结果回传到 channel
-- `officecli agent-bridge` 负责本地文档执行与结构化任务事件
-- `officecli` 负责最终文件的生成、组装、落盘与可选发布
-- agent 应优先读取 `initialize` / `capabilities/get`，并根据 `document_generation.pptx.image_support` 判断 PPT 图片能力
-- agent 还应读取 `initialize` / `capabilities/get -> update`，用结构化字段判断 binary 是否落后，不要解析人类 CLI 更新提示
+- OpenClaw interprets the user message, asks follow-up questions in chat, and sends the result back to the channel
+- `officecli agent-bridge` handles local document execution and structured task events
+- `officecli` generates, assembles, saves, and optionally publishes the final file
+- The agent should read `initialize` / `capabilities/get` first and use `document_generation.pptx.image_support` to determine PPT image support
+- The agent should also read `initialize` / `capabilities/get -> update` and use structured fields to determine whether the binary is outdated instead of parsing human-facing CLI prompts
 
-## 适用场景
+## Use Cases
 
-- 在 Telegram / Discord / Slack 里直接说“生成一个五页的 PPT”
-- 让 OpenClaw 通过多轮补问完善文档需求
-- 生成成功后，把文件作为附件回传到聊天中
+- Say "generate a five-slide PPT" directly in Telegram / Discord / Slack
+- Let OpenClaw refine document requirements through multi-turn follow-up questions
+- Return the generated file to the chat as an attachment after success
 
-## 前置条件
+## Prerequisites
 
-1. 本机已安装并配置 OpenClaw
-2. 本机已安装 `officecli`，或允许 skill 自动安装 `officecli`
-3. 已完成 `officecli config set-generation` 与 `officecli config set-license`，或允许 skill 自动补齐这些配置
-4. OpenClaw agent 具备：
-   - 运行本地命令的能力
-   - 读取本地文件的能力
-   - 回传文件附件到当前 channel 的能力
+1. OpenClaw is installed and configured on the local machine
+2. `officecli` is installed locally, or the skill is allowed to auto-install it
+3. `officecli config set-generation` and `officecli config set-license` have been completed, or the skill is allowed to fill them in automatically
+4. The OpenClaw agent can:
+   - run local commands
+   - read local files
+   - send file attachments back to the current channel
 
-## 安装
+## Installation
 
-使用仓库内置安装脚本：
+Use the repository install script:
 
 ```bash
 bash ./scripts/install-openclaw-skill.sh
 ```
 
-默认会把 skill 安装到：
+By default the skill is installed to:
 
 ```bash
 ~/.openclaw/skills/openclaw-officecli
 ```
 
-如需自定义 OpenClaw 根目录：
+To customize the OpenClaw home directory:
 
 ```bash
 OPENCLAW_HOME=/opt/openclaw bash ./scripts/install-openclaw-skill.sh
 ```
 
-## 配置
+## Configuration
 
-安装脚本会在 skill 目录下放置 `config.yaml`。默认字段如下：
+The install script places `config.yaml` in the skill directory. Default fields:
 
 - `office_cli_path`
 - `agent_bridge_command`
@@ -57,32 +57,32 @@ OPENCLAW_HOME=/opt/openclaw bash ./scripts/install-openclaw-skill.sh
 - `default_lang`
 - `default_publish`
 
-如果 `officecli` 已在 `PATH` 中，默认无需额外修改。
+If `officecli` is already on `PATH`, no extra changes are required by default.
 
-## 环境检查与修复
+## Environment Checks and Repair
 
-skill 目录现在内置两个脚本：
+The skill directory now includes two built-in scripts:
 
 - `check-officecli-env.sh`
 - `fix-officecli-env.sh`
 
-推荐顺序：
+Recommended order:
 
 ```bash
 bash ~/.openclaw/skills/openclaw-officecli/check-officecli-env.sh
 bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 ```
 
-行为说明：
+Behavior:
 
-- 如果 `officecli` 不在 PATH，中间会尝试自动安装
-- 如果只缺生成或额度配置，脚本会只补齐缺失项
-- 如果你需要在线预览，再额外提供 publish 配置
-- 修复成功后，会把 `office_cli_path` 和 `agent_bridge_command` 写回 skill 的 `config.yaml`
+- If `officecli` is not on `PATH`, the workflow will try to install it automatically
+- If only generation or quota config is missing, the script fills in just the missing parts
+- If you need online preview, provide publish configuration as well
+- After a successful repair, `office_cli_path` and `agent_bridge_command` are written back to the skill `config.yaml`
 
-## 挂载到 agent
+## Attach to an Agent
 
-在 `~/.openclaw/config.yaml` 中，把 skill 名称加入目标 agent：
+In `~/.openclaw/config.yaml`, add the skill name to the target agent:
 
 ```yaml
 agents:
@@ -93,50 +93,50 @@ agents:
     tools: [shell, file_read]
 ```
 
-如果当前 channel 需要附件上传，也请确保该 channel 已正确配置并具备发送文件权限。
+If the current channel needs attachment upload, make sure it is configured correctly and has permission to send files.
 
-## 用户使用方式
+## User Workflow
 
-用户可以直接发送自然语言请求，例如：
+Users can send natural-language requests directly, for example:
 
-- `生成一个 5 页的 PPT，介绍企业协作平台`
-- `帮我写一个给客户的 docx，介绍我们的协作平台`
-- `做一个项目预算 excel 表`
+- `generate a 5-slide PPT about an enterprise collaboration platform`
+- `write a customer-facing docx about our collaboration platform`
+- `create a project budget excel sheet`
 
-如果信息不完整，skill 应当把 `officecli agent-bridge` 的 `task.question` 转成聊天补问。
+If the request is incomplete, the skill should convert `officecli agent-bridge` `task.question` messages into chat follow-up questions.
 
-生成成功后，skill 应当：
+After generation succeeds, the skill should:
 
-1. 读取 `task.output.result.file_path`
-2. 把对应文件上传为聊天附件
-3. 在消息中补充文档类型、文件名和 warning
-4. 如果 `result_meta.image_support.attention_required=true`，优先提示用户检查 `image_base_url`、`image_api_key`、`image_model`，或改用 `--no-images`
+1. Read `task.output.result.file_path`
+2. Upload the corresponding file as a chat attachment
+3. Include the document type, file name, and warnings in the message
+4. If `result_meta.image_support.attention_required=true`, tell the user to check `image_base_url`, `image_api_key`, and `image_model`, or switch to `--no-images`
 
-## PPT 图片约定
+## PPT Image Rules
 
-对所有接入这个 skill 的 agent，推荐统一遵循下面的桥接规则：
+For all agents that use this skill, the following bridge rules are recommended:
 
-- `pptx` 默认允许自动配图，是否默认开启以 `document_generation.pptx.image_support.default_enabled` 为准
-- 用户明确说“不要图片 / 纯文本版”时，应传 `enable_images=false`
-- 用户问“为什么没图”时，应优先提示运行 `officecli config set-generation`
-- 优先读取 `result_meta.image_support` 做程序判断，不要只靠 warning 文本猜测
+- `pptx` allows automatic images by default; whether it is enabled by default should follow `document_generation.pptx.image_support.default_enabled`
+- If the user explicitly asks for "no images" or a text-only deck, pass `enable_images=false`
+- If the user asks why there are no images, first suggest running `officecli config set-generation`
+- Prefer `result_meta.image_support` for programmatic checks instead of guessing from warning text alone
 
-## 调试
+## Debugging
 
-先确认本地 bridge 可以正常启动：
+First verify that the local bridge starts correctly:
 
 ```bash
 officecli agent-bridge
 ```
 
-再确认 `officecli` 本身可用：
+Then verify that `officecli` itself is usable:
 
 ```bash
 officecli --version
 officecli auth status
 ```
 
-如果要检查安装后的 skill 文件：
+To inspect the installed skill files:
 
 ```bash
 ls -la ~/.openclaw/skills/openclaw-officecli
