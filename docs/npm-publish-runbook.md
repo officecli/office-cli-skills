@@ -29,13 +29,14 @@ Configure npm trusted publishing for this exact GitHub Actions workflow:
 3. add a trusted publisher for GitHub Actions
 4. set the repository to `officecli/officecli`
 5. set the workflow filename to `npm-publish.yml`
-6. ensure the package `repository.url` in `package.json` exactly matches the GitHub repository URL
+6. save the trusted publisher at the package level in npm settings
 
 Important notes:
 
 - npm treats the workflow filename as case-sensitive and must match exactly
 - trusted publishing uses GitHub OIDC, so no long-lived `NPM_TOKEN` is required
-- if this repository remains private, trusted publishing can still work, but npm provenance may not be generated
+- if this repository remains private, avoid exposing the private repository URL through public package metadata
+- this package intentionally points `homepage` to `https://officecli.io/` instead of the private source repository
 
 ## Manual Dispatch
 

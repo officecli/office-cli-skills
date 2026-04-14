@@ -63,4 +63,4 @@ jobs:
 
       - name: Publish wrapper
         working-directory: packages/npm/officecli
-        run: npm publish --access public --provenance
+        run: npm publish --access public

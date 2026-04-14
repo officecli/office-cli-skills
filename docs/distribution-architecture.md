@@ -55,6 +55,7 @@ It should own:
 - package metadata and install scripts
 - no proprietary source code beyond the wrapper logic
 - runtime downloads that point to the public distribution repository
+- public-facing metadata that points to public endpoints only
 
 ## Release Flows
 

@@ -28,15 +28,7 @@
     "x64",
     "arm64"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/officecli/officecli.git",
-    "directory": "packages/npm/officecli"
-  },
-  "homepage": "https://github.com/officecli/officecli",
-  "bugs": {
-    "url": "https://github.com/officecli/officecli/issues"
-  },
+  "homepage": "https://officecli.io/",
   "publishConfig": {
     "access": "public"
   },

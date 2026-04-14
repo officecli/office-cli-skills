@@ -57,3 +57,4 @@ CI:
 - `packages/npm/officecli/scripts/check-release-version.js` enforces that the npm package version matches the release tag
 - `NPM Publish` verifies that the matching GitHub release already exists in `officecli/officecli-dist`
 - `NPM Publish` uses GitHub OIDC trusted publishing instead of a long-lived `NPM_TOKEN`
+- the npm package metadata should not expose the private source repository URL
