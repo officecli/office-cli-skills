@@ -194,8 +194,8 @@ func defaultPricingPacks() []model.PricingPack {
 
 func fallbackPricingPacks() []model.PricingPack {
 	return []model.PricingPack{
-		{Code: "external-100", Name: "External 100", Description: "100 external generations for workflows that already bring their own LLM.", Currency: "usd", AmountTotal: 1900, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
-		{Code: "external-500", Name: "External 500", Description: "500 external generations for teams running document work in bulk.", Currency: "usd", AmountTotal: 7900, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)},
+		{Code: "external-100", Name: "External 100", Description: "100 external generations for lightweight evaluation and individual workflows.", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+		{Code: "external-500", Name: "External 500", Description: "500 external generations for shared team workflows and recurring automation.", Currency: "usd", AmountTotal: 4490, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)},
 		{Code: "hosted-300", Name: "Hosted 300", Description: "300 hosted credits for low-volume runs on the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		{Code: "hosted-1200", Name: "Hosted 1200", Description: "1200 hosted credits for teams that want the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 9900, CreditAmount: 1200, PackKind: string(model.PackKindHostedCredits)},
 	}

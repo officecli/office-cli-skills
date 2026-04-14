@@ -100,7 +100,7 @@ func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*mod
 	s.mu.RLock()
 	pack, ok := s.packs[req.PackCode]
 	s.mu.RUnlock()
-	if !ok {
+	if !ok || pack.PackKind != string(model.PackKindExternalGeneration) {
 		return nil, "", fmt.Errorf("unknown pack_code")
 	}
 	targetKey, err := s.store.FindAPIKeyByID(ctx, req.TargetAPIKeyID)

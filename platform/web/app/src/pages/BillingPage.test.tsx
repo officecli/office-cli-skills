@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as navigation from '../lib/navigation'
 import BillingPage from './BillingPage'
 
 const fetchMock = vi.fn()
@@ -19,7 +20,7 @@ describe('billing page', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders English pack copy even if pricing and order payloads previously contained localized text', async () => {
+  it('renders external-only pricing and order history', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/pricing') {
@@ -28,14 +29,13 @@ describe('billing page', () => {
           status: 200,
           json: async () => ({
             data: [{
-              code: 'hosted-300',
-              name: 'Hosted 300',
-              description: '300 credits for low-volume runs on the hosted LLM runtime.',
+              code: 'external-100',
+              name: 'External 100',
+              description: '100 external generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
-              amount_total: 2900,
-              quota_amount: 0,
-              credit_amount: 300,
-              pack_kind: 'hosted_credits',
+              amount_total: 990,
+              quota_amount: 100,
+              pack_kind: 'external_generation',
             }],
           }),
         }
@@ -52,12 +52,11 @@ describe('billing page', () => {
               id: 11,
               status: 'paid',
               currency: 'usd',
-              amount_total: 2900,
-              pack_code: 'hosted-300',
-              pack_name: 'Hosted 300',
-              pack_kind: 'hosted_credits',
-              quota_amount: 0,
-              credit_amount: 300,
+              amount_total: 990,
+              pack_code: 'external-100',
+              pack_name: 'External 100',
+              pack_kind: 'external_generation',
+              quota_amount: 100,
               created_at: '2026-04-03T00:00:00Z',
             }],
           }),
@@ -69,13 +68,14 @@ describe('billing page', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Hosted 300')).toBeInTheDocument()
-    expect(screen.getByText(/300 hosted credits for low-volume runs on the platform-managed LLM runtime\./i)).toBeInTheDocument()
-    expect(screen.queryByText(/Hosted 300 credits/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/suited for hosted llm/i)).not.toBeInTheDocument()
+    expect(await screen.findByText('External 100')).toBeInTheDocument()
+    expect(screen.getByText(/100 external generations for lightweight evaluation and individual workflows\./i)).toBeInTheDocument()
+    expect(screen.getByText(/100 external generations per purchase/i)).toBeInTheDocument()
+    expect(screen.queryByText(/hosted/i)).not.toBeInTheDocument()
   })
 
   it('posts checkout to the existing app endpoint and keeps Stripe copy explicit', async () => {
+    const redirectSpy = vi.spyOn(navigation, 'redirectTo').mockImplementation(() => {})
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url === '/api/pricing') {
@@ -86,9 +86,9 @@ describe('billing page', () => {
             data: [{
               code: 'external-100',
               name: 'External 100',
-              description: '100 external generations for workflows that already bring their own LLM.',
+              description: '100 external generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
-              amount_total: 1900,
+              amount_total: 990,
               quota_amount: 100,
               pack_kind: 'external_generation',
             }],
@@ -108,7 +108,6 @@ describe('billing page', () => {
               quota_total: 100,
               quota_used: 0,
               quota_remaining: 100,
-              credit_balance: 0,
               created_at: '2026-04-03T00:00:00Z',
             }],
           }),
@@ -146,6 +145,7 @@ describe('billing page', () => {
         method: 'POST',
       }))
     })
+    expect(redirectSpy).toHaveBeenCalledWith('https://checkout.stripe.com/pay/test_session')
   })
 
   it('shows checkout error details and request id when checkout fails', async () => {
@@ -159,9 +159,9 @@ describe('billing page', () => {
             data: [{
               code: 'external-100',
               name: 'External 100',
-              description: '100 external generations for workflows that already bring their own LLM.',
+              description: '100 external generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
-              amount_total: 1900,
+              amount_total: 990,
               quota_amount: 100,
               pack_kind: 'external_generation',
             }],
@@ -180,7 +180,6 @@ describe('billing page', () => {
               plan_name: 'Growth',
               quota_used: 0,
               quota_remaining: 100,
-              credit_balance: 0,
               created_at: '2026-04-03T00:00:00Z',
             }],
           }),

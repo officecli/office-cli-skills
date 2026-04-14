@@ -69,8 +69,7 @@ export default function OverviewPage() {
           <div className="panel-muted grid gap-4 p-6 md:grid-cols-3">
             <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
             <MetricCard label="External Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining external document generations across all keys" />
-            <MetricCard label="Hosted Credits" value={formatNumber(overview?.hosted_credit_balance)} detail="Available hosted LLM credits across all keys" />
-            <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External and hosted requests recorded recently" />
+            <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External requests recorded recently" />
           </div>
           <div className="panel-muted p-6">
             <div className="info-eyebrow text-tertiary">Lead key</div>
@@ -84,7 +83,6 @@ export default function OverviewPage() {
                   <StatusPill value={featuredKey.status} />
                 </div>
                 <KeyStat label="External Remaining" value={featuredKey.quota_remaining ?? featuredKey.quota_total} meta={`Last used ${formatDate(featuredKey.last_used_at)}`} />
-                <div className="text-sm text-outline">Hosted credits {formatNumber(featuredKey.credit_balance)} / modes {featuredKey.allowed_modes || 'external_only'}</div>
               </div>
             ) : (
               <EmptyState title="No keys provisioned yet" body="Create your first API key to start routing credits into a real workload." />
@@ -116,7 +114,7 @@ export default function OverviewPage() {
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <KeyStat label="Total" value={key.quota_total} meta="External quota" />
                   <KeyStat label="Used" value={key.quota_used} meta="External spent" />
-                  <KeyStat label="Hosted" value={key.credit_balance} meta={`Mode ${key.default_runtime_mode || 'external'}`} />
+                  <KeyStat label="Remaining" value={key.quota_remaining} meta="External left" />
                 </div>
               </div>
             ))}

@@ -67,7 +67,7 @@ export default function ApiKeysPage() {
               <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
             </label>
             <div className="md:col-span-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 p-4 text-sm text-outline">
-              New user-created keys start with zero paid quota. Buy credits from the Billing page or ask an operator to adjust quota in the admin console when needed.
+              New user-created keys start with zero paid quota. Buy external generations from the Billing page or ask an operator to adjust quota in the admin console when needed.
             </div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>
@@ -103,11 +103,8 @@ export default function ApiKeysPage() {
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">{formatNumber(key.credit_balance)}</div></div>
+                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining)}</div></div>
                   </div>
-
-                  <div className="mt-3 text-xs text-outline">Modes: {key.allowed_modes || 'external_only'} / default {key.default_runtime_mode || 'external'} / hosted {key.hosted_enabled ? 'enabled' : 'disabled'}</div>
 
                   {editingId === key.id ? (
                     <div className="mt-5 grid gap-4">

@@ -45,7 +45,6 @@ const DiscordGuildVerificationBlockedReason = "discord guild verification is not
 type Overview struct {
 	APIKeyCount            int64               `json:"api_key_count"`
 	TotalRemaining         int                 `json:"total_remaining"`
-	HostedCreditBalance    int                 `json:"hosted_credit_balance"`
 	RewardRemaining        int                 `json:"reward_remaining"`
 	InviteCode             string              `json:"invite_code,omitempty"`
 	InviteLimit            int                 `json:"invite_limit"`
@@ -58,6 +57,20 @@ type Overview struct {
 	RecentUsageCount       int                 `json:"recent_usage_count"`
 	RecentOrdersCount      int                 `json:"recent_orders_count"`
 	Pricing                []model.PricingPack `json:"pricing"`
+}
+
+type APIKeyView struct {
+	ID             uint64             `json:"id"`
+	KeyPrefix      string             `json:"key_prefix"`
+	Status         model.APIKeyStatus `json:"status"`
+	PlanName       string             `json:"plan_name"`
+	Note           *string            `json:"note,omitempty"`
+	ExpiresAt      *time.Time         `json:"expires_at,omitempty"`
+	LastUsedAt     *time.Time         `json:"last_used_at,omitempty"`
+	QuotaTotal     *int               `json:"quota_total,omitempty"`
+	QuotaUsed      int                `json:"quota_used"`
+	QuotaRemaining int                `json:"quota_remaining"`
+	CreatedAt      time.Time          `json:"created_at"`
 }
 
 type GrowthSnapshot struct {
@@ -103,8 +116,8 @@ type CreateAPIKeyRequest struct {
 }
 
 type CreateAPIKeyResponse struct {
-	PlaintextKey string       `json:"plaintext_key"`
-	Key          model.APIKey `json:"key"`
+	PlaintextKey string     `json:"plaintext_key"`
+	Key          APIKeyView `json:"key"`
 }
 
 type UpdateAPIKeyRequest struct {
@@ -181,11 +194,11 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 		return nil, err
 	}
 	remaining := 0
-	hostedCreditBalance := 0
 	for _, key := range keys {
 		remaining += key.PaidQuotaRemaining()
-		hostedCreditBalance += key.AvailableCredits()
 	}
+	visibleUsage := visibleUsageEvents(usage)
+	visibleOrders := visibleOrders(orders)
 	rewardRemaining := 0
 	for _, grant := range rewardGrants {
 		rewardRemaining += grant.Remaining()
@@ -204,7 +217,6 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 	return &Overview{
 		APIKeyCount:            count,
 		TotalRemaining:         remaining,
-		HostedCreditBalance:    hostedCreditBalance,
 		RewardRemaining:        rewardRemaining,
 		InviteCode:             inviteCode,
 		InviteLimit:            growthsvc.MaxReferralsPerInviter,
@@ -214,14 +226,22 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 		ActivatedReferralCount: activatedReferralCount,
 		DiscordConnected:       discordConnection != nil,
 		DiscordGuildMember:     discordConnection != nil && discordConnection.GuildMember,
-		RecentUsageCount:       len(usage),
-		RecentOrdersCount:      len(orders),
-		Pricing:                s.billing.Pricing(),
+		RecentUsageCount:       len(visibleUsage),
+		RecentOrdersCount:      len(visibleOrders),
+		Pricing:                externalPricingPacks(s.billing.Pricing()),
 	}, nil
 }
 
-func (s *Service) ListAPIKeys(ctx context.Context, userID uint64) ([]model.APIKey, error) {
-	return s.store.FindAPIKeysByOwner(ctx, userID)
+func (s *Service) ListAPIKeys(ctx context.Context, userID uint64) ([]APIKeyView, error) {
+	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]APIKeyView, 0, len(keys))
+	for _, key := range keys {
+		views = append(views, newAPIKeyView(key))
+	}
+	return views, nil
 }
 
 func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
@@ -238,7 +258,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPI
 		return nil, err
 	}
 	_ = s.store.CreateAuditLog(ctx, "app.api_key.create", "api_key", fmt.Sprintf("%d", key.ID), sqlstore.JSONString(key))
-	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: *key}, nil
+	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: newAPIKeyView(*key)}, nil
 }
 
 func (s *Service) UpdateAPIKey(ctx context.Context, userID, apiKeyID uint64, req UpdateAPIKeyRequest) error {
@@ -271,10 +291,11 @@ func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]model.U
 	if err != nil {
 		return nil, err
 	}
-	if events == nil {
+	visible := visibleUsageEvents(events)
+	if visible == nil {
 		return []model.UsageEvent{}, nil
 	}
-	return events, nil
+	return visible, nil
 }
 
 func (s *Service) Growth(ctx context.Context, userID uint64) (*GrowthSnapshot, error) {
@@ -406,6 +427,55 @@ func inviteRemaining(count int) int {
 		return 0
 	}
 	return remaining
+}
+
+func externalPricingPacks(packs []model.PricingPack) []model.PricingPack {
+	result := make([]model.PricingPack, 0, len(packs))
+	for _, pack := range packs {
+		if pack.PackKind != string(model.PackKindExternalGeneration) {
+			continue
+		}
+		result = append(result, pack)
+	}
+	return result
+}
+
+func visibleOrders(orders []model.Order) []model.Order {
+	result := make([]model.Order, 0, len(orders))
+	for _, order := range orders {
+		if order.PackKind != model.PackKindExternalGeneration {
+			continue
+		}
+		result = append(result, order)
+	}
+	return result
+}
+
+func visibleUsageEvents(events []model.UsageEvent) []model.UsageEvent {
+	result := make([]model.UsageEvent, 0, len(events))
+	for _, event := range events {
+		if event.Mode == model.UsageModeHosted {
+			continue
+		}
+		result = append(result, event)
+	}
+	return result
+}
+
+func newAPIKeyView(key model.APIKey) APIKeyView {
+	return APIKeyView{
+		ID:             key.ID,
+		KeyPrefix:      key.KeyPrefix,
+		Status:         key.Status,
+		PlanName:       key.PlanName,
+		Note:           key.Note,
+		ExpiresAt:      key.ExpiresAt,
+		LastUsedAt:     key.LastUsedAt,
+		QuotaTotal:     key.QuotaTotal,
+		QuotaUsed:      key.QuotaUsed,
+		QuotaRemaining: key.PaidQuotaRemaining(),
+		CreatedAt:      key.CreatedAt,
+	}
 }
 
 func generateAPIKey(salt string) (plain string, prefix string, hash string, err error) {

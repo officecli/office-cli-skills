@@ -8,9 +8,8 @@ export interface PricingPack {
 }
 
 const pricingDescriptionByCode: Record<string, string> = {
-  'starter-100': '100 document credits for lightweight evaluation and individual workflows.',
-  'growth-500': '500 document credits for shared team workflows and recurring automation.',
-  'scale-2000': '2,000 document credits for high-frequency batch generation and platform traffic.',
+  'external-100': '100 external generations for lightweight evaluation and individual workflows.',
+  'external-500': '500 external generations for shared team workflows and recurring automation.',
 }
 
 export async function fetchPricing(): Promise<PricingPack[]> {

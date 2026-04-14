@@ -5,24 +5,17 @@ import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
+import { redirectTo } from '../lib/navigation'
 import type { Order, PricingPack } from '../types'
 
 const PACK_COPY: Record<string, { name: string; description: string }> = {
   'external-100': {
     name: 'External 100',
-    description: '100 external generations for workflows that already bring their own LLM.',
+    description: '100 external generations for lightweight evaluation and individual workflows.',
   },
   'external-500': {
     name: 'External 500',
-    description: '500 external generations for teams running document work in bulk.',
-  },
-  'hosted-300': {
-    name: 'Hosted 300',
-    description: '300 hosted credits for low-volume runs on the platform-managed LLM runtime.',
-  },
-  'hosted-1200': {
-    name: 'Hosted 1200',
-    description: '1200 hosted credits for teams that want the platform-managed LLM runtime.',
+    description: '500 external generations for shared team workflows and recurring automation.',
   },
 }
 
@@ -46,7 +39,7 @@ export default function BillingPage() {
     mutationFn: ({ packCode, keyID }: { packCode: string; keyID: number }) => api.checkout({ pack_code: packCode, target_api_key_id: keyID }),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ['app-orders'] })
-      window.location.href = result.checkout_url
+      redirectTo(result.checkout_url)
     },
   })
 
@@ -68,7 +61,7 @@ export default function BillingPage() {
             </select>
             <div className="mt-4 text-sm text-outline">
               {activeKey
-                ? `${activeKey.key_prefix} has external ${activeKey.quota_remaining ?? activeKey.quota_total ?? 0} / hosted ${activeKey.credit_balance ?? 0}.`
+                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} external generations remaining.`
                 : activeKeys.length
                   ? 'Pick an active production key before starting checkout.'
                   : 'No active API key is available for billing. Re-enable a key in API Keys first.'}
@@ -102,7 +95,7 @@ export default function BillingPage() {
                         <div className="mt-3 text-2xl font-bold text-white">{copy.name}</div>
                         <div className="mt-2 text-sm text-outline">{copy.description}</div>
                         <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
-                        <div className="mt-2 text-sm text-outline">{pack.pack_kind === 'hosted_credits' ? `${pack.credit_amount ?? 0} hosted credits per purchase` : `${pack.quota_amount} external generations per purchase`}</div>
+                        <div className="mt-2 text-sm text-outline">{pack.quota_amount} external generations per purchase</div>
                       </div>
                       <button
                         type="button"
@@ -138,7 +131,7 @@ export default function BillingPage() {
                   <div className="mt-1 text-sm text-outline">{billingOrderPackName(order)} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.pack_kind === 'hosted_credits' ? `${order.credit_amount ?? 0} hosted credits` : `${order.quota_amount} external generations`}</div>
+                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} external generations</div>
                   <StatusPill value={order.status} />
                 </div>
               </div>

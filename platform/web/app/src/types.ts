@@ -3,7 +3,6 @@ export interface PricingPack { code: string; name: string; description: string; 
 export interface AppOverview {
   api_key_count: number
   total_remaining: number
-  hosted_credit_balance: number
   reward_remaining: number
   invite_code?: string
   invite_limit: number
@@ -38,7 +37,7 @@ export interface ConnectDiscordResponse {
   reward_source_type?: string
   reward_idempotency_key?: string
 }
-export interface ApiKey { id: number; key_prefix: string; status: 'active' | 'disabled'; plan_name: string; note?: string; allowed_modes?: string; hosted_enabled?: boolean; default_runtime_mode?: string; quota_total?: number; quota_used: number; quota_remaining?: number; credit_balance?: number; credit_reserved?: number; created_at: string; last_used_at?: string }
+export interface ApiKey { id: number; key_prefix: string; status: 'active' | 'disabled'; plan_name: string; note?: string; expires_at?: string; quota_total?: number; quota_used: number; quota_remaining: number; created_at: string; last_used_at?: string }
 export interface Order { id: number; status: string; currency: string; amount_total: number; pack_code: string; pack_name: string; pack_kind?: string; quota_amount: number; credit_amount?: number; target_api_key_id?: number; created_at: string }
 export interface UsageEvent { id: number; mode: string; action: string; result: string; created_at: string; fingerprint_hash: string; reason_code?: string; runtime_mode?: string; provider?: string; model_name?: string; prompt_tokens?: number; completion_tokens?: number; image_count?: number; settled_credits?: number }
 export interface RewardGrant { source_type: string; amount_total: number; amount_used: number; remaining: number; reason: string; metadata_json: string; created_at: string; updated_at: string }

@@ -10,7 +10,7 @@ import (
 )
 
 type fakeGateway struct {
-	called bool
+	called         bool
 	lastCustomerID string
 }
 
@@ -162,7 +162,7 @@ func TestCreateCheckoutRejectsTargetKeyOwnedByAnotherUser(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 1900, QuotaAmount: 100}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
@@ -195,7 +195,7 @@ func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 1900, QuotaAmount: 100}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
@@ -231,7 +231,7 @@ func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 1900, QuotaAmount: 100}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,

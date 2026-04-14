@@ -9,20 +9,20 @@ import { platformBillingURL } from '../siteData'
 
 const fallbackPacks: PricingPack[] = [
   {
-    code: 'starter-shell',
-    name: 'Starter Shell',
-    description: 'Get started with 100 generations per month and core template support.',
+    code: 'external-100',
+    name: 'External 100',
+    description: '100 external generations for lightweight evaluation and individual workflows.',
     currency: 'usd',
-    amount_total: 0,
+    amount_total: 990,
     quota_amount: 100,
   },
   {
-    code: 'production-pack',
-    name: 'Production Pack',
-    description: 'Priority queues, custom brand themes, and webhook-friendly operations.',
+    code: 'external-500',
+    name: 'External 500',
+    description: '500 external generations for shared team workflows and recurring automation.',
     currency: 'usd',
-    amount_total: 4900,
-    quota_amount: 1000,
+    amount_total: 4490,
+    quota_amount: 500,
   },
 ]
 
@@ -65,14 +65,14 @@ export default function Pricing({ standalone = false }: PricingProps) {
   const titleClass = 'font-headline text-5xl md:text-6xl font-bold text-white mb-8 tracking-tighter'
 
   const starterItems = useMemo(() => [
-    `${starterPack.quota_amount} generations per month`,
-    'Basic templating',
+    `${starterPack.quota_amount} external generations`,
+    'Entry pack for evaluation',
     'CLI access',
   ], [starterPack.quota_amount])
 
   const productionItems = useMemo(() => [
-    'High-priority queue',
-    'Custom brand themes',
+    'Best value for recurring usage',
+    'Shared team automation',
     'API webhook support',
   ], [])
 
@@ -81,7 +81,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
       <div className="max-w-3xl mx-auto">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Pricing Architecture</span>
         <h2 className={titleClass}>Simple Kinetic Billing</h2>
-        <p className="text-xl text-outline-variant mb-12">Start for free. Scale by the thousand. Production purchases run through the secure OfficeCLI billing workspace.</p>
+        <p className="text-xl text-outline-variant mb-12">Start with a small pack, then scale external document generation with a discounted team bundle.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto mb-16">
           <motion.div
@@ -89,7 +89,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
             className="p-10 bg-surface-low rounded-2xl border border-outline-variant/10"
           >
             <h3 className="font-headline text-2xl font-bold text-white mb-2">{starterPack.name}</h3>
-            <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(starterPack)} <span className="text-sm font-normal text-outline-variant">/ {starterPack.quota_amount} credits</span></div>
+            <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(starterPack)} <span className="text-sm font-normal text-outline-variant">/ {starterPack.quota_amount} generations</span></div>
             <ul className="space-y-4 mb-10 text-outline-variant text-sm">
               {starterItems.map((item) => (
                 <li key={item} className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> {item}</li>
@@ -99,7 +99,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
               className="w-full py-4 rounded-md border border-outline-variant/30 font-bold hover:bg-white/5 transition-all inline-flex items-center justify-center"
               to="/download"
             >
-              Start Free
+              Download CLI
             </Link>
           </motion.div>
 
@@ -109,7 +109,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
           >
             <div className="absolute top-5 right-5 bg-primary text-[#002e6b] text-[10px] font-bold px-2 py-1 rounded">POPULAR</div>
             <h3 className="font-headline text-2xl font-bold text-white mb-2">{productionPack.name}</h3>
-            <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(productionPack)} <span className="text-sm font-normal text-outline-variant">/ {productionPack.quota_amount} credits</span></div>
+            <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(productionPack)} <span className="text-sm font-normal text-outline-variant">/ {productionPack.quota_amount} generations</span></div>
             <ul className="space-y-4 mb-10 text-outline-variant text-sm">
               <li className="text-outline-variant leading-relaxed">{productionPack.description}</li>
               {productionItems.map((item) => (

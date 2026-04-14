@@ -199,11 +199,21 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerPublishRoutes(api, cfg, publishService)
 	registerAuthRoutes(api, cfg, authSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
-	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
-	registerHostedLLMRoutes(api, hostedSvc)
+	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing())) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc)
 	registerStripeRoutes(api, billingSvc)
 	registerStatic(r.Engine, cfg)
+}
+
+func appuserExternalPricing(packs []model.PricingPack) []model.PricingPack {
+	result := make([]model.PricingPack, 0, len(packs))
+	for _, pack := range packs {
+		if pack.PackKind != string(model.PackKindExternalGeneration) {
+			continue
+		}
+		result = append(result, pack)
+	}
+	return result
 }
 
 type publishRouteService interface {
@@ -879,10 +889,17 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
 		}
-		httpapi.JSON(c, http.StatusOK, data)
+		filtered := make([]model.Order, 0, len(data))
+		for _, order := range data {
+			if order.PackKind != model.PackKindExternalGeneration {
+				continue
+			}
+			filtered = append(filtered, order)
+		}
+		httpapi.JSON(c, http.StatusOK, filtered)
 	})
 	protected.GET("/pricing", func(c *gin.Context) {
-		httpapi.JSON(c, http.StatusOK, billingSvc.Pricing())
+		httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing()))
 	})
 	protected.POST("/checkout", func(c *gin.Context) {
 		var req billing.CheckoutRequest

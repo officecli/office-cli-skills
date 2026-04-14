@@ -67,6 +67,26 @@ func (fakeBilling) ListOrdersByUser(_ context.Context, _ uint64) ([]model.Order,
 }
 func (fakeBilling) Pricing() []model.PricingPack { return nil }
 
+type fakeBillingWithData struct {
+	orders  []model.Order
+	pricing []model.PricingPack
+}
+
+func (f fakeBillingWithData) ListOrdersByUser(_ context.Context, _ uint64) ([]model.Order, error) {
+	return f.orders, nil
+}
+
+func (f fakeBillingWithData) Pricing() []model.PricingPack { return f.pricing }
+
+type usageStore struct {
+	*fakeStore
+	usage []model.UsageEvent
+}
+
+func (s *usageStore) ListAppUsageEvents(_ context.Context, _ uint64) ([]model.UsageEvent, error) {
+	return s.usage, nil
+}
+
 type fakeGrowthManager struct {
 	connectCalls int
 	grantCalls   int
@@ -110,7 +130,16 @@ func TestUpdateAPIKeyOnlyPersistsStatusAndNote(t *testing.T) {
 	status := string(model.APIKeyStatusDisabled)
 	note := "rotate after handoff"
 	store := &fakeStore{owned: true}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBillingWithData{
+		orders: []model.Order{
+			{ID: 1, PackKind: model.PackKindExternalGeneration},
+			{ID: 2, PackKind: model.PackKindHostedCredits},
+		},
+		pricing: []model.PricingPack{
+			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
+		},
+	}, "salt")
 
 	err := svc.UpdateAPIKey(context.Background(), 42, 7, UpdateAPIKeyRequest{
 		Status: &status,
@@ -135,7 +164,16 @@ func TestUpdateAPIKeyRejectsForeignKey(t *testing.T) {
 
 	status := string(model.APIKeyStatusDisabled)
 	store := &fakeStore{owned: false}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBillingWithData{
+		orders: []model.Order{
+			{ID: 1, PackKind: model.PackKindExternalGeneration},
+			{ID: 2, PackKind: model.PackKindHostedCredits},
+		},
+		pricing: []model.PricingPack{
+			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
+		},
+	}, "salt")
 
 	err := svc.UpdateAPIKey(context.Background(), 42, 9, UpdateAPIKeyRequest{Status: &status})
 
@@ -163,7 +201,16 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 		},
 		discord: &model.DiscordConnection{UserID: 42, GuildMember: true},
 	}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBillingWithData{
+		orders: []model.Order{
+			{ID: 1, PackKind: model.PackKindExternalGeneration},
+			{ID: 2, PackKind: model.PackKindHostedCredits},
+		},
+		pricing: []model.PricingPack{
+			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
+		},
+	}, "salt")
 
 	overview, err := svc.Overview(context.Background(), 42)
 	require.NoError(t, err)
@@ -177,6 +224,57 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 	require.Equal(t, 1, overview.ActivatedReferralCount)
 	require.True(t, overview.DiscordConnected)
 	require.True(t, overview.DiscordGuildMember)
+	require.Equal(t, 1, overview.RecentOrdersCount)
+	require.Len(t, overview.Pricing, 1)
+	require.Equal(t, "external-100", overview.Pricing[0].Code)
+}
+
+func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
+	t.Parallel()
+
+	lastUsedAt := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	store := &fakeStore{
+		apiKeysByOwner: []model.APIKey{{
+			ID:                 7,
+			KeyPrefix:          "cop_live_demo",
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Growth",
+			AllowedModes:       "hybrid",
+			HostedEnabled:      true,
+			QuotaTotal:         intPtr(120),
+			QuotaUsed:          80,
+			CreditBalance:      200,
+			DefaultRuntimeMode: stringPtr("hosted"),
+			LastUsedAt:         &lastUsedAt,
+			CreatedAt:          time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		}},
+	}
+	svc := NewService(store, fakeBilling{}, "salt")
+
+	keys, err := svc.ListAPIKeys(context.Background(), 42)
+	require.NoError(t, err)
+	require.Len(t, keys, 1)
+	require.Equal(t, "cop_live_demo", keys[0].KeyPrefix)
+	require.Equal(t, 40, keys[0].QuotaRemaining)
+}
+
+func TestListUsageEventsFiltersHostedEvents(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(&usageStore{
+		fakeStore: &fakeStore{},
+		usage: []model.UsageEvent{
+			{ID: 1, Mode: model.UsageModePaid},
+			{ID: 2, Mode: model.UsageModeHosted},
+			{ID: 3, Mode: model.UsageModeFree},
+		},
+	}, fakeBilling{}, "salt")
+
+	events, err := svc.ListUsageEvents(context.Background(), 42)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	require.Equal(t, uint64(1), events[0].ID)
+	require.Equal(t, uint64(3), events[1].ID)
 }
 
 func TestGrowthReturnsUserFacingRewardReferralAndDiscordData(t *testing.T) {
@@ -303,3 +401,5 @@ func timePtr() *time.Time {
 	now := time.Now().UTC()
 	return &now
 }
+
+func stringPtr(v string) *string { return &v }
