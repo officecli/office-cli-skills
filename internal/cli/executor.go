@@ -25,7 +25,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	if e == nil || e.generator == nil {
 		return GenerateResult{}, fmt.Errorf("generator is unavailable")
 	}
-	emitProgress(ctx, e.progress, progressStepGenerate, "running", "Generating document content")
+	emitProgress(ctx, e.progress, progressStepGenerate, "running", "正在生成文档内容")
 	artifact, err := e.generator.Generate(ctx, GenerateParams{
 		DocumentType: job.DocumentType,
 		Topic:        job.Topic,
@@ -38,10 +38,10 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		LocalPreview: job.LocalPreview,
 	})
 	if err != nil {
-		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")
-		return GenerateResult{}, fmt.Errorf("content generation failed: %w", err)
+		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "生成内容阶段失败")
+		return GenerateResult{}, fmt.Errorf("生成内容阶段失败：%w", err)
 	}
-	emitProgress(ctx, e.progress, progressStepGenerate, "completed", "Document content generated")
+	emitProgress(ctx, e.progress, progressStepGenerate, "completed", "文档内容生成完成")
 	fileName := artifact.DocumentName
 	if fileName == "" {
 		fileName = job.Topic + "." + string(job.DocumentType)
@@ -68,8 +68,8 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	if e.license != nil && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted && strings.TrimSpace(job.LicenseCheck.CommitToken.RequestID) != "" {
 		consumeResult, err := e.license.Consume(ctx, job.LicenseCheck.CommitToken)
 		if err != nil {
-			emitProgress(ctx, e.progress, progressStepFinalize, "failed", "Quota sync failed")
-			return GenerateResult{}, fmt.Errorf("quota sync failed: %w", err)
+			emitProgress(ctx, e.progress, progressStepFinalize, "failed", "额度同步失败")
+			return GenerateResult{}, fmt.Errorf("额度同步失败：%w", err)
 		}
 		if consumeResult != nil {
 			if consumeResult.AccessMode != "" {
@@ -80,66 +80,66 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 			result.RewardRemaining = consumeResult.RewardRemaining
 			result.PaidQuotaRemaining = consumeResult.PaidQuotaRemaining
 			result.CreditBalance = consumeResult.CreditBalance
-			switch job.LicenseCheck.AccessMode {
-			case LicenseAccessModePaid:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Paid mode is active. %d generation credits remaining.", consumeResult.Remaining))
-			case LicenseAccessModeReward:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Reward mode is active. %d generation credits remaining.", consumeResult.Remaining))
-			default:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Free mode is active. %d generation credits remaining.", consumeResult.Remaining))
+				switch job.LicenseCheck.AccessMode {
+				case LicenseAccessModePaid:
+					result.Warnings = append(result.Warnings, fmt.Sprintf("当前为付费模式，剩余 %d 次生成额度。", consumeResult.Remaining))
+				case LicenseAccessModeReward:
+					result.Warnings = append(result.Warnings, fmt.Sprintf("当前为奖励模式，剩余 %d 次生成额度。", consumeResult.Remaining))
+				default:
+					result.Warnings = append(result.Warnings, fmt.Sprintf("当前为免费模式，剩余 %d 次生成额度。", consumeResult.Remaining))
+				}
 			}
+		} else if job.LicenseCheck != nil && job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("当前为托管模式，剩余 %d 点额度。", job.LicenseCheck.CreditBalance))
 		}
-	} else if job.LicenseCheck != nil && job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Hosted mode is active. %d credits remaining.", job.LicenseCheck.CreditBalance))
-	}
 
-	emitProgress(ctx, e.progress, progressStepWriteFile, "running", "Writing local file")
+	emitProgress(ctx, e.progress, progressStepWriteFile, "running", "正在写入本地文件")
 	if err := os.MkdirAll(job.OutputDir, 0o755); err != nil {
-		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "File write failed")
-		return GenerateResult{}, fmt.Errorf("file write failed: %w", err)
+		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "文件写入失败")
+		return GenerateResult{}, fmt.Errorf("文件写入失败：%w", err)
 	}
 	if err := os.WriteFile(filePath, artifact.Bytes, 0o644); err != nil {
-		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "File write failed")
-		return GenerateResult{}, fmt.Errorf("file write failed: %w", err)
+		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "文件写入失败")
+		return GenerateResult{}, fmt.Errorf("文件写入失败：%w", err)
 	}
 	if len(artifact.PreviewHTML) > 0 {
 		if err := os.WriteFile(localPreviewPath, artifact.PreviewHTML, 0o644); err != nil {
-			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview write failed")
-			return GenerateResult{}, fmt.Errorf("preview write failed: %w", err)
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "预览文件写入失败")
+			return GenerateResult{}, fmt.Errorf("预览文件写入失败：%w", err)
 		}
 		result.LocalPreviewPath = localPreviewPath
 	}
 	if len(artifact.PreviewJSON) > 0 {
 		if err := os.WriteFile(localPreviewDataPath, artifact.PreviewJSON, 0o644); err != nil {
-			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview write failed")
-			return GenerateResult{}, fmt.Errorf("preview write failed: %w", err)
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "预览文件写入失败")
+			return GenerateResult{}, fmt.Errorf("预览文件写入失败：%w", err)
 		}
 		result.LocalPreviewDataPath = localPreviewDataPath
 	}
-	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file written")
+	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "本地文件写入完成")
 
 	if job.Publish {
 		if e.publisher == nil {
-			result.Warnings = append(result.Warnings, "Publish service is not configured. Skipping online preview.")
+			result.Warnings = append(result.Warnings, "未配置发布服务，已跳过在线预览发布。")
 		} else {
-			emitProgress(ctx, e.progress, progressStepPublish, "running", "Publishing online preview")
+			emitProgress(ctx, e.progress, progressStepPublish, "running", "正在发布在线预览")
 			published, err := e.publisher.Publish(ctx, PublishRequest{
 				LocalFilePath: filePath,
 				DocumentType:  string(job.DocumentType),
 				DocumentName:  artifact.DocumentName,
 			})
 			if err != nil {
-				emitProgress(ctx, e.progress, progressStepPublish, "failed", "Publish step failed")
-				return GenerateResult{}, fmt.Errorf("publish step failed: %w", err)
+				emitProgress(ctx, e.progress, progressStepPublish, "failed", "发布阶段失败")
+				return GenerateResult{}, fmt.Errorf("发布阶段失败：%w", err)
 			}
 			result.Published = true
 			result.AccessURL = published.AccessURL
 			result.Password = published.Password
 			result.ExpiresAt = published.ExpiresAt
-			emitProgress(ctx, e.progress, progressStepPublish, "completed", "Online preview published")
+			emitProgress(ctx, e.progress, progressStepPublish, "completed", "在线预览发布完成")
 		}
 	}
-	emitProgress(ctx, e.progress, progressStepFinalize, "completed", "Document generated")
+	emitProgress(ctx, e.progress, progressStepFinalize, "completed", "文档已生成")
 	return result, nil
 }
 

@@ -185,29 +185,29 @@ func isTerminalWriter(w io.Writer) bool {
 func defaultProgressMessage(event engine.ProgressEvent) string {
 	switch event.Step {
 	case progressStepLicense:
-		return "Checking license"
+		return "正在校验授权"
 	case progressStepPlanPrepare:
-		return "Preparing generation plan"
+		return "正在准备生成方案"
 	case progressStepQuestion:
-		return "Waiting for additional input"
+		return "等待补充输入"
 	case progressStepPlanConfirm:
-		return "Confirming generation plan"
+		return "正在确认生成方案"
 	case progressStepGenerate, progressStepGenerateLLM:
-		return "Generating document content"
+		return "正在生成文档内容"
 	case progressStepAssemble:
-		return "Assembling document file"
+		return "正在组装文档文件"
 	case progressStepWriteFile:
-		return "Writing local file"
+		return "正在写入本地文件"
 	case progressStepPublish:
-		return "Publishing online preview"
+		return "正在发布在线预览"
 	case progressStepReviewLint:
-		return "Running PPT structure checks"
+		return "正在执行 PPT 结构检查"
 	case progressStepReviewPDF:
-		return "Converting PPT to PDF"
+		return "正在将 PPT 转换为 PDF"
 	case progressStepReviewVisual:
-		return "Running visual quality review"
+		return "正在执行视觉质量评估"
 	case progressStepFinalize:
-		return "Document generated"
+		return "文档已生成"
 	default:
 		return strings.TrimSpace(event.Status)
 	}
