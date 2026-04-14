@@ -1,14 +1,10 @@
 name: NPM Publish
 
 on:
-  push:
-    tags:
-      - "v*"
-      - "!v*-prod-*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag to publish, for example v0.2.3"
+        description: "Release tag to publish, for example v0.2.4"
         required: true
         type: string
       dist_repo:
