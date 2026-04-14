@@ -8,8 +8,8 @@ export interface PricingPack {
 }
 
 const pricingDescriptionByCode: Record<string, string> = {
-  'external-100': '100 external generations for lightweight evaluation and individual workflows.',
-  'external-500': '500 external generations for shared team workflows and recurring automation.',
+  'external-100': '100 paid document operations for lightweight evaluation and individual workflows.',
+  'external-500': '500 paid document operations for shared team workflows and recurring automation.',
 }
 
 export async function fetchPricing(): Promise<PricingPack[]> {

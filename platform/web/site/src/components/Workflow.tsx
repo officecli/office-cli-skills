@@ -1,18 +1,21 @@
-import { motion } from "motion/react";
-import { Terminal, Cpu, FileText, BarChart } from "lucide-react";
+import { motion } from 'motion/react'
+import { Terminal, Settings2, WandSparkles, ScanText } from 'lucide-react'
 
 export default function Workflow() {
   const steps = [
-    { icon: <Terminal className="text-primary" />, title: "Input", subtitle: "JSON / Prompt / Webhook" },
-    { icon: <Cpu className="text-tertiary" />, title: "Process", subtitle: "Cloud Orchestration" },
-    { icon: <FileText className="text-secondary" />, title: "Generate", subtitle: "High-Res Assets" },
-    { icon: <BarChart className="text-primary-container" />, title: "Track", subtitle: "Usage & Logs" }
-  ];
+    { icon: <Terminal className="text-primary" />, title: 'Install', subtitle: 'Binary via brew, npm, script, or manual release' },
+    { icon: <Settings2 className="text-tertiary" />, title: 'Connect', subtitle: 'Point the runtime at your LLM or hosted mode' },
+    { icon: <WandSparkles className="text-secondary" />, title: 'Operate', subtitle: 'Run a document operation from the terminal' },
+    { icon: <ScanText className="text-primary-container" />, title: 'Review', subtitle: 'Score, review, publish, or automate the result' },
+  ]
 
   return (
     <section className="py-24 bg-background border-y border-white/5">
       <div className="max-w-[1440px] mx-auto px-8 md:px-16 text-center">
-        <h2 className="font-headline text-4xl md:text-5xl font-bold text-white mb-16 tracking-tight">The Kinetic Cycle</h2>
+        <h2 className="font-headline text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">How OfficeCLI Fits a Real Workflow</h2>
+        <p className="text-outline-variant text-lg max-w-3xl mx-auto mb-16">
+          Keep the document path local when you want a lightweight setup, then layer in hosted runtime, paid access, or preview publishing only when those features matter.
+        </p>
         <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative">
           <div className="hidden md:block absolute top-1/2 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-outline-variant/30 to-transparent -translate-y-1/2 z-0"></div>
           
@@ -35,5 +38,5 @@ export default function Workflow() {
         </div>
       </div>
     </section>
-  );
+  )
 }

@@ -8,20 +8,20 @@ import teamVisual from '../assets/use-case-team.svg'
 export default function UseCases() {
   const cases = [
     {
-      title: 'Indie Devs',
-      description: 'Automate user reports and exportable summaries for your SaaS without building complex PDF or DOCX engines from scratch.',
+      title: 'Product Teams',
+      description: 'Create deck, doc, spreadsheet, and HTML outputs for launches, business reviews, and internal communication without maintaining separate document stacks.',
       image: indieVisual,
       borderClass: 'hover:border-primary/20',
     },
     {
-      title: 'Small Teams',
-      description: 'Integrate document production into internal Slack bots or customer portals to provide value-added report downloads instantly.',
+      title: 'Automation Builders',
+      description: 'Wire document operations into CI, internal bots, or agent workflows that need lightweight local execution and reproducible outputs.',
       image: teamVisual,
       borderClass: 'hover:border-tertiary/20',
     },
     {
-      title: 'Enterprise',
-      description: 'High-availability API nodes, dedicated support, and custom templating engines for massive multi-format batch production.',
+      title: 'Ops and Research Teams',
+      description: 'Use one CLI for document generation today, then expand toward summarization, conversion, and editing workflows as the roadmap grows.',
       image: enterpriseVisual,
       borderClass: 'hover:border-secondary/20',
     },
@@ -32,11 +32,11 @@ export default function UseCases() {
       <div className="max-w-[1440px] mx-auto px-8 md:px-16">
         <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
           <div className="max-w-2xl">
-            <h2 className="font-headline text-4xl font-bold text-white mb-4">Scalable For Every Tier</h2>
-            <p className="text-outline-variant">Whether you are shipping a side project or managing global report generation for an enterprise, this infrastructure scales with you.</p>
+            <h2 className="font-headline text-4xl font-bold text-white mb-4">Where Document Operations Actually Matter</h2>
+            <p className="text-outline-variant">OfficeCLI is built for teams that want useful document workflows in the terminal first, then optional platform features when hosted access, billing, or preview publishing matters.</p>
           </div>
           <Link className="text-primary font-bold hover:underline flex items-center gap-2" to="/docs">
-            Explore enterprise integration <ArrowRight className="w-5 h-5" />
+            Explore current capabilities <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

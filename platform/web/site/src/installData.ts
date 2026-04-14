@@ -1,0 +1,103 @@
+export type InstallTabID = 'macos' | 'linux' | 'manual'
+
+export interface InstallCommand {
+  label: string
+  command: string
+  detail: string
+}
+
+export interface InstallTabContent {
+  id: InstallTabID
+  label: string
+  eyebrow: string
+  title: string
+  description: string
+  commands: InstallCommand[]
+  notes: string[]
+}
+
+export const stableInstallScript =
+  'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-officecli.sh | bash'
+
+export const installTabs: InstallTabContent[] = [
+  {
+    id: 'macos',
+    label: 'macOS',
+    eyebrow: 'Recommended for Mac',
+    title: 'Install OfficeCLI on macOS',
+    description: 'Use Homebrew for the fastest setup, or npm if you prefer a package-managed CLI workflow.',
+    commands: [
+      {
+        label: 'Homebrew',
+        command: 'brew install officecli/homebrew-officecli/officecli',
+        detail: 'Best default for Apple Silicon and Intel Macs.',
+      },
+      {
+        label: 'npm',
+        command: 'npm install -g officecli',
+        detail: 'Supported on macOS x64 and arm64.',
+      },
+    ],
+    notes: [
+      'Supported CPUs: Apple Silicon arm64 and Intel x64.',
+      'The npm package installs the same published OfficeCLI binary.',
+    ],
+  },
+  {
+    id: 'linux',
+    label: 'Linux',
+    eyebrow: 'Recommended for Linux',
+    title: 'Install OfficeCLI on Linux',
+    description: 'Use the official stable install script for a direct binary install, or npm for Node-based environments.',
+    commands: [
+      {
+        label: 'Shell script',
+        command: stableInstallScript,
+        detail: 'Installs the latest stable public release.',
+      },
+      {
+        label: 'npm',
+        command: 'npm install -g officecli',
+        detail: 'Supported on Linux x64 and arm64.',
+      },
+    ],
+    notes: [
+      'Supported CPUs: x64 and arm64.',
+      'The install script defaults to the latest stable GitHub release.',
+    ],
+  },
+  {
+    id: 'manual',
+    label: 'Manual',
+    eyebrow: 'Manual binaries',
+    title: 'Download a release archive directly',
+    description: 'Use the public GitHub release assets if you want a manual install or need full control over the binary location.',
+    commands: [
+      {
+        label: 'Release page',
+        command: 'https://github.com/officecli/officecli-dist/releases/latest',
+        detail: 'Pick the archive for your OS and CPU, then move `officecli` into your PATH.',
+      },
+      {
+        label: 'Checksums',
+        command: 'https://github.com/officecli/officecli-dist/releases/latest/download/checksums.txt',
+        detail: 'Verify the archive before installing.',
+      },
+    ],
+    notes: [
+      'Available targets: macOS arm64, macOS amd64, Linux arm64, Linux amd64.',
+      'Windows is not supported in the current public release flow.',
+    ],
+  },
+]
+
+export function detectOperatingSystem(userAgent?: string): InstallTabID {
+  const source = (userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '')).toLowerCase()
+  if (source.includes('mac os x') || source.includes('macintosh') || source.includes('darwin')) {
+    return 'macos'
+  }
+  if (source.includes('linux') || source.includes('x11')) {
+    return 'linux'
+  }
+  return 'manual'
+}

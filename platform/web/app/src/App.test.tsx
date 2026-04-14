@@ -124,4 +124,24 @@ describe('platform app shell', () => {
     expect(await screen.findByRole('heading', { name: /Recent workflow usage/i })).toBeInTheDocument()
     expect(screen.getByText(/No usage events recorded/i)).toBeInTheDocument()
   })
+
+  it('renders the downloads page with brew, npm, and the stable install script', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/auth/me') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderApp('/downloads')
+
+    expect(await screen.findByRole('heading', { name: /Install OfficeCLI for document operations/i })).toBeInTheDocument()
+    expect(screen.getByText(/brew install officecli\/homebrew-officecli\/officecli/i)).toBeInTheDocument()
+    expect(screen.getByText(/npm install -g officecli/i)).toBeInTheDocument()
+    expect(screen.getByText(/raw\.githubusercontent\.com\/officecli\/officecli\/main\/scripts\/install-officecli\.sh/i)).toBeInTheDocument()
+    expect(screen.queryByText(/officecli\.io\/install\.sh/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Sign in with Google from the terminal/i)).not.toBeInTheDocument()
+  })
 })

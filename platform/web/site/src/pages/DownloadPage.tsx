@@ -1,6 +1,7 @@
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
 import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
+import InstallTabs from '../components/InstallTabs'
 import { platformAppURL } from '../siteData'
 
 export default function DownloadPage() {
@@ -9,38 +10,42 @@ export default function DownloadPage() {
 
   return (
     <main className="overflow-x-hidden pt-28 px-8 md:px-16 max-w-[1440px] mx-auto pb-24">
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-        <div>
-          <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
-          <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Download OfficeCLI and wire it into your production workflow</h1>
-          <p className="text-outline-variant text-lg leading-relaxed max-w-2xl">
-            Install locally, verify authentication, then route quota purchases and API key management through platform.officecli.io.
-          </p>
-        </div>
-        <div className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
-          <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-4">Recommended sequence</div>
-          <ol className="space-y-4 text-outline-variant text-sm list-decimal list-inside">
-            <li>Install OfficeCLI and verify the runtime environment</li>
-            <li>Create or manage your API key on platform</li>
-            <li>Run `auth status` and `generate` to validate the end-to-end path</li>
-          </ol>
-          <pre className="mt-8 bg-background rounded-xl p-6 overflow-x-auto text-sm text-white border border-outline-variant/10"><code>{`brew install officecli\nofficecli auth status\nofficecli generate ./brief.md`}</code></pre>
-        </div>
+      <section className="max-w-4xl">
+        <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
+        <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for document operations</h1>
+        <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
+          Use Homebrew, npm, the official install script, or manual binaries to get started. The core local path stays simple: one binary plus your LLM endpoint.
+        </p>
       </section>
 
-      <section className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="mt-16">
+        <InstallTabs compact headline="Choose the install path that matches your machine" intro="OfficeCLI supports macOS and Linux on x64 and arm64. Pick the setup that fits your workstation or CI environment." />
+      </div>
+
+      <section className="mt-16 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
-          <h2 className="font-headline text-2xl font-bold text-white mb-4">Integration boundary</h2>
+          <h2 className="font-headline text-2xl font-bold text-white mb-4">What you need</h2>
           <p className="text-outline-variant leading-relaxed">
-            The public site handles discovery and onboarding. Authenticated entitlement checks resolve through <code>platform.officecli.io/api/license/*</code>.
+            For the core local workflow, OfficeCLI only needs the binary and an LLM endpoint. It does not require a cluster, Docker, Kubernetes, or a document backend service.
           </p>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
-          <h2 className="font-headline text-2xl font-bold text-white mb-4">Platform entry</h2>
+          <h2 className="font-headline text-2xl font-bold text-white mb-4">Recommended sequence</h2>
+          <ol className="space-y-3 text-sm text-outline-variant list-decimal list-inside">
+            <li>Install OfficeCLI with Homebrew, npm, the script, or a manual binary.</li>
+            <li>Run <code>officecli config set-generation</code> to configure your LLM endpoint.</li>
+            <li>Use <code>officecli new ...</code> to generate documents, then <code>score</code> or <code>review</code> when needed.</li>
+          </ol>
+        </article>
+        <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
+          <h2 className="font-headline text-2xl font-bold text-white mb-4">Optional platform features</h2>
           <p className="text-outline-variant leading-relaxed mb-6">
-            Use platform to create API keys, inspect credit balances, and complete checkout for production quota packs.
+            Use platform to manage paid access, hosted runtime features, API keys, billing, and optional online preview publishing.
           </p>
-          <a className="inline-flex bg-gradient-to-br from-primary to-primary-container text-[#002e6b] px-6 py-3 rounded-md font-bold" href={platformAppHref} onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.downloadClick, { surface: 'site', placement: 'download-page', ...extractAttributionParams(location.search) })}>Open platform</a>
+          <div className="flex flex-wrap gap-4">
+            <a className="inline-flex bg-gradient-to-br from-primary to-primary-container text-[#002e6b] px-6 py-3 rounded-md font-bold" href={platformAppHref} onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.downloadClick, { surface: 'site', placement: 'download-page', ...extractAttributionParams(location.search) })}>Open platform</a>
+            <Link className="inline-flex border border-outline-variant/20 px-6 py-3 rounded-md font-bold text-white hover:border-primary/30 hover:text-primary" to="/docs">Read capability docs</Link>
+          </div>
         </article>
       </section>
     </main>

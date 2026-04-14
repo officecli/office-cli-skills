@@ -2,17 +2,12 @@
 
 set -euo pipefail
 
-DIST_REPO="${DIST_REPO:-}"
-VERSION="${VERSION:-latest}"
+DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
+VERSION="${VERSION:-stable}"
 PREFIX="${PREFIX:-/usr/local}"
 BIN_DIR="${BIN_DIR:-${PREFIX}/bin}"
 INSTALL_DIR="${INSTALL_DIR:-${BIN_DIR}}"
 LATEST_TAG="${LATEST_TAG:-latest}"
-
-if [[ -z "${DIST_REPO}" ]]; then
-  echo "DIST_REPO is required, e.g. officecli/officecli-dist" >&2
-  exit 1
-fi
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -33,11 +28,28 @@ detect_arch() {
 }
 
 resolve_version() {
-  if [[ "${VERSION}" == "latest" ]]; then
-    echo "latest"
+  case "${VERSION}" in
+    stable|"")
+      echo "stable"
+      ;;
+    latest)
+      echo "latest"
+      ;;
+    *)
+      echo "${VERSION#v}"
+      ;;
+  esac
+}
+
+archive_name_for_version() {
+  local version="$1"
+  local os="$2"
+  local arch="$3"
+  if [[ "${version}" == "latest" ]]; then
+    echo "officecli_latest_${os}_${arch}.tar.gz"
     return
   fi
-  echo "${VERSION#v}"
+  echo "officecli_${version}_${os}_${arch}.tar.gz"
 }
 
 download() {
@@ -118,10 +130,19 @@ resolved_version="$(resolve_version)"
 display_version="${resolved_version}"
 if [[ "${resolved_version}" == "latest" ]]; then
   tag="${LATEST_TAG}"
-  archive_name="officecli_latest_${os}_${arch}.tar.gz"
+  archive_name="$(archive_name_for_version latest "${os}" "${arch}")"
+elif [[ "${resolved_version}" == "stable" ]]; then
+  tag="$(resolve_latest_release_tag)"
+  if [[ -z "${tag}" ]]; then
+    echo "failed to resolve latest stable release tag for ${DIST_REPO}" >&2
+    exit 1
+  fi
+  resolved_version="${tag#v}"
+  display_version="${tag}"
+  archive_name="$(archive_name_for_version "${resolved_version}" "${os}" "${arch}")"
 else
   tag="v${resolved_version}"
-  archive_name="officecli_${resolved_version}_${os}_${arch}.tar.gz"
+  archive_name="$(archive_name_for_version "${resolved_version}" "${os}" "${arch}")"
 fi
 
 tmpdir="$(mktemp -d)"
@@ -139,7 +160,7 @@ if [[ "${resolved_version}" == "latest" ]]; then
     display_version="${fallback_tag}"
     fallback_version="${fallback_tag#v}"
     tag="${fallback_tag}"
-    archive_name="officecli_${fallback_version}_${os}_${arch}.tar.gz"
+    archive_name="$(archive_name_for_version "${fallback_version}" "${os}" "${arch}")"
     base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
     download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
   fi

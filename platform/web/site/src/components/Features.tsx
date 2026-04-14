@@ -1,28 +1,28 @@
-import { motion } from "motion/react";
-import { Bolt, Share2, BarChart3, Activity } from "lucide-react";
+import { motion } from 'motion/react'
+import { Bolt, LaptopMinimal, Sparkles, ScanSearch } from 'lucide-react'
 
 export default function Features() {
   const features = [
     {
       icon: <Bolt className="text-tertiary w-10 h-10 mb-6" />,
-      title: "Prompt Generation",
-      description: "Describe your document in plain natural language. Our engine interprets layout, hierarchy, and data requirements automatically.",
-      footer: "Available in CLI & API",
-      large: true
+      title: 'Single-Binary Document Ops',
+      description: 'OfficeCLI ships as one lightweight binary. For the core local path, it only needs your LLM endpoint instead of a backend stack, queueing layer, or cluster.',
+      footer: 'Local-first by default',
+      large: true,
     },
     {
-      icon: <Share2 className="text-primary w-10 h-10 mb-6" />,
-      title: "Workflow Integration",
-      description: "Connect to GitHub Actions, CI/CD, or internal tools via our high-performance REST API.",
-      large: false
+      icon: <LaptopMinimal className="text-primary w-10 h-10 mb-6" />,
+      title: 'Fits Local and Automated Workflows',
+      description: 'Run the same CLI on your laptop, in CI, or inside agent workflows without switching to a separate document backend.',
+      large: false,
     },
     {
-      icon: <Activity className="text-secondary w-10 h-10 mb-6" />,
-      title: "Free Starter Quota",
-      description: "Get 100 generations per month free. No credit card required to start your integration.",
-      large: false
-    }
-  ];
+      icon: <ScanSearch className="text-secondary w-10 h-10 mb-6" />,
+      title: 'Generate Today, Review Today',
+      description: 'The current release generates PPTX, DOCX, XLSX, and HTML, and can review or score local PPTX decks.',
+      large: false,
+    },
+  ]
 
   return (
     <section className="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
@@ -48,7 +48,7 @@ export default function Features() {
             )}
           </motion.div>
         ))}
-        
+
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -57,8 +57,9 @@ export default function Features() {
           className="md:col-span-4 bg-surface-low p-10 rounded-xl flex flex-col md:flex-row items-center gap-12 group hover:bg-surface-high transition-all border border-white/5"
         >
           <div className="flex-1">
-            <h3 className="font-headline text-3xl font-bold text-white mb-4">Unified Infrastructure Management</h3>
-            <p className="text-outline-variant max-w-2xl">Monitor usage, manage API keys, and track generation success rates through a centralized dashboard or direct terminal readouts.</p>
+            <Sparkles className="text-primary w-10 h-10 mb-6" />
+            <h3 className="font-headline text-3xl font-bold text-white mb-4">Built to Expand Beyond Generation</h3>
+            <p className="text-outline-variant max-w-2xl">OfficeCLI starts with creation and PPT review, then expands toward conversion, modification, summarization, and richer document formatting workflows.</p>
           </div>
           <div className="hidden lg:flex w-48 h-24 bg-surface-high rounded border border-outline-variant/10 items-center justify-center">
             <div className="flex gap-2 items-end">
@@ -71,5 +72,5 @@ export default function Features() {
         </motion.div>
       </div>
     </section>
-  );
+  )
 }

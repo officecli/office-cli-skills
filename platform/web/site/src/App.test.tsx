@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { detectOperatingSystem } from './installData'
 
 describe('marketing site shell', () => {
   it('renders the OfficeCLI brand and home hero copy', () => {
@@ -15,8 +16,27 @@ describe('marketing site shell', () => {
 
     expect(screen.getAllByText('OfficeCLI').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('heading', { name: /Plug Document Production Into Your Workflows/i, level: 1 }),
+      screen.getByRole('heading', { name: /Run Document Operations From One Lightweight Binary/i, level: 1 }),
     ).toBeInTheDocument()
+    expect(screen.getAllByText(/npm install -g officecli/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /OfficeCLI is growing from document generation into document operations/i })).toBeInTheDocument()
+    expect(screen.getByText('support@officecli.io')).toBeInTheDocument()
+  })
+
+  it('copies the support email from the contact section', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Copy email/i }).at(-1)!)
+    expect(writeText).toHaveBeenCalledWith('support@officecli.io')
   })
 
   it('keeps pricing available when the pricing api fails', async () => {
@@ -32,6 +52,12 @@ describe('marketing site shell', () => {
     expect(screen.getAllByText('External 500').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: /Open Secure Checkout/i })[0]).toHaveAttribute('href', 'https://platform.officecli.io/app/billing')
     expect(screen.getAllByText(/Secure Stripe checkout starts in the billing workspace/i).length).toBeGreaterThan(0)
+  })
+
+  it('detects supported operating systems for install tabs', () => {
+    expect(detectOperatingSystem('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4)')).toBe('macos')
+    expect(detectOperatingSystem('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux')
+    expect(detectOperatingSystem('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('manual')
   })
 })
 

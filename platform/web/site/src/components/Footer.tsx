@@ -11,7 +11,7 @@ export default function Footer() {
         <div className="col-span-2 md:col-span-1">
           <div className="text-lg font-black text-white mb-6">OfficeCLI</div>
           <p className="text-gray-500 font-headline text-sm uppercase tracking-widest leading-relaxed">
-            © 2026 OfficeCLI.<br />Kinetic Infrastructure.
+            © 2026 OfficeCLI.<br />Local-first document operations.
           </p>
         </div>
         <div>
