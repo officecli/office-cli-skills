@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag to publish, for example v0.2.4"
+        description: "Release tag to publish, for example v0.2.5"
         required: true
         type: string
       dist_repo:
