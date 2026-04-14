@@ -4,9 +4,7 @@
   "description": "NPM wrapper that installs the OfficeCLI binary from GitHub Releases.",
   "license": "UNLICENSED",
   "private": false,
-  "bin": {
-    "officecli": "./bin/officecli.js"
-  },
+  "bin": "./bin/officecli.js",
   "files": [
     "README.md",
     "bin",
