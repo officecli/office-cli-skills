@@ -18,7 +18,7 @@ officecli --version
 
 ## Version Mapping
 
-- npm package version `0.2.5` downloads OfficeCLI release `v0.2.5`
+- npm package version `0.2.6` downloads OfficeCLI release `v0.2.6`
 - set `OFFICECLI_NPM_VERSION=latest` to test the rolling latest release
 
 ## Supported Platforms

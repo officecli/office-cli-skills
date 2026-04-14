@@ -15,7 +15,7 @@ Before publishing the npm package:
 
 1. update `packages/npm/officecli/package.json` to the target version in the private source repository
 2. sync the wrapper files to `officecli/officecli-npm`
-3. create and push the matching tag such as `v0.2.5`
+3. create and push the matching tag such as `v0.2.6`
 4. let `CLI Release` publish binaries to `officecli/officecli-dist`
 5. let the public npm repository `NPM Publish` workflow verify the public dist release exists
 6. let the public npm repository publish `officecli` to npm
@@ -42,7 +42,7 @@ Important notes:
 
 You can also dispatch `.github/workflows/npm-publish.yml` manually with:
 
-- `version`: release tag, for example `v0.2.5`
+- `version`: release tag, for example `v0.2.6`
 - `dist_repo`: optional override for the public dist repository
 
 ## Local Verification
