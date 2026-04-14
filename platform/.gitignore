@@ -2,14 +2,17 @@ bin/
 logs/
 web/admin/node_modules/
 web/admin/*.tsbuildinfo
+web/admin/dist/
 web/admin/vite.config.js
 web/admin/vite.config.d.ts
 web/app/node_modules/
 web/app/*.tsbuildinfo
+web/app/dist/
 web/app/vite.config.js
 web/app/vite.config.d.ts
 web/site/node_modules/
 web/site/*.tsbuildinfo
+web/site/dist/
 web/site/vite.config.js
 web/site/vite.config.d.ts
 /platform

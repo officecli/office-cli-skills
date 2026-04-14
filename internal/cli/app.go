@@ -25,6 +25,9 @@ type App struct {
 	newLicenseService   func(cfg LicenseConfig) (LicenseManager, error)
 	newReviewer         func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error)
 	officeTaskPreflight func(ctx context.Context, command string, args []string) error
+	checkForUpdates     func(ctx context.Context) (UpdateInfo, error)
+	performUpdate       func(ctx context.Context, info UpdateInfo) error
+	restartCommand      func(ctx context.Context, args []string) error
 }
 
 var Version = "dev"
@@ -69,6 +72,9 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 		officeTaskPreflight: func(ctx context.Context, command string, args []string) error {
 			return runInstalledSkillPreflight(ctx, stdin, stdout, stderr, command, args)
 		},
+		checkForUpdates: defaultCheckForUpdates,
+		performUpdate:   defaultPerformUpdate,
+		restartCommand:  defaultRestartCommand,
 	}
 }
 
@@ -117,6 +123,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 				return err
 			}
 		}
+	}
+	if err := a.maybeHandleUpdate(ctx, args); err != nil {
+		return err
 	}
 	switch args[0] {
 	case "config":

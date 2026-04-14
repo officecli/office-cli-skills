@@ -275,9 +275,9 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 	}
 	switch req.Method {
 	case "initialize":
-		s.writeResult(req.ID, s.initializeResult())
+		s.writeResult(req.ID, s.initializeResult(ctx))
 	case "capabilities/get":
-		s.writeResult(req.ID, s.initializeResult().Capabilities)
+		s.writeResult(req.ID, s.initializeResult(ctx).Capabilities)
 	case "session/open":
 		session := s.openSession()
 		s.writeResult(req.ID, session)
@@ -347,7 +347,7 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 	}
 }
 
-func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
+func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitializeResult {
 	return bridgeInitializeResult{
 		ServerName:      "officecli-agent-bridge",
 		ServerVersion:   Version,
@@ -399,6 +399,7 @@ func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
 					},
 				},
 			},
+			"update": s.updateCapability(ctx),
 		},
 		Tools: []map[string]any{
 			{
@@ -430,6 +431,35 @@ func (s *agentBridgeServer) initializeResult() bridgeInitializeResult {
 				},
 			},
 		},
+	}
+}
+
+func (s *agentBridgeServer) updateCapability(ctx context.Context) map[string]any {
+	if s == nil || s.app == nil {
+		return map[string]any{"available": false}
+	}
+	info, err := s.app.safeCheckForUpdates(ctx)
+	if err != nil {
+		return map[string]any{
+			"available":             false,
+			"current_version":       Version,
+			"current_commit":        Commit,
+			"current_build_date":    BuildDate,
+			"auto_update_supported": false,
+			"check_error":           err.Error(),
+		}
+	}
+	return map[string]any{
+		"available":             info.Available,
+		"channel":               info.Channel,
+		"install_method":        info.InstallMethod,
+		"current_version":       info.CurrentVersion,
+		"current_commit":        info.CurrentCommit,
+		"current_build_date":    info.CurrentBuildDate,
+		"latest_version_label":  info.LatestVersionLabel,
+		"latest_published_at":   info.LatestPublishedAt,
+		"auto_update_supported": info.AutoUpdateSupported,
+		"update_command":        info.UpdateCommand,
 	}
 }
 

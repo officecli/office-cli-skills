@@ -28,6 +28,7 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - `pptx` enables auto-generated images by default when the content and layout are a good fit
 - `--no-images` disables image generation for `pptx`
 - when using `agent-bridge`, agents should treat `capabilities/get -> document_generation.pptx.image_support` as the authoritative machine-readable contract for PPT image behavior
+- when using `agent-bridge`, agents should treat `capabilities/get -> update` as the authoritative machine-readable contract for binary update availability
 - if image generation fails for a slide, the PPT should still be generated with that slide downgraded to a no-image version
 - installing the public skill can also attempt to install the `officecli` binary when it is missing
 - for agent-oriented integrations, `officecli agent-bridge` now exposes a structured `JSON-RPC 2.0 over stdio` protocol
@@ -74,6 +75,7 @@ For agent clients, prefer the structured bridge over the human-oriented CLI surf
 - first choice for agent integration is `officecli agent-bridge`
 - do not parse spinner output or human progress lines as a protocol when `agent-bridge` is available
 - call `initialize` or `capabilities/get` first and cache the returned PPT image capability fields before invoking generation
+- also cache `capabilities/get -> update`; if `available=true`, prefer surfacing `update_command` or triggering your own refresh flow instead of parsing human CLI prompts
 - use `task/invoke` for generation requests and consume `event` notifications for intermediate state
 - use `task/respond` for follow-up questions instead of writing free-form answers to raw stdin prompts
 - use `task/cancel` for cancellation and `task/status` as a polling fallback
@@ -154,7 +156,9 @@ When generating guidance or examples for another agent, prefer showing the `agen
 For all agent clients, use the following image-handling rules:
 
 - read `capabilities/get -> document_generation.pptx.image_support`
+- read `capabilities/get -> update`
 - assume `pptx` default image behavior from `default_enabled`, not from hard-coded client assumptions
+- never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
 - if the user explicitly wants a text-only PPT, pass `enable_images=false` and mention `disable_flag` when helpful
 - if the user asks why a generated PPT has no images, point them to `config_command`
 - if `task.output`, `task.completed`, or `task/status` contains `result_meta.image_support.attention_required=true`, surface that as a first-class issue instead of burying it in raw warnings

@@ -26,6 +26,7 @@ type stubLicenseManager struct {
 
 func TestMain(m *testing.M) {
 	_ = os.Setenv(officeTaskPreflightSkipEnv, "1")
+	_ = os.Setenv(updateCheckSkipEnv, "1")
 	os.Exit(m.Run())
 }
 
@@ -198,6 +199,12 @@ func (b *terminalBuffer) History() []string {
 }
 
 func (b *terminalBuffer) IsTerminal() bool { return true }
+
+type terminalInputBuffer struct {
+	*strings.Reader
+}
+
+func (b *terminalInputBuffer) IsTerminal() bool { return true }
 
 func TestRenderProgress_TTYAnimatesAndFinalizesStage(t *testing.T) {
 	oldInterval := spinnerFrameInterval
@@ -922,6 +929,134 @@ func TestAppRun_VersionOutput(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	stdout := &terminalBuffer{}
+	var stderr bytes.Buffer
+	app := NewApp(stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("yes\n")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.2",
+			LatestVersionLabel:  "latest",
+			InstallMethod:       InstallMethodScript,
+			Channel:             UpdateChannelLatest,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "curl -fsSL https://example.com/install.sh | bash",
+		}, nil
+	}
+	updated := false
+	restarted := false
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		updated = true
+		return nil
+	}
+	app.restartCommand = func(ctx context.Context, args []string) error {
+		restarted = true
+		if len(args) != 2 || args[0] != "config" || args[1] != "status" {
+			t.Fatalf("unexpected restart args: %v", args)
+		}
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"config", "status"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !updated || !restarted {
+		t.Fatalf("updated=%t restarted=%t", updated, restarted)
+	}
+	if !strings.Contains(stdout.String(), "检测到 officecli 有可用更新") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	stdout := &terminalBuffer{}
+	app := NewApp(stdout, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("no\n")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.2",
+			LatestVersionLabel:  "latest",
+			InstallMethod:       InstallMethodScript,
+			Channel:             UpdateChannelLatest,
+			AutoUpdateSupported: true,
+		}, nil
+	}
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		t.Fatal("performUpdate should not be called")
+		return nil
+	}
+	app.restartCommand = func(ctx context.Context, args []string) error {
+		t.Fatal("restartCommand should not be called")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"config", "status"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "检测到 officecli 有可用更新") {
+		t.Fatalf("stdout = %q", output)
+	}
+	if !strings.Contains(output, "配置文件路径：") {
+		t.Fatalf("expected command to continue, got %q", output)
+	}
+}
+
+func TestAppRun_UpdateCheckSkipsJSONAndHelp(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	t.Setenv("OFFICE_CLI_CONFIG", filepath.Join(t.TempDir(), "config.json"))
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+
+	var stdout bytes.Buffer
+	app := NewApp(&terminalBuffer{}, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("yes\n")})
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		t.Fatal("checkForUpdates should not be called")
+		return UpdateInfo{}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"--help"}); err != nil {
+		t.Fatalf("Run(help): %v", err)
+	}
+
+	app = NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString(""))
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		t.Fatal("checkForUpdates should not be called")
+		return UpdateInfo{}, nil
+	}
+	if err := app.Run(t.Context(), []string{"new", "docx", "季度复盘", "--json", "--no-publish"}); err == nil {
+		t.Fatal("expected config-related error for missing setup")
 	}
 }
 

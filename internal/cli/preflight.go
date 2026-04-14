@@ -122,6 +122,9 @@ func installedSkillPreflightScripts(command string) ([]string, error) {
 }
 
 func isTerminalReader(r io.Reader) bool {
+	if detector, ok := r.(interface{ IsTerminal() bool }); ok {
+		return detector.IsTerminal()
+	}
 	file, ok := r.(*os.File)
 	if !ok {
 		return false

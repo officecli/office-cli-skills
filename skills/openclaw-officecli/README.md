@@ -8,6 +8,7 @@
 - `officecli agent-bridge` 负责本地文档执行与结构化任务事件
 - `officecli` 负责最终文件的生成、组装、落盘与可选发布
 - agent 应优先读取 `initialize` / `capabilities/get`，并根据 `document_generation.pptx.image_support` 判断 PPT 图片能力
+- agent 还应读取 `initialize` / `capabilities/get -> update`，用结构化字段判断 binary 是否落后，不要解析人类 CLI 更新提示
 
 ## 适用场景
 

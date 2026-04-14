@@ -66,7 +66,8 @@ Primary event types:
 3. Ensure `officecli` is installed, configured, and reachable.
 4. Ensure `officecli agent-bridge` can be started locally.
 5. Read `initialize` or `capabilities/get` before invoking generation, and cache `document_generation.pptx.image_support`.
-6. Convert the user's natural-language request into:
+6. Also cache `update`; if `available=true`, use `update_command` or your own repair flow instead of parsing human CLI update prompts.
+7. Convert the user's natural-language request into:
    - `document_type`
    - `topic`
    - `prompt`
@@ -74,24 +75,27 @@ Primary event types:
       - optional `lang`
    - optional `style`
    - optional `audience`
-7. If the user explicitly wants no images for `pptx`, set `enable_images=false`; otherwise follow the bridge capability default instead of hard-coding a client default.
-8. Use `interactive=true` by default so the chat can handle follow-up questions.
-9. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
-10. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
-11. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
-12. On `task.failed`, convert the error into a user-friendly message.
-13. On user cancel, send `task/cancel`.
+8. If the user explicitly wants no images for `pptx`, set `enable_images=false`; otherwise follow the bridge capability default instead of hard-coding a client default.
+9. Use `interactive=true` by default so the chat can handle follow-up questions.
+10. Use `mode=fast` by default unless the user explicitly asks for a higher-quality, more iterative workflow.
+11. On `task.question`, present the question naturally in the channel and forward the answer via `task/respond`.
+12. On `task.output`, read `result.file_path` and send the file as an attachment in the current channel.
+13. On `task.failed`, convert the error into a user-friendly message.
+14. On user cancel, send `task/cancel`.
 
 ## PPT Image Rules
 
 For all OpenClaw agents using this skill:
 
 - inspect `document_generation.pptx.image_support.default_enabled` during capability discovery
+- inspect `update.available` during capability discovery
 - use `document_generation.pptx.image_support.disable_flag` when explaining how to produce a text-only deck
+- if `update.available=true`, prefer a structured repair/refresh path and show `update_command` when the host asks how to update
 - use `document_generation.pptx.image_support.config_command` and `config_fields` when the user reports missing images
 - if `task.output`, `task.completed`, or `task/status` includes `result_meta.image_support.attention_required=true`, surface that immediately in the chat
 - if `result_meta.image_support.reason=image_generation_degraded`, tell the user the deck was downgraded to a no-image version and they should check `image_base_url`, `image_api_key`, and `image_model`
 - do not rely only on free-form warning strings for client decisions; prefer `result_meta`
+- do not parse human update prompts from `officecli` stdout; use bridge capability fields
 
 ## Environment Repair Rules
 

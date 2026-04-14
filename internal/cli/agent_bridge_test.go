@@ -185,7 +185,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 
 func TestAgentBridgeCapabilitiesGetIncludesPPTImageSupport(t *testing.T) {
 	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	caps := server.initializeResult().Capabilities
+	caps := server.initializeResult(context.Background()).Capabilities
 
 	docGen, ok := caps["document_generation"].(map[string]any)
 	if !ok {
@@ -204,6 +204,42 @@ func TestAgentBridgeCapabilitiesGetIncludesPPTImageSupport(t *testing.T) {
 	}
 	if imageSupport["invoke_field"] != "enable_images" {
 		t.Fatalf("unexpected invoke_field: %#v", imageSupport["invoke_field"])
+	}
+}
+
+func TestAgentBridgeCapabilitiesIncludeUpdateInfo(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.2",
+			LatestVersionLabel:  "latest",
+			InstallMethod:       InstallMethodScript,
+			Channel:             UpdateChannelLatest,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "curl -fsSL https://example.com/install.sh | bash",
+		}, nil
+	}
+	server := newAgentBridgeServer(app, Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	caps := server.initializeResult(context.Background()).Capabilities
+	updateCaps, ok := caps["update"].(map[string]any)
+	if !ok {
+		t.Fatalf("update capabilities missing: %#v", caps)
+	}
+	if updateCaps["available"] != true {
+		t.Fatalf("unexpected available: %#v", updateCaps["available"])
+	}
+	if updateCaps["update_command"] != "curl -fsSL https://example.com/install.sh | bash" {
+		t.Fatalf("unexpected update command: %#v", updateCaps["update_command"])
 	}
 }
 
