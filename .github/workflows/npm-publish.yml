@@ -45,7 +45,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           git fetch --tags --force
-          git rev-parse "${RELEASE_TAG}^{tag}" >/dev/null 2>&1
+          git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1
 
       - name: Ensure public dist release exists
         env:
