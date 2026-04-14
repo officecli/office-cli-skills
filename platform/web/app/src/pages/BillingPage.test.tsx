@@ -19,7 +19,7 @@ describe('billing page', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders English pack copy even if pricing and order payloads contain Chinese text', async () => {
+  it('renders English pack copy even if pricing and order payloads previously contained localized text', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/pricing') {
@@ -71,8 +71,8 @@ describe('billing page', () => {
 
     expect(await screen.findByText('Hosted 300')).toBeInTheDocument()
     expect(screen.getByText(/300 hosted credits for low-volume runs on the platform-managed LLM runtime\./i)).toBeInTheDocument()
-    expect(screen.queryByText(/托管 300/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/适合托管 LLM/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Hosted 300 credits/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/suited for hosted llm/i)).not.toBeInTheDocument()
   })
 
   it('posts checkout to the existing app endpoint and keeps Stripe copy explicit', async () => {

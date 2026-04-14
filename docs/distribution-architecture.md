@@ -1,80 +1,69 @@
-# OfficeCLI 闭源分发架构
+# OfficeCLI Closed-Source Distribution Architecture
 
-本文档描述 `officecli` 在“源码闭源、二进制公开分发”前提下的推荐仓库结构与发布流水线。
+This document describes the recommended repository layout and release flow for a closed-source codebase with public binary distribution.
 
-## 仓库角色
+## Repository Roles
 
-### 1. 私有源码仓
+### Private source repository
 
-当前仓库保持 private，负责：
+The current repository remains private and owns:
 
-- 源码
-- 测试与 CI
-- 正式构建
-- GoReleaser 配置
-- 用于同步公共仓的脚本与模板
+- source code
+- tests and CI
+- official builds
+- GoReleaser configuration
+- scripts and templates that sync public repositories
 
-### 2. 公共分发仓
+### Public distribution repository
 
-当前仓库名：`officecli/officecli-dist`
+Suggested repository: `officecli/officecli-dist`
 
-职责：
+It should own:
 
 - GitHub Releases
-- 二进制压缩包
+- binary archives
 - `checksums.txt`
-- Linux 安装脚本
-- 面向终端用户的最小安装说明
+- the Linux install script
+- minimal end-user install instructions
 
-发布形态：
+### Public Homebrew tap repository
 
-- 版本化 release：`vX.Y.Z`
-- 滚动 latest release：`latest`
+Suggested repository: `officecli/homebrew-officecli`
 
-注意：
+It should own:
 
-- 不提交源码
-- 不提交源码 patch
-- 不提交会暴露源码结构的构建中间文件
+- `Formula/officecli.rb`
+- release URLs that point to the public distribution repository
 
-### 3. 公共 Homebrew tap 仓
+### Public skills repository
 
-当前仓库名：`officecli/homebrew-officecli`
+Suggested repository: `officecli/officecli-skills`
 
-职责：
+It should own:
 
-- 存放 `Formula/officecli.rb`
-- 指向公共分发仓 release asset URL
+- synced `skills/` content
+- public `SKILL.md` instructions
+- examples without exposing proprietary implementation details
 
-### 4. 公共 skills 仓
+## Release Flows
 
-当前仓库名：`officecli/officecli-skills`
+Versioned release flow:
 
-职责：
+1. Create a `vX.Y.Z` tag in the private source repository
+2. Trigger the `CLI Release` GitHub Action
+3. Build darwin and linux artifacts for amd64 and arm64 with GoReleaser
+4. Publish artifacts to the public distribution repository
+5. Sync the Homebrew tap formula
 
-- 同步 `skills/` 目录
-- 对外提供 `SKILL.md` 与示例说明
-- 不包含闭源实现细节
+Rolling latest flow:
 
-## 发布流水线
+1. Push to `main`
+2. Trigger the `CLI Publish Latest` GitHub Action
+3. Build `officecli_latest_*` artifacts
+4. Replace the public `latest` release assets
+5. Sync the install script and distribution metadata
 
-1. 在私有源码仓打 `vX.Y.Z` tag
-2. GitHub Actions 触发 `CLI Release`
-3. `GoReleaser` 构建 darwin/linux x amd64/arm64 资产并发布到公共分发仓 Releases
-4. 同步公共分发仓的 README 与 Linux 安装脚本
-5. 更新公共 Homebrew tap 仓 formula
-
-另有一条滚动最新分发链路：
-
-1. 私有源码仓 `main` 更新
-2. GitHub Actions 触发 `CLI Publish Latest`
-3. 构建 darwin/linux x amd64/arm64 的 `officecli_latest_*` 资产
-4. 覆盖公共分发仓 `latest` release
-5. 同步公共分发仓 README 与 Linux 安装脚本
-
-## 需要配置的仓库变量
-
-建议在私有源码仓配置以下 repository variables：
+## Required Repository Variables
 
 - `PUBLIC_DIST_REPO_OWNER=officecli`
 - `PUBLIC_DIST_REPO_NAME=officecli-dist`
@@ -87,25 +76,18 @@
 - `CLI_EMBEDDED_PUBLISH_BASE_URL=https://claudeoffice.com`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID=officecli-cli`
 
-## 需要配置的仓库 secrets
+## Required Secrets
 
 - `PUBLIC_DIST_REPO_TOKEN`
 - `HOMEBREW_TAP_TOKEN`
 - `PUBLIC_SKILLS_REPO_TOKEN`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY`
 
-这些 token 至少需要对应公共仓的写权限。
+Each token should grant the minimum write access required for the target public repository.
 
-### 推荐最小权限对应关系
+## Local Validation
 
-- `PUBLIC_DIST_REPO_TOKEN`：对 `officecli/officecli-dist` 有 contents write
-- `HOMEBREW_TAP_TOKEN`：对 `officecli/homebrew-officecli` 有 contents write
-- `PUBLIC_SKILLS_REPO_TOKEN`：对 `officecli/officecli-skills` 有 contents write
-- `CLI_EMBEDDED_PUBLISH_AUTH_KEY`：用于在 CLI 二进制构建时注入发布动态认证密钥，不应提交到源码仓
-
-## 本地验证
-
-发布前至少验证：
+Run at least:
 
 ```bash
 go test ./...
@@ -115,12 +97,12 @@ bash -n scripts/sync-homebrew-tap.sh
 bash -n scripts/sync-public-skills-repo.sh
 ```
 
-## 公开边界
+## Public Boundary
 
-公共仓不得包含：
+Public repositories must not include:
 
-- 私有源码仓地址
-- 私有模块路径
-- 内部 CI 密钥名以外的业务凭据
-- 部署环境信息
-- 内部文档与提交历史
+- private source repository URLs
+- private module paths
+- business credentials beyond CI secret names
+- deployment environment details
+- internal docs or commit history

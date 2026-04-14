@@ -141,25 +141,25 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 	switch {
 	case key == nil:
 		response.ReasonCode = "invalid_api_key"
-		response.Message = "api-key 无效"
+		response.Message = "api key is invalid"
 	case key.Status == model.APIKeyStatusDisabled:
 		response.ReasonCode = "disabled_api_key"
-		response.Message = "api-key 已禁用"
+		response.Message = "api key is disabled"
 	case key.ExpiresAt != nil && key.ExpiresAt.Before(now):
 		response.ReasonCode = "expired_api_key"
-		response.Message = "api-key 已过期"
+		response.Message = "api key has expired"
 	case requestedRuntimeMode(req, key) == string(model.AccessModeHosted) && !key.SupportsHosted():
 		response.ReasonCode = "hosted_not_enabled"
-		response.Message = "当前 key 未开通 hosted 模式"
+		response.Message = "the current key does not allow hosted mode"
 	case requestedRuntimeMode(req, key) == "external" && !key.SupportsExternal():
 		response.ReasonCode = "external_not_enabled"
-		response.Message = "当前 key 未开通 external 模式"
+		response.Message = "the current key does not allow external mode"
 	case requestedRuntimeMode(req, key) == string(model.AccessModeHosted) && key.AvailableCredits() <= 0:
 		response.ReasonCode = "hosted_credit_exhausted"
-		response.Message = "当前 hosted credits 已耗尽，请先充值"
+		response.Message = "hosted credits are exhausted; add more credits first"
 	case requestedRuntimeMode(req, key) != string(model.AccessModeHosted) && key.QuotaTotal != nil && key.PaidQuotaRemaining() <= 0:
 		response.ReasonCode = "paid_quota_exhausted"
-		response.Message = "当前 key 次数已耗尽，请更换或充值次数包"
+		response.Message = "the current key has no remaining generations; replace it or top up the quota pack"
 	default:
 		response.Allowed = true
 		if requestedRuntimeMode(req, key) == string(model.AccessModeHosted) {
@@ -208,7 +208,7 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 		AllowedModes:        []string{"external"},
 		SelectedRuntimeMode: "external",
 		RewardRemaining:     balance.Remaining,
-		Message:             fmt.Sprintf("当前为奖励模式，剩余 %d 次生成额度。", balance.Remaining),
+		Message:             fmt.Sprintf("reward mode is active with %d generations remaining.", balance.Remaining),
 	}
 	response.CommitToken, err = s.issueCommitToken(req, model.AccessModeReward, "")
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckRespon
 		response.Allowed = false
 		response.AccessMode = model.AccessModeBlocked
 		response.ReasonCode = "free_quota_exhausted"
-		response.Message = "免费额度已耗尽，请配置 api-key 后继续使用"
+		response.Message = "free quota is exhausted; configure an API key to continue"
 	}
 
 	event := buildUsageEvent(req, model.UsageModeFree, response, nil)
