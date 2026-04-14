@@ -37,6 +37,8 @@ func hostedModelName(job GenerateJob) string {
 		} else {
 			profile = "pptx-no-image"
 		}
+	case engine.DocumentTypeHTML:
+		profile = "html-report"
 	case engine.DocumentTypeDOCX, engine.DocumentTypeXLSX:
 		profile = "docx-xlsx"
 	}

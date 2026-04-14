@@ -12,6 +12,8 @@ type DOCXTarget = PromptTarget
 
 type XLSXTarget = PromptTarget
 
+type HTMLTarget = PromptTarget
+
 func BuildDOCXPrompt(description string, target DOCXTarget) string {
 	return fmt.Sprintf(`Generate a JSON structure for a Word document based on the following request.
 
@@ -164,6 +166,106 @@ Requirements:
 - Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
+func BuildHTMLPrompt(description string, target HTMLTarget) string {
+	return fmt.Sprintf(`Generate a JSON structure for a narrative HTML business report based on the following request.
+
+Request: %s
+%s
+
+Return only valid JSON in exactly this shape:
+{
+  "title": "Report title",
+  "subtitle": "One-sentence framing",
+  "language": "en",
+  "audience": "Business stakeholders",
+  "summary": "Executive summary paragraph",
+  "updatedAt": "2026-04-14",
+  "kpis": [
+    {"label":"Revenue","value":"$12.4M","change":"+8%% QoQ","note":"North America stayed ahead of plan"}
+  ],
+  "findings": ["Finding 1", "Finding 2", "Finding 3"],
+  "sections": [
+    {
+      "title": "Demand momentum",
+      "subtitle": "What changed and why it matters",
+      "narrative": ["Paragraph 1", "Paragraph 2"],
+      "takeaways": ["Takeaway 1", "Takeaway 2"],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Regional revenue",
+          "subtitle": "Indexed comparison",
+          "categories": ["North America", "Europe", "APAC"],
+          "series": [{"name":"Revenue","values":[128,96,74]}],
+          "unit": "index",
+          "source": "Public company filings"
+        }
+      ],
+      "table": {
+        "title": "Supporting table",
+        "headers": ["Region", "Revenue", "Growth"],
+        "rows": [["North America", "128", "+12%%"]]
+      }
+    }
+  ],
+  "appendixTables": [
+    {
+      "title": "Appendix table",
+      "headers": ["Column 1", "Column 2"],
+      "rows": [["Value 1", "Value 2"]]
+    }
+  ]
+}
+
+Requirements:
+- Write the content in fluent English unless another language is explicitly required
+- Make it a narrative report for external business readers, not an admin dashboard
+- Use chart types only from: bar, stacked_bar, line, area, donut, scatter, waterfall
+- Include 3-5 KPIs, 3-5 findings, and 2-4 analysis sections
+- Every section must combine narrative explanation with at least one chart or supporting table
+- Keep the data internally consistent and presentation-ready`, description, FormatDocumentPromptTarget(target))
+}
+
+func BuildHTMLBestSpecPrompt(description string, target HTMLTarget) string {
+	return fmt.Sprintf(`First produce a structural blueprint for the following HTML report request.
+
+Request: %s
+%s
+
+Return JSON only:
+{
+  "title":"Report title",
+  "audience":"Target readers",
+  "reportStyle":"Narrative business review",
+  "goal":"What the report should help the audience decide",
+  "sections":[
+    {"title":"Section title","purpose":"Why this section exists","chartIntent":"What the chart should prove"}
+  ]
+}
+
+Requirements:
+- Design a narrative HTML report for external readers
+- Keep the structure compact, executive-friendly, and chart-driven
+- Make every section decision-oriented`, description, FormatDocumentPromptTarget(target))
+}
+
+func BuildHTMLBestDraftPrompt(description string, target HTMLTarget, spec string) string {
+	return fmt.Sprintf(`Generate the final HTML report JSON from the request and blueprint below.
+
+Request: %s
+%s
+
+Blueprint:
+%s
+
+Return JSON in exactly the same shape as the HTML report schema.
+
+Requirements:
+- Keep the narrative sharp and business-facing
+- Use rich charts and consistent numeric framing
+- Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
+}
+
 func FormatDocumentPromptTarget(target PromptTarget) string {
 	if IsEmptyPromptTarget(target) {
 		return ""
@@ -258,4 +360,24 @@ func BuildXLSXFromJSON(content, fallbackDescription string) ([]byte, string, err
 		title = ExtractTitleFromDescription(fallbackDescription)
 	}
 	return fileBytes, fmt.Sprintf("%s.xlsx", SanitizeFileName(title)), nil
+}
+
+func BuildHTMLFromJSON(content, fallbackDescription string) ([]byte, string, error) {
+	content = RepairUnescapedQuotes(ExtractJSON(content))
+
+	var report officegen.HTMLReport
+	if err := json.Unmarshal([]byte(content), &report); err != nil {
+		return nil, "", fmt.Errorf("parse LLM response: %w", err)
+	}
+
+	fileBytes, err := officegen.BuildHTMLReport(report)
+	if err != nil {
+		return nil, "", fmt.Errorf("generate html: %w", err)
+	}
+
+	title := strings.TrimSpace(report.Title)
+	if title == "" {
+		title = ExtractTitleFromDescription(fallbackDescription)
+	}
+	return fileBytes, fmt.Sprintf("%s.html", SanitizeFileName(title)), nil
 }

@@ -66,6 +66,23 @@ type workbookBlueprintSheet struct {
 	Notes      string   `json:"notes"`
 }
 
+type htmlReportBlueprint struct {
+	ReportType       string                       `json:"reportType"`
+	TargetAudience   string                       `json:"targetAudience"`
+	StoryGoal        string                       `json:"storyGoal"`
+	ChartDensity     string                       `json:"chartDensity"`
+	ContentGuideline string                       `json:"contentGuideline"`
+	Sections         []htmlReportBlueprintSection `json:"sections"`
+}
+
+type htmlReportBlueprintSection struct {
+	SectionIndex int      `json:"sectionIndex"`
+	Title        string   `json:"title"`
+	Purpose      string   `json:"purpose"`
+	ChartIntent  string   `json:"chartIntent"`
+	Takeaways    []string `json:"takeaways"`
+}
+
 func (w *Workflow) synthesizeFrameworkBlueprint(ctx context.Context, session *engine.PlanSession) (string, error) {
 	if w == nil || w.llm == nil {
 		return "", fmt.Errorf("llm unavailable")
@@ -152,6 +169,29 @@ Requirements:
 1. Define workbook and sheet responsibilities before finalizing columns.
 2. notes must describe the focus and limits of the sheet.
 3. contentGuideline must reflect consistency of definitions and the relationship between summary and detail.`
+	case "html":
+		return `Output format:
+{
+  "reportType":"Business review",
+  "targetAudience":"Board and investors",
+  "storyGoal":"Explain the latest performance shift and what should happen next",
+  "chartDensity":"Balanced",
+  "contentGuideline":"Lead with the headline, keep every section evidence-based, and end with a decision implication",
+  "sections":[
+    {
+      "sectionIndex":1,
+      "title":"Executive summary",
+      "purpose":"Frame the headline change and why it matters",
+      "chartIntent":"Show the single most important comparison first",
+      "takeaways":["Performance shift","Decision implication"]
+    }
+  ]
+}
+
+Requirements:
+1. Design a narrative HTML report for external business readers rather than an admin dashboard.
+2. Each section must define both the story purpose and what the chart needs to prove.
+3. contentGuideline must reflect chart discipline, narrative clarity, and external readability.`
 	default:
 		return `Output format:
 {
@@ -188,6 +228,8 @@ func buildFrameworkBlueprintMarkdown(documentType string, specJSON string) (stri
 		return buildDocumentBlueprintMarkdown(specJSON)
 	case "xlsx":
 		return buildWorkbookBlueprintMarkdown(specJSON)
+	case "html":
+		return buildHTMLReportBlueprintMarkdown(specJSON)
 	default:
 		return buildPresentationBlueprintMarkdown(specJSON)
 	}
@@ -375,6 +417,66 @@ func buildWorkbookBlueprintMarkdown(specJSON string) (string, error) {
 			}
 			if value := strings.TrimSpace(sheet.Notes); value != "" {
 				parts = append(parts, "notes "+value)
+			}
+			if len(parts) > 0 {
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(parts, "; "))
+				sb.WriteString(")")
+			}
+			sb.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(sb.String()), nil
+}
+
+func buildHTMLReportBlueprintMarkdown(specJSON string) (string, error) {
+	var blueprint htmlReportBlueprint
+	if err := json.Unmarshal([]byte(specJSON), &blueprint); err != nil {
+		return "", fmt.Errorf("decode html report blueprint: %w", err)
+	}
+	var sb strings.Builder
+	sb.WriteString("## Framework Blueprint\n")
+	overview := make([]string, 0, 5)
+	if value := strings.TrimSpace(blueprint.ReportType); value != "" {
+		overview = append(overview, "- Report type: "+value)
+	}
+	if value := strings.TrimSpace(blueprint.TargetAudience); value != "" {
+		overview = append(overview, "- Audience: "+value)
+	}
+	if value := strings.TrimSpace(blueprint.StoryGoal); value != "" {
+		overview = append(overview, "- Story goal: "+value)
+	}
+	if value := strings.TrimSpace(blueprint.ChartDensity); value != "" {
+		overview = append(overview, "- Chart density: "+value)
+	}
+	if value := strings.TrimSpace(blueprint.ContentGuideline); value != "" {
+		overview = append(overview, "- Content guideline: "+value)
+	}
+	if len(overview) > 0 {
+		sb.WriteString("\n### Overview\n")
+		sb.WriteString(strings.Join(overview, "\n"))
+		sb.WriteString("\n")
+	}
+	if len(blueprint.Sections) > 0 {
+		sb.WriteString("\n### Section Plan\n")
+		for idx, section := range blueprint.Sections {
+			sectionIndex := section.SectionIndex
+			if sectionIndex <= 0 {
+				sectionIndex = idx + 1
+			}
+			sb.WriteString("- Section ")
+			sb.WriteString(strconv.Itoa(sectionIndex))
+			sb.WriteString(": ")
+			sb.WriteString(fallbackText(section.Title, "Untitled"))
+			parts := make([]string, 0, 3)
+			if value := strings.TrimSpace(section.Purpose); value != "" {
+				parts = append(parts, "purpose "+value)
+			}
+			if value := strings.TrimSpace(section.ChartIntent); value != "" {
+				parts = append(parts, "chart proves "+value)
+			}
+			if len(section.Takeaways) > 0 {
+				parts = append(parts, "takeaways "+strings.Join(section.Takeaways, ", "))
 			}
 			if len(parts) > 0 {
 				sb.WriteString(" (")

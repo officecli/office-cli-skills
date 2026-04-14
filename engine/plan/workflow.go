@@ -243,6 +243,8 @@ func normalizeDocumentType(value string) string {
 		return "docx"
 	case "xlsx":
 		return "xlsx"
+	case "html":
+		return "html"
 	default:
 		return "pptx"
 	}
@@ -344,6 +346,8 @@ func buildDocumentLabel(documentType string) string {
 		return "Word document"
 	case "xlsx":
 		return "Excel workbook"
+	case "html":
+		return "HTML report"
 	default:
 		return "PPT presentation"
 	}
@@ -536,6 +540,12 @@ func buildExecutionQualityConstraints(documentType string) []string {
 			"Give each sheet a clear role, with a clean split between summary and detail.",
 			"Keep fields and metric definitions consistent, and avoid mixing near-duplicate labels.",
 			"Prioritize the analysis goal; provide an executive summary first when useful before expanding into detail.",
+		}
+	case "html":
+		return []string{
+			"Keep the report narrative and chart-driven, with clear executive framing before detail.",
+			"Use charts only for evidence-based comparisons, trends, or composition with consistent units and labels.",
+			"Maintain a reader-friendly single-page HTML structure that is suitable for external business sharing.",
 		}
 	default:
 		return []string{

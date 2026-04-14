@@ -244,6 +244,8 @@ func parseDocumentType(value string) (engine.DocumentType, error) {
 		return engine.DocumentTypeDOCX, nil
 	case "xlsx":
 		return engine.DocumentTypeXLSX, nil
+	case "html":
+		return engine.DocumentTypeHTML, nil
 	default:
 		return "", fmt.Errorf("unsupported document type: %s", value)
 	}

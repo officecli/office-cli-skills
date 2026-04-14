@@ -44,7 +44,7 @@ func (f *fakeLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (
 		f.jsonCallCount++
 		return f.jsonResponses[idx], nil
 	}
-		return f.jsonResponse, nil
+	return f.jsonResponse, nil
 }
 
 func (f *fakeLLMClient) CompleteStructured(_ context.Context, req engine.StructuredCompletionRequest) (string, error) {
@@ -176,6 +176,64 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Enterprise Collabo") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
+	}
+}
+
+func TestServiceGenerateHTMLWithFakeLLM(t *testing.T) {
+	service := NewService(&fakeLLMClient{
+		jsonResponse: `{
+			"title":"Q2 Business Review",
+			"subtitle":"Commercial momentum and decision points",
+			"audience":"Board and investors",
+			"summary":"Growth continued, but conversion efficiency softened in the final mile.",
+			"kpis":[{"label":"Revenue","value":"$12.4M","change":"+8% QoQ"}],
+			"findings":["North America remained ahead of plan."],
+			"sections":[
+				{
+					"title":"Demand momentum",
+					"subtitle":"Headline view of regional performance",
+					"narrative":["North America led the quarter while Europe stayed stable."],
+					"charts":[
+						{
+							"type":"bar",
+							"title":"Regional revenue",
+							"categories":["North America","Europe","APAC"],
+							"series":[{"name":"Revenue","values":[128,96,74]}],
+							"source":"Internal finance data"
+						}
+					]
+				}
+			],
+			"appendixTables":[
+				{
+					"title":"Supporting table",
+					"headers":["Region","Revenue"],
+					"rows":[["North America","128"],["Europe","96"]]
+				}
+			]
+		}`,
+	}, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeHTML,
+		Prompt:       "Create an HTML report for the latest business review.",
+		Topic:        "Q2 Business Review",
+		Mode:         "fast",
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	output := string(doc.Bytes)
+	for _, needle := range []string{
+		"<html lang=",
+		"Q2 Business Review",
+		"Demand momentum",
+		"echarts.min.js",
+		"Regional revenue",
+	} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("html missing %q:\n%s", needle, output)
+		}
 	}
 }
 

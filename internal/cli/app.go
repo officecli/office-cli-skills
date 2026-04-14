@@ -266,13 +266,13 @@ Generate Office documents from natural language.
 Commands:
   config                  View or update local configuration
   auth                    View or update access settings
-  new                     Generate a new PPTX / DOCX / XLSX file
+  new                     Generate a new PPTX / DOCX / XLSX / HTML file
   score                   Run PPTX scoring on demand
   review                  Review the quality of a local PPTX file
   agent-bridge            Expose an agent interface over JSON-RPC via stdio
 
 Usage:
-  officecli new <pptx|docx|xlsx> <topic> [brief]
+  officecli new <pptx|docx|xlsx|html> <topic> [brief]
   officecli config status
   officecli auth status
   officecli auth set-key <api-key>
@@ -323,6 +323,7 @@ Examples:
   officecli review --help
   officecli new docx "Quarterly Review" --prompt-file ./examples/prompt.txt
   officecli new xlsx "Sales Analysis" --json
+  officecli new html "Q2 Business Review" --audience "Board and investors"
   officecli --version
 `
 }
@@ -352,7 +353,7 @@ Description:
 
 func NewHelpText() string {
 	return `Usage:
-  officecli new <pptx|docx|xlsx> <topic> [brief]
+  officecli new <pptx|docx|xlsx|html> <topic> [brief]
 
 Common options:
   --prompt <text>         Provide the full prompt directly
@@ -372,6 +373,7 @@ Description:
   - ` + "`pptx`" + ` generation tries to add images and embed them in the final file by default
   - For a text-only PPT, pass ` + "`--no-images`" + `
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
+  - ` + "`html`" + ` generates a single local HTML report file and does not publish online in v1
 `
 }
 

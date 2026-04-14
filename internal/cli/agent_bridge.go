@@ -398,6 +398,11 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 						"default_enabled": false,
 					},
 				},
+				"html": map[string]any{
+					"image_support": map[string]any{
+						"default_enabled": false,
+					},
+				},
 			},
 			"update": s.updateCapability(ctx),
 		},
@@ -405,7 +410,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type": "pptx|docx|xlsx",
+					"document_type": "pptx|docx|xlsx|html",
 					"topic":         "string",
 					"prompt":        "string",
 					"mode":          "fast|best",

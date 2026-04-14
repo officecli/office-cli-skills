@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/officecli/officecli/engine"
 	generateengine "github.com/officecli/officecli/engine/generate"
 	publishprovider "github.com/officecli/officecli/internal/providers/publish"
 	"github.com/officecli/officecli/internal/runtime"
@@ -138,6 +139,10 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if prompt == "" {
 		prompt = topic
 	}
+	style := strings.TrimSpace(req.Args.Style)
+	if style == "" && documentType == engine.DocumentTypePPTX {
+		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
+	}
 
 	return GenerateJob{
 		DocumentType: documentType,
@@ -146,7 +151,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		RuntimeMode:  runtimeMode,
 		Mode:         mode,
 		Language:     strings.TrimSpace(req.Args.Language),
-		Style:        fallbackString(strings.TrimSpace(req.Args.Style), strings.TrimSpace(cfg.Defaults.PPTXStylePreset)),
+		Style:        style,
 		Audience:     strings.TrimSpace(req.Args.Audience),
 		EnableImages: enableImages,
 		LocalPreview: false,

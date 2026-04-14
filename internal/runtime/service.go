@@ -76,6 +76,8 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 		return s.generateDOCX(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypeXLSX:
 		return s.generateXLSX(ctx, envelope.Prompt, params.Topic, target, meta)
+	case engine.DocumentTypeHTML:
+		return s.generateHTML(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypePPTX:
 		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
 	default:
@@ -124,6 +126,29 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 	return &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeXLSX),
+		Bytes:        fileBytes,
+		Warnings:     convertIssues(meta),
+	}, nil
+}
+
+func (s *Service) generateHTML(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting HTML report content from the LLM")
+	response, err := s.llm.CompleteJSON(ctx, []engine.LLMMessage{{Role: "user", Content: generateengine.BuildHTMLPrompt(prompt, target)}})
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "HTML report content generation failed")
+		return nil, fmt.Errorf("content generation failed: %w", err)
+	}
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received HTML report structure output")
+	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling the HTML report")
+	fileBytes, fileName, err := generateengine.BuildHTMLFromJSON(response, fallbackDescription(topic, prompt))
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "HTML report assembly failed")
+		return nil, fmt.Errorf("document assembly failed: %w", err)
+	}
+	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "HTML report assembly completed")
+	return &GeneratedArtifact{
+		DocumentName: fileName,
+		DocumentType: string(engine.DocumentTypeHTML),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
 	}, nil

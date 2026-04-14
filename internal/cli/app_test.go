@@ -849,7 +849,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"config                  View or update local configuration",
 		"auth                    View or update access settings",
 		"score                   Run PPTX scoring on demand",
-		"new <pptx|docx|xlsx> <topic> [brief]",
+		"new <pptx|docx|xlsx|html> <topic> [brief]",
 		"officecli config status",
 		"officecli score --help",
 		"officecli auth --help",
@@ -878,8 +878,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best", "automatic PPT images", "officecli config set-generation"}},
-		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best", "automatic PPT images", "officecli config set-generation", "single local HTML report file"}},
+		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
 	for _, tc := range cases {

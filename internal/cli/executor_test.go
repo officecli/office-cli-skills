@@ -40,6 +40,16 @@ func (previewGenerator) Generate(_ context.Context, params GenerateParams) (*Gen
 	}, nil
 }
 
+type htmlGenerator struct{}
+
+func (htmlGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + ".html",
+		DocumentType: string(params.DocumentType),
+		Bytes:        []byte("<html><body>report</body></html>"),
+	}, nil
+}
+
 type fakePublisher struct{}
 
 func (fakePublisher) Publish(_ context.Context, req PublishRequest) (*PublishResult, error) {
@@ -139,6 +149,31 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 	}
 	if _, err := os.Stat(result.LocalPreviewDataPath); err != nil {
 		t.Fatalf("stat preview json: %v", err)
+	}
+}
+
+func TestExecutorSkipsPublishForHTML(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(htmlGenerator{}, fakePublisher{}, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypeHTML,
+		Topic:        "Q2 Business Review",
+		Prompt:       "Create a business review HTML report.",
+		OutputDir:    tmpDir,
+		Publish:      true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Published {
+		t.Fatalf("expected html publish to stay local: %+v", result)
+	}
+	if _, err := os.Stat(result.FilePath); err != nil {
+		t.Fatalf("stat file: %v", err)
+	}
+	if !strings.Contains(strings.Join(result.Warnings, "\n"), "HTML publishing is not supported yet") {
+		t.Fatalf("warnings = %#v", result.Warnings)
 	}
 }
 

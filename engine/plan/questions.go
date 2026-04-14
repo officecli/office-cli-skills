@@ -162,6 +162,8 @@ func buildQuestionGoal(documentType string) string {
 		return "Goal: fill in document purpose, target readers, length, and argument depth with the fewest questions so the final document structure is complete and professional."
 	case "xlsx":
 		return "Goal: fill in analysis goal, data granularity, metric definitions, and reporting perspective with the fewest questions so the workbook structure fits the analysis scenario."
+	case "html":
+		return "Goal: fill in audience, report storyline, chart density, and decision focus with the fewest questions so the HTML report is narrative, data-rich, and presentation-ready."
 	default:
 		return "Goal: fill in audience, presentation goal, structural approach, and page density with the fewest questions so the PPT is better suited for a consulting-style deck."
 	}
@@ -405,6 +407,39 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 				AllowFreeform: true,
 			},
 		}
+	case "html":
+		return []engine.PlanQuestion{
+			{
+				ID:       "html_audience",
+				Question: "Who is the primary audience for this HTML report?",
+				Options: []engine.PlanQuestionOption{
+					{ID: "exec", Label: "Executives or board", Description: "Lead with concise conclusions, KPI shifts, and decision implications.", Recommended: true},
+					{ID: "client", Label: "Clients or partners", Description: "Lead with externally understandable framing and business impact."},
+					{ID: "ops", Label: "Operating teams", Description: "Keep more implementation detail and supporting evidence."},
+				},
+				AllowFreeform: true,
+			},
+			{
+				ID:       "html_story",
+				Question: "What narrative should this report emphasize first?",
+				Options: []engine.PlanQuestionOption{
+					{ID: "business_review", Label: "Business review", Description: "Summarize performance, changes, and next actions.", Recommended: true},
+					{ID: "market_report", Label: "Market insight", Description: "Explain external trends, comparison, and opportunity."},
+					{ID: "pipeline", Label: "Pipeline or operating review", Description: "Explain funnel, conversion, and execution bottlenecks."},
+				},
+				AllowFreeform: true,
+			},
+			{
+				ID:       "html_density",
+				Question: "How chart-heavy should the report be?",
+				Options: []engine.PlanQuestionOption{
+					{ID: "balanced", Label: "Balanced", Description: "Keep each section narrative-led with one strong chart.", Recommended: true},
+					{ID: "chart_heavy", Label: "Chart-heavy", Description: "Use more visual evidence and denser KPI framing."},
+					{ID: "light", Label: "Narrative-first", Description: "Use fewer charts and more explanatory text."},
+				},
+				AllowFreeform: true,
+			},
+		}
 	default:
 		return []engine.PlanQuestion{
 			{
@@ -479,6 +514,25 @@ func buildDynamicFallbackQuestions(req engine.PrepareExecutionPlanRequest, docum
 				{ID: "risk", Label: "Risk warning", Description: "Prioritize overdue, blocked, and abnormal items.", Recommended: true},
 				{ID: "milestone", Label: "Milestone progress", Description: "Prioritize the status of key milestones."},
 				{ID: "resource", Label: "Resource coordination", Description: "Prioritize owners, dependencies, and resource state."},
+			}
+		}
+		return questions
+	case "html":
+		questions := buildExecutionPlanQuestions("html")
+		switch {
+		case containsAnyKeyword(prompt, "market", "industry", "competitor", "benchmark", "demand", "trend", "\u5e02\u573a", "\u884c\u4e1a", "\u7ade\u54c1", "\u5bf9\u6807", "\u8d8b\u52bf"):
+			questions[1].Question = "What should this market-facing report prove first?"
+			questions[1].Options = []engine.PlanQuestionOption{
+				{ID: "opportunity", Label: "Opportunity size", Description: "Lead with category size, growth, and where demand is strongest.", Recommended: true},
+				{ID: "positioning", Label: "Competitive position", Description: "Lead with peer comparison and differentiation."},
+				{ID: "timing", Label: "Why now", Description: "Lead with demand shifts and timing advantages."},
+			}
+		case containsAnyKeyword(prompt, "quarterly", "business review", "qbr", "revenue", "sales", "pipeline", "\u5b63\u5ea6", "\u590d\u76d8", "\u6536\u5165", "\u9500\u552e", "\u7ebf\u7d22"):
+			questions[1].Question = "Which business-review lens matters most in this report?"
+			questions[1].Options = []engine.PlanQuestionOption{
+				{ID: "performance", Label: "Performance change", Description: "Lead with KPI movement, variance, and what changed.", Recommended: true},
+				{ID: "efficiency", Label: "Efficiency and quality", Description: "Lead with conversion, mix, and execution quality."},
+				{ID: "action", Label: "Next actions", Description: "Lead with decisions, priorities, and recommendations."},
 			}
 		}
 		return questions

@@ -8,6 +8,7 @@ const (
 	DocumentTypePPTX DocumentType = "pptx"
 	DocumentTypeDOCX DocumentType = "docx"
 	DocumentTypeXLSX DocumentType = "xlsx"
+	DocumentTypeHTML DocumentType = "html"
 )
 
 type GenerateIssue struct {
