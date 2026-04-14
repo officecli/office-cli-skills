@@ -1,0 +1,49 @@
+# officecli
+
+`officecli` is an npm wrapper package for the OfficeCLI binary.
+
+It does not reimplement the CLI in JavaScript. During `npm install`, it downloads the matching prebuilt binary from `officecli/officecli-dist`, verifies `checksums.txt`, and exposes the `officecli` command on your `PATH`.
+
+## Install
+
+```bash
+npm install -g officecli
+```
+
+Run it after install:
+
+```bash
+officecli --version
+```
+
+## Version Mapping
+
+- npm package version `0.2.3` downloads OfficeCLI release `v0.2.3`
+- set `OFFICECLI_NPM_VERSION=latest` to test the rolling latest release
+
+## Supported Platforms
+
+- macOS `x64`
+- macOS `arm64`
+- Linux `x64`
+- Linux `arm64`
+
+Windows is not supported yet because the current public binary release flow only publishes `darwin` and `linux` archives.
+
+## Environment Overrides
+
+- `OFFICECLI_NPM_DIST_REPO`: override the GitHub release repository, default `officecli/officecli-dist`
+- `OFFICECLI_NPM_VERSION`: override the target OfficeCLI version, default the npm package version
+- `OFFICECLI_NPM_LATEST_TAG`: override the rolling release tag, default `latest`
+- `OFFICECLI_NPM_SKIP_DOWNLOAD=1`: skip the postinstall download step
+
+## Local Validation
+
+From this repository:
+
+```bash
+cd packages/npm/officecli
+npm pack --dry-run
+npm install
+npm run smoke:version
+```

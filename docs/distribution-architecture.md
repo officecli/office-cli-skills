@@ -45,6 +45,17 @@ It should own:
 - public `SKILL.md` instructions
 - examples without exposing proprietary implementation details
 
+### Public npm package
+
+Suggested package: `officecli`
+
+It should own:
+
+- a thin Node wrapper only
+- package metadata and install scripts
+- no proprietary source code beyond the wrapper logic
+- runtime downloads that point to the public distribution repository
+
 ## Release Flows
 
 Versioned release flow:
@@ -54,6 +65,14 @@ Versioned release flow:
 3. Build darwin and linux artifacts for amd64 and arm64 with GoReleaser
 4. Publish artifacts to the public distribution repository
 5. Sync the Homebrew tap formula
+
+Npm wrapper flow:
+
+1. Update `packages/npm/officecli/package.json` to the target version
+2. Ensure the matching `vX.Y.Z` binary release already exists in `officecli/officecli-dist`
+3. Run wrapper smoke tests with `npm pack` and a clean install
+4. Publish the wrapper package to npm
+5. Verify `npm install -g officecli` still resolves the matching binary release
 
 Rolling latest flow:
 
@@ -73,6 +92,7 @@ Rolling latest flow:
 - `HOMEBREW_TAP_DEFAULT_BRANCH=main`
 - `PUBLIC_SKILLS_REPO=officecli/officecli-skills`
 - `PUBLIC_SKILLS_DEFAULT_BRANCH=main`
+- `NPM_PACKAGE_NAME=officecli`
 - `CLI_EMBEDDED_PUBLISH_BASE_URL=https://claudeoffice.com`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID=officecli-cli`
 
@@ -85,6 +105,8 @@ Rolling latest flow:
 
 Each token should grant the minimum write access required for the target public repository.
 
+For npm publication, prefer trusted publishing via GitHub Actions OIDC instead of a long-lived npm token.
+
 ## Local Validation
 
 Run at least:
@@ -95,6 +117,7 @@ bash -n scripts/install-officecli.sh
 bash -n scripts/sync-public-dist-repo.sh
 bash -n scripts/sync-homebrew-tap.sh
 bash -n scripts/sync-public-skills-repo.sh
+(cd packages/npm/officecli && npm pack --dry-run)
 ```
 
 ## Public Boundary

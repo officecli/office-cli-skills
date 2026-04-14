@@ -40,6 +40,12 @@ For local validation, load the plugin directories directly:
 claude --plugin-dir ./plugins/officecli --plugin-dir ./plugins/openclaw-officecli
 ```
 
+## NPM Wrapper Package
+
+An initial npm wrapper package now lives at `packages/npm/officecli`.
+
+Its purpose is to install the published OfficeCLI binary from `officecli/officecli-dist` and expose it as an npm-installed `officecli` command. The wrapper does not replace the Go CLI implementation.
+
 ## Quick Start
 
 Build the binary:

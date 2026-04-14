@@ -1,0 +1,47 @@
+name: NPM Wrapper CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/npm/officecli/**"
+      - ".github/workflows/npm-wrapper-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/npm/officecli/**"
+      - ".github/workflows/npm-wrapper-ci.yml"
+
+concurrency:
+  group: npm-wrapper-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Pack And Install Wrapper
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Pack wrapper
+        working-directory: packages/npm/officecli
+        run: npm pack
+
+      - name: Install wrapper globally
+        working-directory: packages/npm/officecli
+        run: npm install -g ./officecli-*.tgz
+
+      - name: Verify installed binary
+        run: officecli --version
