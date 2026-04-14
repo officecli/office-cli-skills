@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     env:
-      PUBLIC_NPM_REPO: ${{ vars.PUBLIC_NPM_REPO }}
+      PUBLIC_NPM_REPO: ${{ vars.PUBLIC_NPM_REPO || 'officecli/officecli-npm' }}
       PUBLIC_NPM_DEFAULT_BRANCH: ${{ vars.PUBLIC_NPM_DEFAULT_BRANCH || 'main' }}
     steps:
       - name: Checkout
