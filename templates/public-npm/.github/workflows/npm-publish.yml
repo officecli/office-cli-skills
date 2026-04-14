@@ -1,0 +1,93 @@
+name: NPM Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "README.md"
+      - "bin/**"
+      - "lib/**"
+      - "scripts/**"
+      - ".github/workflows/npm-publish.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional release tag override, for example v0.2.5"
+        required: false
+        type: string
+      dist_repo:
+        description: "Public dist repository"
+        required: false
+        default: "officecli/officecli-dist"
+        type: string
+
+concurrency:
+  group: npm-publish-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish Wrapper To NPM
+    runs-on: ubuntu-latest
+    env:
+      DIST_REPO: ${{ github.event_name == 'workflow_dispatch' && inputs.dist_repo || 'officecli/officecli-dist' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve publish metadata
+        id: meta
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          release_tag="v${package_version}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            override="${{ inputs.version }}"
+            normalized="${override#v}"
+            if [ "${normalized}" != "${package_version}" ]; then
+              echo "package version ${package_version} does not match workflow input ${override}" >&2
+              exit 1
+            fi
+            release_tag="v${normalized}"
+          fi
+          echo "package_version=${package_version}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure public dist release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ steps.meta.outputs.release_tag }}" -R "${DIST_REPO}" >/dev/null
+
+      - name: Check wrapper version
+        run: npm run check:release-version
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+
+      - name: Pack wrapper
+        run: npm pack
+
+      - name: Skip when version already exists
+        id: published
+        run: |
+          current="$(npm view officecli version 2>/dev/null || true)"
+          if [ "${current}" = "${{ steps.meta.outputs.package_version }}" ]; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "already_published=false" >> "$GITHUB_OUTPUT"
+
+      - name: Publish wrapper
+        if: steps.published.outputs.already_published != 'true'
+        run: npm publish --access public

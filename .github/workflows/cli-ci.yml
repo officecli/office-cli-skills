@@ -74,6 +74,7 @@ jobs:
           python3 -m py_compile scripts/notify-cli-e2e.py
           bash -n scripts/sync-public-dist-repo.sh
           bash -n scripts/sync-homebrew-tap.sh
+          bash -n scripts/sync-public-npm-repo.sh
           bash -n scripts/sync-public-skills-repo.sh
 
       - name: Run skill environment tests

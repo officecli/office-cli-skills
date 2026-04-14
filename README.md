@@ -46,6 +46,8 @@ An initial npm wrapper package now lives at `packages/npm/officecli`.
 
 Its purpose is to install the published OfficeCLI binary from `officecli/officecli-dist` and expose it as an npm-installed `officecli` command. The wrapper does not replace the Go CLI implementation.
 
+For trusted publishing without exposing this private source repository on npmjs, the long-term target is a separate public repository, for example `officecli/officecli-npm`, that receives synced wrapper files and runs the actual npm publish workflow.
+
 ## Quick Start
 
 Build the binary:

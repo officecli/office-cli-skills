@@ -1,0 +1,34 @@
+name: Sync Public NPM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/npm/officecli/**"
+      - "templates/public-npm/**"
+      - "scripts/sync-public-npm-repo.sh"
+      - ".github/workflows/sync-public-npm.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-public-npm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync NPM Wrapper To Public Repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PUBLIC_NPM_REPO: ${{ vars.PUBLIC_NPM_REPO }}
+      PUBLIC_NPM_DEFAULT_BRANCH: ${{ vars.PUBLIC_NPM_DEFAULT_BRANCH || 'main' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync public npm repository
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_NPM_REPO_TOKEN }}
+        run: bash ./scripts/sync-public-npm-repo.sh

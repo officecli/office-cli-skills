@@ -49,6 +49,8 @@ It should own:
 
 Suggested package: `officecli`
 
+Suggested repository: `officecli/officecli-npm`
+
 It should own:
 
 - a thin Node wrapper only
@@ -56,6 +58,7 @@ It should own:
 - no proprietary source code beyond the wrapper logic
 - runtime downloads that point to the public distribution repository
 - public-facing metadata that points to public endpoints only
+- the trusted-publishing workflow that actually runs `npm publish`
 
 ## Release Flows
 
@@ -71,8 +74,8 @@ Npm wrapper flow:
 
 1. Update `packages/npm/officecli/package.json` to the target version
 2. Ensure the matching `vX.Y.Z` binary release already exists in `officecli/officecli-dist`
-3. Run wrapper smoke tests with `npm pack` and a clean install
-4. Publish the wrapper package to npm
+3. Sync the wrapper files to `officecli/officecli-npm`
+4. Let the public npm repository publish the package with trusted publishing
 5. Verify `npm install -g officecli` still resolves the matching binary release
 
 Rolling latest flow:
@@ -93,6 +96,8 @@ Rolling latest flow:
 - `HOMEBREW_TAP_DEFAULT_BRANCH=main`
 - `PUBLIC_SKILLS_REPO=officecli/officecli-skills`
 - `PUBLIC_SKILLS_DEFAULT_BRANCH=main`
+- `PUBLIC_NPM_REPO=officecli/officecli-npm`
+- `PUBLIC_NPM_DEFAULT_BRANCH=main`
 - `NPM_PACKAGE_NAME=officecli`
 - `CLI_EMBEDDED_PUBLISH_BASE_URL=https://claudeoffice.com`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID=officecli-cli`
@@ -102,6 +107,7 @@ Rolling latest flow:
 - `PUBLIC_DIST_REPO_TOKEN`
 - `HOMEBREW_TAP_TOKEN`
 - `PUBLIC_SKILLS_REPO_TOKEN`
+- `PUBLIC_NPM_REPO_TOKEN`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY`
 
 Each token should grant the minimum write access required for the target public repository.
@@ -117,6 +123,7 @@ go test ./...
 bash -n scripts/install-officecli.sh
 bash -n scripts/sync-public-dist-repo.sh
 bash -n scripts/sync-homebrew-tap.sh
+bash -n scripts/sync-public-npm-repo.sh
 bash -n scripts/sync-public-skills-repo.sh
 (cd packages/npm/officecli && npm pack --dry-run)
 ```
