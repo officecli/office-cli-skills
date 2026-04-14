@@ -100,7 +100,7 @@ func TestValidateConfigStillRequiresAPIKeyWithoutEmbeddedDynamicAuth(t *testing.
 	EmbeddedPublishAuthKey = ""
 
 	err := ValidateConfig(Config{Enabled: true, BaseURL: "https://publish.example.com"})
-	if err == nil || !strings.Contains(err.Error(), "online preview publishing credentials") {
+	if err == nil || !strings.Contains(err.Error(), "online preview publishing credential") {
 		t.Fatalf("expected API key validation error, got %v", err)
 	}
 }
