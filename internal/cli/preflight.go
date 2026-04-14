@@ -35,9 +35,18 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 			if isTerminalReader(stdin) {
 				cmd.Stdin = stdin
 			}
-			cmd.Stdout = stdout
-			cmd.Stderr = stderr
-			return cmd.Run()
+			stdoutFilter := newPreflightOutputFilter(stdout)
+			stderrFilter := newPreflightOutputFilter(stderr)
+			cmd.Stdout = stdoutFilter
+			cmd.Stderr = stderrFilter
+			runErr := cmd.Run()
+			if flushErr := stdoutFilter.Flush(); flushErr != nil && runErr == nil {
+				runErr = flushErr
+			}
+			if flushErr := stderrFilter.Flush(); flushErr != nil && runErr == nil {
+				runErr = flushErr
+			}
+			return runErr
 		})
 		if err == nil {
 			continue
@@ -50,6 +59,98 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		}
 	}
 	return nil
+}
+
+type preflightOutputFilter struct {
+	target  io.Writer
+	pending string
+}
+
+func newPreflightOutputFilter(target io.Writer) *preflightOutputFilter {
+	return &preflightOutputFilter{target: target}
+}
+
+func (f *preflightOutputFilter) Write(p []byte) (int, error) {
+	if f == nil || f.target == nil {
+		return len(p), nil
+	}
+	f.pending += string(p)
+	for {
+		idx := strings.IndexByte(f.pending, '\n')
+		if idx < 0 {
+			break
+		}
+		line := f.pending[:idx]
+		f.pending = f.pending[idx+1:]
+		if shouldSuppressPreflightLine(line) {
+			continue
+		}
+		if _, err := io.WriteString(f.target, line+"\n"); err != nil {
+			return 0, err
+		}
+	}
+	if f.pending != "" && !looksLikeSuppressedPreflightPrefix(f.pending) {
+		if _, err := io.WriteString(f.target, f.pending); err != nil {
+			return 0, err
+		}
+		f.pending = ""
+	}
+	return len(p), nil
+}
+
+func (f *preflightOutputFilter) Flush() error {
+	if f == nil || f.target == nil || f.pending == "" {
+		return nil
+	}
+	if shouldSuppressPreflightLine(f.pending) || looksLikeSuppressedPreflightPrefix(f.pending) {
+		f.pending = ""
+		return nil
+	}
+	_, err := io.WriteString(f.target, f.pending)
+	f.pending = ""
+	return err
+}
+
+func shouldSuppressPreflightLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return false
+	}
+	for _, prefix := range suppressedPreflightPrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeSuppressedPreflightPrefix(fragment string) bool {
+	trimmed := strings.TrimSpace(fragment)
+	if trimmed == "" {
+		return false
+	}
+	for _, prefix := range suppressedPreflightPrefixes {
+		if strings.HasPrefix(prefix, trimmed) || strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+var suppressedPreflightPrefixes = []string{
+	"installed skill to ",
+	"installed OpenClaw skill to ",
+	"skipped officecli binary auto-install",
+	"officecli binary already available:",
+	"installed officecli binary:",
+	"officecli version before refresh:",
+	"officecli version after refresh:",
+	"restart your client to pick up the refreshed skill",
+	"warning: curl not found, skipped officecli binary auto-install",
+	"warning: failed to auto-install officecli binary from public dist",
+	"warning: Homebrew not found, falling back to direct binary install",
+	"warning: brew install failed, falling back to direct binary install",
+	"note: add ",
 }
 
 func shouldSkipPublishPreflight(command string, args []string) bool {
