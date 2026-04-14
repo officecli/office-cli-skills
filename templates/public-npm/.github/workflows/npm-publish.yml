@@ -35,6 +35,7 @@ jobs:
   publish:
     name: Publish Wrapper To NPM
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       DIST_REPO: ${{ github.event_name == 'workflow_dispatch' && inputs.dist_repo || 'officecli/officecli-dist' }}
     steps:
@@ -42,9 +43,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Resolve publish metadata
@@ -64,11 +65,21 @@ jobs:
           echo "package_version=${package_version}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure public dist release exists
+      - name: Wait for public dist release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${{ steps.meta.outputs.release_tag }}" -R "${DIST_REPO}" >/dev/null
+          release_tag="${{ steps.meta.outputs.release_tag }}"
+          for attempt in $(seq 1 30); do
+            if gh release view "${release_tag}" -R "${DIST_REPO}" >/dev/null 2>&1; then
+              echo "found ${DIST_REPO} release ${release_tag}"
+              exit 0
+            fi
+            echo "waiting for ${DIST_REPO} release ${release_tag} (${attempt}/30)"
+            sleep 10
+          done
+          echo "timed out waiting for ${DIST_REPO} release ${release_tag}" >&2
+          exit 1
 
       - name: Check wrapper version
         run: npm run check:release-version
