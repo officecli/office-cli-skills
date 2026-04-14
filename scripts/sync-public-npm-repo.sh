@@ -23,7 +23,12 @@ trap 'rm -rf "${tmpdir}"' EXIT
 
 git clone "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_NPM_REPO}.git" "${tmpdir}/npm-repo"
 cd "${tmpdir}/npm-repo"
-git checkout "${PUBLIC_NPM_DEFAULT_BRANCH}"
+if git rev-parse --verify "origin/${PUBLIC_NPM_DEFAULT_BRANCH}" >/dev/null 2>&1; then
+  git checkout "${PUBLIC_NPM_DEFAULT_BRANCH}"
+else
+  git checkout --orphan "${PUBLIC_NPM_DEFAULT_BRANCH}"
+  git rm -rf . >/dev/null 2>&1 || true
+fi
 
 find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 
