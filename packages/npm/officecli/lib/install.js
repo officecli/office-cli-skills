@@ -18,6 +18,7 @@ const METADATA_PATH = path.join(RUNTIME_DIR, "metadata.json");
 const DEFAULT_DIST_REPO = process.env.OFFICECLI_NPM_DIST_REPO || "officecli/officecli-dist";
 const DEFAULT_LATEST_TAG = process.env.OFFICECLI_NPM_LATEST_TAG || "latest";
 const DEFAULT_VERSION = process.env.OFFICECLI_NPM_VERSION || pkg.version;
+const PROGRESS_INTERVAL_MS = 1000;
 
 function getBinaryPath() {
   return BINARY_PATH;
@@ -117,6 +118,137 @@ function download(url) {
   });
 }
 
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let current = value;
+  let unitIndex = 0;
+  while (current >= 1024 && unitIndex < units.length - 1) {
+    current /= 1024;
+    unitIndex += 1;
+  }
+  if (unitIndex === 0) {
+    return `${Math.round(current)} ${units[unitIndex]}`;
+  }
+  return `${current.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatPercent(downloaded, total) {
+  if (!total || total <= 0) {
+    return "";
+  }
+  const percent = Math.min(100, (downloaded / total) * 100);
+  return `${percent.toFixed(0)}%`;
+}
+
+function formatRate(bytesPerSecond) {
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+function createProgressLogger(label, totalBytes) {
+  const startedAt = Date.now();
+  let downloadedBytes = 0;
+  let lastLoggedAt = 0;
+
+  function write(force = false) {
+    const now = Date.now();
+    if (!force && now - lastLoggedAt < PROGRESS_INTERVAL_MS) {
+      return;
+    }
+    lastLoggedAt = now;
+    const elapsedSeconds = Math.max(1, (now - startedAt) / 1000);
+    const rate = downloadedBytes / elapsedSeconds;
+    if (totalBytes > 0) {
+      console.log(
+        `downloading ${label}: ${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)} (${formatPercent(downloadedBytes, totalBytes)}) ${formatRate(rate)}`
+      );
+      return;
+    }
+    console.log(`downloading ${label}: ${formatBytes(downloadedBytes)} ${formatRate(rate)}`);
+  }
+
+  return {
+    update(chunkLength) {
+      downloadedBytes += chunkLength;
+      write(false);
+    },
+    finish() {
+      write(true);
+    }
+  };
+}
+
+function downloadToFile(url, outputPath, label) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          "user-agent": "officecli-npm-wrapper"
+        }
+      },
+      (response) => {
+        const status = response.statusCode || 0;
+
+        if ([301, 302, 303, 307, 308].includes(status) && response.headers.location) {
+          response.resume();
+          resolve(downloadToFile(response.headers.location, outputPath, label));
+          return;
+        }
+
+        if (status < 200 || status >= 300) {
+          const chunks = [];
+          response.on("data", (chunk) => chunks.push(chunk));
+          response.on("end", () => {
+            reject(
+              new Error(
+                `download failed: ${url} returned status ${status} ${Buffer.concat(chunks)
+                  .toString("utf8")
+                  .trim()}`
+              )
+            );
+          });
+          return;
+        }
+
+        const totalBytes = Number(response.headers["content-length"] || 0);
+        const progress = createProgressLogger(label, totalBytes);
+        const hash = crypto.createHash("sha256");
+        const file = fs.createWriteStream(outputPath);
+
+        response.on("data", (chunk) => {
+          hash.update(chunk);
+          progress.update(chunk.length);
+        });
+
+        response.on("error", (error) => {
+          file.destroy();
+          reject(error);
+        });
+
+        file.on("error", (error) => {
+          response.destroy(error);
+          reject(error);
+        });
+
+        file.on("finish", () => {
+          progress.finish();
+          file.close(() => {
+            resolve({
+              sha256: hash.digest("hex"),
+              totalBytes
+            });
+          });
+        });
+
+        response.pipe(file);
+      }
+    );
+
+    request.on("error", reject);
+  });
+}
+
 async function resolveLatestReleaseTag(distRepo, latestTag) {
   const payload = await download(githubApiUrl(distRepo, latestTag));
   const data = JSON.parse(payload.toString("utf8"));
@@ -203,9 +335,14 @@ async function installBinary({ verbose = true } = {}) {
     console.log(`installing officecli ${requestedVersion} for ${platform}/${arch} from ${distRepo}`);
   }
 
-  let archiveBuffer;
+  let archiveSha256;
+  let archivePath;
+  let tempDir;
   try {
-    archiveBuffer = await download(`${baseUrl}/${archive}`);
+    tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
+    archivePath = path.join(tempDir, archive);
+    const archiveDownload = await downloadToFile(`${baseUrl}/${archive}`, archivePath, archive);
+    archiveSha256 = archiveDownload.sha256;
   } catch (error) {
     if (requestedVersion !== "latest") {
       throw error;
@@ -214,20 +351,27 @@ async function installBinary({ verbose = true } = {}) {
     effectiveVersion = effectiveTag.replace(/^v/, "");
     archive = archiveName(effectiveVersion, platform, arch);
     baseUrl = releaseBaseUrl(distRepo, effectiveTag);
-    archiveBuffer = await download(`${baseUrl}/${archive}`);
+    if (!tempDir) {
+      tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
+    }
+    archivePath = path.join(tempDir, archive);
+    const archiveDownload = await downloadToFile(`${baseUrl}/${archive}`, archivePath, archive);
+    archiveSha256 = archiveDownload.sha256;
   }
 
   const checksumsBuffer = await download(`${baseUrl}/checksums.txt`);
   const expectedChecksum = readChecksum(checksumsBuffer.toString("utf8"), archive);
-  const actualChecksum = sha256(archiveBuffer);
-  if (expectedChecksum !== actualChecksum) {
+  if (verbose) {
+    console.log(`verifying checksum for ${archive}`);
+  }
+  if (expectedChecksum !== archiveSha256) {
     throw new Error(`checksum mismatch for ${archive}`);
   }
 
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
   try {
-    const archivePath = path.join(tempDir, archive);
-    await fsp.writeFile(archivePath, archiveBuffer);
+    if (verbose) {
+      console.log(`extracting ${archive}`);
+    }
     const extractedBinary = await extractArchive(archivePath, tempDir);
 
     await fsp.mkdir(RUNTIME_DIR, { recursive: true });
@@ -241,6 +385,9 @@ async function installBinary({ verbose = true } = {}) {
       platform,
       arch
     });
+    if (verbose) {
+      console.log(`installed officecli ${effectiveVersion} to ${BINARY_PATH}`);
+    }
   } finally {
     await fsp.rm(tempDir, { recursive: true, force: true });
   }
