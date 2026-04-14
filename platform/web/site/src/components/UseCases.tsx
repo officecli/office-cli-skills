@@ -21,7 +21,7 @@ export default function UseCases() {
     },
     {
       title: 'Ops and Research Teams',
-      description: 'Use one CLI for document generation today, then expand toward summarization, conversion, and editing workflows as the roadmap grows.',
+      description: 'Use one CLI for document creation and review today, then expand toward summarization, conversion, and editing workflows as the roadmap grows.',
       image: enterpriseVisual,
       borderClass: 'hover:border-secondary/20',
     },

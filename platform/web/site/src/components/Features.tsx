@@ -18,8 +18,8 @@ export default function Features() {
     },
     {
       icon: <ScanSearch className="text-secondary w-10 h-10 mb-6" />,
-      title: 'Generate Today, Review Today',
-      description: 'The current release generates PPTX, DOCX, XLSX, and HTML, and can review or score local PPTX decks.',
+      title: 'Create, Review, Export Today',
+      description: 'The current release creates PPTX, DOCX, XLSX, and HTML outputs, and can review or score local PPTX decks.',
       large: false,
     },
   ]
@@ -58,7 +58,7 @@ export default function Features() {
         >
           <div className="flex-1">
             <Sparkles className="text-primary w-10 h-10 mb-6" />
-            <h3 className="font-headline text-3xl font-bold text-white mb-4">Built to Expand Beyond Generation</h3>
+            <h3 className="font-headline text-3xl font-bold text-white mb-4">Built for Broader Document Operations</h3>
             <p className="text-outline-variant max-w-2xl">OfficeCLI starts with creation and PPT review, then expands toward conversion, modification, summarization, and richer document formatting workflows.</p>
           </div>
           <div className="hidden lg:flex w-48 h-24 bg-surface-high rounded border border-outline-variant/10 items-center justify-center">

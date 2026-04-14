@@ -1,5 +1,5 @@
 const availableNow = [
-  'Generate PPTX, DOCX, XLSX, and HTML files from natural-language prompts.',
+  'Create PPTX, DOCX, XLSX, and HTML files from natural-language prompts.',
   'Review and score local PPTX files, with optional visual review when soffice is available.',
   'Publish optional online previews when preview publishing is configured.',
 ]
