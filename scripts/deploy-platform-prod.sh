@@ -179,15 +179,26 @@ ENTRYPOINT ["/app/officecli-platform"]
 EOF
 
   log "Building image ${image_ref}"
-  (
-    cd "$PLATFORM_DIR"
-    docker buildx build \
-      --platform linux/amd64 \
-      -f "${dockerfile}" \
-      -t "${image_ref}" \
-      --load \
-      .
-  )
+  if docker buildx version >/dev/null 2>&1; then
+    (
+      cd "$PLATFORM_DIR"
+      docker buildx build \
+        --platform linux/amd64 \
+        -f "${dockerfile}" \
+        -t "${image_ref}" \
+        --load \
+        .
+    )
+  else
+    (
+      cd "$PLATFORM_DIR"
+      docker build \
+        --platform linux/amd64 \
+        -f "${dockerfile}" \
+        -t "${image_ref}" \
+        .
+    )
+  fi
 
   log "Exporting image archive ${archive_path}"
   docker save "${image_ref}" | gzip >"${archive_path}"
