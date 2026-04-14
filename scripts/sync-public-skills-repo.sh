@@ -171,7 +171,7 @@ auto_install_binary_if_missing() {
 install_skill
 auto_install_binary_if_missing
 
-echo "restart Codex to pick up the new skill"
+echo "restart your client to pick up the refreshed skill"
 INSTALLER
 
 chmod +x scripts/install-skill.sh
