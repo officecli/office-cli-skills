@@ -54,6 +54,7 @@ type Slide struct {
 	Content     string         `json:"content"`            // 幻灯片内容
 	IsTitle     bool           `json:"isTitle"`            // 是否为封面标题页
 	Layout      string         `json:"layout,omitempty"`   // "title" | "content" | "chart" | "dashboard"
+	Variant     string         `json:"variant,omitempty"`  // 具体视觉变体
 	Subtitle    string         `json:"subtitle,omitempty"` // 副标题（title 布局用）
 	Points      []string       `json:"points,omitempty"`   // 分点内容（简单列表）
 	Sections    []SlideSection `json:"sections,omitempty"` // 两级标题结构（罗列描述用）
@@ -71,9 +72,10 @@ type Slide struct {
 
 // PPTXOptions 配置生成选项
 type PPTXOptions struct {
-	Title   string      // 文档标题
-	Creator string      // 作者
-	Theme   *SlideTheme // 主题配色
+	Title       string      // 文档标题
+	Creator     string      // 作者
+	Theme       *SlideTheme // 主题配色
+	StylePreset string      // 风格预设
 }
 
 // PPTXGenerator PPTX 生成器
@@ -260,6 +262,10 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 	}
 
 	theme := getTheme(opts.Theme)
+	stylePreset := ResolveStylePreset(opts.StylePreset)
+	if strings.TrimSpace(opts.StylePreset) != "" {
+		theme = MergeThemeWithPreset(opts.Theme, opts.StylePreset)
+	}
 
 	// Count charts for Content_Types registration
 	chartCount := 0
@@ -280,7 +286,7 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 	files := g.buildBaseFiles(opts, len(slides), chartCount, imageCount > 0, theme)
 
 	// 添加幻灯片文件和图表文件（含嵌入 xlsx 二进制）
-	slideFiles, binaryFiles, err := g.generateSlidesWithEmbeds(slides, theme)
+	slideFiles, binaryFiles, err := g.generateSlidesWithEmbeds(slides, theme, stylePreset)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +345,7 @@ func (g *PPTXGenerator) buildBaseFiles(opts PPTXOptions, slideCount, chartCount 
 }
 
 // generateSlidesWithEmbeds generates all slide XMLs and embedded chart files.
-func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideTheme) (map[string]string, map[string][]byte, error) {
+func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideTheme, stylePreset PPTXStylePreset) (map[string]string, map[string][]byte, error) {
 	result := make(map[string]string)
 	binaries := make(map[string][]byte)
 
@@ -383,7 +389,7 @@ func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideThe
 			result[relsPath] = slideRels
 		}
 
-		result[slidePath] = g.createSlideXMLEnhanced(slide, theme, hasChart, chartIndex, slideNum, len(slides))
+		result[slidePath] = g.createSlideXMLEnhanced(slide, theme, stylePreset, hasChart, chartIndex, slideNum, len(slides))
 	}
 
 	return result, binaries, nil
@@ -752,24 +758,24 @@ func generateBackgroundXMLWithColors(bgType, bgColor1, bgColor2 string) string {
 }
 
 // createSlideXMLEnhanced 根据布局创建增强的幻灯片 XML
-func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, hasChart bool, chartIndex, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int) string {
 	layout := resolvedLayout(slide)
 
 	switch layout {
 	case "title":
-		return g.createTitleSlideXML(slide, theme, slideNum, totalSlides)
+		return g.createTitleSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	case "chart":
 		if hasChart {
-			return g.createChartSlideXML(slide, theme, chartIndex, slideNum, totalSlides)
+			return g.createChartSlideXML(slide, theme, stylePreset, chartIndex, slideNum, totalSlides)
 		}
-		return g.createChartAsShapesSlideXML(slide, theme, slideNum, totalSlides)
+		return g.createChartAsShapesSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	case "dashboard":
 		if hasChart {
-			return g.createDashboardSlideXML(slide, theme, hasChart, chartIndex, slideNum, totalSlides)
+			return g.createDashboardSlideXML(slide, theme, stylePreset, hasChart, chartIndex, slideNum, totalSlides)
 		}
-		return g.createDashboardAsShapesSlideXML(slide, theme, slideNum, totalSlides)
+		return g.createDashboardAsShapesSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	default:
-		return g.createContentSlideXML(slide, theme, slideNum, totalSlides)
+		return g.createContentSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	}
 }
 
@@ -944,7 +950,7 @@ func createSolidOverlayXML(shapeID int, name, color string, alpha int, x, y, cx,
 }
 
 // createTitleSlideXML 创建封面标题页 XML
-func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -956,6 +962,13 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, slid
 	titleX, titleY, titleCX, titleCY := 1500000, 2200000, 9200000, 1200000
 	subtitleX, subtitleY, subtitleCX, subtitleCY := 1500000, 3800000, 9200000, 800000
 	decorX, decorY, decorCX := 4596000, 3600000, 3000000
+	titleAlign := "ctr"
+	if slide.Variant == "title-split" || stylePreset.ID == StylePresetExecutiveDark {
+		titleX, titleY, titleCX, titleCY = 1000000, 1850000, 5000000, 1450000
+		subtitleX, subtitleY, subtitleCX, subtitleCY = 1000000, 3550000, 5000000, 850000
+		decorX, decorY, decorCX = 1000000, 1500000, 2600000
+		titleAlign = stylePreset.TitleAlign
+	}
 	imageXML := ""
 	overlayXML := ""
 	if imagePos == "background" {
@@ -1023,12 +1036,12 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, slid
                         <a:off x="%d" y="%d"/>
                         <a:ext cx="%d" cy="0"/>
                     </a:xfrm>
-                    <a:prstGeom prst="line"><a:avLst/></a:prstGeom>
+                    <a:prstGeom prst="%s"><a:avLst/></a:prstGeom>
                     <a:ln w="28575">
                         <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                     </a:ln>
                 </p:spPr>
-            </p:sp>`, decorX, decorY, decorCX, accentColor)
+            </p:sp>`, decorX, decorY, decorCX, stylePreset.TitleAccentShape, accentColor)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" 
@@ -1067,7 +1080,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, slid
                     <a:bodyPr anchor="b"/>
                     <a:lstStyle/>
                     <a:p>
-                        <a:pPr algn="ctr"/>
+                        <a:pPr algn="%s"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="4400" b="1">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
@@ -1081,7 +1094,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, slid
             </p:sp>%s%s%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, imageXML, overlayXML, titleX, titleY, titleCX, titleCY, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), decorLineXML, subtitleXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
+</p:sld>`, bgXML, imageXML, overlayXML, titleX, titleY, titleCX, titleCY, titleAlign, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), decorLineXML, subtitleXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
 }
 
 func splitPointCard(point string) (string, string) {
@@ -1182,7 +1195,7 @@ func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textCol
 	return sb.String()
 }
 
-func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily string) string {
+func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
 	if len(sections) == 0 {
 		return ""
 	}
@@ -1235,7 +1248,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                         <a:ext cx="%d" cy="%d"/>
                     </a:xfrm>
                     <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
-                    <a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="95000"/></a:srgbClr></a:solidFill>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
                     <a:ln w="12700">
                         <a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill>
                     </a:ln>
@@ -1300,13 +1313,13 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>`, cardID, idx+1, cardX, cardY, cardW, cardH, accentColor, headerID, idx+1, cardX+220000, cardY-120000, 1500000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading), textID, idx+1, cardX, cardY+220000, cardW, cardH-260000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+            </p:sp>`, cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, headerID, idx+1, cardX+220000, cardY-120000, 1500000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading), textID, idx+1, cardX, cardY+220000, cardW, cardH-260000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
 	}
 	return sb.String()
 }
 
 // createContentSlideXML 创建内容页 XML（支持分点）
-func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1320,6 +1333,9 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, sl
 	titleY, titleCY := 300000, 700000
 	subtitleY := 1000000
 	imageXML := ""
+	if slide.Variant == "image-right" {
+		imagePos = "right"
+	}
 	if imagePos == "right" {
 		contentX, contentY, contentCX, contentCY = 700000, 1500000, 5400000, 4800000
 		imageXML = createImagePictureXML(90, "RightImage", "rId2", 6400000, 1450000, 4800000, 4300000, slide.ImageData)
@@ -1370,7 +1386,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, sl
 	// 构建内容区域
 	contentXML := ""
 	if len(slide.Sections) > 0 {
-		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily)
+		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
 	} else if len(slide.Points) > 0 {
 		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
 			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily)
@@ -1530,7 +1546,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, sl
 // createChartSlideXML 创建包含图表的幻灯片 XML
 // createChartAsShapesSlideXML renders chart data as DrawingML shapes (colored bars + labels)
 // instead of embedded OOXML chart objects, for OfficeSDK compatibility.
-func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideTheme, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideTheme, _ PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1829,11 +1845,11 @@ func generatePointsXML(points []string, startID, y int, textColor, fontFamily, e
 }
 
 // createDashboardAsShapesSlideXML renders dashboard layout without embedded charts
-func (g *PPTXGenerator) createDashboardAsShapesSlideXML(slide Slide, theme *SlideTheme, slideNum, totalSlides int) string {
-	return g.createDashboardSlideXML(slide, theme, false, 0, slideNum, totalSlides)
+func (g *PPTXGenerator) createDashboardAsShapesSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
+	return g.createDashboardSlideXML(slide, theme, stylePreset, false, 0, slideNum, totalSlides)
 }
 
-func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, chartIndex, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, chartIndex, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1917,7 +1933,7 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, char
 }
 
 // createDashboardSlideXML 创建仪表盘布局 XML：指标卡片 + 可选图表 + 可选要点
-func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, hasChart bool, chartIndex, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)

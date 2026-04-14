@@ -35,6 +35,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		Style:        job.Style,
 		Audience:     job.Audience,
 		EnableImages: job.EnableImages,
+		LocalPreview: job.LocalPreview,
 	})
 	if err != nil {
 		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")
@@ -46,6 +47,9 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		fileName = job.Topic + "." + string(job.DocumentType)
 	}
 	filePath := filepath.Join(job.OutputDir, fileName)
+	fileBase := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	localPreviewPath := filepath.Join(job.OutputDir, fileBase+".preview.html")
+	localPreviewDataPath := filepath.Join(job.OutputDir, fileBase+".preview.json")
 	result := GenerateResult{
 		Status:       "success",
 		FilePath:     filePath,
@@ -97,6 +101,20 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	if err := os.WriteFile(filePath, artifact.Bytes, 0o644); err != nil {
 		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "File write failed")
 		return GenerateResult{}, fmt.Errorf("file write failed: %w", err)
+	}
+	if len(artifact.PreviewHTML) > 0 {
+		if err := os.WriteFile(localPreviewPath, artifact.PreviewHTML, 0o644); err != nil {
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview write failed")
+			return GenerateResult{}, fmt.Errorf("preview write failed: %w", err)
+		}
+		result.LocalPreviewPath = localPreviewPath
+	}
+	if len(artifact.PreviewJSON) > 0 {
+		if err := os.WriteFile(localPreviewDataPath, artifact.PreviewJSON, 0o644); err != nil {
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview write failed")
+			return GenerateResult{}, fmt.Errorf("preview write failed: %w", err)
+		}
+		result.LocalPreviewDataPath = localPreviewDataPath
 	}
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file written")
 

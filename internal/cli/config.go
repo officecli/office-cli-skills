@@ -41,9 +41,10 @@ func ResolveConfigPath(path string) string {
 func WriteDefaultConfig(path string) (string, error) {
 	defaultConfig := Config{
 		Defaults: DefaultsConfig{
-			OutputDir: "./output",
-			Mode:      "fast",
-			Publish:   true,
+			OutputDir:       "./output",
+			Mode:            "fast",
+			Publish:         true,
+			PPTXStylePreset: "tech-contrast",
 		},
 		Runtime: RuntimeConfig{
 			Mode: RuntimeModeExternal,
@@ -119,6 +120,7 @@ func applyEnvOverrides(cfg *Config) {
 	setIfPresent(&cfg.Publish.APIKey, "OFFICE_CLI_PUBLISH_API_KEY")
 	setIfPresent(&cfg.Defaults.OutputDir, "OFFICE_CLI_OUTPUT_DIR")
 	setIfPresent(&cfg.Defaults.Mode, "OFFICE_CLI_MODE")
+	setIfPresent(&cfg.Defaults.PPTXStylePreset, "OFFICE_CLI_PPTX_STYLE_PRESET")
 
 	if value := os.Getenv("OFFICE_CLI_PUBLISH_ENABLED"); value != "" {
 		cfg.Publish.Enabled = parseBool(value, cfg.Publish.Enabled)

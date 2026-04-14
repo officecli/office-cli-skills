@@ -767,6 +767,26 @@ func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T) {
+	cfg := Config{}
+	cfg.Defaults.PPTXStylePreset = "executive-dark"
+
+	job, err := BuildGenerateJob([]string{
+		"pptx",
+		"董事会汇报",
+		"--local-preview",
+	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.Style != "executive-dark" {
+		t.Fatalf("style = %q", job.Style)
+	}
+	if !job.LocalPreview {
+		t.Fatal("expected local preview to be enabled")
+	}
+}
+
 func TestRenderResult_JSONIncludesPublishFields(t *testing.T) {
 	var out bytes.Buffer
 	result := GenerateResult{

@@ -58,6 +58,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var audience string
 	var outDir string
 	var jsonOutput bool
+	var localPreview bool
 	var publishFlag boolValue
 	var noPublishFlag boolValue
 	var noImagesFlag boolValue
@@ -71,6 +72,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&audience, "audience", "", "")
 	fs.StringVar(&outDir, "out", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
+	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.Var(&publishFlag, "publish", "")
 	fs.Var(&noPublishFlag, "no-publish", "")
 	fs.Var(&noImagesFlag, "no-images", "")
@@ -168,6 +170,10 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if noImagesFlag.set && noImagesFlag.value {
 		enableImages = false
 	}
+	finalStyle := strings.TrimSpace(style)
+	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
+		finalStyle = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
+	}
 
 	return GenerateJob{
 		DocumentType: documentType,
@@ -177,9 +183,10 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		RuntimeMode:  selectedRuntimeMode,
 		Mode:         strings.ToLower(finalMode),
 		Language:     strings.TrimSpace(lang),
-		Style:        strings.TrimSpace(style),
+		Style:        finalStyle,
 		Audience:     strings.TrimSpace(audience),
 		EnableImages: enableImages,
+		LocalPreview: localPreview && documentType == engine.DocumentTypePPTX,
 		OutputDir:    finalOutputDir,
 		Publish:      publishEnabled,
 		JSONOutput:   jsonOutput,
@@ -201,7 +208,7 @@ func normalizeFlagArgs(args []string) []string {
 				continue
 			}
 			i++
-		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual":
+		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview":
 			flags = append(flags, current)
 			i++
 		default:
@@ -217,7 +224,8 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
 				strings.HasPrefix(current, "--no-images=") ||
-				strings.HasPrefix(current, "--no-visual=") {
+				strings.HasPrefix(current, "--no-visual=") ||
+				strings.HasPrefix(current, "--local-preview=") {
 				flags = append(flags, current)
 			} else {
 				positionals = append(positionals, current)

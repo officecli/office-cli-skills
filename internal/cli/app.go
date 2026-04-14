@@ -201,9 +201,10 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 func defaultInitConfig() Config {
 	return Config{
 		Defaults: DefaultsConfig{
-			OutputDir: "./output",
-			Mode:      "fast",
-			Publish:   true,
+			OutputDir:       "./output",
+			Mode:            "fast",
+			Publish:         true,
+			PPTXStylePreset: "tech-contrast",
 		},
 		Runtime: RuntimeConfig{
 			Mode: RuntimeModeExternal,
@@ -277,6 +278,7 @@ func HelpText() string {
   --style <value>         指定风格
   --audience <value>      指定受众
   --out <dir>             指定输出目录
+  --local-preview         额外生成本地 HTML/JSON 预览 sidecar（仅 pptx）
   --publish               强制发布在线预览
   --no-publish            禁止发布在线预览
   --no-images             关闭 PPT 自动配图
@@ -351,6 +353,7 @@ func NewHelpText() string {
   --style <value>         指定风格
   --audience <value>      指定受众
   --out <dir>             指定输出目录
+  --local-preview         额外生成本地 HTML/JSON 预览 sidecar（仅 pptx）
   --publish               强制发布在线预览
   --no-publish            禁止发布在线预览
   --no-images             关闭 PPT 自动配图
@@ -431,6 +434,9 @@ func (a *App) runConfigStatus(cfg Config) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "默认生成模式：%s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "默认 PPT 风格预设：%s\n", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "视觉评审模型：%s\n", fallbackString(cfg.LLM.ReviewModel, "gpt-5.4-mini")); err != nil {
@@ -560,6 +566,9 @@ func (a *App) runConfigSetDefaults(cfg Config) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Defaults.PPTXStylePreset, err = a.promptLine(reader, "请输入默认 PPT 风格预设", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
+		return err
+	}
 	path, err := WriteConfig("", cfg, true)
 	if err != nil {
 		return err
@@ -679,6 +688,9 @@ func mergeInitBaseConfig(defaults Config, base Config) Config {
 		cfg.Defaults.Mode = base.Defaults.Mode
 	}
 	cfg.Defaults.Publish = base.Defaults.Publish
+	if strings.TrimSpace(base.Defaults.PPTXStylePreset) != "" {
+		cfg.Defaults.PPTXStylePreset = base.Defaults.PPTXStylePreset
+	}
 	if base.Runtime.Mode != "" {
 		cfg.Runtime.Mode = base.Runtime.Mode
 	}

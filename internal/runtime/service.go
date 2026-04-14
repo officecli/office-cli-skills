@@ -22,6 +22,7 @@ type GenerateParams struct {
 	Style        string
 	Audience     string
 	EnableImages bool
+	LocalPreview bool
 }
 
 type GeneratedArtifact struct {
@@ -30,6 +31,8 @@ type GeneratedArtifact struct {
 	Bytes        []byte
 	Warnings     []engine.GenerateIssue
 	Errors       []engine.GenerateIssue
+	PreviewHTML  []byte
+	PreviewJSON  []byte
 }
 
 type Service struct {
@@ -74,7 +77,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypeXLSX:
 		return s.generateXLSX(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypePPTX:
-		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages)
+		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", params.DocumentType)
 	}
@@ -126,7 +129,7 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 	}, nil
 }
 
-func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages bool) (*GeneratedArtifact, error) {
+func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool) (*GeneratedArtifact, error) {
 	basePrompt := BuildPPTXPrompt(prompt, target, enableImages)
 	fallback := fallbackDescription(topic, prompt)
 	messages := []engine.LLMMessage{{Role: "user", Content: basePrompt}}
@@ -138,7 +141,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 	}
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "已收到 pptx 结构结果")
 
-	fileBytes, fileName, warnings, err := BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, enableImages)
+	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, target.Style, enableImages, localPreview)
 	if err != nil {
 		if !shouldRetryPPTXAssembly(err) {
 			return nil, err
@@ -150,7 +153,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 			return nil, fmt.Errorf("生成内容阶段失败：%w", err)
 		}
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "已收到结构化补救后的 pptx 结果")
-		fileBytes, fileName, warnings, err = BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, enableImages)
+		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, target.Style, enableImages, localPreview)
 		if err != nil {
 			return nil, err
 		}
@@ -160,6 +163,8 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		DocumentType: string(engine.DocumentTypePPTX),
 		Bytes:        fileBytes,
 		Warnings:     append(convertIssues(meta), warnings...),
+		PreviewHTML:  previewHTML,
+		PreviewJSON:  previewJSON,
 	}, nil
 }
 
@@ -218,9 +223,10 @@ func fallbackDescription(topic, prompt string) string {
 }
 
 type pptxPayload struct {
-	Title  string                `json:"title"`
-	Theme  *officegen.SlideTheme `json:"theme"`
-	Slides []officegen.Slide     `json:"slides"`
+	Title       string                `json:"title"`
+	StylePreset string                `json:"stylePreset,omitempty"`
+	Theme       *officegen.SlideTheme `json:"theme"`
+	Slides      []officegen.Slide     `json:"slides"`
 }
 
 type pptxArchetype string
@@ -238,6 +244,7 @@ const pptxStructuredSchema = `{
   "additionalProperties": false,
   "properties": {
     "title": { "type": "string" },
+    "stylePreset": { "type": "string" },
     "theme": {
       "anyOf": [
         {
@@ -282,6 +289,7 @@ const pptxStructuredSchema = `{
           "content": { "type": "string" },
           "isTitle": { "type": "boolean" },
           "layout": { "type": "string" },
+          "variant": { "type": "string" },
           "subtitle": { "type": "string" },
           "points": {
             "type": "array",
@@ -349,6 +357,7 @@ const pptxStructuredSchema = `{
           "content",
           "isTitle",
           "layout",
+          "variant",
           "subtitle",
           "points",
           "sections",
@@ -364,14 +373,16 @@ const pptxStructuredSchema = `{
       }
     }
   },
-  "required": ["title", "theme", "slides"]
+  "required": ["title", "stylePreset", "theme", "slides"]
 }`
 
 func BuildPPTXPrompt(description string, target generateengine.PromptTarget, enableImages bool) string {
 	archetype := detectPPTXArchetype(description, "")
+	presetHint := suggestStylePreset(target.Style, archetype)
 	slideExample := `    {
       "title": "章节标题",
       "layout": "content",
+      "variant": "bullets",
       "subtitle": "一句话结论",
       "points": ["要点1", "要点2", "要点3"],
       "source": "可选的数据来源"
@@ -381,6 +392,7 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 		slideExample = `    {
       "title": "章节标题",
       "layout": "content",
+      "variant": "image-right",
       "subtitle": "一句话结论",
       "points": ["要点1", "要点2", "要点3"],
       "hasImage": true,
@@ -404,6 +416,7 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 请严格输出 JSON，不要输出任何额外说明：
 {
   "title": "演示文稿标题",
+  "stylePreset": "%s",
   "theme": {
     "primaryColor": "1A73E8",
     "accentColor": "E8710A",
@@ -417,6 +430,7 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
     {
       "title": "封面标题",
       "layout": "title",
+      "variant": "title-center",
       "subtitle": "副标题",
       "isTitle": true
     },
@@ -424,11 +438,13 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
   ]
 }
 
-要求：
-- 总页数控制在 5-7 页，优先 6 页
-- 首页必须是 title 布局
-- 第 2 页优先给出总览/关键结论，最后 1 页优先给出行动建议或下一步
-- 每页只表达 1 个核心信息，标题尽量控制在 4-12 个字，subtitle 必须是一句结论或本页 takeaway，尽量控制在 14-24 个字，禁止出现省略号
+	要求：
+	- 总页数控制在 5-7 页，优先 6 页
+	- stylePreset 只能取 executive-dark、editorial-light、tech-contrast、training-manual 之一；如用户没有明确指定，按主题选择最贴近的一项
+	- 首页必须是 title 布局
+	- 第 2 页优先给出总览/关键结论，最后 1 页优先给出行动建议或下一步
+	- 每页都必须输出 variant；title 只能用 title-center 或 title-split，content 优先用 bullets、sections-grid、comparison、timeline、image-right，chart 用 chart-focus，dashboard 用 kpi-band
+	- 每页只表达 1 个核心信息，标题尽量控制在 4-12 个字，subtitle 必须是一句结论或本页 takeaway，尽量控制在 14-24 个字，禁止出现省略号
 - 内容页优先使用 content，必要时可用 chart 或 dashboard
 - 比较、步骤、区域、角色分工、培训路径这类页面，优先使用 sections：heading 2-6 个字，detail 12-24 个字
 - 客户价值、经营复盘、市场空间、竞争对比这类页面，优先补上 chart 或 dashboard 等证据型表达；如果没有可靠数字，也要改成 2-3 组 sections，不要只写长句 bullet
@@ -441,24 +457,24 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 - 如果适合做指标页，metrics 可包含 label/value/note，并补充 2-3 条动作或结论型 points
 - 结尾页必须给出 2-3 个带时间、责任主体或验证口径的下一步动作，避免空泛收尾
 - 用词要贴合受众与风格，优先量化表达、结论先行、避免“全面提升/持续赋能/生态闭环”这类空泛措辞
-%s
-%s`, description, generateengine.FormatDocumentPromptTarget(target), slideExample, imageRules, outlineRules)
+	%s
+	%s`, description, generateengine.FormatDocumentPromptTarget(target), presetHint, slideExample, imageRules, outlineRules)
 }
 
-func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback string, enableImages bool) ([]byte, string, []engine.GenerateIssue, error) {
+func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
 	emitProgress(ctx, progress, progressStepAssemble, "running", "正在解析 pptx 结构并准备素材")
 	content = generateengine.RepairUnescapedQuotes(generateengine.ExtractJSON(content))
 
 	var payload pptxPayload
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "pptx 结构解析失败")
-		return nil, "", nil, fmt.Errorf("文档组装阶段失败：parse llm response: %w", err)
+		return nil, "", nil, nil, nil, fmt.Errorf("文档组装阶段失败：parse llm response: %w", err)
 	}
 	if len(payload.Slides) == 0 {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "pptx 结构为空")
-		return nil, "", nil, fmt.Errorf("文档组装阶段失败：slides cannot be empty")
+		return nil, "", nil, nil, nil, fmt.Errorf("文档组装阶段失败：slides cannot be empty")
 	}
-	warnings := normalizePPTXPayload(&payload, fallback, enableImages)
+	warnings := normalizePPTXPayload(&payload, fallback, requestedStyle, enableImages)
 	if !enableImages {
 		for idx := range payload.Slides {
 			payload.Slides[idx].HasImage = false
@@ -502,51 +518,59 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 
 	emitProgress(ctx, progress, progressStepAssemble, "running", "正在打包 pptx 文件")
 	fileBytes, err := officegen.NewPPTXGenerator().Generate(payload.Slides, officegen.PPTXOptions{
-		Title:   payload.Title,
-		Creator: "ClaudeOffice",
-		Theme:   payload.Theme,
+		Title:       payload.Title,
+		Creator:     "ClaudeOffice",
+		Theme:       payload.Theme,
+		StylePreset: payload.StylePreset,
 	})
 	if err != nil {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "pptx 打包失败")
-		return nil, "", nil, fmt.Errorf("文档组装阶段失败：generate pptx: %w", err)
+		return nil, "", nil, nil, nil, fmt.Errorf("文档组装阶段失败：generate pptx: %w", err)
 	}
 	emitProgress(ctx, progress, progressStepAssemble, "completed", "pptx 文件组装完成")
+
+	var previewHTML []byte
+	var previewJSON []byte
+	if localPreview {
+		previewWarnings := make([]string, 0, len(warnings))
+		for _, warning := range warnings {
+			if strings.TrimSpace(warning.Message) == "" {
+				continue
+			}
+			previewWarnings = append(previewWarnings, warning.Message)
+		}
+		previewJSON, _ = officegen.BuildLocalPreviewJSON(payload.Title, payload.StylePreset, payload.Theme, payload.Slides, previewWarnings)
+		previewHTML = officegen.BuildLocalPreviewHTML(payload.Title, payload.StylePreset, payload.Theme, payload.Slides, previewWarnings)
+	}
 
 	title := strings.TrimSpace(payload.Title)
 	if title == "" {
 		title = generateengine.ExtractTitleFromDescription(fallback)
 	}
-	return fileBytes, fmt.Sprintf("%s.pptx", generateengine.SanitizeFileName(title)), warnings, nil
+	return fileBytes, fmt.Sprintf("%s.pptx", generateengine.SanitizeFileName(title)), warnings, previewHTML, previewJSON, nil
 }
 
 func DecodeBase64Image(data string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(data)
 }
 
-func normalizePPTXPayload(payload *pptxPayload, fallback string, enableImages bool) []engine.GenerateIssue {
+func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string, enableImages bool) []engine.GenerateIssue {
 	if payload == nil {
 		return nil
 	}
 
 	warnings := make([]engine.GenerateIssue, 0, 2)
 	payload.Title = trimRunes(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "演示文稿"), 30)
-
-	if payload.Theme == nil {
-		payload.Theme = &officegen.SlideTheme{}
-	}
-	if strings.TrimSpace(payload.Theme.FontFamily) == "" {
-		payload.Theme.FontFamily = "Noto Sans CJK SC"
-	}
-	if strings.TrimSpace(payload.Theme.EAFontFamily) == "" {
-		payload.Theme.EAFontFamily = payload.Theme.FontFamily
-	}
+	archetype := detectPPTXArchetype(fallback, payload.Title)
+	payload.StylePreset = suggestStylePreset(firstNonEmpty(strings.TrimSpace(payload.StylePreset), strings.TrimSpace(requestedStyle)), archetype)
+	payload.Theme = officegen.MergeThemeWithPreset(payload.Theme, payload.StylePreset)
 
 	slides := make([]officegen.Slide, 0, len(payload.Slides))
 	imageBudget := 1
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
-		if len(slides) >= 7 {
+		if len(slides) >= 9 {
 			slidesTrimmed = true
 			break
 		}
@@ -557,7 +581,12 @@ func normalizePPTXPayload(payload *pptxPayload, fallback string, enableImages bo
 		if isEmptyNormalizedSlide(normalized) {
 			continue
 		}
-		slides = append(slides, normalized)
+		slides = append(slides, expandSlideForDensity(normalized)...)
+		if len(slides) > 9 {
+			slidesTrimmed = true
+			slides = slides[:9]
+			break
+		}
 	}
 
 	if len(slides) == 0 {
@@ -570,6 +599,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback string, enableImages bo
 	}
 
 	slides[0].Layout = "title"
+	slides[0].Variant = normalizeSlideVariant(slides[0])
 	slides[0].IsTitle = true
 	slides[0].HasImage = false
 	slides[0].ImagePrompt = ""
@@ -596,10 +626,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback string, enableImages bo
 		}
 	}
 
-	archetype := detectPPTXArchetype(fallback, payload.Title)
-	if archetype != pptxArchetypeGeneral {
-		slides = enforceArchetypeSkeleton(slides, archetype, payload.Title)
-	}
+	slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
 
 	payload.Slides = slides
 
@@ -607,7 +634,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback string, enableImages bo
 		warnings = append(warnings, engine.GenerateIssue{
 			Code:    "WARN_PPT_SLIDES_TRIMMED",
 			Field:   "slides",
-			Message: "生成结果页数超出质量约束，已自动裁剪到 7 页以内。",
+			Message: "生成结果页数超出质量约束，已自动裁剪到 9 页以内。",
 		})
 	}
 	if imagesAdjusted {
@@ -636,6 +663,7 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 	default:
 		slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
 	}
+	slide.Variant = normalizeSlideVariant(slide)
 
 	slide.Points = normalizePoints(slide.Points, 4, 34)
 	slide.Sections = normalizeSections(slide.Sections, 3)
@@ -770,6 +798,182 @@ func normalizeMetrics(metrics []officegen.MetricCard, limit int) []officegen.Met
 		}
 	}
 	return out
+}
+
+func suggestStylePreset(style string, archetype pptxArchetype) string {
+	text := strings.ToLower(strings.TrimSpace(style))
+	switch {
+	case text == officegen.StylePresetExecutiveDark,
+		strings.Contains(text, "董事会"),
+		strings.Contains(text, "高管"),
+		strings.Contains(text, "executive"):
+		return officegen.StylePresetExecutiveDark
+	case text == officegen.StylePresetEditorialLight,
+		strings.Contains(text, "editorial"),
+		strings.Contains(text, "杂志"),
+		strings.Contains(text, "白底"),
+		strings.Contains(text, "浅色"):
+		return officegen.StylePresetEditorialLight
+	case text == officegen.StylePresetTrainingManual,
+		strings.Contains(text, "培训"),
+		strings.Contains(text, "教程"),
+		strings.Contains(text, "manual"):
+		return officegen.StylePresetTrainingManual
+	case text == officegen.StylePresetTechContrast,
+		strings.Contains(text, "科技"),
+		strings.Contains(text, "contrast"),
+		strings.Contains(text, "技术"):
+		return officegen.StylePresetTechContrast
+	}
+	switch archetype {
+	case pptxArchetypeCompany, pptxArchetypeOps:
+		return officegen.StylePresetExecutiveDark
+	case pptxArchetypeMarket:
+		return officegen.StylePresetEditorialLight
+	case pptxArchetypeTraining:
+		return officegen.StylePresetTrainingManual
+	default:
+		return officegen.StylePresetTechContrast
+	}
+}
+
+func normalizeSlideVariant(slide officegen.Slide) string {
+	switch strings.TrimSpace(slide.Layout) {
+	case "title":
+		if strings.TrimSpace(slide.Variant) == "title-split" {
+			return "title-split"
+		}
+		return "title-center"
+	case "chart":
+		return "chart-focus"
+	case "dashboard":
+		return "kpi-band"
+	default:
+		switch strings.TrimSpace(slide.Variant) {
+		case "sections-grid", "comparison", "timeline", "image-right", "bullets":
+			return strings.TrimSpace(slide.Variant)
+		}
+		if slide.HasImage {
+			return "image-right"
+		}
+		if len(slide.Sections) > 0 {
+			return "sections-grid"
+		}
+		return "bullets"
+	}
+}
+
+func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
+	switch {
+	case len(slide.Points) > 4:
+		return splitSlidePoints(slide, 4)
+	case slide.HasImage && len(slide.Points) > 3:
+		return splitSlidePoints(slide, 3)
+	case len(slide.Sections) > 3:
+		return splitSlideSections(slide, 3)
+	case len(slide.Metrics) > 4:
+		return splitSlideMetrics(slide, 4)
+	default:
+		return []officegen.Slide{slide}
+	}
+}
+
+func splitSlidePoints(slide officegen.Slide, chunk int) []officegen.Slide {
+	if chunk <= 0 || len(slide.Points) <= chunk {
+		return []officegen.Slide{slide}
+	}
+	out := make([]officegen.Slide, 0, (len(slide.Points)+chunk-1)/chunk)
+	for start := 0; start < len(slide.Points); start += chunk {
+		end := start + chunk
+		if end > len(slide.Points) {
+			end = len(slide.Points)
+		}
+		next := slide
+		next.Points = append([]string(nil), slide.Points[start:end]...)
+		if start > 0 {
+			next.Title = slide.Title + "（续）"
+			next.HasImage = false
+			next.ImagePrompt = ""
+			next.ImagePos = ""
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func splitSlideSections(slide officegen.Slide, chunk int) []officegen.Slide {
+	if chunk <= 0 || len(slide.Sections) <= chunk {
+		return []officegen.Slide{slide}
+	}
+	out := make([]officegen.Slide, 0, (len(slide.Sections)+chunk-1)/chunk)
+	for start := 0; start < len(slide.Sections); start += chunk {
+		end := start + chunk
+		if end > len(slide.Sections) {
+			end = len(slide.Sections)
+		}
+		next := slide
+		next.Sections = append([]officegen.SlideSection(nil), slide.Sections[start:end]...)
+		if start > 0 {
+			next.Title = slide.Title + "（续）"
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func splitSlideMetrics(slide officegen.Slide, chunk int) []officegen.Slide {
+	if chunk <= 0 || len(slide.Metrics) <= chunk {
+		return []officegen.Slide{slide}
+	}
+	out := make([]officegen.Slide, 0, (len(slide.Metrics)+chunk-1)/chunk)
+	for start := 0; start < len(slide.Metrics); start += chunk {
+		end := start + chunk
+		if end > len(slide.Metrics) {
+			end = len(slide.Metrics)
+		}
+		next := slide
+		next.Metrics = append([]officegen.MetricCard(nil), slide.Metrics[start:end]...)
+		if start > 0 {
+			next.Title = slide.Title + "（续）"
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func softlyApplyArchetypeDefaults(slides []officegen.Slide, archetype pptxArchetype, deckTitle string) []officegen.Slide {
+	if len(slides) == 0 {
+		return slides
+	}
+	if archetype == pptxArchetypeGeneral {
+		return slides
+	}
+	slides = ensureMinimumSlides(slides, 6, archetype, deckTitle)
+	if len(slides) > 8 {
+		return slides
+	}
+	defaults := make([]officegen.Slide, 0, 6)
+	for i := 0; i < 6; i++ {
+		defaults = append(defaults, defaultArchetypeSlide(archetype, i, deckTitle))
+	}
+	for idx := 1; idx < len(slides) && idx < len(defaults); idx++ {
+		if isWeakArchetypeSlide(slides[idx]) {
+			defaultSlide := defaults[idx]
+			defaultSlide.Variant = normalizeSlideVariant(defaultSlide)
+			slides[idx] = defaultSlide
+		}
+	}
+	for idx := range slides {
+		if strings.TrimSpace(slides[idx].Variant) == "" {
+			slides[idx].Variant = normalizeSlideVariant(slides[idx])
+		}
+	}
+	return slides
+}
+
+func isWeakArchetypeSlide(slide officegen.Slide) bool {
+	return strings.TrimSpace(slide.Title) == "" ||
+		(strings.TrimSpace(slide.Subtitle) == "" && len(slide.Points) == 0 && len(slide.Sections) == 0 && len(slide.Metrics) == 0 && slide.Chart == nil)
 }
 
 func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {

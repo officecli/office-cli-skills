@@ -16,6 +16,16 @@ func RenderResult(w io.Writer, result GenerateResult, jsonOutput bool) error {
 	if _, err := fmt.Fprintf(w, "Generation completed. Saved to %s\n", result.FilePath); err != nil {
 		return err
 	}
+	if strings.TrimSpace(result.LocalPreviewPath) != "" {
+		if _, err := fmt.Fprintf(w, "Local preview: %s\n", result.LocalPreviewPath); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(result.LocalPreviewDataPath) != "" {
+		if _, err := fmt.Fprintf(w, "Local preview data: %s\n", result.LocalPreviewDataPath); err != nil {
+			return err
+		}
+	}
 	if result.Published {
 		if _, err := fmt.Fprintf(w, "Preview URL: %s; Password: %s\n", result.AccessURL, result.Password); err != nil {
 			return err

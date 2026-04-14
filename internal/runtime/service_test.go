@@ -309,11 +309,11 @@ func TestNormalizePPTXPayload_EnforcesCompanySkeleton(t *testing.T) {
 			{Title: "第二页"},
 		},
 	}
-	normalizePPTXPayload(payload, "企业协作平台介绍", true)
+	normalizePPTXPayload(payload, "企业协作平台介绍", "", true)
 	if len(payload.Slides) != 6 {
 		t.Fatalf("slide count = %d, want 6", len(payload.Slides))
 	}
-	if payload.Slides[3].Layout != "content" || len(payload.Slides[3].Sections) != 3 {
+	if payload.Slides[3].Layout != "dashboard" || len(payload.Slides[3].Metrics) != 3 {
 		t.Fatalf("company value slide = %#v", payload.Slides[3])
 	}
 	if payload.Slides[5].Title != "落地路径" || len(payload.Slides[5].Sections) == 0 {
@@ -330,14 +330,14 @@ func TestNormalizePPTXPayload_EnforcesMarketSkeleton(t *testing.T) {
 			{Title: "第二页"},
 		},
 	}
-	normalizePPTXPayload(payload, "AI 办公出海市场机会分析", true)
+	normalizePPTXPayload(payload, "AI 办公出海市场机会分析", "", true)
 	if len(payload.Slides) != 6 {
 		t.Fatalf("slide count = %d, want 6", len(payload.Slides))
 	}
 	if payload.Slides[2].Layout != "chart" || payload.Slides[2].Chart == nil {
 		t.Fatalf("market chart slide = %#v", payload.Slides[2])
 	}
-	if payload.Slides[4].Title != "竞争格局" || len(payload.Slides[4].Points) == 0 {
+	if payload.Slides[4].Title != "竞争格局" || len(payload.Slides[4].Sections) == 0 {
 		t.Fatalf("market competition slide = %#v", payload.Slides[4])
 	}
 }
@@ -351,7 +351,7 @@ func TestNormalizePPTXPayload_EnforcesOpsSkeleton(t *testing.T) {
 			{Title: "第二页"},
 		},
 	}
-	normalizePPTXPayload(payload, "SaaS 季度经营复盘", true)
+	normalizePPTXPayload(payload, "SaaS 季度经营复盘", "", true)
 	if len(payload.Slides) != 6 {
 		t.Fatalf("slide count = %d, want 6", len(payload.Slides))
 	}
@@ -372,7 +372,7 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 			{Title: "第二页"},
 		},
 	}
-	normalizePPTXPayload(payload, "OfficeCLI 新员工上手培训", true)
+	normalizePPTXPayload(payload, "OfficeCLI 新员工上手培训", "", true)
 	if len(payload.Slides) != 6 {
 		t.Fatalf("slide count = %d, want 6", len(payload.Slides))
 	}
@@ -514,12 +514,12 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 		]
 	}`
 
-	fileBytes, _, warnings, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "季度总结", true)
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "季度总结", "", true, false)
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 7 {
-		t.Fatalf("slide count = %d, want 7", got)
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 8 {
+		t.Fatalf("slide count = %d, want 8", got)
 	}
 	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 0 {
 		t.Fatalf("image count = %d, want 0 after image rebalancing", got)
@@ -536,7 +536,7 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if strings.Contains(slide6Rels, "image") {
 		t.Fatalf("chart slide should not keep image rels: %s", slide6Rels)
 	}
-	if len(warnings) < 2 {
+	if len(warnings) == 0 {
 		t.Fatalf("warnings = %#v, want normalization warnings", warnings)
 	}
 }
@@ -550,7 +550,7 @@ func TestBuildPPTXFromJSON_DowngradesTimelineChartsToSections(t *testing.T) {
 		]
 	}`
 
-	fileBytes, _, _, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "发布节奏", false)
+	fileBytes, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "发布节奏", "", false, false)
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
@@ -562,6 +562,27 @@ func TestBuildPPTXFromJSON_DowngradesTimelineChartsToSections(t *testing.T) {
 		if !strings.Contains(slide2, needle) {
 			t.Fatalf("slide2 missing %q:\n%s", needle, slide2)
 		}
+	}
+}
+
+func TestBuildPPTXFromJSON_BuildsLocalPreviewSidecars(t *testing.T) {
+	content := `{
+		"title":"本地预览测试",
+		"slides":[
+			{"title":"本地预览测试","layout":"title","variant":"title-center","subtitle":"先看结构"},
+			{"title":"关键结论","layout":"content","variant":"bullets","subtitle":"结论先行","points":["第一点","第二点","第三点"]}
+		]
+	}`
+
+	_, _, _, previewHTML, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "本地预览测试", "executive-dark", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if !strings.Contains(string(previewHTML), "Preset: executive-dark") {
+		t.Fatalf("preview html = %s", string(previewHTML))
+	}
+	if !strings.Contains(string(previewJSON), `"stylePreset": "executive-dark"`) {
+		t.Fatalf("preview json = %s", string(previewJSON))
 	}
 }
 

@@ -28,6 +28,18 @@ func (f failingGenerator) Generate(_ context.Context, _ GenerateParams) (*Genera
 	return nil, f.err
 }
 
+type previewGenerator struct{}
+
+func (previewGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + ".pptx",
+		DocumentType: string(params.DocumentType),
+		Bytes:        []byte("pptx-bytes"),
+		PreviewHTML:  []byte("<html>preview</html>"),
+		PreviewJSON:  []byte(`{"title":"preview"}`),
+	}, nil
+}
+
 type fakePublisher struct{}
 
 func (fakePublisher) Publish(_ context.Context, req PublishRequest) (*PublishResult, error) {
@@ -101,6 +113,32 @@ func TestExecutorGenerateAndPublish(t *testing.T) {
 	}
 	if result.AccessURL == "" || result.Password == "" || result.ExpiresAt == "" {
 		t.Fatalf("unexpected publish result: %+v", result)
+	}
+}
+
+func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(previewGenerator{}, fakePublisher{}, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "企业协作平台介绍",
+		Prompt:       "介绍这款企业协作平台的产品能力、客户价值与应用场景",
+		OutputDir:    tmpDir,
+		Publish:      false,
+		LocalPreview: true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.LocalPreviewPath == "" || result.LocalPreviewDataPath == "" {
+		t.Fatalf("preview paths = %+v", result)
+	}
+	if _, err := os.Stat(result.LocalPreviewPath); err != nil {
+		t.Fatalf("stat preview html: %v", err)
+	}
+	if _, err := os.Stat(result.LocalPreviewDataPath); err != nil {
+		t.Fatalf("stat preview json: %v", err)
 	}
 }
 

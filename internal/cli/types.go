@@ -20,9 +20,10 @@ type Config struct {
 }
 
 type DefaultsConfig struct {
-	OutputDir string `json:"output_dir"`
-	Mode      string `json:"mode"`
-	Publish   bool   `json:"publish"`
+	OutputDir       string `json:"output_dir"`
+	Mode            string `json:"mode"`
+	Publish         bool   `json:"publish"`
+	PPTXStylePreset string `json:"pptx_style_preset,omitempty"`
 }
 
 type RuntimeMode string
@@ -73,6 +74,7 @@ type GenerateJob struct {
 	Style        string
 	Audience     string
 	EnableImages bool
+	LocalPreview bool
 	OutputDir    string
 	Publish      bool
 	JSONOutput   bool
@@ -89,6 +91,8 @@ type GenerateResult struct {
 	Password               string   `json:"password,omitempty"`
 	ExpiresAt              string   `json:"expires_at,omitempty"`
 	Warnings               []string `json:"warnings,omitempty"`
+	LocalPreviewPath       string   `json:"local_preview_path,omitempty"`
+	LocalPreviewDataPath   string   `json:"local_preview_data_path,omitempty"`
 	AccessMode             string   `json:"access_mode,omitempty"`
 	RuntimeMode            string   `json:"runtime_mode,omitempty"`
 	AllowedModes           []string `json:"allowed_modes,omitempty"`
