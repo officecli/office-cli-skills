@@ -39,9 +39,11 @@ export function initAnalytics() {
   }
 
   window.dataLayer = window.dataLayer ?? []
-  window.gtag = window.gtag ?? ((...args: unknown[]) => {
-    window.dataLayer?.push(args)
-  })
+  window.gtag =
+    window.gtag ??
+    function gtag() {
+      window.dataLayer?.push(arguments)
+    }
   window.gtag('js', new Date())
   window.gtag('config', measurementID, { send_page_view: false })
   analyticsInitialized = true
