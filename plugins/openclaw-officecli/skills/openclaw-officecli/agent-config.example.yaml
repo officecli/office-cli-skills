@@ -1,0 +1,6 @@
+agents:
+  office-bot:
+    model: openai/gpt-4o
+    channels: [telegram]
+    skills: [openclaw-officecli]
+    tools: [shell, file_read]

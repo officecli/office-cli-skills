@@ -5,6 +5,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OFFICECLI_SKILL_DIR="${REPO_ROOT}/skills/officecli"
 OPENCLAW_SKILL_DIR="${REPO_ROOT}/skills/openclaw-officecli"
+OFFICECLI_PLUGIN_SKILL_DIR="${REPO_ROOT}/plugins/officecli/skills/officecli"
+OPENCLAW_PLUGIN_SKILL_DIR="${REPO_ROOT}/plugins/openclaw-officecli/skills/openclaw-officecli"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "${TMP_ROOT}"' EXIT
 
@@ -24,6 +26,13 @@ assert_contains() {
   local file="$1"
   local needle="$2"
   grep -q --fixed-strings "${needle}" "${file}" || fail "expected ${file} to contain ${needle}"
+}
+
+assert_dirs_equal() {
+  local left="$1"
+  local right="$2"
+  local msg="$3"
+  diff -rq "${left}" "${right}" >/dev/null || fail "${msg}: ${left} != ${right}"
 }
 
 make_fake_officecli() {
@@ -84,7 +93,7 @@ case "${1:-}" in
       status)
         echo "Config file path: ${OFFICE_CLI_CONFIG:-${STATE_DIR}/config.json}"
         echo "Generation service configured: $([[ ${GENERATION_READY} -eq 1 ]] && echo true || echo false)"
-        echo "Quota validation enabled: $([[ ${LICENSE_READY} -eq 1 ]] && echo true || echo false)"
+        echo "Access checks enabled: $([[ ${LICENSE_READY} -eq 1 ]] && echo true || echo false)"
         echo "Paid quota key configured: false"
         echo "Online preview publishing enabled: $([[ ${PUBLISH_READY} -eq 1 ]] && echo true || echo false)"
         ;;
@@ -275,5 +284,8 @@ assert_contains "${case6_dir}/out.json" '"status":"ready"'
 assert_contains "${case6_dir}/out.json" '"missing_items":[]'
 assert_contains "${case6_dir}/skill/config.yaml" 'office_cli_path: "'
 assert_contains "${case6_dir}/skill/config.yaml" 'agent_bridge_command: "'
+
+assert_dirs_equal "${OFFICECLI_SKILL_DIR}" "${OFFICECLI_PLUGIN_SKILL_DIR}" "officecli plugin skill bundle drift"
+assert_dirs_equal "${OPENCLAW_SKILL_DIR}" "${OPENCLAW_PLUGIN_SKILL_DIR}" "openclaw plugin skill bundle drift"
 
 echo "skill environment tests passed"

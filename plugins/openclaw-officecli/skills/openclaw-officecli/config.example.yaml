@@ -1,0 +1,6 @@
+office_cli_path: ""
+agent_bridge_command: "officecli agent-bridge"
+default_mode: "fast"
+default_output_format: "json"
+default_lang: "zh-CN"
+default_publish: false
