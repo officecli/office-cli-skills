@@ -78,6 +78,64 @@ func TestNewPublisherUsesEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 	}
 }
 
+func TestNewPublisherNormalizesEmbeddedBaseURLWithAPISuffix(t *testing.T) {
+	originalBaseURL := EmbeddedPublishBaseURL
+	originalKeyID := EmbeddedPublishAuthKeyID
+	originalAuthKey := EmbeddedPublishAuthKey
+	defer func() {
+		EmbeddedPublishBaseURL = originalBaseURL
+		EmbeddedPublishAuthKeyID = originalKeyID
+		EmbeddedPublishAuthKey = originalAuthKey
+	}()
+
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/attachment/upload":
+			_, _ = io.WriteString(w, `{"data":{"storage_key":"store-1"}}`)
+		case "/api/preview-shares":
+			_, _ = io.WriteString(w, `{"access_url":"https://claudeoffice.com/preview/t/1","password":"123456"}`)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	EmbeddedPublishBaseURL = "https://claudeoffice.com"
+	EmbeddedPublishAuthKeyID = "embedded-key-id"
+	EmbeddedPublishAuthKey = "embedded-secret"
+
+	publisher, err := NewPublisher(Config{
+		Enabled: true,
+		BaseURL: server.URL + "/api",
+	})
+	if err != nil {
+		t.Fatalf("NewPublisher: %v", err)
+	}
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "deck.pptx")
+	if err := os.WriteFile(filePath, []byte("pptx"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := publisher.Publish(context.Background(), PublishRequest{
+		LocalFilePath: filePath,
+		DocumentType:  "pptx",
+		DocumentName:  "Shanghai and Beijing",
+	}); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	if len(paths) != 2 {
+		t.Fatalf("expected 2 embedded publish requests, got %d (%v)", len(paths), paths)
+	}
+	for _, path := range paths {
+		if strings.HasPrefix(path, "/api/api/") {
+			t.Fatalf("expected embedded base URL normalization, got path %s", path)
+		}
+	}
+}
+
 func TestValidateConfigAllowsEmbeddedDynamicAuthWithoutAPIKey(t *testing.T) {
 	originalBaseURL := EmbeddedPublishBaseURL
 	originalAuthKey := EmbeddedPublishAuthKey

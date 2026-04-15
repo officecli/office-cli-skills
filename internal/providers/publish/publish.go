@@ -59,7 +59,7 @@ func NewPublisher(cfg Config) (Publisher, error) {
 	case "", "http", "internal":
 		if canUseEmbeddedDynamicAuth(cfg) {
 			return &claudeOfficePublisher{
-				baseURL: strings.TrimRight(strings.TrimSpace(effectiveBaseURL(cfg)), "/"),
+				baseURL: normalizeEmbeddedBaseURL(effectiveBaseURL(cfg)),
 				keyID:   strings.TrimSpace(EmbeddedPublishAuthKeyID),
 				secret:  strings.TrimSpace(EmbeddedPublishAuthKey),
 				client:  &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
@@ -104,6 +104,11 @@ func effectiveBaseURL(cfg Config) string {
 
 func canUseEmbeddedDynamicAuth(cfg Config) bool {
 	return SupportsEmbeddedDynamicAuth() && strings.TrimSpace(effectiveBaseURL(cfg)) != ""
+}
+
+func normalizeEmbeddedBaseURL(raw string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(raw), "/")
+	return strings.TrimSuffix(baseURL, "/api")
 }
 
 func timeoutFor(seconds int) time.Duration {
