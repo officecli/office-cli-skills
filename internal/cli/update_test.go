@@ -24,6 +24,7 @@ func TestDetectInstallMethodFallsBackToScriptPath(t *testing.T) {
 	t.Setenv(updateInstallMethodEnv, "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
 
 	method, err := detectInstallMethod(filepath.Join(home, ".local", "bin", "officecli"))
 	if err != nil {
@@ -38,6 +39,33 @@ func TestDetectInstallMethodRecognizesNPMRuntimePath(t *testing.T) {
 	t.Setenv(updateInstallMethodEnv, "")
 
 	method, err := detectInstallMethod("/Users/luyang/.nvm/versions/node/v25.5.0/lib/node_modules/officecli/runtime/officecli")
+	if err != nil {
+		t.Fatalf("detectInstallMethod: %v", err)
+	}
+	if method != InstallMethodNPM {
+		t.Fatalf("method = %q, want %q", method, InstallMethodNPM)
+	}
+}
+
+func TestDetectInstallMethodRecognizesNPMSidecarRuntimeMetadata(t *testing.T) {
+	t.Setenv(updateInstallMethodEnv, "")
+	packageRoot := t.TempDir()
+	runtimeDir := filepath.Join(packageRoot, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	execPath := filepath.Join(runtimeDir, "officecli")
+	if err := os.WriteFile(execPath, []byte(""), 0o755); err != nil {
+		t.Fatalf("WriteFile exec: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.json"), []byte("{\"name\":\"officecli\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile package.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "metadata.json"), []byte("{\"packageManager\":\"pnpm\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile metadata.json: %v", err)
+	}
+
+	method, err := detectInstallMethod(execPath)
 	if err != nil {
 		t.Fatalf("detectInstallMethod: %v", err)
 	}
@@ -75,6 +103,30 @@ func TestDetectedPackageManagerFallsBackToNPMFromExecutablePath(t *testing.T) {
 	got := detectPackageManagerFromPaths([]string{"/Users/luyang/.nvm/versions/node/v25.5.0/bin/officecli"})
 	if got != "npm" {
 		t.Fatalf("detectPackageManagerFromPaths = %q, want %q", got, "npm")
+	}
+}
+
+func TestDetectedPackageManagerUsesNPMSidecarMetadata(t *testing.T) {
+	t.Setenv(updatePackageManagerEnv, "")
+	packageRoot := t.TempDir()
+	runtimeDir := filepath.Join(packageRoot, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	execPath := filepath.Join(runtimeDir, "officecli")
+	if err := os.WriteFile(execPath, []byte(""), 0o755); err != nil {
+		t.Fatalf("WriteFile exec: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.json"), []byte("{\"name\":\"officecli\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile package.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "metadata.json"), []byte("{\"packageManager\":\"pnpm\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile metadata.json: %v", err)
+	}
+
+	got := detectPackageManagerFromNPMMetadata([]string{execPath})
+	if got != "pnpm" {
+		t.Fatalf("detectPackageManagerFromNPMMetadata = %q, want %q", got, "pnpm")
 	}
 }
 
@@ -149,9 +201,43 @@ func TestDefaultPerformUpdateForNPMUsesCurrentPackageManager(t *testing.T) {
 }
 
 func TestDefaultPerformUpdateForNPMRequiresKnownPackageManager(t *testing.T) {
+	t.Setenv(updatePackageManagerEnv, "")
+	t.Setenv("PATH", t.TempDir())
 	err := defaultPerformUpdate(context.Background(), UpdateInfo{InstallMethod: InstallMethodNPM})
 	if err == nil {
 		t.Fatal("expected error for unknown package manager")
+	}
+}
+
+func TestFallbackNPMUpdateInfoConvertsScriptInstallForNPMSidecarRuntime(t *testing.T) {
+	tmpDir := t.TempDir()
+	runtimeDir := filepath.Join(tmpDir, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{\"name\":\"officecli\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile package.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "metadata.json"), []byte("{\"packageManager\":\"pnpm\"}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile metadata.json: %v", err)
+	}
+	execPath := filepath.Join(runtimeDir, "officecli")
+	if err := os.WriteFile(execPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile exec: %v", err)
+	}
+
+	info, ok := fallbackNPMUpdateInfoForExecPath(UpdateInfo{InstallMethod: InstallMethodScript}, execPath)
+	if !ok {
+		t.Fatal("expected npm fallback to be detected")
+	}
+	if info.InstallMethod != InstallMethodNPM {
+		t.Fatalf("InstallMethod = %q, want %q", info.InstallMethod, InstallMethodNPM)
+	}
+	if info.PackageManager != "pnpm" {
+		t.Fatalf("PackageManager = %q, want %q", info.PackageManager, "pnpm")
+	}
+	if info.UpdateCommand != "pnpm add -g officecli" {
+		t.Fatalf("UpdateCommand = %q", info.UpdateCommand)
 	}
 }
 

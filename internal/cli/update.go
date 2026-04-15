@@ -70,6 +70,10 @@ type npmLatestLookup struct {
 	Version string `json:"version"`
 }
 
+type npmRuntimeMetadata struct {
+	PackageManager string `json:"packageManager"`
+}
+
 type brewOutdatedResult struct {
 	Formulae []struct {
 		Name              string   `json:"name"`
@@ -240,6 +244,9 @@ func isNPMInstall(execPath string) bool {
 	if lower == "" {
 		return false
 	}
+	if isNPMSidecarRuntime(execPath) {
+		return true
+	}
 	if strings.Contains(lower, "/lib/node_modules/officecli/") || strings.Contains(lower, "/node_modules/officecli/") {
 		return true
 	}
@@ -256,6 +263,65 @@ func isNPMInstall(execPath string) bool {
 		}
 	}
 	return false
+}
+
+func isNPMSidecarRuntime(execPath string) bool {
+	metadataPath, ok := npmRuntimeMetadataPath(execPath)
+	if !ok {
+		return false
+	}
+	_, err := os.Stat(metadataPath)
+	return err == nil
+}
+
+func npmRuntimeMetadataPath(execPath string) (string, bool) {
+	cleaned := filepath.Clean(strings.TrimSpace(execPath))
+	if cleaned == "" {
+		return "", false
+	}
+	if filepath.Base(cleaned) != "officecli" {
+		return "", false
+	}
+	runtimeDir := filepath.Dir(cleaned)
+	if filepath.Base(runtimeDir) != "runtime" {
+		return "", false
+	}
+	packageJSONPath := filepath.Join(filepath.Dir(runtimeDir), "package.json")
+	raw, err := os.ReadFile(packageJSONPath)
+	if err != nil {
+		return "", false
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		return "", false
+	}
+	if strings.TrimSpace(pkg.Name) != defaultNPMPackageName {
+		return "", false
+	}
+	return filepath.Join(runtimeDir, "metadata.json"), true
+}
+
+func npmRuntimePackageManager(execPath string) string {
+	metadataPath, ok := npmRuntimeMetadataPath(execPath)
+	if !ok {
+		return ""
+	}
+	raw, err := os.ReadFile(metadataPath)
+	if err != nil {
+		return ""
+	}
+	var metadata npmRuntimeMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(metadata.PackageManager)) {
+	case "npm", "pnpm", "yarn", "bun":
+		return strings.ToLower(strings.TrimSpace(metadata.PackageManager))
+	default:
+		return ""
+	}
 }
 
 func isScriptInstall(execPath string) bool {
@@ -401,6 +467,10 @@ func checkLatestReleaseForUpdates(ctx context.Context, execPath string) (UpdateI
 }
 
 func defaultPerformUpdate(ctx context.Context, info UpdateInfo) error {
+	execPath, _ := os.Executable()
+	if fallbackInfo, ok := fallbackNPMUpdateInfoForExecPath(info, execPath); ok {
+		info = fallbackInfo
+	}
 	switch info.InstallMethod {
 	case InstallMethodBrew:
 		return runInteractiveCommand(ctx, "brew", "upgrade", "officecli")
@@ -501,8 +571,47 @@ func detectedPackageManager() string {
 	case "npm":
 		return "npm"
 	default:
-		return detectPackageManagerFromPaths(executablePaths(""))
+		paths := executablePaths("")
+		if manager := detectPackageManagerFromNPMMetadata(paths); manager != "" {
+			return manager
+		}
+		return detectPackageManagerFromPaths(paths)
 	}
+}
+
+func detectPackageManagerFromExecPath(execPath string) string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(updatePackageManagerEnv))) {
+	case "pnpm":
+		return "pnpm"
+	case "yarn":
+		return "yarn"
+	case "bun":
+		return "bun"
+	case "npm":
+		return "npm"
+	}
+	paths := make([]string, 0, 2)
+	appendPath := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		cleaned := filepath.Clean(trimmed)
+		for _, existing := range paths {
+			if existing == cleaned {
+				return
+			}
+		}
+		paths = append(paths, cleaned)
+	}
+	appendPath(execPath)
+	if realPath, err := filepath.EvalSymlinks(strings.TrimSpace(execPath)); err == nil {
+		appendPath(realPath)
+	}
+	if manager := detectPackageManagerFromNPMMetadata(paths); manager != "" {
+		return manager
+	}
+	return detectPackageManagerFromPaths(paths)
 }
 
 func executablePaths(execPath string) []string {
@@ -574,6 +683,49 @@ func detectPackageManagerFromPaths(paths []string) string {
 		return "npm"
 	}
 	return ""
+}
+
+func detectPackageManagerFromNPMMetadata(paths []string) string {
+	for _, path := range paths {
+		if manager := npmRuntimePackageManager(path); manager != "" {
+			return manager
+		}
+	}
+	return ""
+}
+
+func fallbackNPMUpdateInfo(info UpdateInfo) (UpdateInfo, bool) {
+	execPath, err := os.Executable()
+	if err != nil {
+		return info, false
+	}
+	return fallbackNPMUpdateInfoForExecPath(info, execPath)
+}
+
+func fallbackNPMUpdateInfoForExecPath(info UpdateInfo, execPath string) (UpdateInfo, bool) {
+	if info.InstallMethod == InstallMethodNPM {
+		if strings.TrimSpace(info.PackageManager) == "" {
+			info.PackageManager = detectPackageManagerFromExecPath(execPath)
+			info.UpdateCommand = updateCommandForPackageManager(info.PackageManager)
+		}
+		return info, true
+	}
+	if !isNPMInstall(execPath) {
+		return info, false
+	}
+	manager := strings.TrimSpace(info.PackageManager)
+	if manager == "" {
+		manager = detectPackageManagerFromExecPath(execPath)
+	}
+	if manager == "" {
+		return info, false
+	}
+	info.InstallMethod = InstallMethodNPM
+	info.Channel = UpdateChannelNPM
+	info.PackageManager = manager
+	info.AutoUpdateSupported = true
+	info.UpdateCommand = updateCommandForPackageManager(manager)
+	return info, true
 }
 
 func (a *App) promptUpdateChoice(reader *bufio.Reader) (bool, error) {
