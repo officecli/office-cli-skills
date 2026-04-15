@@ -27,7 +27,7 @@ type App struct {
 	officeTaskPreflight func(ctx context.Context, command string, args []string) error
 	checkForUpdates     func(ctx context.Context) (UpdateInfo, error)
 	performUpdate       func(ctx context.Context, info UpdateInfo) error
-	restartCommand      func(ctx context.Context, args []string) error
+	restartCommand      func(ctx context.Context, info UpdateInfo, args []string) error
 }
 
 var Version = "dev"
@@ -100,6 +100,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			help = ReviewHelpText()
 		case "review":
 			help = ReviewHelpText()
+		case "upgrade":
+			help = UpgradeHelpText()
 		case "agent-bridge":
 			help = AgentBridgeHelpText()
 		default:
@@ -157,6 +159,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 		return a.runReview(ctx, cfg, args[1:])
+	case "upgrade":
+		return a.runUpgrade(ctx, args[1:])
 	case "agent-bridge":
 		if err := a.officeTaskPreflight(ctx, args[0], args[1:]); err != nil {
 			return err
@@ -269,6 +273,7 @@ Commands:
   new                     Generate a new PPTX / DOCX / XLSX / HTML file
   score                   Run PPTX scoring on demand
   review                  Review the quality of a local PPTX file
+  upgrade                 Check for updates and upgrade officecli
   agent-bridge            Expose an agent interface over JSON-RPC via stdio
 
 Usage:
@@ -276,6 +281,7 @@ Usage:
   officecli config status
   officecli auth status
   officecli auth set-key <api-key>
+  officecli upgrade
   officecli score pptx ./deck.pptx
   officecli review pptx ./deck.pptx
 
@@ -315,6 +321,8 @@ Examples:
   officecli auth status
   officecli auth --help
   officecli auth set-key <your-api-key>
+  officecli upgrade
+  officecli upgrade --help
   officecli new pptx "Enterprise Collaboration Platform Overview" "Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform"
   officecli score pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli review pptx ./output/enterprise_collaboration_platform_overview.pptx
@@ -393,6 +401,15 @@ Description:
 `
 }
 
+func UpgradeHelpText() string {
+	return `Usage:
+  officecli upgrade
+
+Description:
+  Check for a newer OfficeCLI version and apply the upgrade using the current installation channel when automatic upgrades are supported.
+`
+}
+
 func (a *App) runConfig(args []string) error {
 	if len(args) == 0 {
 		_, err := io.WriteString(a.Stdout, ConfigHelpText())
@@ -416,6 +433,40 @@ func (a *App) runConfig(args []string) error {
 	default:
 		return fmt.Errorf("unsupported config command: %s", args[0])
 	}
+}
+
+func (a *App) runUpgrade(ctx context.Context, args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unsupported upgrade command: %s", args[0])
+	}
+	info, err := a.checkForUpdatesNow(ctx)
+	if err != nil {
+		return err
+	}
+	if !info.Available {
+		_, err := fmt.Fprintf(a.Stdout, "officecli is already up to date (%s).\n", fallbackString(info.CurrentVersion, "unknown"))
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "latest")); err != nil {
+		return err
+	}
+	if strings.TrimSpace(info.UpdateCommand) != "" {
+		if _, err := fmt.Fprintf(a.Stdout, "Suggested update command: %s\n", info.UpdateCommand); err != nil {
+			return err
+		}
+	}
+	if !info.AutoUpdateSupported || a.performUpdate == nil {
+		if strings.TrimSpace(info.UpdateCommand) == "" {
+			_, err := fmt.Fprintln(a.Stdout, "Automatic upgrade is not available for the current installation.")
+			return err
+		}
+		return nil
+	}
+	if err := a.performUpdate(ctx, info); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(a.Stdout, "officecli was updated.")
+	return err
 }
 
 func (a *App) runConfigStatus(cfg Config) error {

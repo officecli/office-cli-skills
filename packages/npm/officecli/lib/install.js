@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const https = require("node:https");
 
 const pkg = require("../package.json");
@@ -45,7 +45,88 @@ function detectPackageManager() {
   if (execPath.includes("bun")) {
     return "bun";
   }
-  return "npm";
+  const packageRoot = PACKAGE_ROOT;
+  if (packageRoot.toLowerCase().includes(`${path.sep}pnpm${path.sep}`)) {
+    return "pnpm";
+  }
+  if (packageRoot.toLowerCase().includes(`${path.sep}yarn${path.sep}`)) {
+    return "yarn";
+  }
+  if (packageRoot.toLowerCase().includes(`${path.sep}bun${path.sep}`)) {
+    return "bun";
+  }
+
+  const inferred = detectPackageManagerFromGlobalRoots(packageRoot);
+  if (inferred) {
+    return inferred;
+  }
+
+  return "";
+}
+
+function normalizedPath(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    return fs.realpathSync(trimmed);
+  } catch {
+    return path.resolve(trimmed);
+  }
+}
+
+function safeCommandOutput(command, args) {
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function detectPackageManagerFromGlobalRoots(packageRoot) {
+  const normalizedRoot = normalizedPath(packageRoot);
+  const checks = [
+    {
+      name: "pnpm",
+      candidate: () => {
+        const root = safeCommandOutput("pnpm", ["root", "-g"]);
+        return root ? path.join(root, pkg.name) : "";
+      }
+    },
+    {
+      name: "yarn",
+      candidate: () => {
+        const root = safeCommandOutput("yarn", ["global", "dir"]);
+        return root ? path.join(root, "node_modules", pkg.name) : "";
+      }
+    },
+    {
+      name: "npm",
+      candidate: () => {
+        const root = safeCommandOutput("npm", ["root", "-g"]);
+        return root ? path.join(root, pkg.name) : "";
+      }
+    },
+    {
+      name: "bun",
+      candidate: () => {
+        const bunInstall = String(process.env.BUN_INSTALL || path.join(os.homedir(), ".bun")).trim();
+        return bunInstall ? path.join(bunInstall, "install", "global", "node_modules", pkg.name) : "";
+      }
+    }
+  ];
+
+  for (const check of checks) {
+    const candidate = normalizedPath(check.candidate());
+    if (candidate && candidate === normalizedRoot) {
+      return check.name;
+    }
+  }
+  return "";
 }
 
 function getBinaryPath() {
@@ -452,5 +533,6 @@ module.exports = {
   ensureInstalled,
   getBinaryPath,
   installBinary,
-  loadMetadata
+  loadMetadata,
+  saveMetadata
 };

@@ -849,8 +849,10 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"config                  View or update local configuration",
 		"auth                    View or update access settings",
 		"score                   Run PPTX scoring on demand",
+		"upgrade                 Check for updates and upgrade officecli",
 		"new <pptx|docx|xlsx|html> <topic> [brief]",
 		"officecli config status",
+		"officecli upgrade --help",
 		"officecli score --help",
 		"officecli auth --help",
 		"officecli new --help",
@@ -878,6 +880,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
+		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
 		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best", "automatic PPT images", "officecli config set-generation", "single local HTML report file"}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
@@ -932,6 +935,104 @@ func TestAppRun_VersionOutput(t *testing.T) {
 	}
 }
 
+func TestAppRun_UpgradeCommandUpdatesImmediately(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.5",
+			LatestVersionLabel:  "0.2.6",
+			InstallMethod:       InstallMethodNPM,
+			PackageManager:      "npm",
+			Channel:             UpdateChannelNPM,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "npm install -g officecli",
+		}, nil
+	}
+	updated := false
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		updated = true
+		if info.InstallMethod != InstallMethodNPM || info.PackageManager != "npm" {
+			t.Fatalf("unexpected update info: %+v", info)
+		}
+		return nil
+	}
+	app.restartCommand = func(ctx context.Context, info UpdateInfo, args []string) error {
+		t.Fatal("restartCommand should not be called for explicit upgrade")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"upgrade"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !updated {
+		t.Fatal("performUpdate was not called")
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Update available for officecli: current 0.2.5, latest 0.2.6.") {
+		t.Fatalf("stdout = %q", output)
+	}
+	if !strings.Contains(output, "Suggested update command: npm install -g officecli") {
+		t.Fatalf("stdout = %q", output)
+	}
+	if !strings.Contains(output, "officecli was updated.") {
+		t.Fatalf("stdout = %q", output)
+	}
+}
+
+func TestAppRun_UpgradeCommandReportsUpToDate(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:      false,
+			CurrentVersion: "0.2.6",
+		}, nil
+	}
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		t.Fatal("performUpdate should not be called")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"upgrade"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "officecli is already up to date (0.2.6).") {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
+func TestAppRun_UpgradeCommandPrintsManualInstructionWhenAutoUpgradeUnsupported(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.5",
+			LatestVersionLabel:  "0.2.6",
+			InstallMethod:       InstallMethodUnknown,
+			AutoUpdateSupported: false,
+			UpdateCommand:       "curl -fsSL https://example.com/install.sh | bash",
+		}, nil
+	}
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		t.Fatal("performUpdate should not be called")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"upgrade"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Suggested update command: curl -fsSL https://example.com/install.sh | bash") {
+		t.Fatalf("stdout = %q", output)
+	}
+	if strings.Contains(output, "officecli was updated.") {
+		t.Fatalf("stdout = %q", output)
+	}
+}
+
 func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	t.Setenv(updateCheckSkipEnv, "0")
 	stdout := &terminalBuffer{}
@@ -962,8 +1063,11 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 		updated = true
 		return nil
 	}
-	app.restartCommand = func(ctx context.Context, args []string) error {
+	app.restartCommand = func(ctx context.Context, info UpdateInfo, args []string) error {
 		restarted = true
+		if info.InstallMethod != InstallMethodScript {
+			t.Fatalf("unexpected restart install method: %q", info.InstallMethod)
+		}
 		if len(args) != 2 || args[0] != "config" || args[1] != "status" {
 			t.Fatalf("unexpected restart args: %v", args)
 		}
@@ -1010,7 +1114,7 @@ func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 		t.Fatal("performUpdate should not be called")
 		return nil
 	}
-	app.restartCommand = func(ctx context.Context, args []string) error {
+	app.restartCommand = func(ctx context.Context, info UpdateInfo, args []string) error {
 		t.Fatal("restartCommand should not be called")
 		return nil
 	}

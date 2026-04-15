@@ -458,6 +458,7 @@ func (s *agentBridgeServer) updateCapability(ctx context.Context) map[string]any
 		"available":             info.Available,
 		"channel":               info.Channel,
 		"install_method":        info.InstallMethod,
+		"package_manager":       info.PackageManager,
 		"current_version":       info.CurrentVersion,
 		"current_commit":        info.CurrentCommit,
 		"current_build_date":    info.CurrentBuildDate,

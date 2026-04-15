@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { spawn } = require("node:child_process");
-const { ensureInstalled, getBinaryPath, loadMetadata } = require("../lib/install");
+const { detectPackageManager, ensureInstalled, getBinaryPath, loadMetadata, saveMetadata } = require("../lib/install");
 
 async function main() {
   try {
@@ -10,13 +10,19 @@ async function main() {
     const packageManager =
       typeof metadata?.packageManager === "string" && metadata.packageManager.trim()
         ? metadata.packageManager.trim()
-        : "npm";
+        : detectPackageManager();
+    if (metadata && packageManager && metadata.packageManager !== packageManager) {
+      await saveMetadata({
+        ...metadata,
+        packageManager
+      });
+    }
     const child = spawn(binaryPath, process.argv.slice(2), {
       stdio: "inherit",
       env: {
         ...process.env,
         OFFICECLI_INSTALL_METHOD: "npm",
-        OFFICECLI_PACKAGE_MANAGER: packageManager
+        ...(packageManager ? { OFFICECLI_PACKAGE_MANAGER: packageManager } : {})
       }
     });
 

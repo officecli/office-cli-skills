@@ -53,6 +53,7 @@ type UpdateInfo struct {
 	LatestPublishedAt   string        `json:"latest_published_at,omitempty"`
 	Channel             UpdateChannel `json:"channel,omitempty"`
 	InstallMethod       InstallMethod `json:"install_method,omitempty"`
+	PackageManager      string        `json:"package_manager,omitempty"`
 	AutoUpdateSupported bool          `json:"auto_update_supported"`
 	UpdateCommand       string        `json:"update_command,omitempty"`
 	CheckError          string        `json:"check_error,omitempty"`
@@ -93,15 +94,15 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	if !info.AutoUpdateSupported || a.performUpdate == nil {
+		return nil
+	}
 	reader := bufio.NewReader(a.Stdin)
 	confirm, err := a.promptYesNo(reader, "Update now and continue with the current command? (yes/no)", true)
 	if err != nil {
 		return err
 	}
 	if !confirm {
-		return nil
-	}
-	if a.performUpdate == nil {
 		return nil
 	}
 	if err := a.performUpdate(ctx, info); err != nil {
@@ -116,7 +117,7 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 	if a.restartCommand == nil {
 		return nil
 	}
-	return a.restartCommand(ctx, args)
+	return a.restartCommand(ctx, info, args)
 }
 
 func (a *App) safeCheckForUpdates(ctx context.Context) (UpdateInfo, error) {
@@ -127,6 +128,10 @@ func (a *App) safeCheckForUpdates(ctx context.Context) (UpdateInfo, error) {
 			CurrentBuildDate: BuildDate,
 		}, nil
 	}
+	return a.checkForUpdatesNow(ctx)
+}
+
+func (a *App) checkForUpdatesNow(ctx context.Context) (UpdateInfo, error) {
 	if a == nil || a.checkForUpdates == nil {
 		return UpdateInfo{}, nil
 	}
@@ -153,7 +158,7 @@ func shouldCheckForUpdates(a *App, args []string) bool {
 	if !isTerminalWriter(a.Stdout) || !isTerminalReader(a.Stdin) {
 		return false
 	}
-	if isHelpArg(args[0]) || isVersionArg(args[0]) || args[0] == "agent-bridge" {
+	if isHelpArg(args[0]) || isVersionArg(args[0]) || args[0] == "agent-bridge" || args[0] == "upgrade" {
 		return false
 	}
 	for _, arg := range args {
@@ -310,14 +315,17 @@ func checkNPMForUpdates(ctx context.Context) (UpdateInfo, error) {
 	}
 	manager := detectedPackageManager()
 	info := UpdateInfo{
-		InstallMethod:       InstallMethodNPM,
-		Channel:             UpdateChannelNPM,
-		CurrentVersion:      Version,
-		CurrentCommit:       Commit,
-		CurrentBuildDate:    BuildDate,
-		LatestVersionLabel:  strings.TrimSpace(latest.Version),
-		AutoUpdateSupported: true,
-		UpdateCommand:       updateCommandForPackageManager(manager),
+		InstallMethod:      InstallMethodNPM,
+		Channel:            UpdateChannelNPM,
+		PackageManager:     manager,
+		CurrentVersion:     Version,
+		CurrentCommit:      Commit,
+		CurrentBuildDate:   BuildDate,
+		LatestVersionLabel: strings.TrimSpace(latest.Version),
+	}
+	if manager != "" {
+		info.AutoUpdateSupported = true
+		info.UpdateCommand = updateCommandForPackageManager(manager)
 	}
 	if versionIsOlder(info.CurrentVersion, info.LatestVersionLabel) {
 		info.Available = true
@@ -383,7 +391,10 @@ func defaultPerformUpdate(ctx context.Context, info UpdateInfo) error {
 	case InstallMethodBrew:
 		return runInteractiveCommand(ctx, "brew", "upgrade", "officecli")
 	case InstallMethodNPM:
-		name, args := packageManagerCommand(detectedPackageManager())
+		name, args := packageManagerCommand(info.PackageManager)
+		if name == "" {
+			return fmt.Errorf("the current npm installation does not expose a supported package manager for automatic updates")
+		}
 		return runInteractiveCommand(ctx, name, args...)
 	case InstallMethodScript:
 		return runInstallScriptUpdate(ctx, info)
@@ -432,16 +443,28 @@ func runInstallScriptUpdate(ctx context.Context, info UpdateInfo) error {
 	return cmd.Run()
 }
 
-func defaultRestartCommand(ctx context.Context, args []string) error {
-	executable, err := os.Executable()
-	if err != nil {
-		return err
+func defaultRestartCommand(ctx context.Context, info UpdateInfo, args []string) error {
+	executable := ""
+	if info.InstallMethod == InstallMethodNPM {
+		executable = "officecli"
+	} else {
+		var err error
+		executable, err = os.Executable()
+		if err != nil {
+			return err
+		}
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(), updateCheckSkipEnv+"=1")
+	if info.InstallMethod == InstallMethodNPM {
+		cmd.Env = append(cmd.Env, updateInstallMethodEnv+"="+string(InstallMethodNPM))
+		if strings.TrimSpace(info.PackageManager) != "" {
+			cmd.Env = append(cmd.Env, updatePackageManagerEnv+"="+strings.TrimSpace(info.PackageManager))
+		}
+	}
 	return cmd.Run()
 }
 
@@ -462,7 +485,7 @@ func detectedPackageManager() string {
 	case "bun":
 		return "bun"
 	default:
-		return "npm"
+		return ""
 	}
 }
 
@@ -474,13 +497,18 @@ func packageManagerCommand(manager string) (string, []string) {
 		return "yarn", []string{"global", "add", defaultNPMPackageName}
 	case "bun":
 		return "bun", []string{"install", "-g", defaultNPMPackageName}
-	default:
+	case "npm":
 		return "npm", []string{"install", "-g", defaultNPMPackageName}
+	default:
+		return "", nil
 	}
 }
 
 func updateCommandForPackageManager(manager string) string {
 	name, args := packageManagerCommand(manager)
+	if strings.TrimSpace(name) == "" {
+		return ""
+	}
 	return strings.TrimSpace(name + " " + strings.Join(args, " "))
 }
 
