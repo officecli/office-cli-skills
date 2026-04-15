@@ -1,5 +1,7 @@
 # OfficeCLI Full Test Matrix
 
+This file is the case inventory for OfficeCLI regression coverage. For the overall harness model, gate design, evidence rules, and journey-based testing strategy, see [`docs/harness-testing-strategy.md`](/home/ubuntu/workspace/officecli/docs/harness-testing-strategy.md).
+
 This document provides a consolidated regression and delivery test matrix for three primary surfaces:
 
 - the `officecli` CLI

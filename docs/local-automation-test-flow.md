@@ -1,5 +1,7 @@
 # OfficeCLI Local Automation Test Flow
 
+This file describes the developer-facing local execution sequence. For the full harness model, journey design, evidence artifacts, and PR/nightly/release gate roles, see [`docs/harness-testing-strategy.md`](/home/ubuntu/workspace/officecli/docs/harness-testing-strategy.md).
+
 This document describes a practical local flow for running the most useful automated checks before opening a PR or preparing a release candidate.
 
 ## Goals
