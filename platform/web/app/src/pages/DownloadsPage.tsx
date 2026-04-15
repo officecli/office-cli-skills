@@ -54,7 +54,7 @@ export default function DownloadsPage() {
           <div className="space-y-4">
             <div className="soft-panel flex items-start gap-3 border border-outline-variant/15 bg-surface-container-high/40 p-5 text-sm text-outline">
               <TerminalSquare size={18} className="mt-0.5 text-secondary" />
-              <p>The current public release generates PPTX, DOCX, XLSX, and HTML, and can review or score local PPTX files.</p>
+              <p>The current public release generates PPTX, DOCX, XLSX, and workbook-backed Report outputs, and can review or score local PPTX files.</p>
             </div>
             <div className="soft-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
               <ShieldCheck size={18} className="mt-0.5 text-primary" />

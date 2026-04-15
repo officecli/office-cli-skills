@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/officecli/officecli/engine"
@@ -143,20 +144,32 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if style == "" && documentType == engine.DocumentTypePPTX {
 		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
+	sourceFile := strings.TrimSpace(req.Args.FilePath)
+	if documentType == engine.DocumentTypeReport {
+		if sourceFile == "" {
+			return GenerateJob{}, fmt.Errorf("report generation requires args.file_path")
+		}
+		if strings.ToLower(filepath.Ext(sourceFile)) != ".xlsx" {
+			return GenerateJob{}, fmt.Errorf("report file_path must point to an .xlsx workbook: %s", sourceFile)
+		}
+	} else if sourceFile != "" {
+		return GenerateJob{}, fmt.Errorf("file_path is only supported for report generation")
+	}
 
 	return GenerateJob{
-		DocumentType: documentType,
-		Topic:        topic,
-		Prompt:       prompt,
-		RuntimeMode:  runtimeMode,
-		Mode:         mode,
-		Language:     strings.TrimSpace(req.Args.Language),
-		Style:        style,
-		Audience:     strings.TrimSpace(req.Args.Audience),
-		EnableImages: enableImages,
-		LocalPreview: false,
-		OutputDir:    outputDir,
-		Publish:      publish,
-		JSONOutput:   true,
+		DocumentType:   documentType,
+		Topic:          topic,
+		Prompt:         prompt,
+		SourceFilePath: sourceFile,
+		RuntimeMode:    runtimeMode,
+		Mode:           mode,
+		Language:       strings.TrimSpace(req.Args.Language),
+		Style:          style,
+		Audience:       strings.TrimSpace(req.Args.Audience),
+		EnableImages:   enableImages,
+		LocalPreview:   false,
+		OutputDir:      outputDir,
+		Publish:        publish,
+		JSONOutput:     true,
 	}, nil
 }

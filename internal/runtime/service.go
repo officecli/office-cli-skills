@@ -14,15 +14,16 @@ import (
 )
 
 type GenerateParams struct {
-	DocumentType engine.DocumentType
-	Topic        string
-	Prompt       string
-	Mode         string
-	Language     string
-	Style        string
-	Audience     string
-	EnableImages bool
-	LocalPreview bool
+	DocumentType   engine.DocumentType
+	Topic          string
+	Prompt         string
+	SourceFilePath string
+	Mode           string
+	Language       string
+	Style          string
+	Audience       string
+	EnableImages   bool
+	LocalPreview   bool
 }
 
 type GeneratedArtifact struct {
@@ -76,8 +77,8 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 		return s.generateDOCX(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypeXLSX:
 		return s.generateXLSX(ctx, envelope.Prompt, params.Topic, target, meta)
-	case engine.DocumentTypeHTML:
-		return s.generateHTML(ctx, envelope.Prompt, params.Topic, target, meta)
+	case engine.DocumentTypeReport:
+		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
 		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
 	default:
@@ -131,24 +132,46 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 	}, nil
 }
 
-func (s *Service) generateHTML(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
-	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting HTML report content from the LLM")
-	response, err := s.llm.CompleteJSON(ctx, []engine.LLMMessage{{Role: "user", Content: generateengine.BuildHTMLPrompt(prompt, target)}})
+func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFilePath string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
+	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Reading workbook data for report generation")
+	sheets, err := loadWorkbookSheetsFromFile(sourceFilePath)
 	if err != nil {
-		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "HTML report content generation failed")
+		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "Workbook read failed")
+		return nil, fmt.Errorf("read report workbook: %w", err)
+	}
+	baseReport := officegen.BuildReportFromWorkbook(topic, sheets)
+	baseReportJSON, err := json.Marshal(baseReport)
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "Report draft preparation failed")
+		return nil, fmt.Errorf("marshal base report: %w", err)
+	}
+	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "Workbook data prepared for report generation")
+
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting workbook-backed report narrative from the LLM")
+	response, err := s.llm.CompleteJSON(ctx, []engine.LLMMessage{{
+		Role: "user",
+		Content: generateengine.BuildWorkbookReportPrompt(
+			prompt,
+			target,
+			buildWorkbookSummary(sheets),
+			string(baseReportJSON),
+		),
+	}})
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Workbook-backed report narrative generation failed")
 		return nil, fmt.Errorf("content generation failed: %w", err)
 	}
-	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received HTML report structure output")
-	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling the HTML report")
-	fileBytes, fileName, err := generateengine.BuildHTMLFromJSON(response, fallbackDescription(topic, prompt))
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received workbook-backed report structure output")
+	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling the report HTML")
+	fileBytes, fileName, err := generateengine.BuildReportFromJSON(response, fallbackDescription(topic, prompt))
 	if err != nil {
-		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "HTML report assembly failed")
+		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "Report assembly failed")
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
-	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "HTML report assembly completed")
+	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "Report assembly completed")
 	return &GeneratedArtifact{
 		DocumentName: fileName,
-		DocumentType: string(engine.DocumentTypeHTML),
+		DocumentType: string(engine.DocumentTypeReport),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
 	}, nil

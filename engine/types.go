@@ -5,10 +5,10 @@ import "context"
 type DocumentType string
 
 const (
-	DocumentTypePPTX DocumentType = "pptx"
-	DocumentTypeDOCX DocumentType = "docx"
-	DocumentTypeXLSX DocumentType = "xlsx"
-	DocumentTypeHTML DocumentType = "html"
+	DocumentTypePPTX   DocumentType = "pptx"
+	DocumentTypeDOCX   DocumentType = "docx"
+	DocumentTypeXLSX   DocumentType = "xlsx"
+	DocumentTypeReport DocumentType = "report"
 )
 
 type GenerateIssue struct {

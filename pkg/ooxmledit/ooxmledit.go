@@ -34,6 +34,8 @@ var contentPathPatterns = map[FileType][]*regexp.Regexp{
 	FileTypeXLSX: {
 		regexp.MustCompile(`^xl/worksheets/sheet\d+\.xml$`),
 		regexp.MustCompile(`^xl/sharedStrings\.xml$`),
+		regexp.MustCompile(`^xl/workbook\.xml$`),
+		regexp.MustCompile(`^xl/_rels/workbook\.xml\.rels$`),
 	},
 }
 

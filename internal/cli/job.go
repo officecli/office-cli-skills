@@ -57,6 +57,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var style string
 	var audience string
 	var outDir string
+	var sourceFile string
 	var jsonOutput bool
 	var localPreview bool
 	var publishFlag boolValue
@@ -71,6 +72,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&style, "style", "", "")
 	fs.StringVar(&audience, "audience", "", "")
 	fs.StringVar(&outDir, "out", "", "")
+	fs.StringVar(&sourceFile, "file", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.Var(&publishFlag, "publish", "")
@@ -101,6 +103,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if topic == "" {
 		return GenerateJob{}, errors.New("topic is required")
 	}
+	sourceFile = strings.TrimSpace(sourceFile)
 
 	finalPrompt := strings.TrimSpace(prompt)
 	if finalPrompt == "" && strings.TrimSpace(promptFile) != "" {
@@ -174,22 +177,33 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
 		finalStyle = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
+	if documentType == engine.DocumentTypeReport {
+		if sourceFile == "" {
+			return GenerateJob{}, errors.New("report generation requires --file <xlsx-path>")
+		}
+		if strings.ToLower(filepath.Ext(sourceFile)) != ".xlsx" {
+			return GenerateJob{}, fmt.Errorf("report --file must point to an .xlsx workbook: %s", sourceFile)
+		}
+	} else if sourceFile != "" {
+		return GenerateJob{}, fmt.Errorf("--file is only supported for report generation")
+	}
 
 	return GenerateJob{
-		DocumentType: documentType,
-		Topic:        topic,
-		Brief:        brief,
-		Prompt:       finalPrompt,
-		RuntimeMode:  selectedRuntimeMode,
-		Mode:         strings.ToLower(finalMode),
-		Language:     strings.TrimSpace(lang),
-		Style:        finalStyle,
-		Audience:     strings.TrimSpace(audience),
-		EnableImages: enableImages,
-		LocalPreview: localPreview && documentType == engine.DocumentTypePPTX,
-		OutputDir:    finalOutputDir,
-		Publish:      publishEnabled,
-		JSONOutput:   jsonOutput,
+		DocumentType:   documentType,
+		Topic:          topic,
+		Brief:          brief,
+		Prompt:         finalPrompt,
+		SourceFilePath: sourceFile,
+		RuntimeMode:    selectedRuntimeMode,
+		Mode:           strings.ToLower(finalMode),
+		Language:       strings.TrimSpace(lang),
+		Style:          finalStyle,
+		Audience:       strings.TrimSpace(audience),
+		EnableImages:   enableImages,
+		LocalPreview:   localPreview && documentType == engine.DocumentTypePPTX,
+		OutputDir:      finalOutputDir,
+		Publish:        publishEnabled,
+		JSONOutput:     jsonOutput,
 	}, nil
 }
 
@@ -200,7 +214,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -220,6 +234,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--style=") ||
 				strings.HasPrefix(current, "--audience=") ||
 				strings.HasPrefix(current, "--out=") ||
+				strings.HasPrefix(current, "--file=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
@@ -244,8 +259,8 @@ func parseDocumentType(value string) (engine.DocumentType, error) {
 		return engine.DocumentTypeDOCX, nil
 	case "xlsx":
 		return engine.DocumentTypeXLSX, nil
-	case "html":
-		return engine.DocumentTypeHTML, nil
+	case "report":
+		return engine.DocumentTypeReport, nil
 	default:
 		return "", fmt.Errorf("unsupported document type: %s", value)
 	}

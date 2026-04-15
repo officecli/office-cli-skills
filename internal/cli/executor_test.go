@@ -152,14 +152,14 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 	}
 }
 
-func TestExecutorSkipsPublishForHTML(t *testing.T) {
+func TestExecutorSkipsPublishForReport(t *testing.T) {
 	tmpDir := t.TempDir()
 	executor := NewExecutor(htmlGenerator{}, fakePublisher{}, nil)
 
 	result, err := executor.Run(context.Background(), GenerateJob{
-		DocumentType: engine.DocumentTypeHTML,
+		DocumentType: engine.DocumentTypeReport,
 		Topic:        "Q2 Business Review",
-		Prompt:       "Create a business review HTML report.",
+		Prompt:       "Create a business review Report.",
 		OutputDir:    tmpDir,
 		Publish:      true,
 	})
@@ -167,12 +167,12 @@ func TestExecutorSkipsPublishForHTML(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if result.Published {
-		t.Fatalf("expected html publish to stay local: %+v", result)
+		t.Fatalf("expected report publish to stay local: %+v", result)
 	}
 	if _, err := os.Stat(result.FilePath); err != nil {
 		t.Fatalf("stat file: %v", err)
 	}
-	if !strings.Contains(strings.Join(result.Warnings, "\n"), "HTML publishing is not supported yet") {
+	if !strings.Contains(strings.Join(result.Warnings, "\n"), "Report publishing is not supported yet") {
 		t.Fatalf("warnings = %#v", result.Warnings)
 	}
 }

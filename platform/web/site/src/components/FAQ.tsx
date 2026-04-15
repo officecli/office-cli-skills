@@ -15,7 +15,7 @@ export default function FAQ({ standalone = false, compact = false }: FAQProps) {
     },
     {
       q: 'What document types work today?',
-      a: 'The current public release generates PPTX, DOCX, XLSX, and HTML. It can also score and review local PPTX files.',
+      a: 'The current public release generates PPTX, DOCX, XLSX, and workbook-backed Report outputs. It can also score and review local PPTX files.',
     },
     {
       q: 'Do I need LibreOffice or Microsoft Office installed?',

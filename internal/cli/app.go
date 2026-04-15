@@ -270,14 +270,14 @@ Generate Office documents from natural language.
 Commands:
   config                  View or update local configuration
   auth                    View or update access settings
-  new                     Generate a new PPTX / DOCX / XLSX / HTML file
+  new                     Generate a new PPTX / DOCX / XLSX / Report file
   score                   Run PPTX scoring on demand
   review                  Review the quality of a local PPTX file
   upgrade                 Check for updates and upgrade officecli
   agent-bridge            Expose an agent interface over JSON-RPC via stdio
 
 Usage:
-  officecli new <pptx|docx|xlsx|html> <topic> [brief]
+  officecli new <pptx|docx|xlsx|report> <topic> [brief]
   officecli config status
   officecli auth status
   officecli auth set-key <api-key>
@@ -293,6 +293,7 @@ Common options:
   --style <value>         Set the style
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
+  --file <path>           Provide the input workbook file (report only)
   --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
@@ -331,7 +332,7 @@ Examples:
   officecli review --help
   officecli new docx "Quarterly Review" --prompt-file ./examples/prompt.txt
   officecli new xlsx "Sales Analysis" --json
-  officecli new html "Q2 Business Review" --audience "Board and investors"
+  officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --audience "Board and investors"
   officecli --version
 `
 }
@@ -361,7 +362,7 @@ Description:
 
 func NewHelpText() string {
 	return `Usage:
-  officecli new <pptx|docx|xlsx|html> <topic> [brief]
+  officecli new <pptx|docx|xlsx|report> <topic> [brief]
 
 Common options:
   --prompt <text>         Provide the full prompt directly
@@ -371,6 +372,7 @@ Common options:
   --style <value>         Set the style
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
+  --file <path>           Provide the input workbook file (report only)
   --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
@@ -381,7 +383,7 @@ Description:
   - ` + "`pptx`" + ` generation tries to add images and embed them in the final file by default
   - For a text-only PPT, pass ` + "`--no-images`" + `
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
-  - ` + "`html`" + ` generates a single local HTML report file and does not publish online in v1
+  - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
 `
 }
 

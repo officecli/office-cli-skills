@@ -398,9 +398,18 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 						"default_enabled": false,
 					},
 				},
-				"html": map[string]any{
+				"report": map[string]any{
 					"image_support": map[string]any{
 						"default_enabled": false,
+					},
+					"source_file": map[string]any{
+						"required":            true,
+						"invoke_field":        "file_path",
+						"accepted_extensions": []string{".xlsx"},
+						"notes": []string{
+							"report generation requires a source workbook file.",
+							"The workbook data is the source of truth for charts, tables, and findings.",
+						},
 					},
 				},
 			},
@@ -410,9 +419,10 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type": "pptx|docx|xlsx|html",
+					"document_type": "pptx|docx|xlsx|report",
 					"topic":         "string",
 					"prompt":        "string",
+					"file_path":     "string (.xlsx for report)",
 					"mode":          "fast|best",
 					"runtime_mode":  "external|hosted",
 				},

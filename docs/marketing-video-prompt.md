@@ -22,7 +22,7 @@ Audience:
 - product teams
 
 Core message:
-- OfficeCLI is a command-line tool that generates PPTX, DOCX, and XLSX files from natural-language prompts.
+- OfficeCLI is a command-line tool that generates PPTX, DOCX, XLSX, and workbook-backed Report outputs from natural-language prompts.
 - PPTX generation can automatically create and embed images when appropriate.
 - Users can keep output local or publish to an online preview endpoint when configured.
 - The platform provides quota enforcement, billing visibility, and admin controls.

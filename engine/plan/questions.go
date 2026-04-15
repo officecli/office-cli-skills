@@ -162,8 +162,8 @@ func buildQuestionGoal(documentType string) string {
 		return "Goal: fill in document purpose, target readers, length, and argument depth with the fewest questions so the final document structure is complete and professional."
 	case "xlsx":
 		return "Goal: fill in analysis goal, data granularity, metric definitions, and reporting perspective with the fewest questions so the workbook structure fits the analysis scenario."
-	case "html":
-		return "Goal: fill in audience, report storyline, chart density, and decision focus with the fewest questions so the HTML report is narrative, data-rich, and presentation-ready."
+	case "report":
+		return "Goal: fill in audience, report storyline, chart density, and decision focus with the fewest questions so the workbook-backed report is narrative, data-rich, and presentation-ready."
 	default:
 		return "Goal: fill in audience, presentation goal, structural approach, and page density with the fewest questions so the PPT is better suited for a consulting-style deck."
 	}
@@ -407,11 +407,11 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 				AllowFreeform: true,
 			},
 		}
-	case "html":
+	case "report":
 		return []engine.PlanQuestion{
 			{
-				ID:       "html_audience",
-				Question: "Who is the primary audience for this HTML report?",
+				ID:       "report_audience",
+				Question: "Who is the primary audience for this workbook-backed report?",
 				Options: []engine.PlanQuestionOption{
 					{ID: "exec", Label: "Executives or board", Description: "Lead with concise conclusions, KPI shifts, and decision implications.", Recommended: true},
 					{ID: "client", Label: "Clients or partners", Description: "Lead with externally understandable framing and business impact."},
@@ -420,7 +420,7 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 				AllowFreeform: true,
 			},
 			{
-				ID:       "html_story",
+				ID:       "report_story",
 				Question: "What narrative should this report emphasize first?",
 				Options: []engine.PlanQuestionOption{
 					{ID: "business_review", Label: "Business review", Description: "Summarize performance, changes, and next actions.", Recommended: true},
@@ -430,7 +430,7 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 				AllowFreeform: true,
 			},
 			{
-				ID:       "html_density",
+				ID:       "report_density",
 				Question: "How chart-heavy should the report be?",
 				Options: []engine.PlanQuestionOption{
 					{ID: "balanced", Label: "Balanced", Description: "Keep each section narrative-led with one strong chart.", Recommended: true},
@@ -517,8 +517,8 @@ func buildDynamicFallbackQuestions(req engine.PrepareExecutionPlanRequest, docum
 			}
 		}
 		return questions
-	case "html":
-		questions := buildExecutionPlanQuestions("html")
+	case "report":
+		questions := buildExecutionPlanQuestions("report")
 		switch {
 		case containsAnyKeyword(prompt, "market", "industry", "competitor", "benchmark", "demand", "trend", "\u5e02\u573a", "\u884c\u4e1a", "\u7ade\u54c1", "\u5bf9\u6807", "\u8d8b\u52bf"):
 			questions[1].Question = "What should this market-facing report prove first?"

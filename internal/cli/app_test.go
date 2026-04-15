@@ -794,6 +794,40 @@ func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T)
 	}
 }
 
+func TestBuildGenerateJob_ReportRequiresWorkbookFile(t *testing.T) {
+	_, err := BuildGenerateJob([]string{
+		"report",
+		"Board Review",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "requires --file") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	workbookPath := filepath.Join(tmpDir, "metrics.xlsx")
+	if err := os.WriteFile(workbookPath, []byte("demo"), 0o644); err != nil {
+		t.Fatalf("write workbook: %v", err)
+	}
+
+	job, err := BuildGenerateJob([]string{
+		"report",
+		"Board Review",
+		"--file", workbookPath,
+		"--prompt", "Summarize the key shifts",
+	}, Config{}, InputSources{IsTTY: true, CWD: tmpDir})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.SourceFilePath != workbookPath {
+		t.Fatalf("source file = %q", job.SourceFilePath)
+	}
+	if job.DocumentType != engine.DocumentTypeReport {
+		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
 func TestRenderResult_JSONIncludesPublishFields(t *testing.T) {
 	var out bytes.Buffer
 	result := GenerateResult{
@@ -850,7 +884,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"auth                    View or update access settings",
 		"score                   Run PPTX scoring on demand",
 		"upgrade                 Check for updates and upgrade officecli",
-		"new <pptx|docx|xlsx|html> <topic> [brief]",
+		"new <pptx|docx|xlsx|report> <topic> [brief]",
 		"officecli config status",
 		"officecli upgrade --help",
 		"officecli score --help",
@@ -881,8 +915,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best", "automatic PPT images", "officecli config set-generation", "single local HTML report file"}},
-		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|html>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report>", "--prompt-file", "--mode fast|best", "--file <path>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`"}},
+		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
 	for _, tc := range cases {

@@ -53,15 +53,15 @@ func TestBuildXLSXPrompt_AndBuildXLSXFromJSON(t *testing.T) {
 	}
 }
 
-func TestBuildHTMLPrompt_AndBuildHTMLFromJSON(t *testing.T) {
-	prompt := BuildHTMLPrompt("Create a board-ready HTML report", PromptTarget{Audience: "Board"})
-	for _, needle := range []string{"Create a board-ready HTML report", "audience=Board", "bar, stacked_bar, line, area, donut, scatter, waterfall"} {
+func TestBuildReportPrompt_AndBuildReportFromJSON(t *testing.T) {
+	prompt := BuildWorkbookReportPrompt("Create a board-ready report", PromptTarget{Audience: "Board"}, "Sheet 1: Revenue", `{"title":"Draft"}`)
+	for _, needle := range []string{"Create a board-ready report", "audience=Board", "Sheet 1: Revenue", `"title":"Draft"`} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q: %s", needle, prompt)
 		}
 	}
 
-	fileBytes, fileName, err := BuildHTMLFromJSON(`{
+	fileBytes, fileName, err := BuildReportFromJSON(`{
 		"title":"Q2 Business Review",
 		"summary":"Commercial momentum stayed positive.",
 		"sections":[
@@ -80,7 +80,7 @@ func TestBuildHTMLPrompt_AndBuildHTMLFromJSON(t *testing.T) {
 		]
 	}`, "fallback")
 	if err != nil {
-		t.Fatalf("BuildHTMLFromJSON: %v", err)
+		t.Fatalf("BuildReportFromJSON: %v", err)
 	}
 	if fileName != "Q2_Business_Review.html" {
 		t.Fatalf("fileName = %q", fileName)

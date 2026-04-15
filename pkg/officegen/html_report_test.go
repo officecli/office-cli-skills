@@ -5,32 +5,32 @@ import (
 	"testing"
 )
 
-func TestBuildHTMLReport_RendersEChartsAndSectionContent(t *testing.T) {
-	report := HTMLReport{
+func TestBuildReport_RendersEChartsAndSectionContent(t *testing.T) {
+	report := Report{
 		Title:    "Q2 Business Review",
 		Subtitle: "A concise view of commercial performance",
 		Audience: "Board and investors",
 		Summary:  "Revenue held up, but conversion quality softened in the lower funnel.",
-		KPIs: []HTMLReportKPI{
+		KPIs: []ReportKPI{
 			{Label: "Revenue", Value: "$12.4M", Change: "+8% QoQ"},
 		},
 		Findings: []string{"North America stayed ahead of plan."},
-		Sections: []HTMLReportSection{
+		Sections: []ReportSection{
 			{
 				Title:     "Demand momentum",
 				Narrative: []string{"Demand stayed strongest in North America while Europe remained stable."},
-				Charts: []HTMLReportChart{
+				Charts: []ReportChart{
 					{
 						Type:       "line",
 						Title:      "Regional revenue trend",
 						Categories: []string{"Jan", "Feb", "Mar"},
-						Series:     []HTMLChartSeries{{Name: "Revenue", Values: []float64{100, 114, 128}}},
+						Series:     []ChartSeries{{Name: "Revenue", Values: []float64{100, 114, 128}}},
 						Source:     "Internal finance data",
 					},
 				},
 			},
 		},
-		AppendixTables: []HTMLReportTable{
+		AppendixTables: []ReportTable{
 			{
 				Title:   "Supporting table",
 				Headers: []string{"Region", "Revenue"},
@@ -39,9 +39,9 @@ func TestBuildHTMLReport_RendersEChartsAndSectionContent(t *testing.T) {
 		},
 	}
 
-	data, err := BuildHTMLReport(report)
+	data, err := BuildReport(report)
 	if err != nil {
-		t.Fatalf("BuildHTMLReport: %v", err)
+		t.Fatalf("BuildReport: %v", err)
 	}
 	output := string(data)
 	for _, needle := range []string{
@@ -58,18 +58,18 @@ func TestBuildHTMLReport_RendersEChartsAndSectionContent(t *testing.T) {
 	}
 }
 
-func TestNormalizeHTMLReport_NormalizesUnsupportedChartType(t *testing.T) {
-	report := NormalizeHTMLReport(HTMLReport{
+func TestNormalizeReport_NormalizesUnsupportedChartType(t *testing.T) {
+	report := NormalizeReport(Report{
 		Title: "Test",
-		Sections: []HTMLReportSection{
+		Sections: []ReportSection{
 			{
 				Title: "Section",
-				Charts: []HTMLReportChart{
+				Charts: []ReportChart{
 					{
 						Type:       "bubble",
 						Title:      "Chart",
 						Categories: []string{"A", "B"},
-						Series:     []HTMLChartSeries{{Name: "Series 1", Values: []float64{1, 2}}},
+						Series:     []ChartSeries{{Name: "Series 1", Values: []float64{1, 2}}},
 					},
 				},
 			},

@@ -6,7 +6,7 @@ const roadmapPhases = [
     border: 'border-outline-variant/10',
     background: 'bg-surface-low',
     items: [
-      'Generate PPTX, DOCX, XLSX, and HTML files from natural-language prompts.',
+      'Generate PPTX, DOCX, XLSX, and workbook-backed Report files from natural-language prompts.',
       'Review and score local PPTX files, with optional visual review when `soffice` is available.',
       'Publish optional online previews when preview publishing is configured.',
     ],

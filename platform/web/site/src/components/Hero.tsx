@@ -6,13 +6,13 @@ import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
 import heroReportPreview from '../assets/hero-report-preview.svg'
 import { platformAppURL } from '../siteData'
 
-type HeroFormatTab = 'pptx' | 'docx' | 'xlsx' | 'html'
+type HeroFormatTab = 'pptx' | 'docx' | 'xlsx' | 'report'
 
 const HERO_TERMINAL_TABS: Array<{ id: HeroFormatTab; label: string }> = [
   { id: 'pptx', label: 'PPTX' },
   { id: 'docx', label: 'DOCX' },
   { id: 'xlsx', label: 'XLSX' },
-  { id: 'html', label: 'HTML' },
+  { id: 'report', label: 'REPORT' },
 ]
 
 function DocPageMock() {
@@ -61,12 +61,12 @@ function SpreadsheetMock() {
   )
 }
 
-function HtmlPageMock() {
+function ReportPageMock() {
   return (
     <div className="w-full h-full bg-white rounded-sm shadow-sm flex flex-col text-[8px] font-mono leading-tight p-2 gap-1 opacity-50 grayscale hover:grayscale-0 transition-all text-outline-variant overflow-hidden">
-      <div className="text-primary/80">&lt;h1&gt;Release Notes&lt;/h1&gt;</div>
-      <div>&lt;section&gt;…&lt;/section&gt;</div>
-      <div>&lt;ul&gt;&lt;li&gt;…&lt;/li&gt;&lt;/ul&gt;</div>
+      <div className="text-primary/80">&lt;h1&gt;Q2 Business Review&lt;/h1&gt;</div>
+      <div>&lt;section&gt;Revenue by region…&lt;/section&gt;</div>
+      <div>&lt;div class="chart"&gt;…&lt;/div&gt;</div>
     </div>
   )
 }
@@ -121,7 +121,7 @@ function HighlightedCommand({ command }: { command: string }) {
       {parts.map((part, i) => {
         if (part === 'officecli') return <span key={i} className="text-[#27c93f] mr-1.5">{part}</span>
         if (part === 'new' || part === 'config' || part === 'set-generation') return <span key={i} className="text-[#8af3f7] mr-1.5">{part}</span>
-        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'html') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
+        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
         if (part.startsWith('"') || part.startsWith("'")) return <span key={i} className="text-[#ff5f56] mr-1.5">{part}</span>
         if (part.startsWith('--')) return <span key={i} className="text-outline-variant mr-1.5">{part}</span>
         return <span key={i} className="text-white mr-1.5">{part}</span>
@@ -222,8 +222,8 @@ export default function Hero() {
         </div>
       ),
     },
-    html: {
-      command: 'officecli new html --prompt "Generate release notes for v1.2.0 focusing on performance improvements"',
+    report: {
+      command: 'officecli new report "Q2 Business Review" --file ./data/q2-metrics.xlsx --prompt "Summarize revenue shifts and decision points for the board"',
       logLines: [
         '✔ Access check completed',
         '✔ Document content generation completed',
@@ -233,17 +233,17 @@ export default function Hero() {
       output: (
         <div className="space-y-4">
           <HeroOutputFileCard
-            filename="RELEASE_NOTES.HTML"
+            filename="Q2_BUSINESS_REVIEW.HTML"
             size="24 KB"
             elapsed="0.9s"
             preview={
               <div className="h-full w-full flex flex-col min-h-0 p-1 gap-1">
                 <div className="shrink-0 h-4 rounded bg-background/90 border border-outline-variant/10 flex items-center gap-1 px-1.5">
                   <div className="w-1 h-1 rounded-full bg-outline-variant/40"></div>
-                  <span className="text-[7px] font-headline text-outline-variant truncate">release-notes.html</span>
+                  <span className="text-[7px] font-headline text-outline-variant truncate">q2-business-review.html</span>
                 </div>
                 <div className="min-h-0 flex-1 overflow-hidden flex items-center justify-center px-0.5 pb-0.5">
-                  <HtmlPageMock />
+                  <ReportPageMock />
                 </div>
               </div>
             }
@@ -272,7 +272,7 @@ export default function Hero() {
             Run <span className="text-primary italic">Document</span> Operations From One Lightweight Binary
           </h1>
           <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI handles document operations locally: generate PPTX, DOCX, XLSX, and HTML today, review decks, and grow into conversion, modification, summarization, and layout workflows next. For the core path, you only need the binary and an LLM endpoint.
+            OfficeCLI handles document operations locally: generate PPTX, DOCX, XLSX, and workbook-backed Report outputs today, review decks, and grow into conversion, modification, summarization, and layout workflows next. For the core path, you only need the binary and an LLM endpoint.
           </p>
           <div className="flex flex-wrap gap-4">
             <motion.a

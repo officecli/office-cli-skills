@@ -27,15 +27,16 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	}
 	emitProgress(ctx, e.progress, progressStepGenerate, "running", "Generating document content")
 	artifact, err := e.generator.Generate(ctx, GenerateParams{
-		DocumentType: job.DocumentType,
-		Topic:        job.Topic,
-		Prompt:       job.Prompt,
-		Mode:         job.Mode,
-		Language:     job.Language,
-		Style:        job.Style,
-		Audience:     job.Audience,
-		EnableImages: job.EnableImages,
-		LocalPreview: job.LocalPreview,
+		DocumentType:   job.DocumentType,
+		Topic:          job.Topic,
+		Prompt:         job.Prompt,
+		SourceFilePath: job.SourceFilePath,
+		Mode:           job.Mode,
+		Language:       job.Language,
+		Style:          job.Style,
+		Audience:       job.Audience,
+		EnableImages:   job.EnableImages,
+		LocalPreview:   job.LocalPreview,
 	})
 	if err != nil {
 		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")
@@ -119,8 +120,8 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file write completed")
 
 	if job.Publish {
-		if job.DocumentType == engine.DocumentTypeHTML {
-			result.Warnings = append(result.Warnings, "HTML publishing is not supported yet, so the report was saved locally only.")
+		if job.DocumentType == engine.DocumentTypeReport {
+			result.Warnings = append(result.Warnings, "Report publishing is not supported yet, so the report was saved as a local HTML file only.")
 		} else if e.publisher == nil {
 			result.Warnings = append(result.Warnings, "Publishing is not configured, so online preview publishing was skipped.")
 		} else {

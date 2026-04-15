@@ -66,16 +66,16 @@ type workbookBlueprintSheet struct {
 	Notes      string   `json:"notes"`
 }
 
-type htmlReportBlueprint struct {
-	ReportType       string                       `json:"reportType"`
-	TargetAudience   string                       `json:"targetAudience"`
-	StoryGoal        string                       `json:"storyGoal"`
-	ChartDensity     string                       `json:"chartDensity"`
-	ContentGuideline string                       `json:"contentGuideline"`
-	Sections         []htmlReportBlueprintSection `json:"sections"`
+type reportBlueprint struct {
+	ReportType       string                   `json:"reportType"`
+	TargetAudience   string                   `json:"targetAudience"`
+	StoryGoal        string                   `json:"storyGoal"`
+	ChartDensity     string                   `json:"chartDensity"`
+	ContentGuideline string                   `json:"contentGuideline"`
+	Sections         []reportBlueprintSection `json:"sections"`
 }
 
-type htmlReportBlueprintSection struct {
+type reportBlueprintSection struct {
 	SectionIndex int      `json:"sectionIndex"`
 	Title        string   `json:"title"`
 	Purpose      string   `json:"purpose"`
@@ -169,7 +169,7 @@ Requirements:
 1. Define workbook and sheet responsibilities before finalizing columns.
 2. notes must describe the focus and limits of the sheet.
 3. contentGuideline must reflect consistency of definitions and the relationship between summary and detail.`
-	case "html":
+	case "report":
 		return `Output format:
 {
   "reportType":"Business review",
@@ -189,8 +189,8 @@ Requirements:
 }
 
 Requirements:
-1. Design a narrative HTML report for external business readers rather than an admin dashboard.
-2. Each section must define both the story purpose and what the chart needs to prove.
+1. Design a narrative workbook-backed report for external business readers rather than an admin dashboard.
+2. Each section must define both the story purpose and what the chart needs to prove from workbook data.
 3. contentGuideline must reflect chart discipline, narrative clarity, and external readability.`
 	default:
 		return `Output format:
@@ -228,8 +228,8 @@ func buildFrameworkBlueprintMarkdown(documentType string, specJSON string) (stri
 		return buildDocumentBlueprintMarkdown(specJSON)
 	case "xlsx":
 		return buildWorkbookBlueprintMarkdown(specJSON)
-	case "html":
-		return buildHTMLReportBlueprintMarkdown(specJSON)
+	case "report":
+		return buildReportBlueprintMarkdown(specJSON)
 	default:
 		return buildPresentationBlueprintMarkdown(specJSON)
 	}
@@ -429,10 +429,10 @@ func buildWorkbookBlueprintMarkdown(specJSON string) (string, error) {
 	return strings.TrimSpace(sb.String()), nil
 }
 
-func buildHTMLReportBlueprintMarkdown(specJSON string) (string, error) {
-	var blueprint htmlReportBlueprint
+func buildReportBlueprintMarkdown(specJSON string) (string, error) {
+	var blueprint reportBlueprint
 	if err := json.Unmarshal([]byte(specJSON), &blueprint); err != nil {
-		return "", fmt.Errorf("decode html report blueprint: %w", err)
+		return "", fmt.Errorf("decode report blueprint: %w", err)
 	}
 	var sb strings.Builder
 	sb.WriteString("## Framework Blueprint\n")

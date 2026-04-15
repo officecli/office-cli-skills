@@ -9,7 +9,7 @@ export default function UseCases() {
   const cases = [
     {
       title: 'Product Teams',
-      description: 'Create deck, doc, spreadsheet, and HTML outputs for launches, business reviews, and internal communication without maintaining separate document stacks.',
+      description: 'Create deck, doc, spreadsheet, and workbook-backed report outputs for launches, business reviews, and internal communication without maintaining separate document stacks.',
       image: indieVisual,
       borderClass: 'hover:border-primary/20',
     },

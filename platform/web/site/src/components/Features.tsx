@@ -120,7 +120,7 @@ export default function Features() {
           <ScanSearch className="text-secondary w-10 h-10 mb-6 relative z-10" />
           <h3 className="font-headline text-2xl font-bold text-white mb-3 relative z-10">Create, Review, Export</h3>
           <p className="text-outline-variant leading-relaxed relative z-10">
-            The current release creates PPTX, DOCX, XLSX, and HTML outputs, and can review or score local PPTX decks.
+            The current release creates PPTX, DOCX, XLSX, and workbook-backed Report outputs, and can review or score local PPTX decks.
           </p>
         </motion.div>
 

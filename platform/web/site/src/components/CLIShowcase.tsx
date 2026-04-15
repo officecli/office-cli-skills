@@ -9,7 +9,7 @@ function HighlightedCommand({ command }: { command: string }) {
       {parts.map((part, i) => {
         if (part === 'officecli' || part === 'brew' || part === 'npm') return <span key={i} className="text-[#27c93f] mr-1.5">{part}</span>
         if (part === 'new' || part === 'config' || part === 'install' || part === 'set-generation') return <span key={i} className="text-[#8af3f7] mr-1.5">{part}</span>
-        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'html' || part === '-g') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
+        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report' || part === '-g') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
         if (part.startsWith('"') || part.startsWith("'")) return <span key={i} className="text-[#ff5f56] mr-1.5">{part}</span>
         if (part.startsWith('--')) return <span key={i} className="text-outline-variant mr-1.5">{part}</span>
         return <span key={i} className="text-white mr-1.5">{part}</span>

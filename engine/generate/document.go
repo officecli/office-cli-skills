@@ -12,7 +12,7 @@ type DOCXTarget = PromptTarget
 
 type XLSXTarget = PromptTarget
 
-type HTMLTarget = PromptTarget
+type ReportTarget = PromptTarget
 
 func BuildDOCXPrompt(description string, target DOCXTarget) string {
 	return fmt.Sprintf(`Generate a JSON structure for a Word document based on the following request.
@@ -166,10 +166,16 @@ Requirements:
 - Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
-func BuildHTMLPrompt(description string, target HTMLTarget) string {
-	return fmt.Sprintf(`Generate a JSON structure for a narrative HTML business report based on the following request.
+func BuildWorkbookReportPrompt(description string, target ReportTarget, workbookSummary, baseReportJSON string) string {
+	return fmt.Sprintf(`Generate a JSON structure for a narrative business report from workbook data.
 
 Request: %s
+%s
+
+Workbook summary:
+%s
+
+Base report draft JSON:
 %s
 
 Return only valid JSON in exactly this shape:
@@ -219,15 +225,18 @@ Return only valid JSON in exactly this shape:
 
 Requirements:
 - Write the content in fluent English unless another language is explicitly required
+- Treat the workbook as the source of truth. Do not invent metrics, categories, findings, or conclusions unsupported by the workbook data.
+- Keep all chart categories, chart series values, supporting tables, and appendix tables aligned with the workbook-backed base draft.
+- This is a report generation workflow, not a generic HTML page generation task. HTML is only the delivery format.
 - Make it a narrative report for external business readers, not an admin dashboard
 - Use chart types only from: bar, stacked_bar, line, area, donut, scatter, waterfall
 - Include 3-5 KPIs, 3-5 findings, and 2-4 analysis sections
 - Every section must combine narrative explanation with at least one chart or supporting table
-- Keep the data internally consistent and presentation-ready`, description, FormatDocumentPromptTarget(target))
+- Focus edits on title, subtitle, summary, findings, section narrative, and takeaways while preserving workbook-backed evidence`, description, FormatDocumentPromptTarget(target), workbookSummary, baseReportJSON)
 }
 
-func BuildHTMLBestSpecPrompt(description string, target HTMLTarget) string {
-	return fmt.Sprintf(`First produce a structural blueprint for the following HTML report request.
+func BuildReportBestSpecPrompt(description string, target ReportTarget) string {
+	return fmt.Sprintf(`First produce a structural blueprint for the following workbook-backed report request.
 
 Request: %s
 %s
@@ -244,13 +253,13 @@ Return JSON only:
 }
 
 Requirements:
-- Design a narrative HTML report for external readers
+- Design a narrative report for external readers that will be backed by workbook data
 - Keep the structure compact, executive-friendly, and chart-driven
 - Make every section decision-oriented`, description, FormatDocumentPromptTarget(target))
 }
 
-func BuildHTMLBestDraftPrompt(description string, target HTMLTarget, spec string) string {
-	return fmt.Sprintf(`Generate the final HTML report JSON from the request and blueprint below.
+func BuildReportBestDraftPrompt(description string, target ReportTarget, spec string) string {
+	return fmt.Sprintf(`Generate the final workbook-backed report JSON from the request and blueprint below.
 
 Request: %s
 %s
@@ -258,11 +267,11 @@ Request: %s
 Blueprint:
 %s
 
-Return JSON in exactly the same shape as the HTML report schema.
+Return JSON in exactly the same shape as the report schema.
 
 Requirements:
 - Keep the narrative sharp and business-facing
-- Use rich charts and consistent numeric framing
+- Keep charts and numeric framing evidence-based and workbook-consistent
 - Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
@@ -362,15 +371,15 @@ func BuildXLSXFromJSON(content, fallbackDescription string) ([]byte, string, err
 	return fileBytes, fmt.Sprintf("%s.xlsx", SanitizeFileName(title)), nil
 }
 
-func BuildHTMLFromJSON(content, fallbackDescription string) ([]byte, string, error) {
+func BuildReportFromJSON(content, fallbackDescription string) ([]byte, string, error) {
 	content = RepairUnescapedQuotes(ExtractJSON(content))
 
-	var report officegen.HTMLReport
+	var report officegen.Report
 	if err := json.Unmarshal([]byte(content), &report); err != nil {
 		return nil, "", fmt.Errorf("parse LLM response: %w", err)
 	}
 
-	fileBytes, err := officegen.BuildHTMLReport(report)
+	fileBytes, err := officegen.BuildReport(report)
 	if err != nil {
 		return nil, "", fmt.Errorf("generate html: %w", err)
 	}
@@ -380,4 +389,8 @@ func BuildHTMLFromJSON(content, fallbackDescription string) ([]byte, string, err
 		title = ExtractTitleFromDescription(fallbackDescription)
 	}
 	return fileBytes, fmt.Sprintf("%s.html", SanitizeFileName(title)), nil
+}
+
+func BuildReportPrompt(description string, target ReportTarget) string {
+	return BuildWorkbookReportPrompt(description, target, "No workbook summary provided.", "{}")
 }

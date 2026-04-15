@@ -9,21 +9,21 @@ import (
 	"time"
 )
 
-type HTMLReport struct {
-	Title          string              `json:"title"`
-	Subtitle       string              `json:"subtitle,omitempty"`
-	Language       string              `json:"language,omitempty"`
-	Audience       string              `json:"audience,omitempty"`
-	Summary        string              `json:"summary,omitempty"`
-	UpdatedAt      string              `json:"updatedAt,omitempty"`
-	Theme          HTMLReportTheme     `json:"theme,omitempty"`
-	KPIs           []HTMLReportKPI     `json:"kpis,omitempty"`
-	Findings       []string            `json:"findings,omitempty"`
-	Sections       []HTMLReportSection `json:"sections,omitempty"`
-	AppendixTables []HTMLReportTable   `json:"appendixTables,omitempty"`
+type Report struct {
+	Title          string          `json:"title"`
+	Subtitle       string          `json:"subtitle,omitempty"`
+	Language       string          `json:"language,omitempty"`
+	Audience       string          `json:"audience,omitempty"`
+	Summary        string          `json:"summary,omitempty"`
+	UpdatedAt      string          `json:"updatedAt,omitempty"`
+	Theme          ReportTheme     `json:"theme,omitempty"`
+	KPIs           []ReportKPI     `json:"kpis,omitempty"`
+	Findings       []string        `json:"findings,omitempty"`
+	Sections       []ReportSection `json:"sections,omitempty"`
+	AppendixTables []ReportTable   `json:"appendixTables,omitempty"`
 }
 
-type HTMLReportTheme struct {
+type ReportTheme struct {
 	Name         string `json:"name,omitempty"`
 	AccentColor  string `json:"accentColor,omitempty"`
 	AccentSoft   string `json:"accentSoft,omitempty"`
@@ -34,46 +34,46 @@ type HTMLReportTheme struct {
 	BorderColor  string `json:"borderColor,omitempty"`
 }
 
-type HTMLReportKPI struct {
+type ReportKPI struct {
 	Label  string `json:"label"`
 	Value  string `json:"value"`
 	Change string `json:"change,omitempty"`
 	Note   string `json:"note,omitempty"`
 }
 
-type HTMLReportSection struct {
-	Title     string            `json:"title"`
-	Subtitle  string            `json:"subtitle,omitempty"`
-	Narrative []string          `json:"narrative,omitempty"`
-	Takeaways []string          `json:"takeaways,omitempty"`
-	Charts    []HTMLReportChart `json:"charts,omitempty"`
-	Table     *HTMLReportTable  `json:"table,omitempty"`
+type ReportSection struct {
+	Title     string        `json:"title"`
+	Subtitle  string        `json:"subtitle,omitempty"`
+	Narrative []string      `json:"narrative,omitempty"`
+	Takeaways []string      `json:"takeaways,omitempty"`
+	Charts    []ReportChart `json:"charts,omitempty"`
+	Table     *ReportTable  `json:"table,omitempty"`
 }
 
-type HTMLReportChart struct {
-	Type       string            `json:"type"`
-	Title      string            `json:"title"`
-	Subtitle   string            `json:"subtitle,omitempty"`
-	Categories []string          `json:"categories,omitempty"`
-	Series     []HTMLChartSeries `json:"series"`
-	Unit       string            `json:"unit,omitempty"`
-	Source     string            `json:"source,omitempty"`
-	Notes      []string          `json:"notes,omitempty"`
+type ReportChart struct {
+	Type       string        `json:"type"`
+	Title      string        `json:"title"`
+	Subtitle   string        `json:"subtitle,omitempty"`
+	Categories []string      `json:"categories,omitempty"`
+	Series     []ChartSeries `json:"series"`
+	Unit       string        `json:"unit,omitempty"`
+	Source     string        `json:"source,omitempty"`
+	Notes      []string      `json:"notes,omitempty"`
 }
 
-type HTMLChartSeries struct {
+type ChartSeries struct {
 	Name   string    `json:"name"`
 	Values []float64 `json:"values"`
 }
 
-type HTMLReportTable struct {
+type ReportTable struct {
 	Title   string     `json:"title,omitempty"`
 	Headers []string   `json:"headers"`
 	Rows    [][]string `json:"rows"`
 }
 
-func BuildHTMLReport(report HTMLReport) ([]byte, error) {
-	report = NormalizeHTMLReport(report)
+func BuildReport(report Report) ([]byte, error) {
+	report = NormalizeReport(report)
 	if strings.TrimSpace(report.Title) == "" {
 		return nil, fmt.Errorf("report title cannot be empty")
 	}
@@ -297,17 +297,17 @@ func BuildHTMLReport(report HTMLReport) ([]byte, error) {
 	return []byte(htmlDoc), nil
 }
 
-func NormalizeHTMLReport(report HTMLReport) HTMLReport {
+func NormalizeReport(report Report) Report {
 	report.Title = strings.TrimSpace(report.Title)
 	report.Subtitle = strings.TrimSpace(report.Subtitle)
 	report.Language = firstNonEmpty(strings.TrimSpace(report.Language), "en")
 	report.Audience = strings.TrimSpace(report.Audience)
 	report.Summary = strings.TrimSpace(report.Summary)
 	report.UpdatedAt = firstNonEmpty(strings.TrimSpace(report.UpdatedAt), time.Now().UTC().Format("2006-01-02"))
-	report.Theme = normalizeHTMLReportTheme(report.Theme)
+	report.Theme = normalizeReportTheme(report.Theme)
 	report.Findings = compactStrings(report.Findings)
 
-	kpis := make([]HTMLReportKPI, 0, len(report.KPIs))
+	kpis := make([]ReportKPI, 0, len(report.KPIs))
 	for _, item := range report.KPIs {
 		item.Label = strings.TrimSpace(item.Label)
 		item.Value = strings.TrimSpace(item.Value)
@@ -319,7 +319,7 @@ func NormalizeHTMLReport(report HTMLReport) HTMLReport {
 		kpis = append(kpis, item)
 	}
 	if len(kpis) == 0 {
-		kpis = []HTMLReportKPI{
+		kpis = []ReportKPI{
 			{Label: "Coverage", Value: "4 sections", Note: "Narrative and charts are balanced."},
 			{Label: "Charts", Value: "3 visuals", Note: "Built for a data-storytelling layout."},
 			{Label: "Audience", Value: firstNonEmpty(report.Audience, "Business stakeholders"), Note: "Optimized for external sharing."},
@@ -327,21 +327,21 @@ func NormalizeHTMLReport(report HTMLReport) HTMLReport {
 	}
 	report.KPIs = kpis
 
-	sections := make([]HTMLReportSection, 0, len(report.Sections))
+	sections := make([]ReportSection, 0, len(report.Sections))
 	for idx, section := range report.Sections {
 		section.Title = firstNonEmpty(strings.TrimSpace(section.Title), fmt.Sprintf("Section %d", idx+1))
 		section.Subtitle = strings.TrimSpace(section.Subtitle)
 		section.Narrative = compactStrings(section.Narrative)
 		section.Takeaways = compactStrings(section.Takeaways)
-		charts := make([]HTMLReportChart, 0, len(section.Charts))
+		charts := make([]ReportChart, 0, len(section.Charts))
 		for _, chart := range section.Charts {
-			if normalized, ok := normalizeHTMLChart(chart); ok {
+			if normalized, ok := normalizeReportChart(chart); ok {
 				charts = append(charts, normalized)
 			}
 		}
 		section.Charts = charts
 		if section.Table != nil {
-			table := normalizeHTMLTable(*section.Table)
+			table := normalizeReportTable(*section.Table)
 			section.Table = &table
 		}
 		if len(section.Narrative) == 0 && len(section.Takeaways) == 0 {
@@ -351,9 +351,9 @@ func NormalizeHTMLReport(report HTMLReport) HTMLReport {
 	}
 	report.Sections = sections
 
-	appendix := make([]HTMLReportTable, 0, len(report.AppendixTables))
+	appendix := make([]ReportTable, 0, len(report.AppendixTables))
 	for _, table := range report.AppendixTables {
-		normalized := normalizeHTMLTable(table)
+		normalized := normalizeReportTable(table)
 		if len(normalized.Headers) == 0 || len(normalized.Rows) == 0 {
 			continue
 		}
@@ -366,8 +366,8 @@ func NormalizeHTMLReport(report HTMLReport) HTMLReport {
 	return report
 }
 
-func normalizeHTMLReportTheme(theme HTMLReportTheme) HTMLReportTheme {
-	return HTMLReportTheme{
+func normalizeReportTheme(theme ReportTheme) ReportTheme {
+	return ReportTheme{
 		Name:         firstNonEmpty(strings.TrimSpace(theme.Name), "global-report"),
 		AccentColor:  firstNonEmpty(strings.TrimSpace(theme.AccentColor), "#2563eb"),
 		AccentSoft:   firstNonEmpty(strings.TrimSpace(theme.AccentSoft), "rgba(37, 99, 235, 0.12)"),
@@ -379,8 +379,8 @@ func normalizeHTMLReportTheme(theme HTMLReportTheme) HTMLReportTheme {
 	}
 }
 
-func normalizeHTMLChart(chart HTMLReportChart) (HTMLReportChart, bool) {
-	chart.Type = normalizeHTMLChartType(chart.Type)
+func normalizeReportChart(chart ReportChart) (ReportChart, bool) {
+	chart.Type = normalizeReportChartType(chart.Type)
 	chart.Title = strings.TrimSpace(chart.Title)
 	chart.Subtitle = strings.TrimSpace(chart.Subtitle)
 	chart.Unit = strings.TrimSpace(chart.Unit)
@@ -390,7 +390,7 @@ func normalizeHTMLChart(chart HTMLReportChart) (HTMLReportChart, bool) {
 	if chart.Title == "" {
 		chart.Title = "Key metric trend"
 	}
-	series := make([]HTMLChartSeries, 0, len(chart.Series))
+	series := make([]ChartSeries, 0, len(chart.Series))
 	maxLen := len(chart.Categories)
 	for idx, item := range chart.Series {
 		item.Name = firstNonEmpty(strings.TrimSpace(item.Name), fmt.Sprintf("Series %d", idx+1))
@@ -403,10 +403,10 @@ func normalizeHTMLChart(chart HTMLReportChart) (HTMLReportChart, bool) {
 		series = append(series, item)
 	}
 	if len(series) == 0 {
-		return HTMLReportChart{}, false
+		return ReportChart{}, false
 	}
 	if maxLen <= 0 {
-		return HTMLReportChart{}, false
+		return ReportChart{}, false
 	}
 	if len(chart.Categories) == 0 {
 		categories := make([]string, maxLen)
@@ -426,7 +426,7 @@ func normalizeHTMLChart(chart HTMLReportChart) (HTMLReportChart, bool) {
 	return chart, true
 }
 
-func normalizeHTMLTable(table HTMLReportTable) HTMLReportTable {
+func normalizeReportTable(table ReportTable) ReportTable {
 	table.Title = strings.TrimSpace(table.Title)
 	table.Headers = compactStrings(table.Headers)
 	rows := make([][]string, 0, len(table.Rows))
@@ -441,7 +441,7 @@ func normalizeHTMLTable(table HTMLReportTable) HTMLReportTable {
 	return table
 }
 
-func normalizeHTMLChartType(value string) string {
+func normalizeReportChartType(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "line", "area", "bar", "stacked_bar", "donut", "scatter", "waterfall":
 		return strings.ToLower(strings.TrimSpace(value))
@@ -450,11 +450,11 @@ func normalizeHTMLChartType(value string) string {
 	}
 }
 
-func renderHeroMeta(report HTMLReport) string {
+func renderHeroMeta(report Report) string {
 	items := []string{
 		"Audience: " + firstNonEmpty(report.Audience, "Business stakeholders"),
 		"Updated: " + firstNonEmpty(report.UpdatedAt, time.Now().UTC().Format("2006-01-02")),
-		"Format: Narrative HTML report",
+		"Format: Report (HTML output)",
 	}
 	var sb strings.Builder
 	for _, item := range items {
@@ -482,7 +482,7 @@ func renderFindings(items []string) string {
 	return sb.String()
 }
 
-func renderKPIs(items []HTMLReportKPI) string {
+func renderKPIs(items []ReportKPI) string {
 	var sb strings.Builder
 	for _, item := range items {
 		sb.WriteString(`<article class="kpi-card"><div class="kpi-label">`)
@@ -505,7 +505,7 @@ func renderKPIs(items []HTMLReportKPI) string {
 	return sb.String()
 }
 
-func renderHTMLSection(section HTMLReportSection, chartIndex *int, snippets *[]string) string {
+func renderHTMLSection(section ReportSection, chartIndex *int, snippets *[]string) string {
 	var copyHTML strings.Builder
 	for _, paragraph := range section.Narrative {
 		copyHTML.WriteString("<p>")
@@ -574,7 +574,7 @@ func renderHTMLSection(section HTMLReportSection, chartIndex *int, snippets *[]s
 	)
 }
 
-func renderHTMLTable(table HTMLReportTable) string {
+func renderHTMLTable(table ReportTable) string {
 	if len(table.Headers) == 0 || len(table.Rows) == 0 {
 		return ""
 	}
@@ -600,7 +600,7 @@ func renderHTMLTable(table HTMLReportTable) string {
 	)
 }
 
-func renderChartScript(containerID string, chart HTMLReportChart) string {
+func renderChartScript(containerID string, chart ReportChart) string {
 	payload := map[string]any{
 		"type":       chart.Type,
 		"title":      chart.Title,
@@ -716,22 +716,22 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func BuildHTMLReportFromWorkbook(title string, sheets []XlsxSheet) HTMLReport {
-	report := HTMLReport{
+func BuildReportFromWorkbook(title string, sheets []XlsxSheet) Report {
+	report := Report{
 		Title:     firstNonEmpty(title, "Workbook Report"),
-		Subtitle:  "A narrative HTML report generated from workbook data.",
+		Subtitle:  "A narrative report generated from workbook data.",
 		Language:  "en",
 		Audience:  "Business stakeholders",
-		Summary:   "This report converts workbook data into an executive-friendly HTML narrative with headline metrics, chart sections, and appendix tables.",
+		Summary:   "This report converts workbook data into an executive-friendly narrative with headline metrics, chart sections, and appendix tables.",
 		UpdatedAt: time.Now().UTC().Format("2006-01-02"),
-		KPIs: []HTMLReportKPI{
+		KPIs: []ReportKPI{
 			{Label: "Worksheets", Value: fmt.Sprintf("%d", len(sheets)), Note: "Each worksheet can map into one analysis section."},
-			{Label: "Format", Value: "HTML", Note: "Ready for browser-based sharing."},
+			{Label: "Output", Value: "HTML", Note: "Generated as a local shareable report file."},
 			{Label: "Charts", Value: "ECharts", Note: "Loaded from CDN for global users."},
 		},
 	}
-	sections := make([]HTMLReportSection, 0, len(sheets))
-	appendix := make([]HTMLReportTable, 0, len(sheets))
+	sections := make([]ReportSection, 0, len(sheets))
+	appendix := make([]ReportTable, 0, len(sheets))
 	for _, sheet := range sheets {
 		if len(sheet.Rows) == 0 {
 			continue
@@ -741,27 +741,27 @@ func BuildHTMLReportFromWorkbook(title string, sheets []XlsxSheet) HTMLReport {
 		for _, row := range sheet.Rows[1:] {
 			rows = append(rows, append([]string(nil), row...))
 		}
-		table := normalizeHTMLTable(HTMLReportTable{Title: sheet.Name, Headers: headers, Rows: rows})
+		table := normalizeReportTable(ReportTable{Title: sheet.Name, Headers: headers, Rows: rows})
 		appendix = append(appendix, table)
-		section := HTMLReportSection{
+		section := ReportSection{
 			Title:     firstNonEmpty(sheet.Name, "Worksheet"),
 			Subtitle:  "Key rows from the workbook are summarized below.",
-			Narrative: []string{"The original workbook has been transformed into a shareable HTML report while preserving the supporting table in the appendix."},
+			Narrative: []string{"The original workbook has been transformed into a shareable data report while preserving the supporting table in the appendix."},
 			Table:     &table,
 		}
 		if chart, ok := buildWorkbookChart(table); ok {
-			section.Charts = []HTMLReportChart{chart}
+			section.Charts = []ReportChart{chart}
 		}
 		sections = append(sections, section)
 	}
 	report.Sections = sections
 	report.AppendixTables = appendix
-	return NormalizeHTMLReport(report)
+	return NormalizeReport(report)
 }
 
-func buildWorkbookChart(table HTMLReportTable) (HTMLReportChart, bool) {
+func buildWorkbookChart(table ReportTable) (ReportChart, bool) {
 	if len(table.Headers) < 2 || len(table.Rows) == 0 {
-		return HTMLReportChart{}, false
+		return ReportChart{}, false
 	}
 	values := make([]float64, 0, len(table.Rows))
 	categories := make([]string, 0, len(table.Rows))
@@ -777,13 +777,13 @@ func buildWorkbookChart(table HTMLReportTable) (HTMLReportChart, bool) {
 		values = append(values, value)
 	}
 	if len(values) < 2 {
-		return HTMLReportChart{}, false
+		return ReportChart{}, false
 	}
-	return HTMLReportChart{
+	return ReportChart{
 		Type:       "bar",
 		Title:      firstNonEmpty(table.Title, "Worksheet summary"),
 		Categories: categories,
-		Series:     []HTMLChartSeries{{Name: table.Headers[1], Values: values}},
+		Series:     []ChartSeries{{Name: table.Headers[1], Values: values}},
 	}, true
 }
 

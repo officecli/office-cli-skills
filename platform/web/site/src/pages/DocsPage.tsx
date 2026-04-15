@@ -21,7 +21,7 @@ export default function DocsPage() {
       <section className="mt-16 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Current release</h2>
-          <p className="text-outline-variant leading-relaxed">Create PPTX, DOCX, XLSX, and HTML outputs. Review and score PPTX decks. Keep files local by default, or publish online previews when configured.</p>
+          <p className="text-outline-variant leading-relaxed">Create PPTX, DOCX, XLSX, and workbook-backed Report outputs. Review and score PPTX decks. Keep files local by default, or publish online previews when configured.</p>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">External vs hosted</h2>

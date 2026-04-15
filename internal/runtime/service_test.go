@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -179,7 +180,26 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 }
 
-func TestServiceGenerateHTMLWithFakeLLM(t *testing.T) {
+func TestServiceGenerateReportWithFakeLLM(t *testing.T) {
+	workbookBytes, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{
+		{
+			Name: "Revenue",
+			Rows: [][]string{
+				{"Region", "Revenue"},
+				{"North America", "128"},
+				{"Europe", "96"},
+				{"APAC", "74"},
+			},
+		},
+	}, officegen.XLSXOptions{Title: "Q2 Business Review", Creator: "test"})
+	if err != nil {
+		t.Fatalf("Generate workbook: %v", err)
+	}
+	workbookPath := filepath.Join(t.TempDir(), "q2_metrics.xlsx")
+	if err := os.WriteFile(workbookPath, workbookBytes, 0o644); err != nil {
+		t.Fatalf("Write workbook: %v", err)
+	}
+
 	service := NewService(&fakeLLMClient{
 		jsonResponse: `{
 			"title":"Q2 Business Review",
@@ -215,10 +235,11 @@ func TestServiceGenerateHTMLWithFakeLLM(t *testing.T) {
 	}, nil)
 
 	doc, err := service.Generate(context.Background(), GenerateParams{
-		DocumentType: engine.DocumentTypeHTML,
-		Prompt:       "Create an HTML report for the latest business review.",
-		Topic:        "Q2 Business Review",
-		Mode:         "fast",
+		DocumentType:   engine.DocumentTypeReport,
+		Prompt:         "Create a board-ready report for the latest business review.",
+		Topic:          "Q2 Business Review",
+		SourceFilePath: workbookPath,
+		Mode:           "fast",
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
@@ -232,7 +253,7 @@ func TestServiceGenerateHTMLWithFakeLLM(t *testing.T) {
 		"Regional revenue",
 	} {
 		if !strings.Contains(output, needle) {
-			t.Fatalf("html missing %q:\n%s", needle, output)
+			t.Fatalf("report html missing %q:\n%s", needle, output)
 		}
 	}
 }

@@ -1,6 +1,6 @@
 # OfficeCLI
 
-OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`, `DOCX`, and `XLSX` files. When publishing is configured, it can also return an online preview URL.
+OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`, `DOCX`, `XLSX`, and workbook-backed `Report` outputs. When publishing is configured, it can also return an online preview URL.
 
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
 
@@ -146,6 +146,12 @@ Generate an XLSX:
 
 ```bash
 ./officecli new xlsx "Sales Analysis" "Generate a quarterly sales analysis sheet with region, revenue, year-over-year change, and owner columns."
+```
+
+Generate a workbook-backed Report:
+
+```bash
+./officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
 ```
 
 Write output to a custom directory:
