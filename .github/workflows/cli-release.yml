@@ -48,6 +48,7 @@ jobs:
       PUBLIC_DIST_DEFAULT_BRANCH: ${{ vars.PUBLIC_DIST_DEFAULT_BRANCH || 'main' }}
       HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
       HOMEBREW_TAP_DEFAULT_BRANCH: ${{ vars.HOMEBREW_TAP_DEFAULT_BRANCH || 'main' }}
+      PLATFORM_LICENSE_PROOF_SEED: ${{ secrets.PLATFORM_LICENSE_PROOF_SEED || '' }}
       CLI_EMBEDDED_PUBLISH_BASE_URL: ${{ vars.CLI_EMBEDDED_PUBLISH_BASE_URL || 'https://platform.officecli.io' }}
       CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID: ${{ vars.CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID || 'officecli-cli' }}
       CLI_EMBEDDED_PUBLISH_AUTH_KEY: ${{ secrets.CLI_EMBEDDED_PUBLISH_AUTH_KEY || '' }}
@@ -86,6 +87,42 @@ jobs:
         with:
           version: latest
           install-only: true
+
+      - name: Derive embedded license proof public key
+        run: |
+          set -euo pipefail
+          if [ -z "${PLATFORM_LICENSE_PROOF_SEED}" ]; then
+            echo "Missing PLATFORM_LICENSE_PROOF_SEED" >&2
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/derive_license_proof_public_key.go" <<'EOF'
+          package main
+
+          import (
+          	"crypto/ed25519"
+          	"encoding/base64"
+          	"fmt"
+          	"os"
+          	"strings"
+          )
+
+          func main() {
+          	seedValue := strings.TrimSpace(os.Getenv("PLATFORM_LICENSE_PROOF_SEED"))
+          	if seedValue == "" {
+          		panic("missing PLATFORM_LICENSE_PROOF_SEED")
+          	}
+          	seed, err := base64.RawURLEncoding.DecodeString(seedValue)
+          	if err != nil {
+          		panic(err)
+          	}
+          	privateKey := ed25519.NewKeyFromSeed(seed)
+          	fmt.Println(base64.RawURLEncoding.EncodeToString(privateKey.Public().(ed25519.PublicKey)))
+          }
+          EOF
+          cli_license_proof_public_key="$(
+            go run "$RUNNER_TEMP/derive_license_proof_public_key.go"
+          )"
+          echo "CLI_LICENSE_PROOF_PUBLIC_KEY=${cli_license_proof_public_key}" >> "$GITHUB_ENV"
 
       - name: Ensure release tag exists for workflow_dispatch
         if: github.event_name == 'workflow_dispatch'

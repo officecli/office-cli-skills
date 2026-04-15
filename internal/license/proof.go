@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,10 +14,12 @@ import (
 const (
 	licenseProofVersion          = "v1"
 	defaultLicenseProofPublicKey = "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ"
+	licenseProofPublicKeyEnv     = "OFFICE_CLI_LICENSE_PROOF_PUBLIC_KEY"
 	licenseProofClockSkew        = 30 * time.Second
 )
 
 var nowFunc = time.Now
+var EmbeddedLicenseProofPublicKey = defaultLicenseProofPublicKey
 
 func NewRequestNonce() (string, error) {
 	var raw [16]byte
@@ -87,7 +90,7 @@ func ValidateCommitToken(token CommitToken, req CheckRequest, accessMode AccessM
 		return fmt.Errorf("license proof expired")
 	}
 
-	publicKey, err := base64.RawURLEncoding.DecodeString(defaultLicenseProofPublicKey)
+	publicKey, err := base64.RawURLEncoding.DecodeString(configuredLicenseProofPublicKey())
 	if err != nil {
 		return fmt.Errorf("decode license proof public key: %w", err)
 	}
@@ -99,6 +102,16 @@ func ValidateCommitToken(token CommitToken, req CheckRequest, accessMode AccessM
 		return fmt.Errorf("license proof signature mismatch")
 	}
 	return nil
+}
+
+func configuredLicenseProofPublicKey() string {
+	if value := strings.TrimSpace(os.Getenv(licenseProofPublicKeyEnv)); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(EmbeddedLicenseProofPublicKey); value != "" {
+		return value
+	}
+	return defaultLicenseProofPublicKey
 }
 
 func isLegacyUnsignedCommitToken(token CommitToken) bool {
