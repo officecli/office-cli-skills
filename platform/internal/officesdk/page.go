@@ -63,7 +63,7 @@ func RenderOfficePage(officesdkEndpoint, fileID, token string, fileType int, rea
 		role = "editor"
 	}
 	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -80,7 +80,7 @@ func RenderOfficePage(officesdkEndpoint, fileID, token string, fileType int, rea
 </head>
 <body>
   <div id="root">
-    <div class="loading" id="loading">正在加载预览...</div>
+    <div class="loading" id="loading">Loading preview...</div>
   </div>
   <script src="https://unpkg.com/@officesdk/web@1.0.9/umd/index.js"></script>
   <script>
@@ -97,7 +97,7 @@ func RenderOfficePage(officesdkEndpoint, fileID, token string, fileType int, rea
       function init() {
         var pkg = window["@officesdk/web"];
         if (!pkg || typeof pkg.createSDK !== "function") {
-          showError("OfficeSDK JS SDK 加载失败");
+          showError("Failed to load the OfficeSDK JavaScript SDK.");
           return;
         }
         document.getElementById("loading").style.display = "none";
@@ -107,13 +107,13 @@ func RenderOfficePage(officesdkEndpoint, fileID, token string, fileType int, rea
           fileId: fileId,
           fileType: fileType,
           token: token,
-          lang: "zh-CN",
+          lang: "en-US",
           root: document.getElementById("root"),
           mode: "standard",
           role: role
         });
         sdk.connect().catch(function(err) {
-          showError("文档加载失败: " + ((err && err.message) || String(err)));
+          showError("Failed to load document: " + ((err && err.message) || String(err)));
         });
       }
       if (document.readyState === "complete") {
