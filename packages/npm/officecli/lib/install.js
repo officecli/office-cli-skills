@@ -20,6 +20,34 @@ const DEFAULT_LATEST_TAG = process.env.OFFICECLI_NPM_LATEST_TAG || "latest";
 const DEFAULT_VERSION = process.env.OFFICECLI_NPM_VERSION || pkg.version;
 const PROGRESS_INTERVAL_MS = 1000;
 
+function detectPackageManager() {
+  const override = String(process.env.OFFICECLI_NPM_PACKAGE_MANAGER || "").trim().toLowerCase();
+  if (override) {
+    return override;
+  }
+
+  const userAgent = String(process.env.npm_config_user_agent || "").trim().toLowerCase();
+  if (userAgent) {
+    const token = userAgent.split(/\s+/)[0] || "";
+    const name = token.split("/")[0] || "";
+    if (["npm", "pnpm", "yarn", "bun"].includes(name)) {
+      return name;
+    }
+  }
+
+  const execPath = String(process.env.npm_execpath || "").trim().toLowerCase();
+  if (execPath.includes("pnpm")) {
+    return "pnpm";
+  }
+  if (execPath.includes("yarn")) {
+    return "yarn";
+  }
+  if (execPath.includes("bun")) {
+    return "bun";
+  }
+  return "npm";
+}
+
 function getBinaryPath() {
   return BINARY_PATH;
 }
@@ -326,6 +354,7 @@ async function installBinary({ verbose = true } = {}) {
   const { platform, arch } = resolvePlatform();
   const distRepo = DEFAULT_DIST_REPO;
   const { requestedVersion, releaseTag } = resolveRequestedVersion();
+  const packageManager = detectPackageManager();
   let effectiveVersion = requestedVersion;
   let effectiveTag = releaseTag;
   let archive = archiveName(effectiveVersion, platform, arch);
@@ -382,6 +411,7 @@ async function installBinary({ verbose = true } = {}) {
       requestedVersion,
       installedVersion: effectiveVersion,
       releaseTag: effectiveTag,
+      packageManager,
       platform,
       arch
     });
@@ -418,7 +448,9 @@ async function ensureInstalled({ verbose = true } = {}) {
 }
 
 module.exports = {
+  detectPackageManager,
   ensureInstalled,
   getBinaryPath,
-  installBinary
+  installBinary,
+  loadMetadata
 };

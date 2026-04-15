@@ -16,8 +16,12 @@ import (
 
 const (
 	updateCheckSkipEnv      = "OFFICECLI_SKIP_UPDATE_CHECK"
+	updateInstallMethodEnv  = "OFFICECLI_INSTALL_METHOD"
+	updatePackageManagerEnv = "OFFICECLI_PACKAGE_MANAGER"
 	defaultDistRepo         = "officecli/officecli-dist"
 	defaultDistBranch       = "main"
+	defaultNPMPackageName   = "officecli"
+	defaultNPMRegistryURL   = "https://registry.npmjs.org/%s/latest"
 	defaultUpdateCheckURL   = "https://api.github.com/repos/%s/releases/latest"
 	defaultInstallScriptURL = "https://raw.githubusercontent.com/%s/%s/scripts/install-officecli.sh"
 )
@@ -27,6 +31,7 @@ type InstallMethod string
 const (
 	InstallMethodUnknown InstallMethod = "unknown"
 	InstallMethodBrew    InstallMethod = "brew"
+	InstallMethodNPM     InstallMethod = "npm"
 	InstallMethodScript  InstallMethod = "script"
 )
 
@@ -35,6 +40,7 @@ type UpdateChannel string
 const (
 	UpdateChannelUnknown UpdateChannel = "unknown"
 	UpdateChannelBrew    UpdateChannel = "brew"
+	UpdateChannelNPM     UpdateChannel = "npm"
 	UpdateChannelLatest  UpdateChannel = "latest"
 )
 
@@ -57,6 +63,10 @@ type UpdateInfo struct {
 type releaseLookup struct {
 	TagName     string `json:"tag_name"`
 	PublishedAt string `json:"published_at"`
+}
+
+type npmLatestLookup struct {
+	Version string `json:"version"`
 }
 
 type brewOutdatedResult struct {
@@ -167,6 +177,8 @@ func defaultCheckForUpdates(ctx context.Context) (UpdateInfo, error) {
 	switch method {
 	case InstallMethodBrew:
 		return checkBrewForUpdates(ctx)
+	case InstallMethodNPM:
+		return checkNPMForUpdates(ctx)
 	case InstallMethodScript:
 		return checkLatestReleaseForUpdates(ctx, execPath)
 	default:
@@ -190,6 +202,9 @@ func defaultCheckForUpdates(ctx context.Context) (UpdateInfo, error) {
 }
 
 func detectInstallMethod(execPath string) (InstallMethod, error) {
+	if method := installMethodFromEnv(); method != InstallMethodUnknown {
+		return method, nil
+	}
 	resolved := strings.TrimSpace(execPath)
 	if resolved == "" {
 		return InstallMethodUnknown, nil
@@ -204,6 +219,19 @@ func detectInstallMethod(execPath string) (InstallMethod, error) {
 		return InstallMethodScript, nil
 	}
 	return InstallMethodUnknown, nil
+}
+
+func installMethodFromEnv() InstallMethod {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(updateInstallMethodEnv))) {
+	case string(InstallMethodBrew):
+		return InstallMethodBrew
+	case string(InstallMethodNPM):
+		return InstallMethodNPM
+	case string(InstallMethodScript):
+		return InstallMethodScript
+	default:
+		return InstallMethodUnknown
+	}
 }
 
 func isBrewInstall(execPath string) bool {
@@ -256,6 +284,44 @@ func checkBrewForUpdates(ctx context.Context) (UpdateInfo, error) {
 	}
 	info.Available = true
 	info.LatestVersionLabel = strings.TrimSpace(parsed.Formulae[0].CurrentVersion)
+	return info, nil
+}
+
+func checkNPMForUpdates(ctx context.Context) (UpdateInfo, error) {
+	packageName := fallbackString(os.Getenv("OFFICECLI_NPM_PACKAGE_NAME"), defaultNPMPackageName)
+	url := fmt.Sprintf(defaultNPMRegistryURL, packageName)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return UpdateInfo{}, err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return UpdateInfo{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return UpdateInfo{}, fmt.Errorf("npm update check failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var latest npmLatestLookup
+	if err := json.NewDecoder(resp.Body).Decode(&latest); err != nil {
+		return UpdateInfo{}, err
+	}
+	manager := detectedPackageManager()
+	info := UpdateInfo{
+		InstallMethod:       InstallMethodNPM,
+		Channel:             UpdateChannelNPM,
+		CurrentVersion:      Version,
+		CurrentCommit:       Commit,
+		CurrentBuildDate:    BuildDate,
+		LatestVersionLabel:  strings.TrimSpace(latest.Version),
+		AutoUpdateSupported: true,
+		UpdateCommand:       updateCommandForPackageManager(manager),
+	}
+	if versionIsOlder(info.CurrentVersion, info.LatestVersionLabel) {
+		info.Available = true
+	}
 	return info, nil
 }
 
@@ -316,6 +382,9 @@ func defaultPerformUpdate(ctx context.Context, info UpdateInfo) error {
 	switch info.InstallMethod {
 	case InstallMethodBrew:
 		return runInteractiveCommand(ctx, "brew", "upgrade", "officecli")
+	case InstallMethodNPM:
+		name, args := packageManagerCommand(detectedPackageManager())
+		return runInteractiveCommand(ctx, name, args...)
 	case InstallMethodScript:
 		return runInstallScriptUpdate(ctx, info)
 	default:
@@ -382,6 +451,98 @@ func runInteractiveCommand(ctx context.Context, name string, args ...string) err
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func detectedPackageManager() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(updatePackageManagerEnv))) {
+	case "pnpm":
+		return "pnpm"
+	case "yarn":
+		return "yarn"
+	case "bun":
+		return "bun"
+	default:
+		return "npm"
+	}
+}
+
+func packageManagerCommand(manager string) (string, []string) {
+	switch strings.ToLower(strings.TrimSpace(manager)) {
+	case "pnpm":
+		return "pnpm", []string{"add", "-g", defaultNPMPackageName}
+	case "yarn":
+		return "yarn", []string{"global", "add", defaultNPMPackageName}
+	case "bun":
+		return "bun", []string{"install", "-g", defaultNPMPackageName}
+	default:
+		return "npm", []string{"install", "-g", defaultNPMPackageName}
+	}
+}
+
+func updateCommandForPackageManager(manager string) string {
+	name, args := packageManagerCommand(manager)
+	return strings.TrimSpace(name + " " + strings.Join(args, " "))
+}
+
+func versionIsOlder(current, latest string) bool {
+	currentParts, currentOK := parseVersionParts(current)
+	latestParts, latestOK := parseVersionParts(latest)
+	if currentOK && latestOK {
+		maxLen := len(currentParts)
+		if len(latestParts) > maxLen {
+			maxLen = len(latestParts)
+		}
+		for i := 0; i < maxLen; i++ {
+			var currentPart int
+			if i < len(currentParts) {
+				currentPart = currentParts[i]
+			}
+			var latestPart int
+			if i < len(latestParts) {
+				latestPart = latestParts[i]
+			}
+			if currentPart < latestPart {
+				return true
+			}
+			if currentPart > latestPart {
+				return false
+			}
+		}
+		return false
+	}
+	currentTrimmed := strings.TrimSpace(strings.TrimPrefix(current, "v"))
+	latestTrimmed := strings.TrimSpace(strings.TrimPrefix(latest, "v"))
+	return currentTrimmed != "" && latestTrimmed != "" && currentTrimmed != latestTrimmed
+}
+
+func parseVersionParts(raw string) ([]int, bool) {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(raw, "v"))
+	if trimmed == "" {
+		return nil, false
+	}
+	parts := strings.Split(trimmed, ".")
+	values := make([]int, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			return nil, false
+		}
+		digits := part
+		for i, r := range part {
+			if r < '0' || r > '9' {
+				if i == 0 {
+					return nil, false
+				}
+				digits = part[:i]
+				break
+			}
+		}
+		value := 0
+		for _, r := range digits {
+			value = value*10 + int(r-'0')
+		}
+		values = append(values, value)
+	}
+	return values, true
 }
 
 func userHomeDirOrEmpty() string {
