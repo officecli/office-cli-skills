@@ -9,7 +9,7 @@ export default function UseCases() {
   const cases = [
     {
       title: 'Product Teams',
-      description: 'Create deck, doc, spreadsheet, and workbook-backed report outputs for launches, business reviews, and internal communication without maintaining separate document stacks.',
+      description: 'Create presentations, documents, spreadsheets, and workbook-backed report outputs for launches, business reviews, and internal communication without maintaining separate document stacks.',
       image: indieVisual,
       borderClass: 'hover:border-primary/20',
     },
@@ -21,7 +21,7 @@ export default function UseCases() {
     },
     {
       title: 'Ops and Research Teams',
-      description: 'Use one CLI for document creation and review today, then expand toward summarization, conversion, and editing workflows as the roadmap grows.',
+      description: 'Use one CLI for document creation and review today, then expand into summarization, conversion, and editing workflows as the product evolves.',
       image: enterpriseVisual,
       borderClass: 'hover:border-secondary/20',
     },

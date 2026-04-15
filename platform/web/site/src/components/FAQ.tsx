@@ -7,11 +7,11 @@ export default function FAQ({ standalone = false, compact = false }: FAQProps) {
   const faqs = [
     {
       q: 'Is OfficeCLI only for generating files?',
-      a: 'No. Generation is the current center of gravity, but the product direction is broader document operations: conversion, content modification, summarization, extraction, and layout handling.',
+      a: 'No. Generation is the primary focus right now, but the product direction is broader document operations: conversion, content modification, summarization, extraction, and layout handling.',
     },
     {
       q: 'Do I need Docker, Kubernetes, or a backend?',
-      a: 'No for the core local workflow. OfficeCLI is designed to stay lightweight: one binary plus your LLM endpoint. Platform features are optional, not a requirement for basic local use.',
+      a: 'Not for the core local workflow. OfficeCLI is designed to stay lightweight: one binary plus your LLM endpoint. Platform features are optional, not a requirement for basic local use.',
     },
     {
       q: 'What document types work today?',

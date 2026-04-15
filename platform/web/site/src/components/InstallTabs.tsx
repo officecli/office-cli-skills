@@ -11,7 +11,7 @@ interface InstallTabsProps {
 export default function InstallTabs({
   compact = false,
   headline = 'Install OfficeCLI',
-  intro = 'Pick the setup path that matches your machine. OfficeCLI stays lightweight: one binary, plus your LLM endpoint for the core local workflow.',
+  intro = 'Choose the installation method that matches your environment. OfficeCLI stays lightweight: one binary, plus your LLM endpoint for the core local workflow.',
 }: InstallTabsProps) {
   const [activeTab, setActiveTab] = useState<InstallTabID>('manual')
   const [copiedValue, setCopiedValue] = useState<string>('')

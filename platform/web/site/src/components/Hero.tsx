@@ -272,7 +272,7 @@ export default function Hero() {
             Run <span className="text-primary italic">Document</span> Operations From One Lightweight Binary
           </h1>
           <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI handles document operations locally: generate PPTX, DOCX, XLSX, and workbook-backed Report outputs today, review decks, and grow into conversion, modification, summarization, and layout workflows next. For the core path, you only need the binary and an LLM endpoint.
+            OfficeCLI handles document operations locally: generate PPTX, DOCX, XLSX, and workbook-backed Report outputs today, review presentations, and expand into conversion, modification, summarization, and layout workflows next. For the core path, you only need the binary and an LLM endpoint.
           </p>
           <div className="flex flex-wrap gap-4">
             <motion.a

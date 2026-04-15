@@ -137,7 +137,7 @@ export default function Features() {
             <Sparkles className="text-primary w-10 h-10 mb-6" />
             <h3 className="font-headline text-3xl font-bold text-white mb-4">Built for Broader Document Operations</h3>
             <p className="text-outline-variant max-w-2xl text-lg">
-              OfficeCLI starts with creation and PPT review, then expands toward conversion, modification, summarization, and richer document formatting workflows.
+              OfficeCLI starts with creation and PPT review, then expands into conversion, modification, summarization, and richer document formatting workflows.
             </p>
           </div>
           <div className="hidden lg:flex w-64 h-32 bg-surface-high rounded-xl border border-outline-variant/10 items-center justify-center relative z-10 shadow-inner">

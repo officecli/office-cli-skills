@@ -30,8 +30,8 @@ const roadmapPhases = [
     border: 'border-outline-variant/10',
     background: 'bg-surface-low',
     items: [
-      'Add PDF, Markdown, and CSV to the supported workflow surface.',
-      'Cover more Word, spreadsheet, and presentation family variants.',
+      'Add PDF, Markdown, and CSV to the supported formats.',
+      'Cover more document, spreadsheet, and presentation formats.',
       'Improve layout cleanup and advanced formatting operations.',
     ],
   },
@@ -44,7 +44,7 @@ export default function Roadmap() {
         <div className="max-w-3xl mb-14">
           <h2 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-5">ROADMAP</h2>
           <p className="text-outline-variant text-lg leading-relaxed">
-            OfficeCLI is moving from document generation into a broader document operations workflow. The timeline below separates what is already strong today from the next areas of expansion.
+            OfficeCLI is moving from document generation into a broader document operations workflow. The timeline below separates current core capabilities from the next areas of expansion.
           </p>
         </div>
 
