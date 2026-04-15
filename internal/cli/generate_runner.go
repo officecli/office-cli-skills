@@ -59,7 +59,11 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
-	publisher, err := publishprovider.NewPublisher(cfg.Publish)
+	publishCfg := cfg.Publish
+	if strings.TrimSpace(publishCfg.APIKey) == "" {
+		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
+	}
+	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
 		return GenerateResult{}, err
 	}

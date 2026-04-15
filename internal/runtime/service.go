@@ -567,7 +567,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Packaging the PPTX file")
 	fileBytes, err := officegen.NewPPTXGenerator().Generate(payload.Slides, officegen.PPTXOptions{
 		Title:       payload.Title,
-		Creator:     "ClaudeOffice",
+		Creator:     "OfficeCLI",
 		Theme:       payload.Theme,
 		StylePreset: payload.StylePreset,
 	})

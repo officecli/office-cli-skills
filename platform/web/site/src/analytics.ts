@@ -1,4 +1,5 @@
 import { SITE_ANALYTICS_EVENTS } from './analytics-events'
+import { siteBaseURL } from './siteData'
 
 const TRACKED_PARAMS = [
   'invite',
@@ -19,15 +20,20 @@ declare global {
   }
 }
 
-const measurementID = import.meta.env.VITE_GA4_MEASUREMENT_ID?.trim()
+const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
 let analyticsInitialized = false
 
+function getMeasurementID() {
+  return (viteEnv?.VITE_GA4_MEASUREMENT_ID ?? process.env.VITE_GA4_MEASUREMENT_ID)?.trim()
+}
+
 export function analyticsEnabled() {
-  return Boolean(measurementID)
+  return Boolean(getMeasurementID())
 }
 
 export function initAnalytics() {
-  if (!analyticsEnabled() || analyticsInitialized) return
+  const measurementID = getMeasurementID()
+  if (!measurementID || analyticsInitialized) return
 
   const scriptID = 'ga4-script'
   if (!document.getElementById(scriptID)) {
@@ -60,7 +66,8 @@ export function extractAttributionParams(currentSearch: string) {
 }
 
 export function buildTrackedURL(target: string, currentSearch: string) {
-  const url = new URL(target, window.location.origin)
+  const origin = typeof window !== 'undefined' ? window.location.origin : siteBaseURL
+  const url = new URL(target, origin)
   const attrs = extractAttributionParams(currentSearch)
 
   for (const [key, value] of Object.entries(attrs)) {

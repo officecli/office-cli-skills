@@ -16,6 +16,7 @@ site_base_url: "https://officecli.io"
 platform_base_url: "https://platform.officecli.io"
 # For local development only; replace with real secrets when APP_ENV=production
 app_session_secret: "change-me-app-session-secret-123456"
+app_session_cookie_domain: ""
 app_session_ttl: "24h"
 google_redirect_url: "https://platform.officecli.io/api/auth/google/callback"
 app_google_allowlist: "luyang950@gmail.com"
@@ -26,10 +27,14 @@ stripe_cancel_url: "https://platform.officecli.io/app/billing?status=cancel"
 admin_static_dir: "web/admin/dist"
 app_static_dir: "web/app/dist"
 site_static_dir: "web/site/dist"
-claudeoffice_base_url: "https://claudeoffice.example.com"
-claudeoffice_auth_key: ""
-claudeoffice_auth_key_id: "platform-prod"
-claudeoffice_auth_shared_secret: ""
+preview_object_endpoint: ""
+preview_object_access_key: ""
+preview_object_secret_key: ""
+preview_object_bucket: "officecli-preview"
+preview_object_use_ssl: true
+officesdk_host: ""
+officesdk_endpoint: "https://officecli.io/sdk/turbo-ai"
+officesdk_jwt_secret: ""
 publish_rate_limit_per_minute: 30
 publish_max_file_bytes: 52428800
 publish_default_expire_seconds: 2592000

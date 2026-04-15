@@ -83,7 +83,7 @@ func RenderRewriteSlideXML(blueprint RewriteSlideBlueprint) (string, error) {
 
 	fileBytes, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{slide}, officegen.PPTXOptions{
 		Title:   slide.Title,
-		Creator: "ClaudeOffice",
+		Creator: "OfficeCLI",
 	})
 	if err != nil {
 		return "", err

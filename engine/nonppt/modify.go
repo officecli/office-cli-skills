@@ -94,7 +94,7 @@ func RewriteDOCXDocument(ooxmlBytes []byte, paragraphs []string) ([]byte, error)
 	for _, paragraph := range paragraphs {
 		docParagraphs = append(docParagraphs, officegen.DocxParagraph{Text: paragraph})
 	}
-	docxBytes, err := officegen.NewDOCXGenerator().Generate(docParagraphs, officegen.DOCXOptions{Title: "Updated Document", Creator: "ClaudeOffice"})
+	docxBytes, err := officegen.NewDOCXGenerator().Generate(docParagraphs, officegen.DOCXOptions{Title: "Updated Document", Creator: "OfficeCLI"})
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func RewriteXLSXSheet(ooxmlBytes []byte, worksheetIndex int, rows [][]string) ([
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("rows cannot be empty")
 	}
-	xlsxBytes, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{{Name: fmt.Sprintf("Sheet%d", worksheetIndex), Rows: rows}}, officegen.XLSXOptions{Title: "Updated Sheet", Creator: "ClaudeOffice"})
+	xlsxBytes, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{{Name: fmt.Sprintf("Sheet%d", worksheetIndex), Rows: rows}}, officegen.XLSXOptions{Title: "Updated Sheet", Creator: "OfficeCLI"})
 	if err != nil {
 		return nil, err
 	}

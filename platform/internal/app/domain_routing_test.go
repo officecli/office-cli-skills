@@ -155,6 +155,49 @@ func TestRegisterStaticServesAppAccessDeniedThroughSPA(t *testing.T) {
 	}
 }
 
+func TestRegisterStaticServesSiteRootFiles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	root := t.TempDir()
+	adminDir := writeIndex(t, filepath.Join(root, "admin"), "admin")
+	appDir := writeIndex(t, filepath.Join(root, "app"), "app")
+	siteDir := writeIndex(t, filepath.Join(root, "site"), "site")
+	writeFile(t, siteDir, "robots.txt", "User-agent: *")
+	writeFile(t, siteDir, "sitemap.xml", "<urlset/>")
+	writeFile(t, siteDir, "favicon.svg", "<svg/>")
+
+	engine := gin.New()
+	registerStatic(engine, Config{
+		AdminStaticDir:  adminDir,
+		AppStaticDir:    appDir,
+		SiteStaticDir:   siteDir,
+		SiteBaseURL:     "https://officecli.io",
+		PlatformBaseURL: "https://platform.officecli.io",
+	})
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{path: "/robots.txt", want: "User-agent: *"},
+		{path: "/sitemap.xml", want: "<urlset/>"},
+		{path: "/favicon.svg", want: "<svg/>"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "http://officecli.io"+tc.path, nil)
+		req.Host = "officecli.io"
+		rec := httptest.NewRecorder()
+
+		engine.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, body = %s", tc.path, rec.Code, rec.Body.String())
+		}
+		if body := rec.Body.String(); body != tc.want {
+			t.Fatalf("%s body = %q", tc.path, body)
+		}
+	}
+}
+
 func writeIndex(t *testing.T, dir, label string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -165,4 +208,11 @@ func writeIndex(t *testing.T, dir, label string) string {
 		t.Fatalf("WriteFile(%s): %v", indexPath, err)
 	}
 	return dir
+}
+
+func writeFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", name, err)
+	}
 }

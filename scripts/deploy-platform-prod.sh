@@ -316,27 +316,10 @@ PY
   kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "${payload}" >/dev/null
 }
 
-backfill_publish_auth_secret() {
-  local legacy_auth_key=""
-  local shared_secret=""
-  local key_id=""
-
-  legacy_auth_key="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_KEY}' 2>/dev/null | base64 -d || true)"
-  shared_secret="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_SHARED_SECRET}' 2>/dev/null | base64 -d || true)"
-  key_id="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.CLAUDEOFFICE_AUTH_KEY_ID}' 2>/dev/null | base64 -d || true)"
-
-  if [[ -z "$shared_secret" && -n "$legacy_auth_key" ]]; then
-    kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p "{\"stringData\":{\"CLAUDEOFFICE_AUTH_SHARED_SECRET\":\"${legacy_auth_key}\"}}" >/dev/null
-  fi
-  if [[ -z "$key_id" ]]; then
-    kubectl -n "$KUBE_NAMESPACE" patch secret "$SECRET_NAME" --type merge -p '{"stringData":{"CLAUDEOFFICE_AUTH_KEY_ID":"platform-prod"}}' >/dev/null
-  fi
-}
-
 assert_secret_keys() {
   local missing=()
   local key
-  for key in CLAUDEOFFICE_BASE_URL CLAUDEOFFICE_AUTH_SHARED_SECRET; do
+  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
@@ -344,6 +327,9 @@ assert_secret_keys() {
   if [[ ${#missing[@]} -gt 0 ]]; then
     die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} is missing required keys: ${missing[*]}"
   fi
+  local app_env
+  app_env="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.APP_ENV}' | base64 -d)"
+  [[ "${app_env}" == "production" ]] || die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} must set APP_ENV=production"
 }
 
 ensure_postgres_secret() {
@@ -520,7 +506,6 @@ cd "$REMOTE_WORKDIR"
 ensure_namespace
 ensure_secret
 sync_secret_from_env_file
-backfill_publish_auth_secret
 assert_secret_keys
 ensure_postgres_secret
 sync_platform_secret_postgres_dsn

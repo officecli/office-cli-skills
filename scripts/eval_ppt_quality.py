@@ -217,7 +217,7 @@ def main():
         print(config_status.strip(), file=sys.stderr)
         return 2
     if args.publish and "Online preview publishing enabled: true" not in config_status:
-        write_blocker("Online preview publishing is not enabled, so the ClaudeOffice preview URL cannot be validated.", config_status.strip())
+        write_blocker("Online preview publishing is not enabled, so the OfficeCLI preview URL cannot be validated.", config_status.strip())
         print("Blocked: online preview publishing is not enabled.", file=sys.stderr)
         print(config_status.strip(), file=sys.stderr)
         return 2

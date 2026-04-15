@@ -1,9 +1,13 @@
 export interface NavItem {
   to: string
   label: string
+  newTab?: boolean
 }
 
-export const platformBaseURL = import.meta.env.VITE_PLATFORM_BASE_URL ?? 'https://platform.officecli.io'
+const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+
+export const siteBaseURL = viteEnv?.VITE_SITE_BASE_URL ?? 'https://officecli.io'
+export const platformBaseURL = viteEnv?.VITE_PLATFORM_BASE_URL ?? 'https://platform.officecli.io'
 export const platformAppURL = `${platformBaseURL}/app`
 export const platformBillingURL = `${platformBaseURL}/app/billing`
 export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
@@ -11,8 +15,8 @@ export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
 export const navItems: NavItem[] = [
   { to: '/#', label: 'Home' },
   { to: '/#pricing', label: 'Pricing' },
-  { to: '/#download', label: 'Download CLI' },
-  { to: '/docs', label: 'Docs' },
+  { to: '/#download', label: 'Install the CLI' },
+  { to: '/docs', label: 'Product Docs', newTab: true },
   { to: '/#faq', label: 'FAQ' },
 ]
 
@@ -20,8 +24,8 @@ export const footerGroups = [
   {
     title: 'Product',
     links: [
-      { label: 'CLI', to: '/#download', external: false },
-      { label: 'Docs', to: '/docs', external: false },
+      { label: 'Install the CLI', to: '/#download', external: false },
+      { label: 'Product Docs', to: '/docs', external: false },
       { label: 'Console', to: platformAppURL, external: true },
     ],
   },

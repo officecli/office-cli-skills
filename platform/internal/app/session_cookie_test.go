@@ -24,6 +24,8 @@ type fakeAuthRouteService struct {
 	logoutCookie   string
 	loginInvite    string
 	handleErr      error
+	meUser         *model.User
+	meErr          error
 }
 
 func (f *fakeAuthRouteService) LoginURL(_ context.Context, returnTo, inviteCode string) (string, error) {
@@ -36,6 +38,9 @@ func (f *fakeAuthRouteService) HandleCallback(_ context.Context, code, state str
 }
 
 func (f *fakeAuthRouteService) Me(_ context.Context, raw string) (*model.User, error) {
+	if f.meUser != nil || f.meErr != nil {
+		return f.meUser, f.meErr
+	}
 	return &model.User{ID: 1, Email: "demo@example.com", Name: "demo"}, nil
 }
 
@@ -130,7 +135,7 @@ func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T)
 		handleCookie:   "encoded-app-cookie",
 		handleReturnTo: "/app",
 	}
-	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc)
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour, AppSessionCookieDomain: ".officecli.io"}, authSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=demo&state=state", nil)
 	rec := httptest.NewRecorder()
@@ -143,6 +148,9 @@ func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T)
 	if !strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "SameSite=Lax") {
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
+	if !strings.Contains(cookie, "Domain=officecli.io") {
+		t.Fatalf("Set-Cookie = %q", cookie)
+	}
 }
 
 func TestRegisterAuthRoutesLogoutClearsCookieWithSameSiteLax(t *testing.T) {
@@ -150,7 +158,7 @@ func TestRegisterAuthRoutesLogoutClearsCookieWithSameSiteLax(t *testing.T) {
 	router := gin.New()
 	api := router.Group("/api")
 	authSvc := &fakeAuthRouteService{}
-	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc)
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour, AppSessionCookieDomain: ".officecli.io"}, authSvc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "existing"})
@@ -162,6 +170,9 @@ func TestRegisterAuthRoutesLogoutClearsCookieWithSameSiteLax(t *testing.T) {
 		t.Fatalf("logout cookie = %q", authSvc.logoutCookie)
 	}
 	if !strings.Contains(cookie, "cop_app_session=") || !strings.Contains(cookie, "Max-Age=0") || !strings.Contains(cookie, "SameSite=Lax") {
+		t.Fatalf("Set-Cookie = %q", cookie)
+	}
+	if !strings.Contains(cookie, "Domain=officecli.io") {
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
 }

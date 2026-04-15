@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	ego "github.com/gotomicro/ego"
 	"github.com/gotomicro/ego/server/egin"
+	sdkoffice "github.com/officesdk/go-sdk/officesdk"
 	"golang.org/x/time/rate"
 
 	"github.com/officecli/officecli/platform/internal/admin"
@@ -31,6 +33,9 @@ import (
 	"github.com/officecli/officecli/platform/internal/httpapi"
 	licensesvc "github.com/officecli/officecli/platform/internal/license"
 	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/objectstore"
+	"github.com/officecli/officecli/platform/internal/officesdk"
+	"github.com/officecli/officecli/platform/internal/previewshare"
 	publishsvc "github.com/officecli/officecli/platform/internal/publish"
 	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
@@ -120,6 +125,16 @@ func New() (*Application, error) {
 	if err := redisRepo.Ping(context.Background()); err != nil {
 		return nil, err
 	}
+	previewObjects, err := objectstore.New(objectstore.Config{
+		Endpoint:  cfg.PreviewObjectEndpoint,
+		AccessKey: cfg.PreviewObjectAccessKey,
+		SecretKey: cfg.PreviewObjectSecretKey,
+		Bucket:    cfg.PreviewObjectBucket,
+		UseSSL:    cfg.PreviewObjectUseSSL,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	rewardService := rewardsvc.NewService(dbStore)
 	growthService := growthsvc.NewService(dbStore, dbStore, dbStore, dbStore)
@@ -152,7 +167,15 @@ func New() (*Application, error) {
 	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, growthService)
-	publishService := publishsvc.NewService(apiKeyRepo{store: dbStore}, publishConfigFromAppConfig(cfg, cfg.APIKeyHashSalt))
+	fileStore := officesdk.NewFileStore(redisRepo)
+	previewShares := previewshare.NewService(dbStore.DB(), cfg.AppSessionSecret, cfg.AppSessionCookieDomain, fileStore, previewObjects)
+	sdkProvider := officesdk.NewFileProvider(fileStore, previewObjects, previewShares)
+	sdkHandler := officesdk.NewHandler(fileStore, sdkProvider, cfg.OfficeSDKEndpoint, cfg.OfficeSDKJWTSecret)
+	publishService := publishsvc.NewService(apiKeyRepo{store: dbStore}, previewObjects, fileStore, previewShares, publishsvc.Config{
+		SiteBaseURL:          cfg.SiteBaseURL,
+		HashSalt:             cfg.APIKeyHashSalt,
+		DefaultExpireSeconds: cfg.PublishDefaultExpireSeconds,
+	})
 	discordOAuthSvc := discordoauth.NewService(
 		discordoauth.NewOAuthClient(cfg.DiscordClientID, cfg.DiscordClientSecret, cfg.DiscordRedirectURL, cfg.DiscordGuildID, cfg.DiscordBotToken),
 		redisRepo,
@@ -164,31 +187,20 @@ func New() (*Application, error) {
 		return nil, err
 	}
 	server := egin.DefaultContainer().Build(egin.WithHost(hostPart(cfg.HTTPAddr)), egin.WithPort(port))
-	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc)
+	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, previewShares, sdkHandler, sdkProvider)
 
 	application := ego.New()
 	application.Serve(server)
 	return &Application{ego: application}, nil
 }
 
-func publishConfigFromAppConfig(cfg Config, hashSalt string) publishsvc.Config {
-	return publishsvc.Config{
-		BaseURL:              cfg.ClaudeOfficeBaseURL,
-		AuthKey:              cfg.ClaudeOfficeAuthKey,
-		AuthKeyID:            cfg.ClaudeOfficeAuthKeyID,
-		AuthSharedSecret:     cfg.ClaudeOfficeAuthSharedSecret,
-		HashSalt:             hashSalt,
-		DefaultExpireSeconds: cfg.PublishDefaultExpireSeconds,
-	}
-}
-
 func (a *Application) Run() error { return a.ego.Run() }
 
 func registerRoutes(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
-	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc)
+	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil)
 }
 
-func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService) {
+func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
 	r.Use(httpapi.RequestIDMiddleware())
 	r.Use(httpapi.AccessLogMiddleware(time.Second))
 	r.Use(gin.Recovery())
@@ -202,6 +214,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing())) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc)
 	registerStripeRoutes(api, billingSvc)
+	registerPreviewRoutes(r, cfg, authSvc, previewShares, sdkHandler, sdkProvider)
 	registerStatic(r.Engine, cfg)
 }
 
@@ -754,14 +767,123 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	})
 }
 
+func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+	if shares == nil || sdkHandler == nil || sdkProvider == nil {
+		return
+	}
+	r.GET("/p/:shareToken", func(c *gin.Context) {
+		share, status, err := shares.ValidateEntryRequest(c.Request.Context(), c.Param("shareToken"))
+		if err != nil {
+			httpapi.Error(c, status, err.Error())
+			return
+		}
+		if raw, err := c.Cookie("cop_app_session"); err == nil && raw != "" {
+			if _, authErr := authSvc.Me(c.Request.Context(), raw); authErr == nil {
+				shares.IssueAccessCookie(c, share)
+				c.Redirect(http.StatusFound, "/officesdk/page?file_id="+url.QueryEscape(share.FileID))
+				return
+			}
+		}
+		c.Redirect(http.StatusFound, previewLoginURL(cfg, c.Request))
+	})
+
+	osdk := r.Group("/officesdk")
+	osdk.GET("/page", sdkHandler.ServePage)
+	osdk.HEAD("/page", sdkHandler.ServePage)
+	osdk.GET("/sdk-params", sdkHandler.GetSDKParams)
+	osdk.HEAD("/sdk-params", sdkHandler.GetSDKParams)
+	osdk.PUT("/storage/upload", sdkProvider.HandleProxyUpload)
+	osdk.GET("/proxy/download", sdkProvider.HandleProxyDownload)
+	osdk.HEAD("/proxy/download", sdkProvider.HandleProxyDownload)
+
+	sdkoffice.NewServer(sdkoffice.Config{
+		FileProvider: sdkProvider,
+		AIProvider:   officesdk.NewNoopAIProvider(),
+		Prefix:       "",
+	}, r.Engine)
+
+	registerOfficeSDKProxy(r.Engine, cfg)
+}
+
+func previewLoginURL(cfg Config, r *http.Request) string {
+	currentURL := currentRequestURL(r)
+	values := url.Values{}
+	values.Set("return_to", currentURL)
+	return joinURL(cfg.PlatformBaseURL, "/api/auth/google/login?"+values.Encode())
+}
+
+func currentRequestURL(r *http.Request) string {
+	base := officesdkRequestBaseURL(r)
+	if base == "" {
+		return ""
+	}
+	if r == nil || r.URL == nil {
+		return base
+	}
+	return base + r.URL.RequestURI()
+}
+
+func officesdkRequestBaseURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return ""
+	}
+	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	return scheme + "://" + host
+}
+
+func registerOfficeSDKProxy(router *gin.Engine, cfg Config) {
+	target := strings.TrimSpace(cfg.OfficeSDKHost)
+	if target == "" {
+		return
+	}
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return
+	}
+	proxy := httputil.NewSingleHostReverseProxy(parsed)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalHost := req.Host
+		originalDirector(req)
+		req.Host = parsed.Host
+		if originalHost != "" {
+			req.Header.Set("X-Forwarded-Host", originalHost)
+		}
+	}
+	router.Any("/sdk/turbo-ai/*path", func(c *gin.Context) {
+		proxy.ServeHTTP(c.Writer, c.Request)
+	})
+}
+
 func setSessionCookie(c *gin.Context, cfg Config, name, value string, ttl time.Duration) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(name, value, int(ttl.Seconds()), "/", "", shouldUseSecureCookies(cfg), true)
+	c.SetCookie(name, value, int(ttl.Seconds()), "/", sessionCookieDomain(cfg, name), shouldUseSecureCookies(cfg), true)
 }
 
 func clearSessionCookie(c *gin.Context, cfg Config, name string) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(name, "", -1, "/", "", shouldUseSecureCookies(cfg), true)
+	c.SetCookie(name, "", -1, "/", sessionCookieDomain(cfg, name), shouldUseSecureCookies(cfg), true)
+}
+
+func sessionCookieDomain(cfg Config, name string) string {
+	if name == "cop_app_session" {
+		return strings.TrimSpace(cfg.AppSessionCookieDomain)
+	}
+	return ""
 }
 
 func shouldUseSecureCookies(cfg Config) bool {
@@ -984,6 +1106,10 @@ func registerStatic(router *gin.Engine, cfg Config) {
 	registerStaticDir(router, "/admin/assets", cfg.AdminStaticDir, "assets")
 	registerStaticDir(router, "/app/assets", cfg.AppStaticDir, "assets")
 	registerStaticDir(router, "/assets", cfg.SiteStaticDir, "assets")
+	registerStaticFile(router, "/favicon.svg", cfg.SiteStaticDir, "favicon.svg")
+	registerStaticFile(router, "/og-cover.svg", cfg.SiteStaticDir, "og-cover.svg")
+	registerStaticFile(router, "/robots.txt", cfg.SiteStaticDir, "robots.txt")
+	registerStaticFile(router, "/sitemap.xml", cfg.SiteStaticDir, "sitemap.xml")
 
 	adminDir := absIfExists(cfg.AdminStaticDir)
 	appDir := absIfExists(cfg.AppStaticDir)
@@ -1068,6 +1194,17 @@ func registerStaticDir(router *gin.Engine, routePrefix, staticDir, subdir string
 	assetsDir := filepath.Join(abs, subdir)
 	if _, err := os.Stat(assetsDir); err == nil {
 		router.Static(routePrefix, assetsDir)
+	}
+}
+
+func registerStaticFile(router *gin.Engine, routePath, staticDir, filename string) {
+	abs := absIfExists(staticDir)
+	if abs == "" {
+		return
+	}
+	filePath := filepath.Join(abs, filename)
+	if _, err := os.Stat(filePath); err == nil {
+		router.StaticFile(routePath, filePath)
 	}
 }
 

@@ -5,7 +5,7 @@ set -euo pipefail
 OFFICECLI_ENV_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_REPO_DEFAULT="${DIST_REPO:-officecli/officecli-dist}"
 DEFAULT_LICENSE_BASE_URL="${OFFICECLI_SETUP_LICENSE_BASE_URL:-https://platform.officecli.io}"
-DEFAULT_PUBLISH_BASE_URL="${OFFICECLI_SETUP_DEFAULT_PUBLISH_BASE_URL:-https://claudeoffice.com}"
+DEFAULT_PUBLISH_BASE_URL="${OFFICECLI_SETUP_DEFAULT_PUBLISH_BASE_URL:-https://platform.officecli.io}"
 PUBLIC_SKILLS_REPO_DEFAULT="${PUBLIC_SKILLS_REPO:-officecli/officecli-skills}"
 PUBLIC_SKILLS_BRANCH_DEFAULT="${PUBLIC_SKILLS_BRANCH:-main}"
 

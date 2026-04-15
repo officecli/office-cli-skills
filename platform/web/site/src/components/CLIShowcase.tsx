@@ -56,15 +56,15 @@ function CopyableCommand({ command, prefix = '$' }: { command: string, prefix?: 
 
 export default function CLIShowcase() {
   return (
-    <section className="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
+    <section id="formats" className="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
         >
-          <h2 className="font-headline text-4xl font-bold text-white mb-6">A Practical CLI for Document Operations</h2>
-          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal. Install once, connect an LLM, and run document operations without standing up extra infrastructure for the core workflow.</p>
+          <h2 className="font-headline text-4xl font-bold text-white mb-6">Generate PPTX, DOCX, XLSX, and REPORT Outputs</h2>
+          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal and run AI document automation from one local-first CLI. Install once, connect your LLM, and generate PPTX, DOCX, XLSX, and REPORT outputs without standing up extra infrastructure.</p>
           <ul className="space-y-6">
             <li className="flex items-start gap-4">
               <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
@@ -77,7 +77,7 @@ export default function CLIShowcase() {
               <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
               <div>
                 <h5 className="font-bold text-white">Current release surface is explicit</h5>
-                <p className="text-sm text-outline-variant">Use `new`, `score`, and `review` today, while broader conversion and editing workflows land next.</p>
+                <p className="text-sm text-outline-variant">Use `new`, `score`, and `review` today for presentations, documents, spreadsheets, and REPORT outputs while broader conversion and editing workflows land next.</p>
               </div>
             </li>
           </ul>

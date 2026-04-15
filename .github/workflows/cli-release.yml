@@ -48,7 +48,7 @@ jobs:
       PUBLIC_DIST_DEFAULT_BRANCH: ${{ vars.PUBLIC_DIST_DEFAULT_BRANCH || 'main' }}
       HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
       HOMEBREW_TAP_DEFAULT_BRANCH: ${{ vars.HOMEBREW_TAP_DEFAULT_BRANCH || 'main' }}
-      CLI_EMBEDDED_PUBLISH_BASE_URL: ${{ vars.CLI_EMBEDDED_PUBLISH_BASE_URL || 'https://claudeoffice.com' }}
+      CLI_EMBEDDED_PUBLISH_BASE_URL: ${{ vars.CLI_EMBEDDED_PUBLISH_BASE_URL || 'https://platform.officecli.io' }}
       CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID: ${{ vars.CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID || 'officecli-cli' }}
       CLI_EMBEDDED_PUBLISH_AUTH_KEY: ${{ secrets.CLI_EMBEDDED_PUBLISH_AUTH_KEY || '' }}
     steps:

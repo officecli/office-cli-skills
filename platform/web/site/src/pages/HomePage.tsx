@@ -11,10 +11,10 @@ import Contact from '../components/Contact'
 
 export default function HomePage() {
   return (
-    <>
+    <main className="overflow-x-hidden">
       <Hero />
-      <CLIShowcase />
       <Features />
+      <CLIShowcase />
       <Workflow />
       <UseCases />
       <InstallTabs />
@@ -22,6 +22,6 @@ export default function HomePage() {
       <Pricing />
       <FAQ />
       <Contact />
-    </>
+    </main>
   )
 }

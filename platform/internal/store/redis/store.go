@@ -21,6 +21,22 @@ func NewStore(client *redis.Client) *Store { return &Store{client: client} }
 
 func (s *Store) Ping(ctx context.Context) error { return s.client.Ping(ctx).Err() }
 
+func (s *Store) GetString(ctx context.Context, key string) (string, error) {
+	raw, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+func (s *Store) SetString(ctx context.Context, key, value string, ttl time.Duration) error {
+	return s.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (s *Store) Del(ctx context.Context, key string) error {
+	return s.client.Del(ctx, key).Err()
+}
+
 func (s *Store) GetJSON(ctx context.Context, key string, dest any) (bool, error) {
 	raw, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {

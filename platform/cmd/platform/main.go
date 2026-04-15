@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/officecli/officecli/platform/internal/app"
-	"github.com/officecli/officecli/platform/internal/dbtools"
 	"github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
@@ -24,7 +23,7 @@ func run(args []string) error {
 		return runMigrate()
 	}
 	if len(args) >= 2 && args[0] == "db" && args[1] == "copy" {
-		return runCopy()
+		return fmt.Errorf("db copy is no longer supported; this project only supports PostgreSQL")
 	}
 
 	application, err := app.New()
@@ -48,23 +47,4 @@ func runMigrate() error {
 		return err
 	}
 	return store.EnsureMigrations(ctx)
-}
-
-func runCopy() error {
-	cfg, err := app.LoadConfig()
-	if err != nil {
-		return err
-	}
-	mysqlDSN := os.Getenv("MYSQL_DSN")
-	if mysqlDSN == "" {
-		return fmt.Errorf("MYSQL_DSN is required for db copy")
-	}
-	summaries, err := dbtools.CopyMySQLToPostgres(context.Background(), mysqlDSN, cfg.PostgresDSN)
-	if err != nil {
-		return err
-	}
-	for _, summary := range summaries {
-		fmt.Printf("%s rows=%d max_id=%d\n", summary.Table, summary.Rows, summary.MaxIDTarget)
-	}
-	return nil
 }

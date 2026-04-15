@@ -68,8 +68,8 @@ func WriteDefaultConfig(path string) (string, error) {
 		},
 		Publish: publishprovider.Config{
 			Provider:   "http",
-			BaseURL:    "https://your-publish-service.example.com/api",
-			APIKey:     "YOUR_PUBLISH_API_KEY",
+			BaseURL:    "https://platform.officecli.io",
+			APIKey:     "",
 			Enabled:    true,
 			TimeoutSec: 60,
 		},
@@ -142,6 +142,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if value := os.Getenv("OFFICE_CLI_PUBLISH_TIMEOUT_SEC"); value != "" {
 		cfg.Publish.TimeoutSec = parseInt(value, cfg.Publish.TimeoutSec)
+	}
+	if strings.TrimSpace(cfg.Publish.APIKey) == "" {
+		cfg.Publish.APIKey = strings.TrimSpace(cfg.License.APIKey)
 	}
 }
 

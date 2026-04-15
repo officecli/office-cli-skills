@@ -33,6 +33,7 @@ type Config struct {
 	SiteBaseURL                  string
 	PlatformBaseURL              string
 	AppSessionSecret             string
+	AppSessionCookieDomain       string
 	AppSessionTTL                time.Duration
 	LicenseProofSeed             string
 	LicenseProofTTL              time.Duration
@@ -50,10 +51,14 @@ type Config struct {
 	HostedLLMTextModel           string
 	HostedLLMImageModel          string
 	HostedLLMProvider            string
-	ClaudeOfficeBaseURL          string
-	ClaudeOfficeAuthKey          string
-	ClaudeOfficeAuthKeyID        string
-	ClaudeOfficeAuthSharedSecret string
+	PreviewObjectEndpoint        string
+	PreviewObjectAccessKey       string
+	PreviewObjectSecretKey       string
+	PreviewObjectBucket          string
+	PreviewObjectUseSSL          bool
+	OfficeSDKHost                string
+	OfficeSDKEndpoint            string
+	OfficeSDKJWTSecret           string
 	PublishRateLimitPerMinute    int
 	PublishMaxFileBytes          int64
 	PublishDefaultExpireSeconds  int
@@ -90,6 +95,7 @@ func LoadConfig() (Config, error) {
 		SiteBaseURL:                  mustEnvDefault("SITE_BASE_URL", "https://officecli.io"),
 		PlatformBaseURL:              mustEnvDefault("PLATFORM_BASE_URL", "https://platform.officecli.io"),
 		AppSessionSecret:             mustEnvDefault("APP_SESSION_SECRET", "change-me-app-session-secret-123456"),
+		AppSessionCookieDomain:       defaultAppSessionCookieDomain(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
 		AppSessionTTL:                mustEnvDuration("APP_SESSION_TTL", 24*time.Hour),
 		LicenseProofSeed:             mustEnvDefault("LICENSE_PROOF_SEED", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"),
 		LicenseProofTTL:              mustEnvDuration("LICENSE_PROOF_TTL", 2*time.Minute),
@@ -107,10 +113,14 @@ func LoadConfig() (Config, error) {
 		HostedLLMTextModel:           mustEnvDefault("HOSTED_LLM_TEXT_MODEL", "gpt-4.1"),
 		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-1"),
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
-		ClaudeOfficeBaseURL:          mustEnvDefault("CLAUDEOFFICE_BASE_URL", ""),
-		ClaudeOfficeAuthKey:          os.Getenv("CLAUDEOFFICE_AUTH_KEY"),
-		ClaudeOfficeAuthKeyID:        mustEnvDefault("CLAUDEOFFICE_AUTH_KEY_ID", "platform-prod"),
-		ClaudeOfficeAuthSharedSecret: os.Getenv("CLAUDEOFFICE_AUTH_SHARED_SECRET"),
+		PreviewObjectEndpoint:        mustEnvDefault("PREVIEW_OBJECT_ENDPOINT", ""),
+		PreviewObjectAccessKey:       os.Getenv("PREVIEW_OBJECT_ACCESS_KEY"),
+		PreviewObjectSecretKey:       os.Getenv("PREVIEW_OBJECT_SECRET_KEY"),
+		PreviewObjectBucket:          mustEnvDefault("PREVIEW_OBJECT_BUCKET", ""),
+		PreviewObjectUseSSL:          mustEnvBool("PREVIEW_OBJECT_USE_SSL", true),
+		OfficeSDKHost:                mustEnvDefault("OFFICESDK_HOST", ""),
+		OfficeSDKEndpoint:            mustEnvDefault("OFFICESDK_ENDPOINT", "https://officecli.io/sdk/turbo-ai"),
+		OfficeSDKJWTSecret:           os.Getenv("OFFICESDK_JWT_SECRET"),
 		PublishRateLimitPerMinute:    mustEnvInt("PUBLISH_RATE_LIMIT_PER_MINUTE", 30),
 		PublishMaxFileBytes:          mustEnvInt64("PUBLISH_MAX_FILE_BYTES", 50<<20),
 		PublishDefaultExpireSeconds:  mustEnvInt("PUBLISH_DEFAULT_EXPIRE_SECONDS", 30*24*60*60),
@@ -132,12 +142,10 @@ func LoadConfig() (Config, error) {
 		return Config{}, err
 	}
 	cfg.PricingPacks = pricingPacks
-	if strings.TrimSpace(cfg.ClaudeOfficeAuthSharedSecret) == "" {
-		cfg.ClaudeOfficeAuthSharedSecret = cfg.ClaudeOfficeAuthKey
-	}
 	if cfg.AppEnv != "development" && cfg.AppEnv != "staging" && cfg.AppEnv != "production" {
 		return Config{}, fmt.Errorf("APP_ENV must be one of development, staging, production")
 	}
+	cfg.AppSessionCookieDomain = strings.TrimSpace(mustEnvDefault("APP_SESSION_COOKIE_DOMAIN", cfg.AppSessionCookieDomain))
 	if len(cfg.SessionSecret) < 16 {
 		return Config{}, fmt.Errorf("SESSION_SECRET must be at least 16 chars")
 	}
@@ -187,6 +195,13 @@ func defaultRateLimitVisitorTTL(appEnv string) time.Duration {
 		return 5 * time.Minute
 	}
 	return time.Minute
+}
+
+func defaultAppSessionCookieDomain(appEnv string) string {
+	if appEnv == "production" {
+		return ".officecli.io"
+	}
+	return ""
 }
 
 func defaultPricingPacks(unitPriceCents int64, external500PriceRatio string) ([]model.PricingPack, error) {
@@ -370,6 +385,18 @@ func mustEnvInt(key string, fallback int) int {
 		parsed, err := strconv.Atoi(v)
 		if err == nil {
 			return parsed
+		}
+	}
+	return fallback
+}
+
+func mustEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
 		}
 	}
 	return fallback

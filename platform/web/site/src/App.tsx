@@ -9,6 +9,7 @@ import FAQPage from './pages/FAQPage'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import PricingPage from './pages/PricingPage'
+import { applyDocumentSEO, getRouteSEO } from './seo'
 
 function SiteShell() {
   const location = useLocation()
@@ -20,6 +21,10 @@ function SiteShell() {
   useEffect(() => {
     trackPageView(location.pathname, location.search)
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    applyDocumentSEO(document, getRouteSEO(location.pathname))
+  }, [location.pathname])
 
   return (
     <div className="min-h-screen bg-background text-white selection:bg-primary/30">

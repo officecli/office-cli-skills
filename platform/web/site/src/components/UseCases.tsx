@@ -28,15 +28,15 @@ export default function UseCases() {
   ]
 
   return (
-    <section className="py-24 bg-surface-low">
+    <section id="use-cases" className="py-24 bg-surface-low">
       <div className="max-w-[1440px] mx-auto px-8 md:px-16">
         <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
           <div className="max-w-2xl">
-            <h2 className="font-headline text-4xl font-bold text-white mb-4">Where Document Operations Actually Matter</h2>
-            <p className="text-outline-variant">OfficeCLI is built for teams that want useful document workflows in the terminal first, then optional platform features when hosted access, billing, or preview publishing matters.</p>
+            <h2 className="font-headline text-4xl font-bold text-white mb-4">Where AI Document Automation Actually Matters</h2>
+            <p className="text-outline-variant">OfficeCLI is built for teams that want AI document workflows in the terminal first, then optional platform features when hosted access, billing, or preview publishing matters.</p>
           </div>
           <Link className="text-primary font-bold hover:underline flex items-center gap-2" to="/docs">
-            Explore current capabilities <ArrowRight className="w-5 h-5" />
+            Explore product docs <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

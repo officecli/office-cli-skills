@@ -3,13 +3,13 @@ import { Bolt, LaptopMinimal, Sparkles, ScanSearch, Terminal, Bot, Plug, ArrowRi
 
 export default function Features() {
   return (
-    <section className="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
+    <section id="what-is-officecli" className="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">
       <div className="mb-16">
         <h2 className="font-headline text-4xl md:text-5xl font-bold text-white tracking-tight mb-4">
-          Everything you need, <span className="text-primary italic">locally</span>.
+          What Is <span className="text-primary italic">OfficeCLI</span>
         </h2>
         <p className="text-outline-variant text-lg max-w-2xl">
-          OfficeCLI is built for modern developer workflows. No complex backend setups, just a single binary and your LLM endpoint.
+          OfficeCLI is a local-first AI document generation CLI for developers and automation teams. It keeps document automation close to your terminal with one binary, your own LLM endpoint, and no required backend stack.
         </p>
       </div>
 
@@ -28,9 +28,9 @@ export default function Features() {
             <div className="flex-1 flex flex-col justify-between">
               <div>
                 <Bolt className="text-tertiary w-12 h-12 mb-8" />
-                <h3 className="font-headline text-4xl font-bold text-white mb-4">Single-Binary Document Ops</h3>
+                <h3 className="font-headline text-4xl font-bold text-white mb-4">Single-Binary Document Automation</h3>
                 <p className="text-outline-variant text-lg leading-relaxed max-w-md">
-                  OfficeCLI ships as one lightweight binary. For the core local path, it only needs your LLM endpoint instead of a backend stack, queueing layer, or cluster.
+                  OfficeCLI ships as one lightweight binary for AI document generation. For the core local path, it only needs your LLM endpoint instead of a backend stack, queueing layer, or cluster.
                 </p>
               </div>
               <div className="mt-12 border-t border-outline-variant/10 pt-6">
@@ -120,7 +120,7 @@ export default function Features() {
           <ScanSearch className="text-secondary w-10 h-10 mb-6 relative z-10" />
           <h3 className="font-headline text-2xl font-bold text-white mb-3 relative z-10">Create, Review, Export</h3>
           <p className="text-outline-variant leading-relaxed relative z-10">
-            The current release creates PPTX, DOCX, XLSX, and workbook-backed Report outputs, and can review or score local PPTX decks.
+            The current release creates PPTX, DOCX, XLSX, and workbook-backed REPORT outputs, and can review or score local PPTX decks.
           </p>
         </motion.div>
 

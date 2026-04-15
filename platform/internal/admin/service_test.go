@@ -51,11 +51,11 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.FreeQuota{}, &model.UsageEvent{}, &model.AdminAuditLog{}))
-	mysqlRepo := sqlstore.NewWithDB(db)
+	store := sqlstore.NewWithDB(db)
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"})
 	_ = client
 	redisRepo := redisstore.NewStore(redis.NewClient(&redis.Options{Addr: "localhost:6379"}))
-	svc := NewService(mysqlRepo, redisRepo, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+	svc := NewService(store, redisRepo, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
 
 	note := "created by test"
 	quotaTotal := 20

@@ -99,7 +99,7 @@ Rolling latest flow:
 - `PUBLIC_NPM_REPO=officecli/officecli-npm`
 - `PUBLIC_NPM_DEFAULT_BRANCH=main`
 - `NPM_PACKAGE_NAME=officecli`
-- `CLI_EMBEDDED_PUBLISH_BASE_URL=https://claudeoffice.com`
+- `CLI_EMBEDDED_PUBLISH_BASE_URL=https://platform.officecli.io`
 - `CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID=officecli-cli`
 
 ## Required Secrets

@@ -12,9 +12,9 @@ export default function DownloadPage() {
     <main className="overflow-x-hidden pt-28 px-8 md:px-16 max-w-[1440px] mx-auto pb-24">
       <section className="max-w-4xl">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
-        <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for document operations</h1>
+        <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for AI document generation</h1>
         <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
-          Use Homebrew, npm, the official install script, or manual binaries to get started. The core local path stays simple: one binary plus your LLM endpoint.
+          Use Homebrew, npm, the official install script, or manual binaries to get started. The core local path stays simple: one binary plus your LLM endpoint for PPTX, DOCX, XLSX, and REPORT outputs.
         </p>
       </section>
 

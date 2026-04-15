@@ -85,7 +85,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
                 className="w-full py-4 rounded-md border border-outline-variant/30 font-bold hover:bg-white/5 transition-all inline-flex items-center justify-center"
                 to="/download"
               >
-                Download CLI
+                Install the CLI
               </Link>
             </motion.div>
 
@@ -135,7 +135,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
                 className="inline-flex items-center justify-center rounded-md border border-outline-variant/30 px-6 py-4 font-bold transition-all hover:bg-white/5"
                 to="/download"
               >
-                Download CLI
+                Install the CLI
               </Link>
             </div>
           </div>

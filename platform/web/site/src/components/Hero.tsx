@@ -232,6 +232,9 @@ export default function Hero() {
       ],
       output: (
         <div className="space-y-4">
+          <div className="text-[10px] font-headline uppercase tracking-[0.25em] text-tertiary">
+            REPORT output
+          </div>
           <HeroOutputFileCard
             filename="Q2_BUSINESS_REVIEW.HTML"
             size="24 KB"
@@ -266,13 +269,13 @@ export default function Hero() {
         >
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0d4c54]/40 text-[#8af3f7] text-xs font-headline uppercase tracking-widest mb-6 border border-[#0d4c54]/60">
             <span className="w-2 h-2 rounded-full bg-tertiary terminal-pulse shadow-[0_0_8px_#00dce5]"></span>
-            Local-first document operations
+            Local-first AI document generation CLI
           </span>
           <h1 className="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
-            Run <span className="text-primary italic">Document</span> Operations From One Lightweight Binary
+            Generate <span className="text-primary italic">PPTX</span>, DOCX, XLSX, and REPORT Outputs From One AI CLI
           </h1>
           <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI handles document operations locally: generate PPTX, DOCX, XLSX, and workbook-backed Report outputs today, review presentations, and expand into conversion, modification, summarization, and layout workflows next. For the core path, you only need the binary and an LLM endpoint.
+            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, and workbook-backed REPORT outputs with your own LLM endpoint, without a backend stack or cluster, then review presentations and expand into broader document automation.
           </p>
           <div className="flex flex-wrap gap-4">
             <motion.a
@@ -285,7 +288,7 @@ export default function Hero() {
             </motion.a>
             <motion.div whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
               <Link className="border border-outline-variant/30 text-white px-8 py-4 rounded-md font-bold text-lg transition-all inline-flex" to="/download">
-                Install CLI
+                Install the AI CLI
               </Link>
             </motion.div>
           </div>

@@ -10,21 +10,6 @@ on:
         description: 'Tag to deploy, for example v0.2.0-prod-20260402-1'
         required: true
         type: string
-      claudeoffice_base_url:
-        description: 'Optional: sync CLAUDEOFFICE_BASE_URL to the production Secret before deployment; leave empty to fall back to the repo variable or the live value'
-        required: false
-        default: ''
-        type: string
-      claudeoffice_auth_key_id:
-        description: 'Optional: sync CLAUDEOFFICE_AUTH_KEY_ID to the production Secret before deployment; leave empty to fall back to the repo variable or the default platform-prod'
-        required: false
-        default: ''
-        type: string
-      claudeoffice_auth_shared_secret:
-        description: 'Optional: sync CLAUDEOFFICE_AUTH_SHARED_SECRET to the production Secret before deployment; leave empty to fall back to the repo secret or the live value'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -51,9 +36,21 @@ jobs:
       CONTAINER_NAME: ${{ vars.PLATFORM_CONTAINER_NAME || 'platform' }}
       IMAGE_REPO: ${{ vars.PLATFORM_IMAGE_REPO || 'docker.io/library/officecli-platform' }}
       SECRET_NAME: ${{ vars.PLATFORM_SECRET_NAME || 'officecli-platform-env' }}
-      CLAUDEOFFICE_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_base_url || vars.PLATFORM_CLAUDEOFFICE_BASE_URL || '' }}
-      CLAUDEOFFICE_AUTH_KEY_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_key_id || vars.PLATFORM_CLAUDEOFFICE_AUTH_KEY_ID || 'platform-prod' }}
-      CLAUDEOFFICE_AUTH_SHARED_SECRET: ${{ github.event_name == 'workflow_dispatch' && inputs.claudeoffice_auth_shared_secret || secrets.PLATFORM_CLAUDEOFFICE_AUTH_SHARED_SECRET || secrets.PLATFORM_CLAUDEOFFICE_AUTH_KEY || '' }}
+      APP_ENV: ${{ vars.PLATFORM_APP_ENV || 'production' }}
+      SITE_BASE_URL: ${{ vars.PLATFORM_SITE_BASE_URL || 'https://officecli.io' }}
+      PLATFORM_BASE_URL: ${{ vars.PLATFORM_PLATFORM_BASE_URL || 'https://platform.officecli.io' }}
+      APP_SESSION_TTL: ${{ vars.PLATFORM_APP_SESSION_TTL || '24h' }}
+      APP_SESSION_COOKIE_DOMAIN: ${{ vars.PLATFORM_APP_SESSION_COOKIE_DOMAIN || '.officecli.io' }}
+      PREVIEW_OBJECT_ENDPOINT: ${{ vars.PLATFORM_PREVIEW_OBJECT_ENDPOINT }}
+      PREVIEW_OBJECT_BUCKET: ${{ vars.PLATFORM_PREVIEW_OBJECT_BUCKET || 'officecli-preview' }}
+      PREVIEW_OBJECT_USE_SSL: ${{ vars.PLATFORM_PREVIEW_OBJECT_USE_SSL || 'false' }}
+      OFFICESDK_HOST: ${{ vars.PLATFORM_OFFICESDK_HOST }}
+      OFFICESDK_ENDPOINT: ${{ vars.PLATFORM_OFFICESDK_ENDPOINT || 'https://officecli.io/sdk/turbo-ai' }}
+      APP_SESSION_SECRET: ${{ secrets.PLATFORM_APP_SESSION_SECRET }}
+      LICENSE_PROOF_SEED: ${{ secrets.PLATFORM_LICENSE_PROOF_SEED }}
+      PREVIEW_OBJECT_ACCESS_KEY: ${{ secrets.PLATFORM_PREVIEW_OBJECT_ACCESS_KEY }}
+      PREVIEW_OBJECT_SECRET_KEY: ${{ secrets.PLATFORM_PREVIEW_OBJECT_SECRET_KEY }}
+      OFFICESDK_JWT_SECRET: ${{ secrets.PLATFORM_OFFICESDK_JWT_SECRET }}
     steps:
       - name: Checkout target ref
         uses: actions/checkout@v4
@@ -113,20 +110,42 @@ jobs:
           git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1
 
       - name: Prepare production secret env file
-        if: env.CLAUDEOFFICE_BASE_URL != '' || env.CLAUDEOFFICE_AUTH_KEY_ID != '' || env.CLAUDEOFFICE_AUTH_SHARED_SECRET != ''
         run: |
           set -euo pipefail
+          required_keys=(
+            APP_SESSION_SECRET
+            LICENSE_PROOF_SEED
+            PREVIEW_OBJECT_ENDPOINT
+            PREVIEW_OBJECT_ACCESS_KEY
+            PREVIEW_OBJECT_SECRET_KEY
+            PREVIEW_OBJECT_BUCKET
+            OFFICESDK_HOST
+            OFFICESDK_ENDPOINT
+            OFFICESDK_JWT_SECRET
+          )
+          for key in "${required_keys[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required production config: ${key}" >&2
+              exit 1
+            fi
+          done
           env_file="${RUNNER_TEMP}/platform-prod-sync.env"
           : > "${env_file}"
-          if [ -n "${CLAUDEOFFICE_BASE_URL}" ]; then
-            printf 'CLAUDEOFFICE_BASE_URL=%s\n' "${CLAUDEOFFICE_BASE_URL}" >> "${env_file}"
-          fi
-          if [ -n "${CLAUDEOFFICE_AUTH_KEY_ID}" ]; then
-            printf 'CLAUDEOFFICE_AUTH_KEY_ID=%s\n' "${CLAUDEOFFICE_AUTH_KEY_ID}" >> "${env_file}"
-          fi
-          if [ -n "${CLAUDEOFFICE_AUTH_SHARED_SECRET}" ]; then
-            printf 'CLAUDEOFFICE_AUTH_SHARED_SECRET=%s\n' "${CLAUDEOFFICE_AUTH_SHARED_SECRET}" >> "${env_file}"
-          fi
+          printf 'APP_ENV=%s\n' "${APP_ENV}" >> "${env_file}"
+          printf 'SITE_BASE_URL=%s\n' "${SITE_BASE_URL}" >> "${env_file}"
+          printf 'PLATFORM_BASE_URL=%s\n' "${PLATFORM_BASE_URL}" >> "${env_file}"
+          printf 'APP_SESSION_SECRET=%s\n' "${APP_SESSION_SECRET}" >> "${env_file}"
+          printf 'LICENSE_PROOF_SEED=%s\n' "${LICENSE_PROOF_SEED}" >> "${env_file}"
+          printf 'APP_SESSION_TTL=%s\n' "${APP_SESSION_TTL}" >> "${env_file}"
+          printf 'APP_SESSION_COOKIE_DOMAIN=%s\n' "${APP_SESSION_COOKIE_DOMAIN}" >> "${env_file}"
+          printf 'PREVIEW_OBJECT_ENDPOINT=%s\n' "${PREVIEW_OBJECT_ENDPOINT}" >> "${env_file}"
+          printf 'PREVIEW_OBJECT_ACCESS_KEY=%s\n' "${PREVIEW_OBJECT_ACCESS_KEY}" >> "${env_file}"
+          printf 'PREVIEW_OBJECT_SECRET_KEY=%s\n' "${PREVIEW_OBJECT_SECRET_KEY}" >> "${env_file}"
+          printf 'PREVIEW_OBJECT_BUCKET=%s\n' "${PREVIEW_OBJECT_BUCKET}" >> "${env_file}"
+          printf 'PREVIEW_OBJECT_USE_SSL=%s\n' "${PREVIEW_OBJECT_USE_SSL}" >> "${env_file}"
+          printf 'OFFICESDK_HOST=%s\n' "${OFFICESDK_HOST}" >> "${env_file}"
+          printf 'OFFICESDK_ENDPOINT=%s\n' "${OFFICESDK_ENDPOINT}" >> "${env_file}"
+          printf 'OFFICESDK_JWT_SECRET=%s\n' "${OFFICESDK_JWT_SECRET}" >> "${env_file}"
           echo "PLATFORM_ENV_FILE=${env_file}" >> "$GITHUB_ENV"
 
       - name: Deploy platform production

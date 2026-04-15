@@ -1,10 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { detectOperatingSystem } from './installData'
+import { renderRouteApp } from './prerender'
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('marketing site shell', () => {
   it('renders the OfficeCLI brand and home hero copy', () => {
@@ -16,7 +22,7 @@ describe('marketing site shell', () => {
 
     expect(screen.getAllByText('OfficeCLI').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('heading', { name: /Run Document Operations From One Lightweight Binary/i, level: 1 }),
+      screen.getByRole('heading', { name: /Generate PPTX.*DOCX, XLSX, and REPORT Outputs From One AI CLI/i, level: 1 }),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^ROADMAP$/i, level: 2 })).toBeInTheDocument()
     expect(
@@ -60,18 +66,63 @@ describe('marketing site shell', () => {
     expect(detectOperatingSystem('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux')
     expect(detectOperatingSystem('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('manual')
   })
+
+  it('updates document head metadata for docs routes', () => {
+    render(
+      <MemoryRouter initialEntries={['/docs']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(document.title).toContain('OfficeCLI Docs')
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/docs')
+  })
+
+  it('opens the product docs navbar item in a new browser tab', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const docsLink = screen.getAllByRole('link', { name: 'Product Docs (opens in a new tab)' })[0]
+    expect(docsLink).toHaveAttribute('href', '/docs')
+    expect(docsLink).toHaveAttribute('target', '_blank')
+    expect(docsLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
+  it('renders the docs page sections, prompt examples, and pricing fallback', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network error'))
+
+    render(
+      <MemoryRouter initialEntries={['/docs']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getAllByText('Install / Update / Uninstall').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Command Reference').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Prompting Tips').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Prompt Cookbook').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Use With Agents').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Use With OpenClaw').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pricing & Usage Rules').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/--prompt-file/i).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
+  })
 })
 
 describe('site metadata and assets', () => {
   it('defines marketing metadata in index.html', () => {
     const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8')
 
-    expect(html).toContain('<title>OfficeCLI</title>')
+    expect(html).toContain('AI PPTX, DOCX, XLSX, and REPORT Generator')
     expect(html).toContain('name="description"')
-    expect(html).toContain('property="og:title" content="OfficeCLI"')
-    expect(html).toContain('name="twitter:title" content="OfficeCLI"')
-    expect(html).toContain('property="og:title"')
+    expect(html).toContain('rel="canonical" href="https://officecli.io/"')
+    expect(html).toContain('name="robots" content="index,follow"')
+    expect(html).toContain('property="og:url" content="https://officecli.io/"')
     expect(html).toContain('name="twitter:card"')
+    expect(html).toContain('application/ld+json')
   })
 
   it('loads the Stitch baseline web fonts for the marketing site', () => {
@@ -92,5 +143,22 @@ describe('site metadata and assets', () => {
 
     expect(heroSource).not.toContain('picsum.photos')
     expect(useCasesSource).not.toContain('picsum.photos')
+  })
+
+  it('defines crawl assets for the marketing site', () => {
+    const robots = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'robots.txt'), 'utf8')
+    const sitemap = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'sitemap.xml'), 'utf8')
+
+    expect(robots).toContain('Sitemap: https://officecli.io/sitemap.xml')
+    expect(sitemap).toContain('<loc>https://officecli.io/docs</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/download</loc>')
+  })
+
+  it('renders prerendered home app html with main content', () => {
+    const html = renderRouteApp('/')
+
+    expect(html).toContain('<main')
+    expect(html).toContain('REPORT Outputs From One AI CLI')
+    expect(html).toContain('id="faq"')
   })
 })

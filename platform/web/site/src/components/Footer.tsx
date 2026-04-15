@@ -18,8 +18,8 @@ export default function Footer() {
           <h5 className="text-white font-bold mb-6">Explore</h5>
           <ul className="space-y-4 text-gray-500 font-headline text-sm uppercase tracking-widest">
             <li><Link className="hover:text-primary transition-colors" to="/">Home</Link></li>
-            <li><Link className="hover:text-primary transition-colors" to="/pricing">Pricing</Link></li>
-            <li><Link className="hover:text-primary transition-colors" to="/faq">FAQ</Link></li>
+            <li><Link className="hover:text-primary transition-colors" to="/download">Install the CLI</Link></li>
+            <li><Link className="hover:text-primary transition-colors" to="/docs">Product Docs</Link></li>
           </ul>
         </div>
         {footerGroups.map((group) => (

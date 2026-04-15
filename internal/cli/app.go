@@ -237,7 +237,7 @@ func defaultInitConfig() Config {
 		},
 		Publish: publishprovider.Config{
 			Provider:   "http",
-			BaseURL:    "https://your-publish-service.example.com/api",
+			BaseURL:    "https://platform.officecli.io",
 			Enabled:    true,
 			TimeoutSec: 60,
 		},
@@ -590,14 +590,8 @@ func (a *App) runConfigSetPublish(cfg Config) error {
 		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "Enter the publishing service URL", defaultBaseURL); err != nil {
 			return err
 		}
-		if publishprovider.SupportsEmbeddedDynamicAuth() {
-			if cfg.Publish.APIKey, err = a.promptLine(reader, "Enter the publishing service credential (optional when built-in dynamic auth is available)", cfg.Publish.APIKey); err != nil {
-				return err
-			}
-		} else {
-			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
-				return err
-			}
+		if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
+			return err
 		}
 	} else {
 		cfg.Publish.BaseURL = ""
@@ -722,14 +716,8 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 		if cfg.Publish.BaseURL, err = a.promptRequiredLine(reader, "Enter the publishing service URL", defaultBaseURL); err != nil {
 			return Config{}, err
 		}
-		if publishprovider.SupportsEmbeddedDynamicAuth() {
-			if cfg.Publish.APIKey, err = a.promptLine(reader, "Enter the publishing service credential (optional when built-in dynamic auth is available)", cfg.Publish.APIKey); err != nil {
-				return Config{}, err
-			}
-		} else {
-			if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
-				return Config{}, err
-			}
+		if cfg.Publish.APIKey, err = a.promptRequiredLine(reader, "Enter the publishing service credential", cfg.Publish.APIKey); err != nil {
+			return Config{}, err
 		}
 	} else {
 		cfg.Publish.BaseURL = ""

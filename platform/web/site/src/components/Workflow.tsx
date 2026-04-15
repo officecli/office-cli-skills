@@ -12,7 +12,7 @@ export default function Workflow() {
   return (
     <section className="py-24 bg-background border-y border-white/5">
       <div className="max-w-[1440px] mx-auto px-8 md:px-16 text-center">
-        <h2 className="font-headline text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">How OfficeCLI Fits a Real Workflow</h2>
+        <h2 className="font-headline text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">Use AI Document Automation in Real Workflows</h2>
         <p className="text-outline-variant text-lg max-w-3xl mx-auto mb-16">
           Keep the document path local when you want a lightweight setup, then layer in hosted runtime, paid access, or preview publishing only when those features matter.
         </p>

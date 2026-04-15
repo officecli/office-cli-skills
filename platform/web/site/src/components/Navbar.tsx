@@ -92,6 +92,17 @@ export default function Navbar() {
               <a key={item.to} href={item.to} className={className} onClick={(e) => handleAnchorClick(e, item.to)}>
                 {item.label}
               </a>
+            ) : item.newTab ? (
+              <a
+                key={item.to}
+                href={item.to}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`${item.label} (opens in a new tab)`}
+                className={className}
+              >
+                {item.label}
+              </a>
             ) : (
               <Link key={item.to} to={item.to} className={className}>
                 {item.label}

@@ -322,7 +322,7 @@ func BuildDOCXFromJSON(content, fallbackDescription string) ([]byte, string, err
 		}
 	}
 
-	fileBytes, err := officegen.NewDOCXGenerator().Generate(paragraphs, officegen.DOCXOptions{Title: llmResp.Title, Creator: "ClaudeOffice"})
+	fileBytes, err := officegen.NewDOCXGenerator().Generate(paragraphs, officegen.DOCXOptions{Title: llmResp.Title, Creator: "OfficeCLI"})
 	if err != nil {
 		return nil, "", fmt.Errorf("generate docx: %w", err)
 	}
@@ -359,7 +359,7 @@ func BuildXLSXFromJSON(content, fallbackDescription string) ([]byte, string, err
 		sheets = append(sheets, officegen.XlsxSheet{Name: sh.Name, Rows: rows})
 	}
 
-	fileBytes, err := officegen.NewXLSXGenerator().Generate(sheets, officegen.XLSXOptions{Title: llmResp.Title, Creator: "ClaudeOffice"})
+	fileBytes, err := officegen.NewXLSXGenerator().Generate(sheets, officegen.XLSXOptions{Title: llmResp.Title, Creator: "OfficeCLI"})
 	if err != nil {
 		return nil, "", fmt.Errorf("generate xlsx: %w", err)
 	}

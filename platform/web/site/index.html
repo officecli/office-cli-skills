@@ -3,27 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index,follow" />
     <meta
       name="description"
-      content="OfficeCLI is a local-first CLI for document operations across PPTX, DOCX, XLSX, and workbook-backed Report outputs. Bring your own LLM. No backend stack required."
+      content="OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, and REPORT outputs. Generate files from the terminal with your own LLM endpoint, without a backend stack or cluster."
     />
     <meta name="theme-color" content="#131313" />
+    <link rel="canonical" href="https://officecli.io/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="OfficeCLI" />
+    <meta property="og:site_name" content="OfficeCLI" />
+    <meta property="og:title" content="OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows" />
     <meta
       property="og:description"
-      content="A lightweight single-binary CLI for document operations. Create, review, and automate files without a backend stack or cluster."
+      content="Generate PPTX, DOCX, XLSX, and REPORT outputs from one local-first CLI with your own LLM endpoint."
     />
-    <meta property="og:image" content="/og-cover.svg" />
+    <meta property="og:url" content="https://officecli.io/" />
+    <meta property="og:image" content="https://officecli.io/og-cover.svg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="OfficeCLI" />
+    <meta name="twitter:title" content="OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows" />
     <meta
       name="twitter:description"
-      content="Lightweight document operations from the terminal. Your LLM endpoint is enough."
+      content="Generate PPTX, DOCX, XLSX, and REPORT outputs from one local-first CLI with your own LLM endpoint."
     />
-    <meta name="twitter:image" content="/og-cover.svg" />
+    <meta name="twitter:image" content="https://officecli.io/og-cover.svg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>OfficeCLI</title>
+    <script type="application/ld+json" data-route-jsonld="0">
+      {"@context":"https://schema.org","@type":"SoftwareApplication","name":"OfficeCLI","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux","description":"OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, and REPORT outputs. Generate files from the terminal with your own LLM endpoint, without a backend stack or cluster.","url":"https://officecli.io/","image":"https://officecli.io/og-cover.svg"}
+    </script>
+    <script type="application/ld+json" data-route-jsonld="1">
+      {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is OfficeCLI only for generating files?","acceptedAnswer":{"@type":"Answer","text":"No. Generation is the primary focus right now, but the product direction is broader document operations: conversion, content modification, summarization, extraction, and layout handling."}},{"@type":"Question","name":"Do I need Docker, Kubernetes, or a backend?","acceptedAnswer":{"@type":"Answer","text":"Not for the core local workflow. OfficeCLI is designed to stay lightweight: one binary plus your LLM endpoint. Platform features are optional, not a requirement for basic local use."}},{"@type":"Question","name":"What document types work today?","acceptedAnswer":{"@type":"Answer","text":"The current public release generates PPTX, DOCX, XLSX, and workbook-backed REPORT outputs. It can also score and review local PPTX files."}},{"@type":"Question","name":"Do I need LibreOffice or Microsoft Office installed?","acceptedAnswer":{"@type":"Answer","text":"Not for generation. PPTX review can run structural checks without extra tools. If soffice is installed, OfficeCLI can add a stronger visual review pass."}},{"@type":"Question","name":"What install options are supported?","acceptedAnswer":{"@type":"Answer","text":"Homebrew, npm, the official install script, and manual release binaries are all supported on macOS and Linux for x64 and arm64."}},{"@type":"Question","name":"When do I need platform.officecli.io?","acceptedAnswer":{"@type":"Answer","text":"Use the platform when you need paid access management, hosted runtime features, billing, API-key workflows, or optional online preview publishing."}}]}
+    </script>
+    <title>OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows</title>
   </head>
   <body>
     <div id="root"></div>

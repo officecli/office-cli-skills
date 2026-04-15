@@ -5,18 +5,18 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
-	"net/http"
-	"net/url"
+	"mime"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/officesdk"
+	"github.com/officecli/officecli/platform/internal/previewshare"
 )
 
 type APIKeyStore interface {
@@ -24,20 +24,33 @@ type APIKeyStore interface {
 	TouchLastUsedAt(ctx context.Context, id uint64, usedAt time.Time) error
 }
 
+type ObjectStore interface {
+	PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string) error
+	DeleteObject(ctx context.Context, key string) error
+}
+
+type FileMetaStore interface {
+	SetFileMeta(ctx context.Context, meta *officesdk.FileMeta) error
+	DeleteFileMeta(ctx context.Context, fileID string) error
+}
+
+type PreviewShareStore interface {
+	Create(ctx context.Context, params previewshare.CreateParams) (*previewshare.PreviewShare, error)
+}
+
 type Config struct {
-	BaseURL              string
-	AuthKey              string
-	AuthKeyID            string
-	AuthSharedSecret     string
+	SiteBaseURL          string
 	HashSalt             string
-	TimeoutSec           int
 	DefaultExpireSeconds int
 }
 
 type Service struct {
-	store  APIKeyStore
-	cfg    Config
-	client *http.Client
+	store   APIKeyStore
+	objects ObjectStore
+	files   FileMetaStore
+	shares  PreviewShareStore
+	cfg     Config
+	now     func() time.Time
 }
 
 type Request struct {
@@ -56,26 +69,20 @@ type Result struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-func NewService(store APIKeyStore, cfg Config) *Service {
+func NewService(store APIKeyStore, objects ObjectStore, files FileMetaStore, shares PreviewShareStore, cfg Config) *Service {
 	return &Service{
-		store:  store,
-		cfg:    cfg,
-		client: &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
+		store:   store,
+		objects: objects,
+		files:   files,
+		shares:  shares,
+		cfg:     cfg,
+		now:     time.Now,
 	}
 }
 
 func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Result, error) {
-	if s == nil || s.store == nil {
+	if s == nil || s.store == nil || s.objects == nil || s.files == nil || s.shares == nil {
 		return nil, fmt.Errorf("publish service unavailable")
-	}
-	if strings.TrimSpace(s.cfg.BaseURL) == "" {
-		return nil, fmt.Errorf("claudeoffice base url is required")
-	}
-	if strings.TrimSpace(s.cfg.AuthSharedSecret) == "" {
-		return nil, fmt.Errorf("claudeoffice auth shared secret is required")
-	}
-	if strings.TrimSpace(s.cfg.AuthKeyID) == "" {
-		return nil, fmt.Errorf("claudeoffice auth key id is required")
 	}
 	key, err := s.authorize(ctx, bearer)
 	if err != nil {
@@ -85,30 +92,61 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 		return nil, err
 	}
 
-	upload, err := s.uploadAttachment(ctx, req)
+	fileData, err := io.ReadAll(req.Reader)
 	if err != nil {
 		return nil, err
 	}
+	if len(fileData) == 0 {
+		return nil, fmt.Errorf("file is required")
+	}
 
-	expiresIn := req.ExpiresInSeconds
-	if expiresIn <= 0 {
-		expiresIn = s.cfg.DefaultExpireSeconds
-	}
-	if expiresIn <= 0 {
-		expiresIn = 30 * 24 * 60 * 60
-	}
-	expiresAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
-	result, err := s.createPreviewShare(ctx, upload.StorageKey, req.DocumentName, req.DocumentType, expiresAt)
-	if err != nil {
-		_ = s.deleteUploadedObject(ctx, upload.StorageKey)
+	fileID := newFileID()
+	documentName := normalizeDocumentName(req.DocumentName, req.FileName, req.DocumentType)
+	contentType := normalizeContentType(req.ContentType, documentName)
+	storageKey := fmt.Sprintf("preview/%s/original/%s", fileID, filepath.Base(documentName))
+	now := s.now().UTC()
+
+	if err := s.objects.PutObject(ctx, storageKey, bytes.NewReader(fileData), int64(len(fileData)), contentType); err != nil {
 		return nil, err
 	}
-	_ = s.store.TouchLastUsedAt(ctx, key.ID, time.Now().UTC())
-	return result, nil
-}
 
-type uploadTokenResponse struct {
-	StorageKey string `json:"storage_key"`
+	meta := &officesdk.FileMeta{
+		ID:         fileID,
+		Name:       documentName,
+		StorageKey: storageKey,
+		Version:    1,
+		FromSDK:    false,
+		CreateTime: now.Unix(),
+		ModifyTime: now.Unix(),
+		CreatorID:  "publish",
+		ModifierID: "publish",
+	}
+	if err := s.files.SetFileMeta(ctx, meta); err != nil {
+		_ = s.objects.DeleteObject(ctx, storageKey)
+		return nil, err
+	}
+
+	expiresAt := now.Add(time.Duration(s.expireSeconds(req.ExpiresInSeconds)) * time.Second)
+	share, err := s.shares.Create(ctx, previewshare.CreateParams{
+		FileID:     fileID,
+		StorageKey: storageKey,
+		FileName:   documentName,
+		FileType:   strings.ToLower(strings.TrimSpace(req.DocumentType)),
+		ExpiresAt:  expiresAt,
+	})
+	if err != nil {
+		_ = s.files.DeleteFileMeta(ctx, fileID)
+		_ = s.objects.DeleteObject(ctx, storageKey)
+		return nil, err
+	}
+
+	_ = s.store.TouchLastUsedAt(ctx, key.ID, now)
+	return &Result{
+		AccessURL: strings.TrimRight(defaultSiteBaseURL(s.cfg.SiteBaseURL), "/") + "/p/" + share.ShareToken,
+		Password:  "",
+		FileID:    fileID,
+		ExpiresAt: &share.ExpiresAt,
+	}, nil
 }
 
 func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, error) {
@@ -166,146 +204,50 @@ func validateRequest(req Request) error {
 	}
 }
 
-func (s *Service) uploadAttachment(ctx context.Context, req Request) (*uploadTokenResponse, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	fileName := filepath.Base(strings.TrimSpace(req.FileName))
-	if err := writer.WriteField("fileName", fileName); err != nil {
-		return nil, err
+func (s *Service) expireSeconds(requested int) int {
+	if requested > 0 {
+		return requested
 	}
-	part, err := writer.CreateFormFile("file", fileName)
-	if err != nil {
-		return nil, err
+	if s.cfg.DefaultExpireSeconds > 0 {
+		return s.cfg.DefaultExpireSeconds
 	}
-	if _, err := io.Copy(part, req.Reader); err != nil {
-		return nil, err
-	}
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.BaseURL, "/")+"/api/attachment/upload", &body)
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-	s.attachAuth(httpReq, body.Bytes())
-
-	resp, err := s.client.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	rawBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("claudeoffice request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
-	}
-
-	var envelope struct {
-		Data uploadTokenResponse `json:"data"`
-	}
-	if err := json.Unmarshal(rawBody, &envelope); err != nil {
-		return nil, fmt.Errorf("decode upload response: %w", err)
-	}
-	if strings.TrimSpace(envelope.Data.StorageKey) == "" {
-		return nil, fmt.Errorf("upload response missing storage_key")
-	}
-	return &envelope.Data, nil
+	return 30 * 24 * 60 * 60
 }
 
-func (s *Service) createPreviewShare(ctx context.Context, storageKey, documentName, documentType string, expiresAt time.Time) (*Result, error) {
-	rawBody, err := s.postJSON(ctx, "/api/preview-shares", map[string]any{
-		"source_type":   "storage_key",
-		"source_value":  storageKey,
-		"file_name":     documentName,
-		"file_type":     documentType,
-		"expires_at":    expiresAt.Format(time.RFC3339),
-		"readonly":      true,
-		"password_mode": "auto",
-	})
-	if err != nil {
-		return nil, err
+func defaultSiteBaseURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "https://officecli.io"
 	}
-	var result Result
-	if err := json.Unmarshal(rawBody, &result); err != nil {
-		return nil, fmt.Errorf("decode preview share response: %w", err)
-	}
-	if strings.TrimSpace(result.AccessURL) == "" || strings.TrimSpace(result.Password) == "" {
-		return nil, fmt.Errorf("preview share response missing fields")
-	}
-	return &result, nil
+	return value
 }
 
-func (s *Service) deleteUploadedObject(ctx context.Context, storageKey string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.BaseURL, "/")+"/api/attachment/delete?storage_key="+url.QueryEscape(storageKey), nil)
-	if err != nil {
-		return err
+func normalizeDocumentName(documentName, fileName, documentType string) string {
+	name := strings.TrimSpace(documentName)
+	if name == "" {
+		name = strings.TrimSpace(fileName)
 	}
-	s.attachAuth(req, nil)
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
+	name = filepath.Base(name)
+	ext := "." + strings.ToLower(strings.TrimSpace(documentType))
+	if !strings.EqualFold(filepath.Ext(name), ext) {
+		name += ext
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("delete uploaded object failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
+	return name
 }
 
-func (s *Service) postJSON(ctx context.Context, path string, payload any) ([]byte, error) {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
+func normalizeContentType(contentType, fileName string) string {
+	value := strings.TrimSpace(contentType)
+	if value != "" {
+		return value
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.cfg.BaseURL, "/")+path, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
+	if guessed := mime.TypeByExtension(strings.ToLower(filepath.Ext(fileName))); guessed != "" {
+		return guessed
 	}
-	req.Header.Set("Content-Type", "application/json")
-	s.attachAuth(req, raw)
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("claudeoffice request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return body, nil
+	return "application/octet-stream"
 }
 
-func (s *Service) attachAuth(req *http.Request, body []byte) {
-	if req == nil {
-		return
-	}
-	if strings.TrimSpace(s.cfg.AuthSharedSecret) == "" || strings.TrimSpace(s.cfg.AuthKeyID) == "" {
-		return
-	}
-	nonce, err := newRequestNonce()
-	if err != nil {
-		return
-	}
-	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
-	req.Header.Set("X-Auth-Key-Id", strings.TrimSpace(s.cfg.AuthKeyID))
-	req.Header.Set("X-Auth-Timestamp", timestamp)
-	req.Header.Set("X-Auth-Nonce", nonce)
-	req.Header.Set("X-Auth-Signature", signDynamic(strings.TrimSpace(s.cfg.AuthSharedSecret), timestamp, req.Method, canonicalPath(req), bodySHA256Hex(body), nonce))
-}
-
-func timeoutFor(seconds int) time.Duration {
-	if seconds <= 0 {
-		return 60 * time.Second
-	}
-	return time.Duration(seconds) * time.Second
+func newFileID() string {
+	return strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
 func hashAPIKey(apiKey, salt string) string {

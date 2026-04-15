@@ -28,7 +28,7 @@ type SessionPayload struct {
 }
 
 type Service struct {
-	mysql              *sqlstore.Store
+	store              *sqlstore.Store
 	redis              *redisstore.Store
 	adminPassword      string
 	sessionTTL         time.Duration
@@ -55,7 +55,7 @@ type CookieCodec interface {
 	Decode(value string) (string, error)
 }
 
-func NewService(mysql *sqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
+func NewService(store *sqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
 	allowlist := make(map[string]struct{}, len(adminAllowlist))
 	for _, email := range adminAllowlist {
 		normalized := strings.ToLower(strings.TrimSpace(email))
@@ -69,7 +69,7 @@ func NewService(mysql *sqlstore.Store, redis *redisstore.Store, adminPassword st
 		hostedPricingManager = hostedPricing[0]
 	}
 	return &Service{
-		mysql:              mysql,
+		store:              store,
 		redis:              redis,
 		adminPassword:      adminPassword,
 		sessionTTL:         sessionTTL,
@@ -109,7 +109,7 @@ func (s *Service) Login(ctx context.Context, password string) (string, error) {
 		return "", err
 	}
 	body, _ := json.Marshal(payload)
-	_ = s.mysql.CreateAuditLog(ctx, "admin.login", "session", sessionID, string(body))
+	_ = s.store.CreateAuditLog(ctx, "admin.login", "session", sessionID, string(body))
 	return raw, nil
 }
 
@@ -143,7 +143,7 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code, state string) 
 	}
 	normalizedEmail := strings.ToLower(strings.TrimSpace(googleUser.Email))
 	if _, allowed := s.adminAllowlist[normalizedEmail]; !allowed {
-		_ = s.mysql.CreateAuditLog(ctx, "admin.google_login_denied", "google_account", normalizedEmail, sqlstore.JSONString(map[string]any{
+		_ = s.store.CreateAuditLog(ctx, "admin.google_login_denied", "google_account", normalizedEmail, sqlstore.JSONString(map[string]any{
 			"email": normalizedEmail,
 			"name":  googleUser.Name,
 		}))
@@ -165,7 +165,7 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code, state string) 
 	if err != nil {
 		return nil, "", "", err
 	}
-	_ = s.mysql.CreateAuditLog(ctx, "admin.google_login", "session", sessionID, sqlstore.JSONString(map[string]any{
+	_ = s.store.CreateAuditLog(ctx, "admin.google_login", "session", sessionID, sqlstore.JSONString(map[string]any{
 		"email":       normalizedEmail,
 		"name":        googleUser.Name,
 		"auth_method": "google",
@@ -203,15 +203,15 @@ func (s *Service) Logout(ctx context.Context, rawCookie string) error {
 	if err := s.redis.DeleteSession(ctx, sessionID); err != nil {
 		return err
 	}
-	_ = s.mysql.CreateAuditLog(ctx, "admin.logout", "session", sessionID, "{}")
+	_ = s.store.CreateAuditLog(ctx, "admin.logout", "session", sessionID, "{}")
 	return nil
 }
 
 func (s *Service) Overview(ctx context.Context) (*model.OverviewStats, error) {
-	return s.mysql.Overview(ctx)
+	return s.store.Overview(ctx)
 }
 func (s *Service) ListAPIKeys(ctx context.Context) ([]model.APIKey, error) {
-	return s.mysql.ListAPIKeys(ctx)
+	return s.store.ListAPIKeys(ctx)
 }
 
 func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, *model.APIKey, error) {
@@ -219,7 +219,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*C
 	if err != nil {
 		return nil, nil, err
 	}
-	key, err := s.mysql.AdminCreateAPIKey(ctx, req.OwnerUserID, req.PlanName, req.ExpiresAt, req.Note, req.PlanCode, hash, prefix, req.QuotaTotal)
+	key, err := s.store.AdminCreateAPIKey(ctx, req.OwnerUserID, req.PlanName, req.ExpiresAt, req.Note, req.PlanCode, hash, prefix, req.QuotaTotal)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -237,16 +237,16 @@ func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*C
 		updates["credit_balance"] = *req.CreditBalance
 	}
 	if len(updates) > 0 {
-		if err := s.mysql.UpdateAPIKey(ctx, key.ID, updates); err != nil {
+		if err := s.store.UpdateAPIKey(ctx, key.ID, updates); err != nil {
 			return nil, nil, err
 		}
-		key, err = s.mysql.FindAPIKeyByID(ctx, key.ID)
+		key, err = s.store.FindAPIKeyByID(ctx, key.ID)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	payload, _ := json.Marshal(key)
-	_ = s.mysql.CreateAuditLog(ctx, "api_key.create", "api_key", fmt.Sprintf("%d", key.ID), string(payload))
+	_ = s.store.CreateAuditLog(ctx, "api_key.create", "api_key", fmt.Sprintf("%d", key.ID), string(payload))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, KeyPrefix: prefix}, key, nil
 }
 
@@ -294,31 +294,31 @@ func (s *Service) UpdateAPIKey(ctx context.Context, id uint64, req UpdateAPIKeyR
 	if len(updates) == 0 {
 		return nil
 	}
-	if err := s.mysql.UpdateAPIKey(ctx, id, updates); err != nil {
+	if err := s.store.UpdateAPIKey(ctx, id, updates); err != nil {
 		return err
 	}
 	payload, _ := json.Marshal(updates)
-	return s.mysql.CreateAuditLog(ctx, "api_key.update", "api_key", fmt.Sprintf("%d", id), string(payload))
+	return s.store.CreateAuditLog(ctx, "api_key.update", "api_key", fmt.Sprintf("%d", id), string(payload))
 }
 
 func (s *Service) ListFreeQuotas(ctx context.Context, fingerprint string) ([]model.FreeQuota, error) {
-	return s.mysql.ListFreeQuotas(ctx, fingerprint)
+	return s.store.ListFreeQuotas(ctx, fingerprint)
 }
 
 func (s *Service) UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error {
-	if err := s.mysql.UpdateFreeQuota(ctx, id, freeLimit); err != nil {
+	if err := s.store.UpdateFreeQuota(ctx, id, freeLimit); err != nil {
 		return err
 	}
 	payload, _ := json.Marshal(map[string]any{"free_limit": freeLimit})
-	return s.mysql.CreateAuditLog(ctx, "free_quota.update", "free_quota", fmt.Sprintf("%d", id), string(payload))
+	return s.store.CreateAuditLog(ctx, "free_quota.update", "free_quota", fmt.Sprintf("%d", id), string(payload))
 }
 
 func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
-	return s.mysql.ListUsageEvents(ctx, filter)
+	return s.store.ListUsageEvents(ctx, filter)
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]model.User, error) {
-	return s.mysql.ListUsers(ctx)
+	return s.store.ListUsers(ctx)
 }
 
 func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserRequest) error {
@@ -329,14 +329,14 @@ func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserReque
 	if len(updates) == 0 {
 		return nil
 	}
-	if err := s.mysql.UpdateUser(ctx, id, updates); err != nil {
+	if err := s.store.UpdateUser(ctx, id, updates); err != nil {
 		return err
 	}
-	return s.mysql.CreateAuditLog(ctx, "user.update", "user", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
+	return s.store.CreateAuditLog(ctx, "user.update", "user", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
 }
 
 func (s *Service) ListOrders(ctx context.Context) ([]model.Order, error) {
-	return s.mysql.ListOrders(ctx)
+	return s.store.ListOrders(ctx)
 }
 
 func (s *Service) UpdateOrder(ctx context.Context, id uint64, req UpdateOrderRequest) error {
@@ -350,26 +350,26 @@ func (s *Service) UpdateOrder(ctx context.Context, id uint64, req UpdateOrderReq
 	if len(updates) == 0 {
 		return nil
 	}
-	if err := s.mysql.UpdateOrder(ctx, id, updates); err != nil {
+	if err := s.store.UpdateOrder(ctx, id, updates); err != nil {
 		return err
 	}
-	return s.mysql.CreateAuditLog(ctx, "order.update", "order", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
+	return s.store.CreateAuditLog(ctx, "order.update", "order", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
 }
 
 func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error) {
-	return s.mysql.ListBillingEvents(ctx)
+	return s.store.ListBillingEvents(ctx)
 }
 
 func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
-	rewardGrants, err := s.mysql.ListRewardGrants(ctx)
+	rewardGrants, err := s.store.ListRewardGrants(ctx)
 	if err != nil {
 		return nil, err
 	}
-	referrals, err := s.mysql.ListReferrals(ctx)
+	referrals, err := s.store.ListReferrals(ctx)
 	if err != nil {
 		return nil, err
 	}
-	discordConnections, err := s.mysql.ListDiscordConnections(ctx)
+	discordConnections, err := s.store.ListDiscordConnections(ctx)
 	if err != nil {
 		return nil, err
 	}
