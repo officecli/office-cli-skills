@@ -15,7 +15,7 @@ export default function UseCases() {
     },
     {
       title: 'Automation Builders',
-      description: 'Wire document operations into CI, internal bots, or agent workflows that need lightweight local execution and reproducible outputs.',
+      description: 'Wire document operations into CI, custom AI agents, or OpenClaw workflows that need lightweight local execution and reproducible outputs.',
       image: teamVisual,
       borderClass: 'hover:border-tertiary/20',
     },

@@ -18,8 +18,10 @@ describe('marketing site shell', () => {
     expect(
       screen.getByRole('heading', { name: /Run Document Operations From One Lightweight Binary/i, level: 1 }),
     ).toBeInTheDocument()
-    expect(screen.getAllByText(/npm install -g officecli/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: /OfficeCLI is growing from document generation into document operations/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^ROADMAP$/i, level: 2 })).toBeInTheDocument()
+    expect(
+      screen.getByText(/OfficeCLI is moving from document generation into a broader document operations workflow/i),
+    ).toBeInTheDocument()
     expect(screen.getByText('support@officecli.io')).toBeInTheDocument()
   })
 

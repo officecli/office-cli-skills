@@ -13,11 +13,15 @@
   --color-primary-container: #4f8eff;
   --color-tertiary: #00dce5;
   --color-secondary: #ffb1c0;
-  --color-outline: #8b90a0;
-  --color-outline-variant: #414754;
+  --color-outline: #a1a1aa;
+  --color-outline-variant: #71717a;
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-white font-sans selection:bg-primary/30;
     background-image:

@@ -10,7 +10,7 @@ interface InstallTabsProps {
 
 export default function InstallTabs({
   compact = false,
-  headline = 'Install OfficeCLI in minutes',
+  headline = 'Install OfficeCLI',
   intro = 'Pick the setup path that matches your machine. OfficeCLI stays lightweight: one binary, plus your LLM endpoint for the core local workflow.',
 }: InstallTabsProps) {
   const [activeTab, setActiveTab] = useState<InstallTabID>('manual')
@@ -38,7 +38,7 @@ export default function InstallTabs({
   }
 
   return (
-    <section className={compact ? '' : 'py-24 px-8 md:px-16 max-w-[1440px] mx-auto'}>
+    <section id="download" className={compact ? '' : 'py-24 px-8 md:px-16 max-w-[1440px] mx-auto'}>
       <div className={compact ? '' : 'max-w-6xl'}>
         <div className={compact ? 'mb-8' : 'mb-12'}>
           <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Quick install</span>
@@ -70,9 +70,6 @@ export default function InstallTabs({
                 <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-3">{current.eyebrow}</div>
                 <h3 className="font-headline text-3xl font-bold text-white mb-4">{current.title}</h3>
                 <p className="text-outline-variant leading-relaxed max-w-2xl">{current.description}</p>
-              </div>
-              <div className="bg-background border border-outline-variant/10 rounded-2xl px-5 py-4 text-sm text-outline-variant">
-                Core path: one binary + your LLM endpoint. No cluster, backend service, Docker, or Kubernetes required.
               </div>
             </div>
 

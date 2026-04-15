@@ -1,5 +1,58 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Copy, CheckCheck } from 'lucide-react'
+
+function HighlightedCommand({ command }: { command: string }) {
+  const parts = command.split(' ')
+  return (
+    <span className="break-all">
+      {parts.map((part, i) => {
+        if (part === 'officecli' || part === 'brew' || part === 'npm') return <span key={i} className="text-[#27c93f] mr-1.5">{part}</span>
+        if (part === 'new' || part === 'config' || part === 'install' || part === 'set-generation') return <span key={i} className="text-[#8af3f7] mr-1.5">{part}</span>
+        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'html' || part === '-g') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
+        if (part.startsWith('"') || part.startsWith("'")) return <span key={i} className="text-[#ff5f56] mr-1.5">{part}</span>
+        if (part.startsWith('--')) return <span key={i} className="text-outline-variant mr-1.5">{part}</span>
+        return <span key={i} className="text-white mr-1.5">{part}</span>
+      })}
+    </span>
+  )
+}
+
+function CopyableCommand({ command, prefix = '$' }: { command: string, prefix?: string }) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1500)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard?.writeText(command)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-4 group/cmd">
+      <div className="flex gap-4">
+        <span className="text-primary">{prefix}</span>
+        <HighlightedCommand command={command} />
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="opacity-0 group-hover/cmd:opacity-100 transition-opacity p-1.5 rounded bg-surface-high border border-outline-variant/20 text-outline-variant hover:text-white hover:border-outline-variant/40"
+        aria-label="Copy command"
+      >
+        {copied ? <CheckCheck size={14} className="text-tertiary" /> : <Copy size={14} />}
+      </button>
+    </div>
+  )
+}
 
 export default function CLIShowcase() {
   return (
@@ -47,31 +100,27 @@ export default function CLIShowcase() {
             <div className="flex gap-4">
               <span className="text-tertiary italic"># Install via Homebrew or npm</span>
             </div>
-            <div className="flex gap-4">
-              <span className="text-primary">$</span>
-              <span className="text-white">brew install officecli/homebrew-officecli/officecli</span>
-            </div>
-            <div className="flex gap-4">
-              <span className="text-primary">$</span>
-              <span className="text-white">npm install -g officecli</span>
-            </div>
+            <CopyableCommand command="brew install officecli/homebrew-officecli/officecli" />
+            <CopyableCommand command="npm install -g officecli" />
             <div className="pt-4 flex gap-4">
               <span className="text-tertiary italic"># Configure the runtime and run a document operation</span>
             </div>
-            <div className="flex gap-4">
-              <span className="text-primary">$</span>
-              <span className="text-white">officecli config set-generation</span>
-            </div>
-            <div className="flex gap-4">
-              <span className="text-primary">$</span>
-              <span className="text-white">officecli new pptx "Q3 Business Review" --prompt-file ./brief.md --no-publish</span>
-            </div>
+            <CopyableCommand command="officecli config set-generation" />
+            <CopyableCommand command='officecli new pptx "Q3 Business Review" --prompt-file ./brief.md' />
             <motion.div 
               animate={{ opacity: [0.5, 1, 0.5] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
-              className="text-tertiary mt-4"
+              className="text-outline-variant mt-4"
             >
-              Writing output/q3-business-review.pptx [##########] 100%
+              <span className="text-[#27c93f]">✔</span> Document generated
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.5 }}
+              className="text-white mt-2"
+            >
+              Preview: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a> (Password: abcdef)
             </motion.div>
           </div>
         </motion.div>

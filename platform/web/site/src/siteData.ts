@@ -9,18 +9,18 @@ export const platformBillingURL = `${platformBaseURL}/app/billing`
 export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
 
 export const navItems: NavItem[] = [
-  { to: '/', label: 'Home' },
-  { to: '/pricing', label: 'Pricing' },
-  { to: '/download', label: 'Download CLI' },
+  { to: '/#', label: 'Home' },
+  { to: '/#pricing', label: 'Pricing' },
+  { to: '/#download', label: 'Download CLI' },
   { to: '/docs', label: 'Docs' },
-  { to: '/faq', label: 'FAQ' },
+  { to: '/#faq', label: 'FAQ' },
 ]
 
 export const footerGroups = [
   {
     title: 'Product',
     links: [
-      { label: 'CLI', to: '/download', external: false },
+      { label: 'CLI', to: '/#download', external: false },
       { label: 'Docs', to: '/docs', external: false },
       { label: 'Console', to: platformAppURL, external: true },
     ],
@@ -30,7 +30,7 @@ export const footerGroups = [
     links: [
       { label: 'Login', to: platformAppURL, external: true },
       { label: 'Billing', to: platformBillingURL, external: true },
-      { label: 'Security', to: '/faq', external: false },
+      { label: 'Security', to: '/#faq', external: false },
     ],
   },
   {

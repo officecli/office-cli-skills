@@ -77,7 +77,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
   ], [])
 
   return (
-    <section className={`px-8 md:px-16 max-w-[1440px] mx-auto text-center ${standalone ? 'pt-8 pb-24' : 'py-32'}`}>
+    <section id="pricing" className={`px-8 md:px-16 max-w-[1440px] mx-auto text-center ${standalone ? 'pt-8 pb-24' : 'py-32'}`}>
       <div className="max-w-3xl mx-auto">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Pricing</span>
         <h2 className={titleClass}>Simple Access for Paid Workflows</h2>
@@ -132,7 +132,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
 
         <div className="bg-surface-low p-8 rounded-xl border border-outline-variant/10 inline-flex flex-col items-center">
           <p className="text-outline-variant text-sm mb-4">Enterprise scale or custom requirements?</p>
-          <Link className="text-tertiary font-bold hover:underline" to="/docs">Talk to the OfficeCLI team</Link>
+          <a className="text-tertiary font-bold hover:underline" href="mailto:support@officecli.io">Contact Us</a>
         </div>
       </div>
     </section>

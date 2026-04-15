@@ -13,11 +13,11 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <Features />
-      <InstallTabs />
-      <Workflow />
       <CLIShowcase />
+      <Features />
+      <Workflow />
       <UseCases />
+      <InstallTabs />
       <Roadmap />
       <Pricing />
       <FAQ />

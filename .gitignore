@@ -14,3 +14,7 @@ output/
 .inspection-reports/
 platform/web/*/vite.config.js
 platform/web/*/vite.config.d.ts
+.inspection-reports/
+packages/npm/officecli/runtime/
+.env.local
+
