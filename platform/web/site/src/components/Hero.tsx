@@ -63,10 +63,38 @@ function SpreadsheetMock() {
 
 function ReportPageMock() {
   return (
-    <div className="w-full h-full bg-white rounded-sm shadow-sm flex flex-col text-[8px] font-mono leading-tight p-2 gap-1 opacity-50 grayscale hover:grayscale-0 transition-all text-outline-variant overflow-hidden">
-      <div className="text-primary/80">&lt;h1&gt;Q2 Business Review&lt;/h1&gt;</div>
-      <div>&lt;section&gt;Revenue by region…&lt;/section&gt;</div>
-      <div>&lt;div class="chart"&gt;…&lt;/div&gt;</div>
+    <div className="w-full h-full bg-white rounded-sm shadow-sm flex flex-col p-2 gap-1.5 opacity-50 grayscale hover:grayscale-0 transition-all overflow-hidden">
+      {/* Title */}
+      <div className="w-1/2 h-1.5 bg-primary/40 rounded-sm mb-0.5"></div>
+      
+      {/* Summary text */}
+      <div className="space-y-0.5 mb-1">
+        <div className="w-full h-0.5 bg-outline-variant/20 rounded-full"></div>
+        <div className="w-5/6 h-0.5 bg-outline-variant/20 rounded-full"></div>
+        <div className="w-4/5 h-0.5 bg-outline-variant/20 rounded-full"></div>
+      </div>
+
+      {/* Grid for charts */}
+      <div className="flex gap-1.5 flex-1 min-h-0">
+        {/* Left: Bar chart */}
+        <div className="flex-1 bg-surface-low/30 rounded border border-outline-variant/10 p-1 flex flex-col justify-end gap-0.5">
+          <div className="flex items-end justify-between h-full gap-0.5 pt-1">
+            <div className="w-full bg-primary/30 h-[40%] rounded-t-[1px]"></div>
+            <div className="w-full bg-primary/50 h-[70%] rounded-t-[1px]"></div>
+            <div className="w-full bg-tertiary/60 h-[90%] rounded-t-[1px]"></div>
+            <div className="w-full bg-primary/40 h-[60%] rounded-t-[1px]"></div>
+          </div>
+        </div>
+        
+        {/* Right: Donut chart & legend */}
+        <div className="flex-1 bg-surface-low/30 rounded border border-outline-variant/10 p-1 flex items-center justify-center gap-1">
+          <div className="w-4 h-4 rounded-full border-[2px] border-primary/20 border-r-tertiary/60 border-t-tertiary/60 shrink-0"></div>
+          <div className="flex flex-col gap-0.5 flex-1">
+            <div className="w-full h-0.5 bg-outline-variant/30 rounded-full"></div>
+            <div className="w-2/3 h-0.5 bg-outline-variant/20 rounded-full"></div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
