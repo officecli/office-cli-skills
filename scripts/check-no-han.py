@@ -62,6 +62,8 @@ def tracked_files() -> list[Path]:
     out: list[Path] = []
     for raw in result.stdout.splitlines():
         path = Path(raw)
+        if path.parts and path.parts[0] == "docs":
+            continue
         if any(part in EXCLUDED_PARTS for part in path.parts):
             continue
         if path.suffix.lower() in EXCLUDED_SUFFIXES:
