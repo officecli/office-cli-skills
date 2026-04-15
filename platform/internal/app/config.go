@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -63,6 +64,8 @@ type Config struct {
 	StripeWebhookSecret          string
 	StripeSuccessURL             string
 	StripeCancelURL              string
+	ExternalUnitPriceCents       int64
+	External500PriceRatio        string
 	PricingPacks                 []model.PricingPack
 }
 
@@ -118,11 +121,17 @@ func LoadConfig() (Config, error) {
 		StripeWebhookSecret:          os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		StripeSuccessURL:             mustEnvDefault("STRIPE_SUCCESS_URL", "https://platform.officecli.io/app/billing?status=success"),
 		StripeCancelURL:              mustEnvDefault("STRIPE_CANCEL_URL", "https://platform.officecli.io/app/billing?status=cancel"),
-		PricingPacks:                 defaultPricingPacks(),
+		ExternalUnitPriceCents:       mustEnvInt64("EXTERNAL_UNIT_PRICE_CENTS", 5),
+		External500PriceRatio:        mustEnvDefault("EXTERNAL_500_PRICE_RATIO", "449/495"),
 	}
 	cfg.AdminLoginRateLimitPerMinute = mustEnvInt("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", cfg.AdminLoginRateLimitPerMinute)
 	cfg.LicenseRateLimitPerMinute = mustEnvInt("LICENSE_RATE_LIMIT_PER_MINUTE", cfg.LicenseRateLimitPerMinute)
 	cfg.RateLimitVisitorTTL = mustEnvDuration("RATE_LIMIT_VISITOR_TTL", cfg.RateLimitVisitorTTL)
+	pricingPacks, err := defaultPricingPacks(cfg.ExternalUnitPriceCents, cfg.External500PriceRatio)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.PricingPacks = pricingPacks
 	if strings.TrimSpace(cfg.ClaudeOfficeAuthSharedSecret) == "" {
 		cfg.ClaudeOfficeAuthSharedSecret = cfg.ClaudeOfficeAuthKey
 	}
@@ -180,25 +189,87 @@ func defaultRateLimitVisitorTTL(appEnv string) time.Duration {
 	return time.Minute
 }
 
-func defaultPricingPacks() []model.PricingPack {
-	raw := strings.TrimSpace(os.Getenv("PRICING_PACKS_JSON"))
-	if raw == "" {
-		return fallbackPricingPacks()
+func defaultPricingPacks(unitPriceCents int64, external500PriceRatio string) ([]model.PricingPack, error) {
+	externalPacks, err := externalPricingPacks(unitPriceCents, external500PriceRatio)
+	if err != nil {
+		return nil, err
 	}
-	var packs []model.PricingPack
-	if err := jsonUnmarshal([]byte(raw), &packs); err != nil || len(packs) == 0 {
-		return fallbackPricingPacks()
-	}
-	return packs
+	return append(externalPacks, hostedPricingPacks()...), nil
 }
 
-func fallbackPricingPacks() []model.PricingPack {
+func hostedPricingPacks() []model.PricingPack {
 	return []model.PricingPack{
-		{Code: "external-100", Name: "External 100", Description: "100 external generations for lightweight evaluation and individual workflows.", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
-		{Code: "external-500", Name: "External 500", Description: "500 external generations for shared team workflows and recurring automation.", Currency: "usd", AmountTotal: 4490, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)},
 		{Code: "hosted-300", Name: "Hosted 300", Description: "300 hosted credits for low-volume runs on the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		{Code: "hosted-1200", Name: "Hosted 1200", Description: "1200 hosted credits for teams that want the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 9900, CreditAmount: 1200, PackKind: string(model.PackKindHostedCredits)},
 	}
+}
+
+func externalPricingPacks(unitPriceCents int64, external500PriceRatio string) ([]model.PricingPack, error) {
+	if unitPriceCents <= 0 {
+		return nil, fmt.Errorf("EXTERNAL_UNIT_PRICE_CENTS must be greater than 0")
+	}
+	ratio, err := parsePositiveRatio(external500PriceRatio)
+	if err != nil {
+		return nil, fmt.Errorf("EXTERNAL_500_PRICE_RATIO is invalid: %w", err)
+	}
+
+	const (
+		starterQuota = 100
+		bulkQuota    = 500
+	)
+
+	return []model.PricingPack{
+		{
+			Code:        "external-100",
+			Name:        "External 100",
+			Description: "100 external generations for lightweight evaluation and individual workflows.",
+			Currency:    "usd",
+			AmountTotal: unitPriceCents * starterQuota,
+			QuotaAmount: starterQuota,
+			PackKind:    string(model.PackKindExternalGeneration),
+		},
+		{
+			Code:        "external-500",
+			Name:        "External 500",
+			Description: "500 external generations for shared team workflows and recurring automation.",
+			Currency:    "usd",
+			AmountTotal: applyPriceRatio(unitPriceCents*bulkQuota, ratio),
+			QuotaAmount: bulkQuota,
+			PackKind:    string(model.PackKindExternalGeneration),
+		},
+	}, nil
+}
+
+func parsePositiveRatio(raw string) (*big.Rat, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, fmt.Errorf("value is required")
+	}
+	ratio, ok := new(big.Rat).SetString(value)
+	if !ok {
+		return nil, fmt.Errorf("must be a decimal or fraction")
+	}
+	if ratio.Sign() <= 0 {
+		return nil, fmt.Errorf("must be greater than 0")
+	}
+	if ratio.Cmp(big.NewRat(1, 1)) > 0 {
+		return nil, fmt.Errorf("must be less than or equal to 1")
+	}
+	return ratio, nil
+}
+
+func applyPriceRatio(amountCents int64, ratio *big.Rat) int64 {
+	scaled := new(big.Rat).Mul(big.NewRat(amountCents, 1), ratio)
+	num := new(big.Int).Set(scaled.Num())
+	den := new(big.Int).Set(scaled.Denom())
+	quotient := new(big.Int)
+	remainder := new(big.Int)
+	quotient.QuoRem(num, den, remainder)
+	remainder.Mul(remainder, big.NewInt(2))
+	if remainder.Cmp(den) >= 0 {
+		quotient.Add(quotient, big.NewInt(1))
+	}
+	return quotient.Int64()
 }
 
 func defaultHostedPricingRules() []model.HostedPricingRule {

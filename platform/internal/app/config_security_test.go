@@ -157,3 +157,31 @@ func TestLoadConfigParsesAppGoogleAllowlist(t *testing.T) {
 		t.Fatalf("AppGoogleAllowlist[1] = %q", cfg.AppGoogleAllowlist[1])
 	}
 }
+
+func TestLoadConfigBuildsExternalPricingFromUnitPriceAndRatio(t *testing.T) {
+	t.Setenv("EXTERNAL_UNIT_PRICE_CENTS", "5")
+	t.Setenv("EXTERNAL_500_PRICE_RATIO", "449/495")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if len(cfg.PricingPacks) < 2 {
+		t.Fatalf("PricingPacks len = %d", len(cfg.PricingPacks))
+	}
+	if cfg.PricingPacks[0].Code != "external-100" || cfg.PricingPacks[0].AmountTotal != 500 {
+		t.Fatalf("starter pack = %+v", cfg.PricingPacks[0])
+	}
+	if cfg.PricingPacks[1].Code != "external-500" || cfg.PricingPacks[1].AmountTotal != 2268 {
+		t.Fatalf("bulk pack = %+v", cfg.PricingPacks[1])
+	}
+}
+
+func TestLoadConfigRejectsInvalidExternal500PriceRatio(t *testing.T) {
+	t.Setenv("EXTERNAL_500_PRICE_RATIO", "not-a-ratio")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

@@ -152,7 +152,7 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 	}
 	appSvc := appuser.NewService(store, overviewRouteBilling{
 		orders:  []model.Order{{ID: 11, PackKind: model.PackKindExternalGeneration}},
-		pricing: []model.PricingPack{{Code: "external-500", AmountTotal: 4490, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)}},
+		pricing: []model.PricingPack{{Code: "external-500", AmountTotal: 2268, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)}},
 	}, "salt")
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 

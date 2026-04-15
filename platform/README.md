@@ -103,6 +103,8 @@ Recommended production base URLs:
 - `APP_GOOGLE_ALLOWLIST`: comma-separated allowlist for app sign-in
 - `STRIPE_SUCCESS_URL`: Stripe success redirect
 - `STRIPE_CANCEL_URL`: Stripe cancel redirect
+- `EXTERNAL_UNIT_PRICE_CENTS`: base external price per document, in cents
+- `EXTERNAL_500_PRICE_RATIO`: discounted price ratio applied to the 500-document external pack
 - `HOSTED_LLM_BASE_URL`: hosted LLM upstream base URL
 - `HOSTED_LLM_API_KEY`: hosted LLM upstream API key
 - `HOSTED_LLM_TEXT_MODEL`: hosted text model

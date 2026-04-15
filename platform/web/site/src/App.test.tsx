@@ -41,7 +41,7 @@ describe('marketing site shell', () => {
     expect(writeText).toHaveBeenCalledWith('support@officecli.io')
   })
 
-  it('keeps pricing available when the pricing api fails', async () => {
+  it('shows a non-price placeholder when the pricing api fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network error'))
 
     render(
@@ -50,10 +50,9 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    expect((await screen.findAllByText('External 100')).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('External 500').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: /Open Secure Checkout/i })[0]).toHaveAttribute('href', 'https://platform.officecli.io/app/billing')
-    expect(screen.getAllByText(/Secure Stripe checkout starts in the billing workspace/i).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: /Open Billing Workspace/i })[0]).toHaveAttribute('href', 'https://platform.officecli.io/app/billing')
+    expect(screen.queryByText('External 100')).not.toBeInTheDocument()
   })
 
   it('detects supported operating systems for install tabs', () => {

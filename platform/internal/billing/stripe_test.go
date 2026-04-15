@@ -14,7 +14,7 @@ func TestCheckoutSessionParamsReuseExistingCustomer(t *testing.T) {
 	gateway := NewStripeGateway("sk_test_123", "", "https://platform.officecli.io/app/billing?status=success", "https://platform.officecli.io/app/billing?status=cancel")
 	params := gateway.checkoutSessionParams(
 		CheckoutRequest{UserID: 42, PackCode: "external-100", TargetAPIKeyID: 7},
-		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 		"cus_existing_123",
 	)
 
@@ -29,7 +29,7 @@ func TestCheckoutSessionParamsCreateCustomerForFirstPurchase(t *testing.T) {
 	gateway := NewStripeGateway("sk_test_123", "", "https://platform.officecli.io/app/billing?status=success", "https://platform.officecli.io/app/billing?status=cancel")
 	params := gateway.checkoutSessionParams(
 		CheckoutRequest{UserID: 42, PackCode: "external-100", TargetAPIKeyID: 7},
-		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 		"",
 	)
 
@@ -45,7 +45,7 @@ func TestCreateCheckoutSessionFailsFastWhenStripeSecretKeyMissing(t *testing.T) 
 	_, err := gateway.CreateCheckoutSession(
 		t.Context(),
 		CheckoutRequest{UserID: 42, PackCode: "external-100", TargetAPIKeyID: 7},
-		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+		model.PricingPack{Code: "external-100", Name: "External 100", Description: "External pack", Currency: "usd", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 		"",
 	)
 

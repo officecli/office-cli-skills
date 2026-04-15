@@ -1037,7 +1037,7 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	t.Setenv(updateCheckSkipEnv, "0")
 	stdout := &terminalBuffer{}
 	var stderr bytes.Buffer
-	app := NewApp(stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("yes\n")})
+	app := NewApp(stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("1\n")})
 	originalVersion := Version
 	originalBuildDate := BuildDate
 	Version = "0.2.2"
@@ -1083,6 +1083,9 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Update available for officecli") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "1. Update now and continue") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
@@ -1091,7 +1094,7 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 	t.Setenv(updateCheckSkipEnv, "0")
 	stdout := &terminalBuffer{}
-	app := NewApp(stdout, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("no\n")})
+	app := NewApp(stdout, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("2\n")})
 	originalVersion := Version
 	originalBuildDate := BuildDate
 	Version = "0.2.2"
@@ -1126,6 +1129,9 @@ func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 	if !strings.Contains(output, "Update available for officecli") {
 		t.Fatalf("stdout = %q", output)
 	}
+	if !strings.Contains(output, "2. Continue without updating") {
+		t.Fatalf("stdout = %q", output)
+	}
 	if !strings.Contains(output, "Config file:") {
 		t.Fatalf("expected command to continue, got %q", output)
 	}
@@ -1144,7 +1150,7 @@ func TestAppRun_UpdateCheckSkipsJSONAndHelp(t *testing.T) {
 	}()
 
 	var stdout bytes.Buffer
-	app := NewApp(&terminalBuffer{}, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("yes\n")})
+	app := NewApp(&terminalBuffer{}, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("1\n")})
 	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
 		t.Fatal("checkForUpdates should not be called")
 		return UpdateInfo{}, nil

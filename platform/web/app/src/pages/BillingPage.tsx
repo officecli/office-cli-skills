@@ -6,26 +6,6 @@ import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 import { redirectTo } from '../lib/navigation'
-import type { Order, PricingPack } from '../types'
-
-const PACK_COPY: Record<string, { name: string; description: string }> = {
-  'external-100': {
-    name: 'External 100',
-    description: '100 external generations for lightweight evaluation and individual workflows.',
-  },
-  'external-500': {
-    name: 'External 500',
-    description: '500 external generations for shared team workflows and recurring automation.',
-  },
-}
-
-function billingPackCopy(pack: Pick<PricingPack, 'code' | 'name' | 'description'>) {
-  return PACK_COPY[pack.code] ?? { name: pack.name, description: pack.description }
-}
-
-function billingOrderPackName(order: Pick<Order, 'pack_code' | 'pack_name'>) {
-  return PACK_COPY[order.pack_code]?.name ?? order.pack_name
-}
 
 export default function BillingPage() {
   const queryClient = useQueryClient()
@@ -85,33 +65,25 @@ export default function BillingPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {pricing.map((pack) => (
               <div key={pack.code} className="panel-muted flex flex-col justify-between p-5">
-                {(() => {
-                  const copy = billingPackCopy(pack)
-
-                  return (
-                    <>
-                      <div>
-                        <div className="info-eyebrow text-outline">{pack.code}</div>
-                        <div className="mt-3 text-2xl font-bold text-white">{copy.name}</div>
-                        <div className="mt-2 text-sm text-outline">{copy.description}</div>
-                        <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
-                        <div className="mt-2 text-sm text-outline">{pack.quota_amount} external generations per purchase</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="tonal-button mt-8 w-full"
-                        disabled={!selectedKey || checkout.isPending}
-                        onClick={() => {
-                          if (!selectedKey) return
-                          trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', pack_code: pack.code, target_api_key_id: selectedKey })
-                          checkout.mutate({ packCode: pack.code, keyID: selectedKey })
-                        }}
-                      >
-                        <CreditCard size={16} /> Continue to Stripe Checkout
-                      </button>
-                    </>
-                  )
-                })()}
+                <div>
+                  <div className="info-eyebrow text-outline">{pack.code}</div>
+                  <div className="mt-3 text-2xl font-bold text-white">{pack.name}</div>
+                  <div className="mt-2 text-sm text-outline">{pack.description}</div>
+                  <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
+                  <div className="mt-2 text-sm text-outline">{pack.quota_amount} external generations per purchase</div>
+                </div>
+                <button
+                  type="button"
+                  className="tonal-button mt-8 w-full"
+                  disabled={!selectedKey || checkout.isPending}
+                  onClick={() => {
+                    if (!selectedKey) return
+                    trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', pack_code: pack.code, target_api_key_id: selectedKey })
+                    checkout.mutate({ packCode: pack.code, keyID: selectedKey })
+                  }}
+                >
+                  <CreditCard size={16} /> Continue to Stripe Checkout
+                </button>
               </div>
             ))}
           </div>
@@ -128,7 +100,7 @@ export default function BillingPage() {
               <div key={order.id} className="panel-muted flex flex-wrap items-center justify-between gap-4 p-5">
                 <div>
                   <div className="text-lg font-semibold text-white">Order #{order.id}</div>
-                  <div className="mt-1 text-sm text-outline">{billingOrderPackName(order)} / created {formatDate(order.created_at)}</div>
+                  <div className="mt-1 text-sm text-outline">{order.pack_name} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} external generations</div>

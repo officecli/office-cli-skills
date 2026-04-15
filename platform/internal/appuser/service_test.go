@@ -136,7 +136,7 @@ func TestUpdateAPIKeyOnlyPersistsStatusAndNote(t *testing.T) {
 			{ID: 2, PackKind: model.PackKindHostedCredits},
 		},
 		pricing: []model.PricingPack{
-			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
 	}, "salt")
@@ -170,7 +170,7 @@ func TestUpdateAPIKeyRejectsForeignKey(t *testing.T) {
 			{ID: 2, PackKind: model.PackKindHostedCredits},
 		},
 		pricing: []model.PricingPack{
-			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
 	}, "salt")
@@ -207,7 +207,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 			{ID: 2, PackKind: model.PackKindHostedCredits},
 		},
 		pricing: []model.PricingPack{
-			{Code: "external-100", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
 	}, "salt")

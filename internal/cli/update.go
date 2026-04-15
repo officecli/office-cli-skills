@@ -98,7 +98,7 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 		return nil
 	}
 	reader := bufio.NewReader(a.Stdin)
-	confirm, err := a.promptYesNo(reader, "Update now and continue with the current command? (yes/no)", true)
+	confirm, err := a.promptUpdateChoice(reader)
 	if err != nil {
 		return err
 	}
@@ -210,20 +210,11 @@ func detectInstallMethod(execPath string) (InstallMethod, error) {
 	if method := installMethodFromEnv(); method != InstallMethodUnknown {
 		return method, nil
 	}
-	resolved := strings.TrimSpace(execPath)
-	if resolved == "" {
+	paths := executablePaths(execPath)
+	if len(paths) == 0 {
 		return InstallMethodUnknown, nil
 	}
-	if realPath, err := filepath.EvalSymlinks(resolved); err == nil && strings.TrimSpace(realPath) != "" {
-		resolved = realPath
-	}
-	if isBrewInstall(resolved) {
-		return InstallMethodBrew, nil
-	}
-	if isScriptInstall(resolved) {
-		return InstallMethodScript, nil
-	}
-	return InstallMethodUnknown, nil
+	return detectInstallMethodFromPaths(paths), nil
 }
 
 func installMethodFromEnv() InstallMethod {
@@ -242,6 +233,29 @@ func installMethodFromEnv() InstallMethod {
 func isBrewInstall(execPath string) bool {
 	lower := filepath.ToSlash(strings.ToLower(strings.TrimSpace(execPath)))
 	return strings.Contains(lower, "/cellar/officecli/") || strings.Contains(lower, "/homebrew/")
+}
+
+func isNPMInstall(execPath string) bool {
+	lower := filepath.ToSlash(strings.ToLower(strings.TrimSpace(execPath)))
+	if lower == "" {
+		return false
+	}
+	if strings.Contains(lower, "/lib/node_modules/officecli/") || strings.Contains(lower, "/node_modules/officecli/") {
+		return true
+	}
+	if strings.Contains(lower, "/node_modules/.bin/officecli") {
+		return true
+	}
+	if strings.HasSuffix(lower, "/bin/officecli") {
+		switch {
+		case strings.Contains(lower, "/.nvm/versions/node/"),
+			strings.Contains(lower, "/fnm/"),
+			strings.Contains(lower, "/volta/bin/"),
+			strings.Contains(lower, "/npm-global/"):
+			return true
+		}
+	}
+	return false
 }
 
 func isScriptInstall(execPath string) bool {
@@ -484,8 +498,112 @@ func detectedPackageManager() string {
 		return "yarn"
 	case "bun":
 		return "bun"
+	case "npm":
+		return "npm"
 	default:
-		return ""
+		return detectPackageManagerFromPaths(executablePaths(""))
+	}
+}
+
+func executablePaths(execPath string) []string {
+	paths := make([]string, 0, 4)
+	appendPath := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		cleaned := filepath.Clean(trimmed)
+		for _, existing := range paths {
+			if existing == cleaned {
+				return
+			}
+		}
+		paths = append(paths, cleaned)
+	}
+	addExecutablePath := func(value string) {
+		appendPath(value)
+		if realPath, err := filepath.EvalSymlinks(strings.TrimSpace(value)); err == nil {
+			appendPath(realPath)
+		}
+	}
+	if strings.TrimSpace(execPath) != "" {
+		addExecutablePath(execPath)
+	} else if currentExecPath, err := os.Executable(); err == nil {
+		addExecutablePath(currentExecPath)
+	}
+	if lookedUpPath, err := exec.LookPath("officecli"); err == nil {
+		addExecutablePath(lookedUpPath)
+	}
+	return paths
+}
+
+func detectInstallMethodFromPaths(paths []string) InstallMethod {
+	for _, path := range paths {
+		if isBrewInstall(path) {
+			return InstallMethodBrew
+		}
+	}
+	for _, path := range paths {
+		if isNPMInstall(path) {
+			return InstallMethodNPM
+		}
+	}
+	for _, path := range paths {
+		if isScriptInstall(path) {
+			return InstallMethodScript
+		}
+	}
+	return InstallMethodUnknown
+}
+
+func detectPackageManagerFromPaths(paths []string) string {
+	for _, path := range paths {
+		lower := filepath.ToSlash(strings.ToLower(strings.TrimSpace(path)))
+		switch {
+		case strings.Contains(lower, "/pnpm/") || strings.Contains(lower, "/.pnpm/") || strings.Contains(lower, "/pnpm-global/"):
+			return "pnpm"
+		case strings.Contains(lower, "/.config/yarn/") || strings.Contains(lower, "/yarn/global/"):
+			return "yarn"
+		case strings.Contains(lower, "/.bun/") || strings.Contains(lower, "/bun/install/global/"):
+			return "bun"
+		case isNPMInstall(path):
+			return "npm"
+		}
+	}
+	if detectInstallMethodFromPaths(paths) == InstallMethodNPM {
+		return "npm"
+	}
+	return ""
+}
+
+func (a *App) promptUpdateChoice(reader *bufio.Reader) (bool, error) {
+	for {
+		if _, err := fmt.Fprintln(a.Stdout, "Update now and continue with the current command?"); err != nil {
+			return false, err
+		}
+		if _, err := fmt.Fprintln(a.Stdout, "1. Update now and continue"); err != nil {
+			return false, err
+		}
+		if _, err := fmt.Fprintln(a.Stdout, "2. Continue without updating"); err != nil {
+			return false, err
+		}
+		if _, err := fmt.Fprint(a.Stdout, "Enter an option number [1-2] (default 1): "); err != nil {
+			return false, err
+		}
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return false, err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "", "1", "yes", "y":
+			return true, nil
+		case "2", "no", "n":
+			return false, nil
+		default:
+			if _, err := fmt.Fprintln(a.Stdout, "Please enter 1 or 2."); err != nil {
+				return false, err
+			}
+		}
 	}
 }
 

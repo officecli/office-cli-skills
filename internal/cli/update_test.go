@@ -34,6 +34,50 @@ func TestDetectInstallMethodFallsBackToScriptPath(t *testing.T) {
 	}
 }
 
+func TestDetectInstallMethodRecognizesNPMRuntimePath(t *testing.T) {
+	t.Setenv(updateInstallMethodEnv, "")
+
+	method, err := detectInstallMethod("/Users/luyang/.nvm/versions/node/v25.5.0/lib/node_modules/officecli/runtime/officecli")
+	if err != nil {
+		t.Fatalf("detectInstallMethod: %v", err)
+	}
+	if method != InstallMethodNPM {
+		t.Fatalf("method = %q, want %q", method, InstallMethodNPM)
+	}
+}
+
+func TestDetectInstallMethodUsesLookPathForNPMBin(t *testing.T) {
+	t.Setenv(updateInstallMethodEnv, "")
+	originalPath := os.Getenv("PATH")
+	tmpDir := t.TempDir()
+	binDir := filepath.Join(tmpDir, ".nvm", "versions", "node", "v25.5.0", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	wrapperPath := filepath.Join(binDir, "officecli")
+	if err := os.WriteFile(wrapperPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+originalPath)
+
+	method, err := detectInstallMethod("/tmp/officecli")
+	if err != nil {
+		t.Fatalf("detectInstallMethod: %v", err)
+	}
+	if method != InstallMethodNPM {
+		t.Fatalf("method = %q, want %q", method, InstallMethodNPM)
+	}
+}
+
+func TestDetectedPackageManagerFallsBackToNPMFromExecutablePath(t *testing.T) {
+	t.Setenv(updatePackageManagerEnv, "")
+
+	got := detectPackageManagerFromPaths([]string{"/Users/luyang/.nvm/versions/node/v25.5.0/bin/officecli"})
+	if got != "npm" {
+		t.Fatalf("detectPackageManagerFromPaths = %q, want %q", got, "npm")
+	}
+}
+
 func TestUpdateCommandForPackageManager(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -141,7 +185,7 @@ func TestDefaultRestartCommandForNPMUsesPathCommand(t *testing.T) {
 
 func TestMaybeHandleUpdateSkipsPromptWhenAutoUpdateUnsupported(t *testing.T) {
 	stdout := &terminalBuffer{}
-	app := NewApp(stdout, os.Stderr, &terminalInputBuffer{Reader: strings.NewReader("yes\n")})
+	app := NewApp(stdout, os.Stderr, &terminalInputBuffer{Reader: strings.NewReader("1\n")})
 	originalVersion := Version
 	originalBuildDate := BuildDate
 	Version = "0.2.2"
@@ -168,7 +212,7 @@ func TestMaybeHandleUpdateSkipsPromptWhenAutoUpdateUnsupported(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"config", "status"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if strings.Contains(stdout.String(), "Update now and continue") {
+	if strings.Contains(stdout.String(), "Enter an option number [1-2]") {
 		t.Fatalf("unexpected prompt in output: %q", stdout.String())
 	}
 }

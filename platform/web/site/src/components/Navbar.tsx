@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { motion } from 'motion/react'
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
@@ -42,7 +42,7 @@ export default function Navbar() {
     }
   }, [location.pathname, location.hash])
 
-  const handleAnchorClick = (e: React.MouseEvent<HTMLAnchorElement>, to: string) => {
+  const handleAnchorClick = (e: MouseEvent<HTMLAnchorElement>, to: string) => {
     if (location.pathname === '/') {
       e.preventDefault()
       const hash = to.replace('/#', '#')
