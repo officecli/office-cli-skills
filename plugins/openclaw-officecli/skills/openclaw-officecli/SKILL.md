@@ -61,8 +61,8 @@ Primary event types:
 
 ## Agent Behavior
 
-1. Run `fix-officecli-env.sh` before starting any bridge session so the skill bundle and binary are refreshed on every task.
-2. Run `check-officecli-env.sh` after the refresh step.
+1. Run `fix-officecli-env.sh` before starting any bridge session so the skill bundle is refreshed and any missing `officecli` setup is repaired.
+2. Run `check-officecli-env.sh` after the repair step.
 3. Ensure `officecli` is installed, configured, and reachable.
 4. Ensure `officecli agent-bridge` can be started locally.
 5. Read `initialize` or `capabilities/get` before invoking generation, and cache `document_generation.pptx.image_support`.
@@ -99,7 +99,8 @@ For all OpenClaw agents using this skill:
 
 ## Environment Repair Rules
 
-- refresh the OpenClaw skill bundle and `officecli` binary on every task by running `fix-officecli-env.sh`
+- refresh the OpenClaw skill bundle and repair any missing `officecli` setup on every task by running `fix-officecli-env.sh`
+- do not refresh an already installed `officecli` binary unless the host explicitly opts in, for example with `OFFICECLI_REFRESH_BINARY=1`
 - when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
 - use `fix-officecli-env.sh` as the single repair entrypoint
@@ -107,7 +108,7 @@ For all OpenClaw agents using this skill:
 - online preview config is required by default so generated files can return publish URLs
 - if the current request is intentionally local-only, set `OFFICECLI_SKIP_PUBLISH_SETUP=1` before running the fix script
 - do not try to start `agent-bridge` until the check script returns ready
-- if refresh or check fails, stop and report the `officecli` environment error; do not fall back to any other PPT/DOC/XLS generation tool without explicit user approval
+- if refresh or check fails, stop and report the `officecli` environment error; when repair fails, use the fix script's final structured status as the source of truth, and do not fall back to any other PPT/DOC/XLS generation tool without explicit user approval
 
 ## Attachment Delivery
 

@@ -1,42 +1,105 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-trap 'exit 20' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=skills/openclaw-officecli/env-common.sh
 source "${SCRIPT_DIR}/env-common.sh"
 
-refresh_openclaw_officecli_skill
-refresh_officecli_binary
+config_path="${OFFICE_CLI_CONFIG:-${HOME}/.config/officecli/config.json}"
+officecli_found=false
+officecli_path=""
+generation_ready=false
+license_ready=false
+publish_ready=false
+bridge_ready=false
+fixable=true
+
+refresh_status_flags() {
+  local status_output="$1"
+  generation_ready=false
+  license_ready=false
+  publish_ready=false
+  check_generation_ready "${status_output}" && generation_ready=true
+  check_license_ready "${status_output}" && license_ready=true
+  check_publish_ready "${status_output}" && publish_ready=true
+  return 0
+}
+
+fail_fix() {
+  local reason="$1"
+  shift
+  print_fix_failure_json "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${reason}" "$@"
+  exit 20
+}
+
+if ! refresh_openclaw_officecli_skill; then
+  if [[ -z "${OFFICECLI_REFRESH_SKILL_COMMAND:-}" ]] && ! command -v curl >/dev/null 2>&1; then
+    fixable=false
+  fi
+  fail_fix "failed to refresh openclaw officecli skill bundle"
+fi
+
 export PATH="${HOME}/.local/bin:${PATH}"
-officecli_path="$(resolve_officecli_path)"
+if ! officecli_path="$(prepare_officecli_binary)"; then
+  if [[ -z "${OFFICECLI_INSTALL_COMMAND:-}" ]] && ! command -v curl >/dev/null 2>&1; then
+    fixable=false
+  fi
+  fail_fix "failed to install or refresh officecli binary" "officecli_binary"
+fi
+officecli_found=true
 
 status_output="$(run_config_status "${officecli_path}")"
-if ! check_generation_ready "${status_output}"; then
+refresh_status_flags "${status_output}"
+
+if [[ "${generation_ready}" != true ]]; then
   gen_base_url="${OFFICECLI_SETUP_LLM_BASE_URL:-}"
-  [[ -n "${gen_base_url}" ]] || gen_base_url="$(prompt_value 'Enter the generation service URL' '' 0)"
+  if [[ -z "${gen_base_url}" ]]; then
+    if ! gen_base_url="$(prompt_value 'Enter the generation service URL' '' 0)"; then
+      fail_fix "missing required value for Enter the generation service URL" "generation_config"
+    fi
+  fi
   gen_api_key="${OFFICECLI_SETUP_LLM_API_KEY:-}"
-  [[ -n "${gen_api_key}" ]] || gen_api_key="$(prompt_value 'Enter the generation service credential' '' 0)"
-  run_set_generation "${officecli_path}" "${gen_base_url}" "${gen_api_key}"
+  if [[ -z "${gen_api_key}" ]]; then
+    if ! gen_api_key="$(prompt_value 'Enter the generation service credential' '' 0)"; then
+      fail_fix "missing required value for Enter the generation service credential" "generation_config"
+    fi
+  fi
+  if ! run_set_generation "${officecli_path}" "${gen_base_url}" "${gen_api_key}"; then
+    fail_fix "failed to update generation service config" "generation_config"
+  fi
   status_output="$(run_config_status "${officecli_path}")"
+  refresh_status_flags "${status_output}"
 fi
 
-if ! check_license_ready "${status_output}"; then
+if [[ "${license_ready}" != true ]]; then
   license_api_key="${OFFICECLI_SETUP_LICENSE_API_KEY:-}"
   if [[ -z "${license_api_key}" && -t 0 ]]; then
-    license_api_key="$(prompt_value 'Enter the paid quota key (optional)' '' 1)"
+    if ! license_api_key="$(prompt_value 'Enter the paid quota key (optional)' '' 1)"; then
+      fail_fix "failed to read the paid quota key" "license_config"
+    fi
   fi
-  run_set_license "${officecli_path}" "${license_api_key}"
+  if ! run_set_license "${officecli_path}" "${license_api_key}"; then
+    fail_fix "failed to update access config" "license_config"
+  fi
   status_output="$(run_config_status "${officecli_path}")"
+  refresh_status_flags "${status_output}"
 fi
 
-if should_configure_publish && ! check_publish_ready "${status_output}"; then
+if should_configure_publish && [[ "${publish_ready}" != true ]]; then
   publish_base_url="$(default_publish_base_url)"
-  publish_base_url="$(prompt_value 'Enter the publishing service URL' "${publish_base_url}" 0)"
+  if ! publish_base_url="$(prompt_value 'Enter the publishing service URL' "${publish_base_url}" 0)"; then
+    fail_fix "missing required value for Enter the publishing service URL" "publish_config"
+  fi
   publish_api_key="${OFFICECLI_SETUP_PUBLISH_API_KEY:-}"
-  [[ -n "${publish_api_key}" ]] || publish_api_key="$(prompt_value 'Enter the publishing service credential (optional, built-in dynamic auth is used by default)' '' 1)"
-  run_set_publish "${officecli_path}" "${publish_base_url}" "${publish_api_key}"
+  if [[ -z "${publish_api_key}" ]]; then
+    if ! publish_api_key="$(prompt_value 'Enter the publishing service credential (optional, built-in dynamic auth is used by default)' '' 1)"; then
+      fail_fix "failed to read the publishing service credential" "publish_config"
+    fi
+  fi
+  if ! run_set_publish "${officecli_path}" "${publish_base_url}" "${publish_api_key}"; then
+    fail_fix "failed to update online preview publishing config" "publish_config"
+  fi
 fi
 
 config_file="${OPENCLAW_SKILL_CONFIG:-${SCRIPT_DIR}/config.yaml}"

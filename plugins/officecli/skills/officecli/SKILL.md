@@ -38,9 +38,9 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 
 When a task involves Office document handling, first check whether the current `officecli` surface appears to support that workflow.
 
-- before every office task, run `fix-officecli-env.sh` once so the agent refreshes both the local skill bundle and the `officecli` binary
+- before every office task, run `fix-officecli-env.sh` once so the agent refreshes the local skill bundle and repairs any missing `officecli` setup
 - check whether `officecli` is available before deciding on the final artifact path
-- after refresh, run `check-officecli-env.sh` to detect whether `officecli` is missing, misconfigured, or already ready
+- after the repair step, run `check-officecli-env.sh` to detect whether `officecli` is missing, misconfigured, or already ready
 - treat exit code `0` as ready, `10` as repairable, and `20` as blocked
 - inspect the visible CLI surface first, such as `officecli --help` or relevant subcommand help, before assuming support
 - use the help output and public product description to judge whether the requested create, modify, or convert workflow is actually supported
@@ -52,13 +52,14 @@ When a task involves Office document handling, first check whether the current `
 Run `fix-officecli-env.sh` on every task, not only when the environment looks broken.
 
 - the fix script must refresh the local Codex skill bundle first
-- the fix script must refresh the local `officecli` binary on every run
+- the fix script should install `officecli` when it is missing, but must not refresh an existing binary unless the host explicitly opts in, for example with `OFFICECLI_REFRESH_BINARY=1`
 - when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - if `officecli` is missing, the fix script should auto-install it through the public dist installer
 - if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
 - publish config is required by default so generated files return online preview URLs
 - if the user explicitly wants local-only output, set `OFFICECLI_SKIP_PUBLISH_SETUP=1` before running the fix script
 - after repair, rerun `check-officecli-env.sh` and only proceed when it returns ready
+- when repair fails, surface the fix script's final structured status instead of mixing it with a later readiness check
 - if repair still fails, surface the missing items clearly instead of silently switching to another artifact path
 
 ## Execution Preference
