@@ -158,6 +158,43 @@ print_check_json() {
   printf '}\n'
 }
 
+print_fix_failure_json() {
+  local officecli_found="$1"
+  local officecli_path="$2"
+  local config_path="$3"
+  local generation_ready="$4"
+  local license_ready="$5"
+  local publish_ready="$6"
+  local bridge_ready="$7"
+  local fixable="$8"
+  local failure_reason="$9"
+  shift 9
+  local missing_items=()
+  local item
+  for item in "$@"; do
+    [[ -n "${item}" ]] || continue
+    missing_items+=("${item}")
+  done
+
+  printf '{'
+  printf '"status":"blocked",'
+  printf '"officecli_found":%s,' "$officecli_found"
+  printf '"officecli_path":"%s",' "$(json_escape "$officecli_path")"
+  printf '"config_path":"%s",' "$(json_escape "$config_path")"
+  printf '"generation_ready":%s,' "$generation_ready"
+  printf '"license_ready":%s,' "$license_ready"
+  printf '"publish_ready":%s,' "$publish_ready"
+  printf '"bridge_ready":%s,' "$bridge_ready"
+  printf '"fixable":%s,' "$fixable"
+  printf '"failure_reason":"%s",' "$(json_escape "$failure_reason")"
+  if [[ ${#missing_items[@]} -eq 0 ]]; then
+    printf '"missing_items":[]'
+  else
+    printf '"missing_items":%s' "$(join_json_array "${missing_items[@]}")"
+  fi
+  printf '}\n'
+}
+
 prompt_value() {
   local prompt="$1"
   local default_value="${2:-}"
@@ -209,6 +246,23 @@ refresh_officecli_binary() {
   print_officecli_version "officecli version before refresh: "
   install_officecli_binary
   print_officecli_version "officecli version after refresh: "
+}
+
+prepare_officecli_binary() {
+  local officecli_bin=""
+
+  if officecli_bin="$(resolve_officecli_path 2>/dev/null)"; then
+    if truthy "${OFFICECLI_REFRESH_BINARY:-0}"; then
+      refresh_officecli_binary || return 1
+      officecli_bin="$(resolve_officecli_path 2>/dev/null)" || return 1
+    fi
+    printf '%s\n' "${officecli_bin}"
+    return 0
+  fi
+
+  install_officecli_binary || return 1
+  officecli_bin="$(resolve_officecli_path 2>/dev/null)" || return 1
+  printf '%s\n' "${officecli_bin}"
 }
 
 uninstall_officecli_binary() {

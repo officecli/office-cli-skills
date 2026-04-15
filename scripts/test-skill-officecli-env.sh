@@ -182,16 +182,15 @@ assert_eq "${code}" "10" "officecli check missing binary exit code"
 assert_contains "${case2_dir}/out.json" 'officecli_binary'
 unset code
 
-# case 3: fix installs and configures officecli skill
+# case 3: fix uses the existing officecli binary by default
 case3_dir="${TMP_ROOT}/case3"
-mkdir -p "${case3_dir}/home/.local/bin" "${case3_dir}/state" "${case3_dir}/install"
-make_fake_officecli "${case3_dir}/install/officecli"
-INSTALL_CMD="mkdir -p '${case3_dir}/home/.local/bin' && cp '${case3_dir}/install/officecli' '${case3_dir}/home/.local/bin/officecli' && chmod +x '${case3_dir}/home/.local/bin/officecli'"
+mkdir -p "${case3_dir}/home" "${case3_dir}/bin" "${case3_dir}/state"
+make_fake_officecli "${case3_dir}/bin/officecli"
 REFRESH_CMD="mkdir -p '${case3_dir}/home/.codex/skills' && true"
 set +e
 HOME="${case3_dir}/home" \
-PATH="/usr/bin:/bin" \
-OFFICECLI_INSTALL_COMMAND="${INSTALL_CMD}" \
+PATH="${case3_dir}/bin:/usr/bin:/bin" \
+OFFICECLI_INSTALL_COMMAND="touch '${case3_dir}/install-should-not-run' && exit 99" \
 OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
 OFFICECLI_FAKE_STATE_DIR="${case3_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
@@ -201,19 +200,60 @@ OFFICECLI_SETUP_PUBLISH_BASE_URL="https://claudeoffice.com" \
 "${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case3_dir}/out.json" 2>&1
 code=$?
 set -e
-assert_eq "${code}" "0" "officecli fix exit code"
+assert_eq "${code}" "0" "officecli fix existing binary exit code"
 assert_contains "${case3_dir}/out.json" '"status":"ready"'
-assert_contains "${case3_dir}/out.json" '"missing_items":[]'
+[[ ! -f "${case3_dir}/install-should-not-run" ]] || fail "existing officecli binary should not be reinstalled by default"
+
+# case 4: fix installs and configures officecli skill when binary is missing
+case4_dir="${TMP_ROOT}/case4"
+mkdir -p "${case4_dir}/home/.local/bin" "${case4_dir}/state" "${case4_dir}/install"
+make_fake_officecli "${case4_dir}/install/officecli"
+INSTALL_CMD="mkdir -p '${case4_dir}/home/.local/bin' && cp '${case4_dir}/install/officecli' '${case4_dir}/home/.local/bin/officecli' && chmod +x '${case4_dir}/home/.local/bin/officecli'"
+REFRESH_CMD="mkdir -p '${case4_dir}/home/.codex/skills' && true"
+set +e
+HOME="${case4_dir}/home" \
+PATH="/usr/bin:/bin" \
+OFFICECLI_INSTALL_COMMAND="${INSTALL_CMD}" \
+OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
+OFFICECLI_FAKE_STATE_DIR="${case4_dir}/state" \
+OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
+OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
+OFFICECLI_SETUP_LICENSE_API_KEY="" \
+OFFICECLI_SETUP_PUBLISH_BASE_URL="https://claudeoffice.com" \
+"${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case4_dir}/out.json" 2>&1
+code=$?
+set -e
+assert_eq "${code}" "0" "officecli fix exit code"
+assert_contains "${case4_dir}/out.json" '"status":"ready"'
+assert_contains "${case4_dir}/out.json" '"missing_items":[]'
 # shellcheck disable=SC1090
-source "${case3_dir}/state/state.sh"
+source "${case4_dir}/state/state.sh"
 assert_eq "${GENERATION_READY}" "1" "generation configured"
 assert_eq "${LICENSE_READY}" "1" "license configured"
 assert_eq "${PUBLISH_READY}" "1" "publish configured"
 
-# case 4: officecli check fails when CLI help surface is broken
-case4_dir="${TMP_ROOT}/case4"
-mkdir -p "${case4_dir}/bin" "${case4_dir}/state"
-cat > "${case4_dir}/bin/officecli" <<'SCRIPT'
+# case 5: officecli fix emits blocked json when required values are still missing
+case5_dir="${TMP_ROOT}/case5"
+mkdir -p "${case5_dir}/home" "${case5_dir}/bin" "${case5_dir}/state"
+make_fake_officecli "${case5_dir}/bin/officecli"
+REFRESH_CMD="mkdir -p '${case5_dir}/home/.codex/skills' && true"
+set +e
+HOME="${case5_dir}/home" \
+PATH="${case5_dir}/bin:/usr/bin:/bin" \
+OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
+OFFICECLI_FAKE_STATE_DIR="${case5_dir}/state" \
+"${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case5_dir}/out.json" 2>&1
+code=$?
+set -e
+assert_eq "${code}" "20" "officecli fix blocked exit code"
+assert_contains "${case5_dir}/out.json" '"status":"blocked"'
+assert_contains "${case5_dir}/out.json" '"failure_reason":"missing required value for Enter the generation service URL"'
+assert_contains "${case5_dir}/out.json" '"missing_items":["generation_config"]'
+
+# case 6: officecli check fails when CLI help surface is broken
+case6_dir="${TMP_ROOT}/case6"
+mkdir -p "${case6_dir}/bin" "${case6_dir}/state"
+cat > "${case6_dir}/bin/officecli" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
@@ -235,55 +275,55 @@ case "${1:-}" in
 esac
 exit 1
 SCRIPT
-chmod +x "${case4_dir}/bin/officecli"
-PATH="${case4_dir}/bin:${PATH}" run_check "${OFFICECLI_SKILL_DIR}/check-officecli-env.sh" "${case4_dir}/out.json" || code=$?
+chmod +x "${case6_dir}/bin/officecli"
+PATH="${case6_dir}/bin:${PATH}" run_check "${OFFICECLI_SKILL_DIR}/check-officecli-env.sh" "${case6_dir}/out.json" || code=$?
 code=${code:-0}
 assert_eq "${code}" "10" "officecli check broken cli surface exit code"
-assert_contains "${case4_dir}/out.json" 'cli_surface'
+assert_contains "${case6_dir}/out.json" 'cli_surface'
 unset code
 
-# case 5: openclaw check requires bridge
-case5_dir="${TMP_ROOT}/case5"
-mkdir -p "${case5_dir}/bin" "${case5_dir}/state"
-make_fake_officecli "${case5_dir}/bin/officecli"
-cat > "${case5_dir}/state/state.sh" <<'STATE'
+# case 7: openclaw check requires bridge
+case7_dir="${TMP_ROOT}/case7"
+mkdir -p "${case7_dir}/bin" "${case7_dir}/state"
+make_fake_officecli "${case7_dir}/bin/officecli"
+cat > "${case7_dir}/state/state.sh" <<'STATE'
 GENERATION_READY=1
 LICENSE_READY=1
 PUBLISH_READY=0
 BRIDGE_READY=0
 STATE
-PATH="${case5_dir}/bin:${PATH}" OFFICECLI_FAKE_STATE_DIR="${case5_dir}/state" run_check "${OPENCLAW_SKILL_DIR}/check-officecli-env.sh" "${case5_dir}/out.json" || code=$?
+PATH="${case7_dir}/bin:${PATH}" OFFICECLI_FAKE_STATE_DIR="${case7_dir}/state" run_check "${OPENCLAW_SKILL_DIR}/check-officecli-env.sh" "${case7_dir}/out.json" || code=$?
 code=${code:-0}
 assert_eq "${code}" "10" "openclaw check missing bridge exit code"
-assert_contains "${case5_dir}/out.json" 'agent_bridge'
+assert_contains "${case7_dir}/out.json" 'agent_bridge'
 unset code
 
-# case 6: openclaw fix writes config.yaml and returns ready
-case6_dir="${TMP_ROOT}/case6"
-mkdir -p "${case6_dir}/home/.local/bin" "${case6_dir}/state" "${case6_dir}/install" "${case6_dir}/skill"
-make_fake_officecli "${case6_dir}/install/officecli"
-INSTALL_CMD="mkdir -p '${case6_dir}/home/.local/bin' && cp '${case6_dir}/install/officecli' '${case6_dir}/home/.local/bin/officecli' && chmod +x '${case6_dir}/home/.local/bin/officecli'"
-REFRESH_CMD="mkdir -p '${case6_dir}/home/.openai/skills' && true"
-cp "${OPENCLAW_SKILL_DIR}/config.example.yaml" "${case6_dir}/skill/config.yaml"
+# case 8: openclaw fix writes config.yaml and returns ready
+case8_dir="${TMP_ROOT}/case8"
+mkdir -p "${case8_dir}/home/.local/bin" "${case8_dir}/state" "${case8_dir}/install" "${case8_dir}/skill"
+make_fake_officecli "${case8_dir}/install/officecli"
+INSTALL_CMD="mkdir -p '${case8_dir}/home/.local/bin' && cp '${case8_dir}/install/officecli' '${case8_dir}/home/.local/bin/officecli' && chmod +x '${case8_dir}/home/.local/bin/officecli'"
+REFRESH_CMD="mkdir -p '${case8_dir}/home/.openai/skills' && true"
+cp "${OPENCLAW_SKILL_DIR}/config.example.yaml" "${case8_dir}/skill/config.yaml"
 set +e
-HOME="${case6_dir}/home" \
+HOME="${case8_dir}/home" \
 PATH="/usr/bin:/bin" \
-OPENCLAW_SKILL_CONFIG="${case6_dir}/skill/config.yaml" \
+OPENCLAW_SKILL_CONFIG="${case8_dir}/skill/config.yaml" \
 OFFICECLI_INSTALL_COMMAND="${INSTALL_CMD}" \
 OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
-OFFICECLI_FAKE_STATE_DIR="${case6_dir}/state" \
+OFFICECLI_FAKE_STATE_DIR="${case8_dir}/state" \
 OFFICECLI_SETUP_LLM_BASE_URL="https://example.com/v1" \
 OFFICECLI_SETUP_LLM_API_KEY="sk-test" \
 OFFICECLI_SETUP_LICENSE_API_KEY="" \
 OFFICECLI_SETUP_PUBLISH_BASE_URL="https://claudeoffice.com" \
-"${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case6_dir}/out.json" 2>&1
+"${OPENCLAW_SKILL_DIR}/fix-officecli-env.sh" >"${case8_dir}/out.json" 2>&1
 code=$?
 set -e
 assert_eq "${code}" "0" "openclaw fix exit code"
-assert_contains "${case6_dir}/out.json" '"status":"ready"'
-assert_contains "${case6_dir}/out.json" '"missing_items":[]'
-assert_contains "${case6_dir}/skill/config.yaml" 'office_cli_path: "'
-assert_contains "${case6_dir}/skill/config.yaml" 'agent_bridge_command: "'
+assert_contains "${case8_dir}/out.json" '"status":"ready"'
+assert_contains "${case8_dir}/out.json" '"missing_items":[]'
+assert_contains "${case8_dir}/skill/config.yaml" 'office_cli_path: "'
+assert_contains "${case8_dir}/skill/config.yaml" 'agent_bridge_command: "'
 
 assert_dirs_equal "${OFFICECLI_SKILL_DIR}" "${OFFICECLI_PLUGIN_SKILL_DIR}" "officecli plugin skill bundle drift"
 assert_dirs_equal "${OPENCLAW_SKILL_DIR}" "${OPENCLAW_PLUGIN_SKILL_DIR}" "openclaw plugin skill bundle drift"
