@@ -66,7 +66,7 @@ jobs:
       OFFICE_CLI_LLM_TIMEOUT_SEC: ${{ vars.CLI_INSTALLED_E2E_LLM_TIMEOUT_SEC || '180' }}
       OFFICE_CLI_LICENSE_BASE_URL: ${{ vars.OFFICE_CLI_LICENSE_BASE_URL || 'https://platform.officecli.io' }}
       OFFICE_CLI_LICENSE_ENABLED: 'true'
-      OFFICE_CLI_PUBLISH_BASE_URL: ${{ vars.OFFICE_CLI_PUBLISH_BASE_URL || 'https://platform.officecli.io/api' }}
+      OFFICE_CLI_PUBLISH_BASE_URL: ${{ secrets.CLI_EMBEDDED_PUBLISH_AUTH_KEY != '' && (vars.CLI_EMBEDDED_PUBLISH_BASE_URL || 'https://claudeoffice.com') || vars.OFFICE_CLI_PUBLISH_BASE_URL || 'https://platform.officecli.io/api' }}
       OFFICE_CLI_PUBLISH_API_KEY: ${{ secrets.OFFICE_CLI_PUBLISH_API_KEY || secrets.OFFICE_CLI_LICENSE_API_KEY }}
       OFFICE_CLI_PUBLISH_PROVIDER: http
       OFFICE_CLI_PUBLISH_ENABLED: 'true'
