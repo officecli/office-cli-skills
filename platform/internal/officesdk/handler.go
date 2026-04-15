@@ -35,7 +35,7 @@ func (h *Handler) GetSDKParams(c *gin.Context) {
 		c.JSON(previewAccessHTTPStatus(err), gin.H{"code": previewAccessHTTPStatus(err), "message": err.Error()})
 		return
 	}
-	meta, err := h.store.GetFileMeta(c.Request.Context(), fileID)
+	meta, err := h.provider.ResolveFileMeta(c.Request.Context(), fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "file not found"})
 		return
@@ -72,7 +72,11 @@ func (h *Handler) ServePage(c *gin.Context) {
 		c.String(previewAccessHTTPStatus(err), err.Error())
 		return
 	}
-	meta, err := h.store.GetFileMeta(c.Request.Context(), fileID)
+	h.ServePageForFile(c, fileID)
+}
+
+func (h *Handler) ServePageForFile(c *gin.Context, fileID string) {
+	meta, err := h.provider.ResolveFileMeta(c.Request.Context(), fileID)
 	if err != nil {
 		c.String(http.StatusNotFound, "file not found")
 		return

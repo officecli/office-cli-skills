@@ -767,7 +767,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	})
 }
 
-func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
 	if shares == nil || sdkHandler == nil || sdkProvider == nil {
 		return
 	}
@@ -777,14 +777,33 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteServi
 			httpapi.Error(c, status, err.Error())
 			return
 		}
-		if raw, err := c.Cookie("cop_app_session"); err == nil && raw != "" {
-			if _, authErr := authSvc.Me(c.Request.Context(), raw); authErr == nil {
-				shares.IssueAccessCookie(c, share)
-				c.Redirect(http.StatusFound, "/officesdk/page?file_id="+url.QueryEscape(share.FileID))
-				return
+		if shares.HasAccessCookie(c, share) {
+			sdkHandler.ServePageForFile(c, share.FileID)
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderPasswordPage(share, "")))
+	})
+	r.POST("/p/:shareToken", func(c *gin.Context) {
+		share, status, err := shares.ValidateEntryRequest(c.Request.Context(), c.Param("shareToken"))
+		if err != nil {
+			httpapi.Error(c, status, err.Error())
+			return
+		}
+		password := strings.TrimSpace(c.PostForm("password"))
+		if password == "" {
+			var body struct {
+				Password string `json:"password"`
+			}
+			if bindErr := c.ShouldBindJSON(&body); bindErr == nil {
+				password = strings.TrimSpace(body.Password)
 			}
 		}
-		c.Redirect(http.StatusFound, previewLoginURL(cfg, c.Request))
+		if !shares.VerifyPassword(share, password) {
+			c.Data(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(previewshare.RenderPasswordPage(share, "Incorrect password. Please try again.")))
+			return
+		}
+		shares.IssueAccessCookie(c, share)
+		sdkHandler.ServePageForFile(c, share.FileID)
 	})
 
 	osdk := r.Group("/officesdk")
@@ -864,9 +883,41 @@ func registerOfficeSDKProxy(router *gin.Engine, cfg Config) {
 			req.Header.Set("X-Forwarded-Host", originalHost)
 		}
 	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		rewriteOfficeSDKProxyLocation(resp)
+		return nil
+	}
 	router.Any("/sdk/turbo-ai/*path", func(c *gin.Context) {
 		proxy.ServeHTTP(c.Writer, c.Request)
 	})
+}
+
+func rewriteOfficeSDKProxyLocation(resp *http.Response) {
+	if resp == nil || resp.Request == nil {
+		return
+	}
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return
+	}
+	parsedLocation, err := url.Parse(location)
+	if err != nil || !parsedLocation.IsAbs() {
+		return
+	}
+	publicBase := officesdkRequestBaseURL(resp.Request)
+	if publicBase == "" {
+		return
+	}
+	parsedPublicBase, err := url.Parse(publicBase)
+	if err != nil || parsedPublicBase.Host == "" {
+		return
+	}
+	if strings.EqualFold(parsedLocation.Scheme, parsedPublicBase.Scheme) && strings.EqualFold(parsedLocation.Host, parsedPublicBase.Host) {
+		return
+	}
+	parsedLocation.Scheme = parsedPublicBase.Scheme
+	parsedLocation.Host = parsedPublicBase.Host
+	resp.Header.Set("Location", parsedLocation.String())
 }
 
 func setSessionCookie(c *gin.Context, cfg Config, name, value string, ttl time.Duration) {

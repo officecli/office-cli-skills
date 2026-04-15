@@ -74,16 +74,21 @@ func (f *fakeFileMetaStore) DeleteFileMeta(_ context.Context, fileID string) err
 }
 
 type fakePreviewShareStore struct {
-	share *previewshare.PreviewShare
-	got   previewshare.CreateParams
+	share    *previewshare.PreviewShare
+	password string
+	got      previewshare.CreateParams
 }
 
-func (f *fakePreviewShareStore) Create(_ context.Context, params previewshare.CreateParams) (*previewshare.PreviewShare, error) {
+func (f *fakePreviewShareStore) CreateWithPassword(_ context.Context, params previewshare.CreateParams) (*previewshare.CreateResult, error) {
 	f.got = params
-	if f.share != nil {
-		return f.share, nil
+	password := f.password
+	if password == "" {
+		password = "123456"
 	}
-	return &previewshare.PreviewShare{
+	if f.share != nil {
+		return &previewshare.CreateResult{Share: f.share, Password: password}, nil
+	}
+	return &previewshare.CreateResult{Share: &previewshare.PreviewShare{
 		ShareToken: "share-1",
 		FileID:     params.FileID,
 		StorageKey: params.StorageKey,
@@ -91,7 +96,7 @@ func (f *fakePreviewShareStore) Create(_ context.Context, params previewshare.Cr
 		FileType:   params.FileType,
 		ExpiresAt:  params.ExpiresAt,
 		Status:     previewshare.StatusActive,
-	}, nil
+	}, Password: password}, nil
 }
 
 func TestAuthorizeRejectsZeroEntitlementKey(t *testing.T) {
@@ -163,7 +168,7 @@ func TestPublishCreatesLocalPreviewShare(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "https://officecli.io/p/share-1", result.AccessURL)
-	require.Equal(t, "", result.Password)
+	require.Equal(t, "123456", result.Password)
 	require.NotEmpty(t, result.FileID)
 	require.NotNil(t, result.ExpiresAt)
 	require.True(t, apiKeys.touched)

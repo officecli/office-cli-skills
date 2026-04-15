@@ -35,7 +35,7 @@ type FileMetaStore interface {
 }
 
 type PreviewShareStore interface {
-	Create(ctx context.Context, params previewshare.CreateParams) (*previewshare.PreviewShare, error)
+	CreateWithPassword(ctx context.Context, params previewshare.CreateParams) (*previewshare.CreateResult, error)
 }
 
 type Config struct {
@@ -127,7 +127,7 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 	}
 
 	expiresAt := now.Add(time.Duration(s.expireSeconds(req.ExpiresInSeconds)) * time.Second)
-	share, err := s.shares.Create(ctx, previewshare.CreateParams{
+	result, err := s.shares.CreateWithPassword(ctx, previewshare.CreateParams{
 		FileID:     fileID,
 		StorageKey: storageKey,
 		FileName:   documentName,
@@ -139,11 +139,12 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 		_ = s.objects.DeleteObject(ctx, storageKey)
 		return nil, err
 	}
+	share := result.Share
 
 	_ = s.store.TouchLastUsedAt(ctx, key.ID, now)
 	return &Result{
 		AccessURL: strings.TrimRight(defaultSiteBaseURL(s.cfg.SiteBaseURL), "/") + "/p/" + share.ShareToken,
-		Password:  "",
+		Password:  result.Password,
 		FileID:    fileID,
 		ExpiresAt: &share.ExpiresAt,
 	}, nil

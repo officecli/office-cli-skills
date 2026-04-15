@@ -3,6 +3,7 @@ package officesdk
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -61,7 +62,7 @@ func (p *FileProvider) GetFile(c *gin.Context, fileID string) (*sdkoffice.FileRe
 	if err := p.AuthorizeShareFile(c, fileID); err != nil {
 		return nil, err
 	}
-	meta, err := p.store.GetFileMeta(c.Request.Context(), fileID)
+	meta, err := p.ResolveFileMeta(c.Request.Context(), fileID)
 	if err != nil {
 		return nil, fmt.Errorf("file not found: %s", fileID)
 	}
@@ -81,7 +82,7 @@ func (p *FileProvider) GetFileDownload(c *gin.Context, fileID string) (*sdkoffic
 	if err := p.AuthorizeShareFile(c, fileID); err != nil {
 		return nil, err
 	}
-	meta, err := p.store.GetFileMeta(c.Request.Context(), fileID)
+	meta, err := p.ResolveFileMeta(c.Request.Context(), fileID)
 	if err != nil {
 		return nil, fmt.Errorf("file not found: %s", fileID)
 	}
@@ -123,14 +124,18 @@ func (p *FileProvider) CompleteUpload(c *gin.Context, fileID string) (*sdkoffice
 	if err := p.AuthorizeShareFile(c, fileID); err != nil {
 		return nil, err
 	}
-	meta, err := p.store.GetFileMeta(c.Request.Context(), fileID)
+	meta, err := p.ResolveFileMeta(c.Request.Context(), fileID)
 	if err != nil {
 		return nil, fmt.Errorf("file not found: %s", fileID)
 	}
 	now := time.Now().Unix()
-	meta.FromSDK = true
-	meta.Version++
 	meta.ModifyTime = now
+	pendingKey, _ := p.pendingContentStorageKey(c.Request.Context(), fileID)
+	initialImport := pendingKey != "" && !isSDKContentStorageKey(fileID, meta.StorageKey)
+	if !initialImport {
+		meta.FromSDK = true
+		meta.Version++
+	}
 	if err := p.store.SetFileMeta(c.Request.Context(), meta); err != nil {
 		return nil, err
 	}
@@ -153,10 +158,10 @@ func (p *FileProvider) GetDownloadURL(c *gin.Context, fileID string) (*sdkoffice
 		return nil, fmt.Errorf("object_name is required")
 	}
 	if objectName == "content" {
-		if pendingKey, err := p.store.GetPendingContentStorageKey(c.Request.Context(), fileID); err == nil && pendingKey != "" {
+		if pendingKey, err := p.pendingContentStorageKey(c.Request.Context(), fileID); err == nil && pendingKey != "" {
 			return &sdkoffice.DownloadResponse{URL: p.proxyDownloadURL(c, pendingKey)}, nil
 		}
-		meta, err := p.store.GetFileMeta(c.Request.Context(), fileID)
+		meta, err := p.ResolveFileMeta(c.Request.Context(), fileID)
 		if err != nil {
 			return nil, fmt.Errorf("file not found: %s", fileID)
 		}
@@ -215,6 +220,48 @@ func (p *FileProvider) CreateAssetsFile(_ *gin.Context, fileID string) (*sdkoffi
 	return &sdkoffice.CreateAssetsResponse{ID: fileID, Size: 1}, nil
 }
 
+func (p *FileProvider) pendingContentStorageKey(ctx context.Context, fileID string) (string, error) {
+	if p != nil && p.store != nil {
+		if pendingKey, err := p.store.GetPendingContentStorageKey(ctx, fileID); err == nil && pendingKey != "" {
+			return pendingKey, nil
+		}
+	}
+	derivedKey := sdkContentStorageKey(fileID)
+	if !p.hasObject(ctx, derivedKey) {
+		return "", fmt.Errorf("pending content not found: %s", fileID)
+	}
+	if p != nil && p.store != nil {
+		_ = p.store.SetPendingContentStorageKey(ctx, fileID, derivedKey)
+	}
+	return derivedKey, nil
+}
+
+func (p *FileProvider) ResolveFileMeta(ctx context.Context, fileID string) (*FileMeta, error) {
+	normalizedFileID := strings.TrimSpace(fileID)
+	if normalizedFileID == "" {
+		return nil, fmt.Errorf("file not found: %s", fileID)
+	}
+	if p != nil && p.store != nil {
+		meta, err := p.store.GetFileMeta(ctx, normalizedFileID)
+		if err == nil {
+			return meta, nil
+		}
+		if !isFileMetaNotFound(err) {
+			return nil, err
+		}
+	}
+	if p != nil && p.shares != nil {
+		share, err := p.shares.GetByFileID(ctx, normalizedFileID)
+		if err == nil {
+			return previewShareToFileMeta(share), nil
+		}
+		if err != nil && !errors.Is(err, previewshare.ErrNotFound) {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("file not found: %s", normalizedFileID)
+}
+
 func (p *FileProvider) HandleProxyUpload(c *gin.Context) {
 	storageKey := strings.TrimSpace(c.Query("key"))
 	if storageKey == "" {
@@ -254,9 +301,16 @@ func (p *FileProvider) HandleProxyDownload(c *gin.Context) {
 		return
 	}
 	if fileID, ok := parseFileIDFromStorageKey(storageKey); ok {
-		if err := p.AuthorizeShareFile(c, fileID); err != nil {
-			c.JSON(previewAccessHTTPStatus(err), gin.H{"error": err.Error()})
-			return
+		if p != nil && p.shares != nil {
+			if _, status, err := p.shares.RequireShareDownloadAccess(c, fileID, storageKey); err != nil {
+				c.JSON(status, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := p.AuthorizeShareFile(c, fileID); err != nil {
+				c.JSON(previewAccessHTTPStatus(err), gin.H{"error": err.Error()})
+				return
+			}
 		}
 	}
 	obj, err := p.objects.GetObject(c.Request.Context(), storageKey)
@@ -280,12 +334,56 @@ func (p *FileProvider) HandleProxyDownload(c *gin.Context) {
 
 func (p *FileProvider) downloadMetadata(ctx context.Context, storageKey string) (string, string) {
 	if fileID, ok := parseFileIDFromStorageKey(storageKey); ok {
-		if meta, err := p.store.GetFileMeta(ctx, fileID); err == nil && meta != nil && meta.StorageKey == storageKey {
+		if meta, err := p.ResolveFileMeta(ctx, fileID); err == nil && meta != nil && meta.StorageKey == storageKey {
 			return meta.Name, normalizeDownloadContentType(meta.Name, storageKey)
 		}
 	}
 	name := path.Base(storageKey)
 	return name, normalizeDownloadContentType(name, storageKey)
+}
+
+func isFileMetaNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "file not found")
+}
+
+func previewShareToFileMeta(share *previewshare.PreviewShare) *FileMeta {
+	if share == nil {
+		return nil
+	}
+	return &FileMeta{
+		ID:         share.FileID,
+		Name:       share.FileName,
+		StorageKey: share.StorageKey,
+		Version:    1,
+		FromSDK:    false,
+		CreateTime: share.CreatedAt.UTC().Unix(),
+		ModifyTime: share.UpdatedAt.UTC().Unix(),
+		CreatorID:  "publish",
+		ModifierID: "publish",
+	}
+}
+
+func (p *FileProvider) hasObject(ctx context.Context, storageKey string) bool {
+	if p == nil || p.objects == nil || strings.TrimSpace(storageKey) == "" {
+		return false
+	}
+	obj, err := p.objects.GetObject(ctx, storageKey)
+	if err != nil {
+		return false
+	}
+	_ = obj.Close()
+	return true
+}
+
+func sdkContentStorageKey(fileID string) string {
+	return fmt.Sprintf("officesdk/%s/content/content", strings.TrimSpace(fileID))
+}
+
+func isSDKContentStorageKey(fileID, storageKey string) bool {
+	return strings.TrimSpace(storageKey) == sdkContentStorageKey(fileID)
 }
 
 func normalizeDownloadContentType(name, storageKey string) string {
@@ -348,7 +446,16 @@ func (p *FileProvider) proxyUploadURL(c *gin.Context, storageKey string) string 
 }
 
 func (p *FileProvider) proxyDownloadURL(c *gin.Context, storageKey string) string {
-	return requestBaseURL(c.Request) + "/officesdk/proxy/download?key=" + urlQueryEscape(storageKey)
+	downloadURL := requestBaseURL(c.Request) + "/officesdk/proxy/download?key=" + urlQueryEscape(storageKey)
+	if p == nil || p.shares == nil {
+		return downloadURL
+	}
+	if fileID, ok := parseFileIDFromStorageKey(storageKey); ok {
+		if token, err := p.shares.IssueDownloadToken(c.Request.Context(), fileID, storageKey); err == nil && token != "" {
+			return downloadURL + "&access_token=" + urlQueryEscape(token)
+		}
+	}
+	return downloadURL
 }
 
 func buildAttachmentDisposition(filename string) string {

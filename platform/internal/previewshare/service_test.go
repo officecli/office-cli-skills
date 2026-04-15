@@ -77,6 +77,153 @@ func TestIssueAccessCookieAllowsShareAccess(t *testing.T) {
 	require.Equal(t, share.ShareToken, resolved.ShareToken)
 }
 
+func TestCreateWithPasswordReturnsVerifiablePassword(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+
+	result, err := service.CreateWithPassword(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "preview/file-1/original/demo.pptx",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  time.Now().UTC().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Share)
+	require.Len(t, result.Password, 6)
+	require.NotEmpty(t, result.Share.PasswordHash)
+	require.True(t, service.VerifyPassword(result.Share, result.Password))
+}
+
+func TestRequireShareAccessAllowsInternalCallbackWithoutCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+	service.now = func() time.Time {
+		return time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	}
+
+	share, err := service.Create(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "preview/file-1/original/demo.pptx",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  service.now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "http://host.docker.internal:29001/officesdk/proxy/download?key=preview%2Ffile-1%2Foriginal%2Fdemo.pptx", nil)
+	c.Request.Host = "host.docker.internal:29001"
+	c.Request.RemoteAddr = "172.17.0.2:45678"
+
+	resolved, status, err := service.RequireShareAccess(c, "file-1")
+	require.NoError(t, err)
+	require.Equal(t, 0, status)
+	require.NotNil(t, resolved)
+	require.Equal(t, share.ShareToken, resolved.ShareToken)
+}
+
+func TestRequireShareAccessRejectsPublicRequestWithoutCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+	service.now = func() time.Time {
+		return time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	}
+
+	_, err := service.Create(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "preview/file-1/original/demo.pptx",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  service.now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "https://officecli.io/officesdk/proxy/download?key=preview%2Ffile-1%2Foriginal%2Fdemo.pptx", nil)
+	c.Request.Host = "officecli.io"
+	c.Request.RemoteAddr = "8.8.8.8:45678"
+
+	resolved, status, err := service.RequireShareAccess(c, "file-1")
+	require.Error(t, err)
+	require.Equal(t, http.StatusUnauthorized, status)
+	require.NotNil(t, resolved)
+	require.Contains(t, err.Error(), "preview password required")
+}
+
+func TestRequireShareDownloadAccessAllowsSignedTokenWithoutCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+	service.now = func() time.Time {
+		return time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	}
+
+	share, err := service.Create(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "officesdk/file-1/content/content",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  service.now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	token, err := service.IssueDownloadToken(t.Context(), share.FileID, share.StorageKey)
+	require.NoError(t, err)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(
+		http.MethodGet,
+		"https://officecli.io/officesdk/proxy/download?key=officesdk%2Ffile-1%2Fcontent%2Fcontent&access_token="+url.QueryEscape(token),
+		nil,
+	)
+	c.Request.Host = "officecli.io"
+	c.Request.RemoteAddr = "8.8.8.8:45678"
+
+	resolved, status, err := service.RequireShareDownloadAccess(c, "file-1", "officesdk/file-1/content/content")
+	require.NoError(t, err)
+	require.Equal(t, 0, status)
+	require.NotNil(t, resolved)
+	require.Equal(t, share.ShareToken, resolved.ShareToken)
+}
+
+func TestRequireShareDownloadAccessRejectsInvalidSignedToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+	service.now = func() time.Time {
+		return time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	}
+
+	_, err := service.Create(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "officesdk/file-1/content/content",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  service.now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(
+		http.MethodGet,
+		"https://officecli.io/officesdk/proxy/download?key=officesdk%2Ffile-1%2Fcontent%2Fcontent&access_token=bad-token",
+		nil,
+	)
+	c.Request.Host = "officecli.io"
+	c.Request.RemoteAddr = "8.8.8.8:45678"
+
+	resolved, status, err := service.RequireShareDownloadAccess(c, "file-1", "officesdk/file-1/content/content")
+	require.Error(t, err)
+	require.Equal(t, http.StatusUnauthorized, status)
+	require.NotNil(t, resolved)
+	require.Contains(t, err.Error(), "preview password required")
+}
+
 func TestCleanupExpiredRemovesArtifacts(t *testing.T) {
 	db := newTestDB(t)
 	files := &fakeFileCleaner{}
