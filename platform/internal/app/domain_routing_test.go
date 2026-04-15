@@ -11,6 +11,7 @@ import (
 )
 
 func TestLoadConfigDefaultsUseProductionDomains(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("GOOGLE_REDIRECT_URL", "")
 	t.Setenv("STRIPE_SUCCESS_URL", "")
 	t.Setenv("STRIPE_CANCEL_URL", "")

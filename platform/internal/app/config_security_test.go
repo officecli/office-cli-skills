@@ -141,6 +141,7 @@ func TestLoadConfigAllowsRateLimitOverrides(t *testing.T) {
 }
 
 func TestLoadConfigParsesAppGoogleAllowlist(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("APP_GOOGLE_ALLOWLIST", " Demo@example.com, ops@example.com , ")
 
 	cfg, err := LoadConfig()
@@ -159,6 +160,7 @@ func TestLoadConfigParsesAppGoogleAllowlist(t *testing.T) {
 }
 
 func TestLoadConfigBuildsExternalPricingFromUnitPriceAndRatio(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("EXTERNAL_UNIT_PRICE_CENTS", "5")
 	t.Setenv("EXTERNAL_500_PRICE_RATIO", "449/495")
 
@@ -178,6 +180,7 @@ func TestLoadConfigBuildsExternalPricingFromUnitPriceAndRatio(t *testing.T) {
 }
 
 func TestLoadConfigRejectsInvalidExternal500PriceRatio(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("EXTERNAL_500_PRICE_RATIO", "not-a-ratio")
 
 	_, err := LoadConfig()
