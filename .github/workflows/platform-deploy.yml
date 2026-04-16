@@ -1,9 +1,6 @@
 name: Platform Deploy
 
 on:
-  push:
-    tags:
-      - 'v*-prod-*'
   workflow_dispatch:
     inputs:
       release_tag:

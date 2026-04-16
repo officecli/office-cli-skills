@@ -1,10 +1,6 @@
 name: CLI Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-      - '!v*-prod-*'
   workflow_dispatch:
     inputs:
       version:

@@ -1,14 +1,6 @@
 name: Sync Public NPM
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "packages/npm/officecli/**"
-      - "templates/public-npm/**"
-      - "scripts/sync-public-npm-repo.sh"
-      - ".github/workflows/sync-public-npm.yml"
   workflow_dispatch:
 
 concurrency:

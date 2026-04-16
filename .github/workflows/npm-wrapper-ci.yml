@@ -1,16 +1,7 @@
 name: NPM Wrapper CI
 
 on:
-  pull_request:
-    paths:
-      - "packages/npm/officecli/**"
-      - ".github/workflows/npm-wrapper-ci.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "packages/npm/officecli/**"
-      - ".github/workflows/npm-wrapper-ci.yml"
+  workflow_dispatch:
 
 concurrency:
   group: npm-wrapper-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

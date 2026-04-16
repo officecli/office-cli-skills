@@ -1,14 +1,6 @@
 name: Sync Public Skills
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'skills/**'
-      - '.github/workflows/sync-public-skills.yml'
-      - 'scripts/sync-public-skills-repo.sh'
-      - 'templates/public-skills/**'
   workflow_dispatch:
 
 concurrency:
@@ -32,4 +24,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_SKILLS_REPO_TOKEN }}
         run: bash ./scripts/sync-public-skills-repo.sh
-
