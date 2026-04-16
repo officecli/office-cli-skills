@@ -22,12 +22,12 @@ export default function QuotaPage() {
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Reward quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(rewardQuota?.remaining)}</div>
-            <div className="mt-2 text-sm text-outline">Credits granted by invite activation and future growth programs.</div>
+            <div className="mt-2 text-sm text-outline">Bonus generations granted by invite activation and future growth programs.</div>
           </div>
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-tertiary">Paid external quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(paidQuota?.total_remaining)}</div>
-            <div className="mt-2 text-sm text-outline">Remaining external document generations across all active and disabled keys in this workspace.</div>
+            <div className="mt-2 text-sm text-outline">Remaining paid document generations across all active and disabled keys in this workspace.</div>
           </div>
         </div>
       </Panel>
@@ -36,7 +36,7 @@ export default function QuotaPage() {
         <SectionHeading
           eyebrow="Trial policy"
           title="CLI trial only"
-          body="Anonymous trial counts are tracked on the machine that runs the officecli binary. They do not appear as browser quota and are never added to account totals."
+          body="Anonymous trial counts are tracked on the machine that runs the officecli binary. They do not appear in account quota and are never added to account totals."
         />
         <div className="panel-muted p-5">
           <div className="flex items-center justify-between gap-4">
@@ -82,8 +82,8 @@ export default function QuotaPage() {
       <Panel>
         <SectionHeading
           eyebrow="Paid quota"
-          title="External quota by key"
-          body="These rows show the account-owned external generations tied to each API key."
+          title="Paid quota by key"
+          body="These rows show the purchased document generations tied to each API key."
         />
         {isLoading ? null : keys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -97,15 +97,15 @@ export default function QuotaPage() {
                   <StatusPill value={key.status} />
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <KeyStat label="Total" value={key.quota_total} meta="External quota" />
-                  <KeyStat label="Used" value={key.quota_used} meta="Spent" />
+                  <KeyStat label="Total" value={key.quota_total} meta="Paid quota" />
+                  <KeyStat label="Used" value={key.quota_used} meta="Consumed" />
                   <KeyStat label="Remaining" value={key.quota_remaining} meta="Available now" />
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyState title="No API key quota yet" body="Create a key and attach a paid pack from Billing to start building account quota." />
+          <EmptyState title="No paid quota yet" body="Create a key and buy a pack from Billing to start building paid quota." />
         )}
       </Panel>
     </div>

@@ -152,7 +152,7 @@ export const commandGroups: CommandGroup[] = [
       {
         label: 'Save a paid key',
         command: 'officecli auth set-key cop_live_xxx',
-        detail: 'Routes future generation requests through the paid quota pack linked to that key.',
+        detail: 'Routes future generation requests through the paid document-generation quota linked to that key.',
       },
     ],
   },
@@ -340,7 +340,7 @@ export const usageRules: UsageRule[] = [
   },
   {
     title: 'Paid usage is API-key based',
-    detail: 'Paid users consume quota packs through API keys managed by the platform.',
+    detail: 'Paid users consume purchased document-generation quota through API keys managed by the platform.',
   },
   {
     title: 'Quota is consumed only after successful generation',

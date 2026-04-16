@@ -67,7 +67,7 @@ export default function ApiKeysPage() {
               <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
             </label>
             <div className="md:col-span-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 p-4 text-sm text-outline">
-              New user-created keys start with zero paid quota. Buy external generations from the Billing page or ask an operator to adjust quota in the admin console when needed.
+              New user-created keys start with zero paid quota. Buy more document generations from Billing or ask an operator to adjust quota in the admin console when needed.
             </div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>

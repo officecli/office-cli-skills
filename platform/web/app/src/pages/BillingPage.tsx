@@ -31,7 +31,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Simple kinetic billing" title="Attach new credits to a real key" body="Select the key that should receive fresh capacity, then continue into secure Stripe Checkout from the same workspace." />
+        <SectionHeading eyebrow="Secure checkout" title="Buy quota for an API key" body="Select the key that should receive more document generations, then continue into secure Stripe Checkout from the same workspace." />
         <div className="billing-shell mb-6">
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
@@ -41,7 +41,7 @@ export default function BillingPage() {
             </select>
             <div className="mt-4 text-sm text-outline">
               {activeKey
-                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} external generations remaining.`
+                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} document generations remaining.`
                 : activeKeys.length
                   ? 'Pick an active production key before starting checkout.'
                   : 'No active API key is available for billing. Re-enable a key in API Keys first.'}
@@ -70,7 +70,7 @@ export default function BillingPage() {
                   <div className="mt-3 text-2xl font-bold text-white">{pack.name}</div>
                   <div className="mt-2 text-sm text-outline">{pack.description}</div>
                   <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
-                  <div className="mt-2 text-sm text-outline">{pack.quota_amount} external generations per purchase</div>
+                  <div className="mt-2 text-sm text-outline">{pack.quota_amount} document generations per purchase</div>
                 </div>
                 <button
                   type="button"
@@ -103,7 +103,7 @@ export default function BillingPage() {
                   <div className="mt-1 text-sm text-outline">{order.pack_name} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} external generations</div>
+                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} document generations</div>
                   <StatusPill value={order.status} />
                 </div>
               </div>

@@ -1611,7 +1611,7 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward generations remaining: 3") || !strings.Contains(output, "Paid generations on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
+	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -1658,7 +1658,7 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward generations remaining: 5") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 0 used / 10 remaining") {
+	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 0 used / 10 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }

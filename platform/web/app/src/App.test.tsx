@@ -33,7 +33,7 @@ describe('platform app shell', () => {
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
     expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Attach credits to a target key/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Buy quota for an API key/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Ship faster from the terminal/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/What unlocks after sign-in/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/\$ officecli auth status/i)).not.toBeInTheDocument()
@@ -62,7 +62,7 @@ describe('platform app shell', () => {
     expect(screen.getByRole('link', { name: /Try another Google account/i })).toHaveAttribute('href', '/api/auth/google/login?return_to=%2Fapp')
   })
 
-  it('renders the overview after login and shows the remaining credits board', async () => {
+  it('renders the overview after login and shows the remaining quota board', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/auth/me') {
@@ -98,10 +98,10 @@ describe('platform app shell', () => {
 
     renderApp('/')
 
-    expect(await screen.findByRole('heading', { name: /Remaining Credits/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/Reward Credits/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Referral Progress/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Discord Status/i).length).toBeGreaterThan(0)
+    expect(await screen.findByRole('heading', { name: /Remaining Quota/i })).toBeInTheDocument()
+    expect(await screen.findByText(/^Reward Quota$/i)).toBeInTheDocument()
+    expect(await screen.findByText(/^Referral Progress$/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/^Discord Status$/i)).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /Reward grants and referral progress/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Link Discord for growth rewards/i })).toBeInTheDocument()
   })

@@ -62,8 +62,8 @@ export default function OverviewPage() {
         <div className="overview-hero-glow absolute inset-y-0 right-0 hidden w-1/2 lg:block" />
         <SectionHeading
           eyebrow="Runtime overview"
-          title="Remaining Credits"
-          body="Keep an eye on aggregate platform capacity, recent document traffic, and the key that is carrying the most production load."
+          title="Remaining Quota"
+          body="Keep an eye on account quota, recent document traffic, and the key carrying the most production load."
         />
         <div className="overview-shell">
           <div className="panel-muted grid gap-4 p-6 md:grid-cols-3">
@@ -76,7 +76,7 @@ export default function OverviewPage() {
             ) : (
               <>
                 <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
-                <MetricCard label="External Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining external document generations across all keys" />
+                <MetricCard label="Paid Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining purchased document generations across all keys" />
                 <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External requests recorded recently" />
               </>
             )}
@@ -98,10 +98,10 @@ export default function OverviewPage() {
                   </div>
                   <StatusPill value={featuredKey.status} />
                 </div>
-                <KeyStat label="External Remaining" value={featuredKey.quota_remaining ?? featuredKey.quota_total} meta={`Last used ${formatDate(featuredKey.last_used_at)}`} />
+                <KeyStat label="Remaining Quota" value={featuredKey.quota_remaining ?? featuredKey.quota_total} meta={`Last used ${formatDate(featuredKey.last_used_at)}`} />
               </div>
             ) : (
-              <EmptyState title="No keys provisioned yet" body="Create your first API key to start routing credits into a real workload." />
+              <EmptyState title="No keys provisioned yet" body="Create your first API key to start using paid quota in a real workflow." />
             )}
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function OverviewPage() {
         ) : (
           <>
             <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
-            <MetricCard label="Reward Credits" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} credits per activated invite` : 'No invite code available yet'} />
+            <MetricCard label="Reward Quota" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} bonus generations per activated invite` : 'No invite code available yet'} />
             <MetricCard label="Referral Progress" value={`${formatNumber(referralCount)}/${formatNumber(inviteLimit)}`} detail={`${formatNumber(activatedReferralCount)} activated · ${formatNumber(inviteRemaining)} slots left`} />
             <MetricCard label="Discord Status" value={growthStatusValue} detail={discordConnection?.verification_blocked_reason ?? 'Guild membership determines Discord reward eligibility'} />
           </>
@@ -126,7 +126,7 @@ export default function OverviewPage() {
       </div>
 
       <Panel>
-        <SectionHeading eyebrow="Key inventory" title="Current API key fleet" body="The newest or most active credentials stay visible here so you can spot quota pressure before it blocks a workflow." />
+        <SectionHeading eyebrow="Key inventory" title="Current API key fleet" body="The newest or most active credentials stay visible here so you can spot quota pressure before it blocks document generation." />
         {apiKeys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {apiKeys.slice(0, 4).map((key) => (
@@ -139,9 +139,9 @@ export default function OverviewPage() {
                   <StatusPill value={key.status} />
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <KeyStat label="Total" value={key.quota_total} meta="External quota" />
-                  <KeyStat label="Used" value={key.quota_used} meta="External spent" />
-                  <KeyStat label="Remaining" value={key.quota_remaining} meta="External left" />
+                  <KeyStat label="Total" value={key.quota_total} meta="Paid quota" />
+                  <KeyStat label="Used" value={key.quota_used} meta="Consumed" />
+                  <KeyStat label="Remaining" value={key.quota_remaining} meta="Available now" />
                 </div>
               </div>
             ))}
@@ -153,7 +153,7 @@ export default function OverviewPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <Panel>
-          <SectionHeading eyebrow="Rewards ledger" title="Reward grants and referral progress" body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} reward credits.`} />
+          <SectionHeading eyebrow="Rewards ledger" title="Reward grants and referral progress" body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} bonus generations to account quota.`} />
           {rewardGrants.length ? (
             <div className="space-y-3">
               {rewardGrants.map((grant) => (

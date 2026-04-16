@@ -318,7 +318,7 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "Current mode: free. 3 generations remaining.") {
+	if !strings.Contains(warnings, "Current mode: free. 3 document generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if !strings.Contains(warnings, "Trial today on this machine: 3 remaining.") {
@@ -368,7 +368,7 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "Current mode: paid. 7 generations remaining.") {
+	if !strings.Contains(warnings, "Current mode: paid. 7 document generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if !strings.Contains(warnings, "Paid quota on current key: 7 remaining.") || !strings.Contains(warnings, "Reward quota: 2 remaining.") {
@@ -414,7 +414,7 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "Current mode: reward. 4 generations remaining.") {
+	if !strings.Contains(warnings, "Current mode: reward. 4 document generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if !strings.Contains(warnings, "Reward quota: 4 remaining.") {

@@ -44,7 +44,7 @@ export default function QuotaSourcesPage() {
         <SectionHeading
           eyebrow="Unified quota audit"
           title="Quota sources"
-          body="Inspect anonymous CLI trial devices, account reward grants, paid external keys, and hidden hosted credits from one operator surface."
+          body="Inspect anonymous CLI trial devices, account reward grants, paid external quota keys, and hosted credits from one operator surface."
         />
         <form className="surface-console soft-panel grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
@@ -117,7 +117,7 @@ export default function QuotaSourcesPage() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel>
-          <SectionHeading eyebrow="Paid external" title="Paid external keys" body="These keys carry billable external document generations." />
+          <SectionHeading eyebrow="Paid external" title="Paid external quota keys" body="These keys carry billable document-generation quota." />
           {paidExternalKeys.length ? (
             <div className="space-y-3">
               {paidExternalKeys.map((key) => (
@@ -138,7 +138,7 @@ export default function QuotaSourcesPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No paid keys matched" body="Filter by key prefix or user ID to narrow a paid quota investigation." />
+            <EmptyState title="No paid keys matched" body="Filter by key prefix or user ID to narrow a paid quota trace." />
           )}
         </Panel>
 

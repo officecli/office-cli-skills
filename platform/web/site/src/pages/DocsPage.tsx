@@ -314,7 +314,7 @@ export default function DocsPage() {
             <SectionHeading
               id="pricing-rules"
               title="Pricing & Usage Rules"
-              description="Pricing and quota behavior are surfaced through the platform and can be validated from the public pricing API and billing workspace."
+              description="Pricing and document-generation quota behavior are surfaced through the platform and can be validated from the public pricing API and billing workspace."
             />
             <div className="grid gap-6 md:grid-cols-2 mb-10">
               {usageRules.map((rule) => (

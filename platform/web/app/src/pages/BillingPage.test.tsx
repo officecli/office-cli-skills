@@ -31,7 +31,7 @@ describe('billing page', () => {
             data: [{
               code: 'external-100',
               name: 'External 100',
-              description: '100 external generations for lightweight evaluation and individual workflows.',
+              description: '100 document generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
               amount_total: 500,
               quota_amount: 100,
@@ -69,8 +69,8 @@ describe('billing page', () => {
     renderPage()
 
     expect(await screen.findByText('External 100')).toBeInTheDocument()
-    expect(screen.getByText(/100 external generations for lightweight evaluation and individual workflows\./i)).toBeInTheDocument()
-    expect(screen.getByText(/100 external generations per purchase/i)).toBeInTheDocument()
+    expect(screen.getByText(/100 document generations for lightweight evaluation and individual workflows\./i)).toBeInTheDocument()
+    expect(screen.getByText(/100 document generations per purchase/i)).toBeInTheDocument()
     expect(screen.queryByText(/hosted/i)).not.toBeInTheDocument()
   })
 
@@ -86,7 +86,7 @@ describe('billing page', () => {
             data: [{
               code: 'external-100',
               name: 'External 100',
-              description: '100 external generations for lightweight evaluation and individual workflows.',
+              description: '100 document generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
               amount_total: 500,
               quota_amount: 100,
@@ -159,7 +159,7 @@ describe('billing page', () => {
             data: [{
               code: 'external-100',
               name: 'External 100',
-              description: '100 external generations for lightweight evaluation and individual workflows.',
+              description: '100 document generations for lightweight evaluation and individual workflows.',
               currency: 'usd',
               amount_total: 500,
               quota_amount: 100,

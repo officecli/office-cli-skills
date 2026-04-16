@@ -5,7 +5,7 @@ This document records the monetization capabilities that are actually implemente
 ## Capabilities Already Implemented
 
 - Anonymous users can consume free quota tracked by machine fingerprint.
-- Paid users can consume quota packs through API keys.
+- Paid users can consume purchased document-generation quota through API keys.
 - Quota is consumed only after a document is generated successfully.
 - The CLI, app, and admin views can display current free or paid quota information.
 

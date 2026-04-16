@@ -43,7 +43,7 @@ export default function FreeQuotasPage() {
                     <code className="mt-2 block break-all font-mono text-sm text-white">{quota.fingerprint_hash}</code>
                   </div>
                   <button type="button" className="ghost-button" onClick={() => update.mutate({ id: quota.id, free_limit: quota.daily_limit + 1 })}>
-                    <ShieldPlus size={14} /> Add 1 credit
+                    <ShieldPlus size={14} /> Add 1 trial generation
                   </button>
                 </div>
                 <div className="mt-4 text-xs text-outline">Usage date {quota.usage_date}</div>

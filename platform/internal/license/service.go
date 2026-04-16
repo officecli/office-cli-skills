@@ -159,7 +159,7 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 		response.Message = "hosted credits are exhausted; add more credits first"
 	case requestedRuntimeMode(req, key) != string(model.AccessModeHosted) && key.QuotaTotal != nil && key.PaidQuotaRemaining() <= 0:
 		response.ReasonCode = "paid_quota_exhausted"
-		response.Message = "the current key has no remaining generations; replace it or top up the quota pack"
+		response.Message = "the current key has no remaining document generations; replace it or buy more quota"
 	default:
 		response.Allowed = true
 		if requestedRuntimeMode(req, key) == string(model.AccessModeHosted) {
@@ -212,7 +212,7 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 		AllowedModes:        []string{"external"},
 		SelectedRuntimeMode: "external",
 		RewardRemaining:     balance.Remaining,
-		Message:             fmt.Sprintf("reward mode is active with %d generations remaining.", balance.Remaining),
+		Message:             fmt.Sprintf("reward mode is active with %d document generations remaining.", balance.Remaining),
 	}
 	response.CommitToken, err = s.issueCommitToken(req, model.AccessModeReward, "")
 	if err != nil {

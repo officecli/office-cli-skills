@@ -50,7 +50,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
   const titleClass = 'font-headline text-5xl md:text-6xl font-bold text-white mb-8 tracking-tighter'
 
   const starterItems = useMemo(() => [
-    `${starterPack?.quota_amount ?? 0} paid document operations`,
+    `${starterPack?.quota_amount ?? 0} paid document generations`,
     'Entry pack for evaluation',
     'CLI and platform access',
   ], [starterPack?.quota_amount])
@@ -66,7 +66,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
       <div className="max-w-3xl mx-auto">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Pricing</span>
         <h2 className={titleClass}>Simple Access for Paid Workflows</h2>
-        <p className="text-xl text-outline-variant mb-12">Start with a small paid pack, then scale document operations for recurring team usage when the platform or paid access model fits your workflow.</p>
+        <p className="text-xl text-outline-variant mb-12">Start with a small paid pack, then scale document generation quota for recurring team usage when the platform or paid access model fits your workflow.</p>
 
         {packs.length > 0 && starterPack && productionPack ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto mb-16">
@@ -75,7 +75,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
               className="p-10 bg-surface-low rounded-2xl border border-outline-variant/10"
             >
               <h3 className="font-headline text-2xl font-bold text-white mb-2">{starterPack.name}</h3>
-              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(starterPack)} <span className="text-sm font-normal text-outline-variant">/ {starterPack.quota_amount} operations</span></div>
+              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(starterPack)} <span className="text-sm font-normal text-outline-variant">/ {starterPack.quota_amount} generations</span></div>
               <ul className="space-y-4 mb-10 text-outline-variant text-sm">
                 {starterItems.map((item) => (
                   <li key={item} className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> {item}</li>
@@ -95,7 +95,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
             >
               <div className="absolute top-5 right-5 bg-primary text-[#002e6b] text-[10px] font-bold px-2 py-1 rounded">POPULAR</div>
               <h3 className="font-headline text-2xl font-bold text-white mb-2">{productionPack.name}</h3>
-              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(productionPack)} <span className="text-sm font-normal text-outline-variant">/ {productionPack.quota_amount} operations</span></div>
+              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(productionPack)} <span className="text-sm font-normal text-outline-variant">/ {productionPack.quota_amount} generations</span></div>
               <ul className="space-y-4 mb-10 text-outline-variant text-sm">
                 <li className="text-outline-variant leading-relaxed">{productionPack.description}</li>
                 {productionItems.map((item) => (

@@ -237,7 +237,7 @@ func externalPricingPacks(unitPriceCents int64, external500PriceRatio string) ([
 		{
 			Code:        "external-100",
 			Name:        "External 100",
-			Description: "100 external generations for lightweight evaluation and individual workflows.",
+			Description: "100 document generations for lightweight evaluation and individual workflows.",
 			Currency:    "usd",
 			AmountTotal: unitPriceCents * starterQuota,
 			QuotaAmount: starterQuota,
@@ -246,7 +246,7 @@ func externalPricingPacks(unitPriceCents int64, external500PriceRatio string) ([
 		{
 			Code:        "external-500",
 			Name:        "External 500",
-			Description: "500 external generations for shared team workflows and recurring automation.",
+			Description: "500 document generations for shared team workflows and recurring automation.",
 			Currency:    "usd",
 			AmountTotal: applyPriceRatio(unitPriceCents*bulkQuota, ratio),
 			QuotaAmount: bulkQuota,

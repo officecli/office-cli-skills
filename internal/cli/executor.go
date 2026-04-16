@@ -83,11 +83,11 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 			result.CreditBalance = consumeResult.CreditBalance
 			switch job.LicenseCheck.AccessMode {
 			case LicenseAccessModePaid:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: paid. %d generations remaining.", consumeResult.Remaining))
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: paid. %d document generations remaining.", consumeResult.Remaining))
 			case LicenseAccessModeReward:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: reward. %d generations remaining.", consumeResult.Remaining))
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: reward. %d document generations remaining.", consumeResult.Remaining))
 			default:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: free. %d generations remaining.", consumeResult.Remaining))
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: free. %d document generations remaining.", consumeResult.Remaining))
 			}
 			if snapshot := job.LicenseCheck.QuotaSnapshot; snapshot != nil {
 				freeRemaining := snapshot.FreeTrialDaily.Remaining

@@ -20,11 +20,11 @@ declare global {
   }
 }
 
-const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
 let analyticsInitialized = false
 
 function getMeasurementID() {
-  return (viteEnv?.VITE_GA4_MEASUREMENT_ID ?? process.env.VITE_GA4_MEASUREMENT_ID)?.trim()
+  const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+  return (process.env.VITE_GA4_MEASUREMENT_ID ?? viteEnv?.VITE_GA4_MEASUREMENT_ID)?.trim()
 }
 
 export function analyticsEnabled() {

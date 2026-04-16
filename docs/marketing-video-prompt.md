@@ -9,7 +9,7 @@ Produce a short product video that communicates:
 - OfficeCLI turns natural-language prompts into Office documents
 - PPT generation can include automatically generated visuals
 - the CLI supports local file output and optional online preview publishing
-- the platform supports free quota, paid quota packs, and operational visibility
+- the platform supports free quota, paid document-generation quota, and operational visibility
 
 ## Prompt Template
 

@@ -38,7 +38,7 @@ export default function GrowthPage() {
         <SectionHeading
           eyebrow="Growth operations"
           title="Reward grants, referrals, and Discord connections"
-          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace where credits come from and which Discord records are still blocked on trusted guild verification."
+          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace how reward quota is granted and which Discord records are still blocked on trusted guild verification."
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="panel-muted p-5">

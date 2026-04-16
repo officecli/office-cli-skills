@@ -962,15 +962,15 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 	if _, err := fmt.Fprintf(a.Stdout, "Free trial today (this machine, UTC): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Reward generations remaining: %d\n", rewardQuota.Remaining); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Reward quota remaining: %d\n", rewardQuota.Remaining); err != nil {
 		return err
 	}
 	if paidQuota.CurrentKeyPrefix != "" {
-		if _, err := fmt.Fprintf(a.Stdout, "Paid generations on current key (%s): %d total / %d used / %d remaining\n", paidQuota.CurrentKeyPrefix, paidQuota.CurrentKeyTotal, paidQuota.CurrentKeyUsed, paidQuota.CurrentKeyRemaining); err != nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Paid quota on current key (%s): %d total / %d used / %d remaining\n", paidQuota.CurrentKeyPrefix, paidQuota.CurrentKeyTotal, paidQuota.CurrentKeyUsed, paidQuota.CurrentKeyRemaining); err != nil {
 			return err
 		}
 	} else {
-		if _, err := fmt.Fprintln(a.Stdout, "Paid generations on current key: no paid API key configured"); err != nil {
+		if _, err := fmt.Fprintln(a.Stdout, "Paid quota on current key: no paid API key configured"); err != nil {
 			return err
 		}
 	}
@@ -1108,13 +1108,13 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		return nil, fmt.Errorf("%s", fallbackMessage(result.Message, fallback))
 	}
 	if result.AccessMode == LicenseAccessModeFree && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("Current mode: free. %d generations remaining.", result.FreeRemaining)
+		result.Message = fmt.Sprintf("Current mode: free. %d document generations remaining.", result.FreeRemaining)
 	}
 	if result.AccessMode == LicenseAccessModeReward && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("Current mode: reward. %d generations remaining.", result.RewardRemaining)
+		result.Message = fmt.Sprintf("Current mode: reward. %d document generations remaining.", result.RewardRemaining)
 	}
 	if result.AccessMode == LicenseAccessModePaid && strings.TrimSpace(result.Message) == "" && result.PaidQuotaTotal > 0 {
-		result.Message = fmt.Sprintf("Current mode: paid. %d generations remaining.", result.PaidQuotaRemaining)
+		result.Message = fmt.Sprintf("Current mode: paid. %d document generations remaining.", result.PaidQuotaRemaining)
 	}
 	if result.AccessMode == LicenseAccessModeHosted && strings.TrimSpace(result.Message) == "" {
 		result.Message = fmt.Sprintf("Current mode: hosted. %d credits remaining.", result.CreditBalance)
