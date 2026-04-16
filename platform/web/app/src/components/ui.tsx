@@ -29,8 +29,33 @@ export function MetricCard({ label, value, detail }: { label: string; value: str
 }
 
 export function StatusPill({ value }: { value: string }) {
-  const styles = value === 'active' || value === 'allowed' ? 'bg-secondary/15 text-secondary border-secondary/20' : value === 'disabled' || value === 'blocked' ? 'bg-error/15 text-error border-error/20' : 'bg-tertiary/15 text-tertiary border-tertiary/20'
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const styles = statusPillStyles(normalized)
   return <span className={cn('info-eyebrow-tight inline-flex rounded-full border px-3 py-1', styles)}>{value}</span>
+}
+
+function statusPillStyles(value: string) {
+  if (matchesStatus(value, ['active', 'allowed', 'paid', 'complete', 'completed', 'success', 'succeeded', 'verified'])) {
+    return 'border-emerald-400/30 bg-emerald-500/12 text-emerald-300'
+  }
+  if (matchesStatus(value, ['pending', 'processing', 'queued', 'reconciling', 'incomplete', 'requires_action', 'action_required', 'trialing', 'awaiting_payment'])) {
+    return 'border-amber-400/30 bg-amber-500/12 text-amber-200'
+  }
+  if (matchesStatus(value, ['cancelled', 'canceled', 'refunded', 'reversed', 'inactive', 'archived'])) {
+    return 'border-slate-400/30 bg-slate-500/12 text-slate-200'
+  }
+  if (matchesStatus(value, ['disabled', 'blocked', 'failed', 'failure', 'error', 'denied', 'expired'])) {
+    return 'border-rose-400/30 bg-rose-500/12 text-rose-200'
+  }
+  return 'bg-tertiary/15 text-tertiary border-tertiary/20'
+}
+
+function matchesStatus(value: string, exactValues: string[]) {
+  if (exactValues.includes(value)) {
+    return true
+  }
+
+  return exactValues.some((candidate) => value.endsWith(`_${candidate}`))
 }
 
 export function DataTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
