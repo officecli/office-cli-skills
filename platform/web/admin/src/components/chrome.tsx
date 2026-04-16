@@ -1,4 +1,4 @@
-import { Activity, CreditCard, Fingerprint, Gift, KeyRound, LogOut, ReceiptText, ShieldCheck, Sparkles, TerminalSquare, Users, SlidersHorizontal } from 'lucide-react'
+import { Activity, CreditCard, Fingerprint, Gift, KeyRound, Layers3, LogOut, ReceiptText, ShieldCheck, Sparkles, TerminalSquare, Users, SlidersHorizontal } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '../api'
@@ -13,7 +13,8 @@ const navItems = [
   { to: '/users', label: 'Users', icon: Users },
   { to: '/orders', label: 'Orders', icon: CreditCard },
   { to: '/billing-events', label: 'Billing Events', icon: ReceiptText },
-  { to: '/free-quotas', label: 'Free Quotas', icon: Fingerprint },
+  { to: '/quota-sources', label: 'Quota Sources', icon: Layers3 },
+  { to: '/free-quotas', label: 'Free Trial Devices', icon: Fingerprint },
   { to: '/usage-events', label: 'Usage Events', icon: Activity },
 ]
 

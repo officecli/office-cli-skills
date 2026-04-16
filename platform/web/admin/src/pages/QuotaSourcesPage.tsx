@@ -1,0 +1,173 @@
+import { FormEvent, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../api'
+import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+
+interface FilterState {
+  fingerprint: string
+  usage_date: string
+  key_prefix: string
+  user_id: string
+}
+
+const defaultFilters: FilterState = {
+  fingerprint: '',
+  usage_date: '',
+  key_prefix: '',
+  user_id: '',
+}
+
+export default function QuotaSourcesPage() {
+  const [draft, setDraft] = useState<FilterState>(defaultFilters)
+  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+
+  const { data } = useQuery({
+    queryKey: ['admin-quota-sources', filters],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (filters.fingerprint) params.set('fingerprint', filters.fingerprint)
+      if (filters.usage_date) params.set('usage_date', filters.usage_date)
+      if (filters.key_prefix) params.set('key_prefix', filters.key_prefix)
+      if (filters.user_id) params.set('user_id', filters.user_id)
+      return api.quotaSources(params)
+    },
+  })
+
+  const freeTrialDevices = data?.free_trial_devices ?? []
+  const rewardGrants = data?.reward_grants ?? []
+  const paidExternalKeys = data?.paid_external_keys ?? []
+  const hostedKeys = data?.hosted_keys ?? []
+
+  return (
+    <div className="space-y-8">
+      <Panel>
+        <SectionHeading
+          eyebrow="Unified quota audit"
+          title="Quota sources"
+          body="Inspect anonymous CLI trial devices, account reward grants, paid external keys, and hidden hosted credits from one operator surface."
+        />
+        <form className="surface-console soft-panel grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          setFilters(draft)
+        }}>
+          <label className="text-sm text-outline">Fingerprint
+            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.fingerprint} onChange={(event) => setDraft((current) => ({ ...current, fingerprint: event.target.value }))} />
+          </label>
+          <label className="text-sm text-outline">Usage date
+            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="YYYY-MM-DD" value={draft.usage_date} onChange={(event) => setDraft((current) => ({ ...current, usage_date: event.target.value }))} />
+          </label>
+          <label className="text-sm text-outline">Key prefix
+            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.key_prefix} onChange={(event) => setDraft((current) => ({ ...current, key_prefix: event.target.value }))} />
+          </label>
+          <label className="text-sm text-outline">User ID
+            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.user_id} onChange={(event) => setDraft((current) => ({ ...current, user_id: event.target.value }))} />
+          </label>
+          <div className="md:col-span-4 flex gap-3">
+            <button type="submit" className="tonal-button">Apply filters</button>
+            <button type="button" className="ghost-button" onClick={() => {
+              setDraft(defaultFilters)
+              setFilters(defaultFilters)
+            }}>Reset</button>
+          </div>
+        </form>
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Anonymous trial" title="CLI free trial devices" body="These rows reflect the real daily_free_quotas records used by the license service." />
+        {freeTrialDevices.length ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {freeTrialDevices.map((quota) => (
+              <div key={quota.id} className="panel-muted p-5">
+                <div className="text-xs text-outline">{quota.usage_date}</div>
+                <code className="mt-2 block break-all text-sm text-white">{quota.fingerprint_hash}</code>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Limit</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.daily_limit)}</div></div>
+                  <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.daily_used)}</div></div>
+                  <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.remaining)}</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No free trial devices matched" body="Adjust the filters or wait for CLI anonymous traffic to create daily records." />
+        )}
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Account rewards" title="Reward grants" body="Reward grants remain account-owned quota and should never be mixed into anonymous trial counts." />
+        {rewardGrants.length ? (
+          <div className="space-y-3">
+            {rewardGrants.map((grant) => (
+              <div key={grant.id} className="panel-muted flex flex-wrap items-center justify-between gap-4 p-5">
+                <div>
+                  <div className="text-white">{grant.reason}</div>
+                  <div className="mt-1 text-sm text-outline">User {grant.user_id} / {grant.source_type} / created {formatDate(grant.created_at)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-white">{formatNumber(grant.amount_total - grant.amount_used)} remaining</div>
+                  <div className="text-xs text-outline">{formatNumber(grant.amount_used)} used / {formatNumber(grant.amount_total)} total</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No reward grants matched" body="Try filtering by user ID if you are tracing a single account." />
+        )}
+      </Panel>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel>
+          <SectionHeading eyebrow="Paid external" title="Paid external keys" body="These keys carry billable external document generations." />
+          {paidExternalKeys.length ? (
+            <div className="space-y-3">
+              {paidExternalKeys.map((key) => (
+                <div key={key.id} className="panel-muted p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-white">{key.key_prefix}</div>
+                      <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
+                    </div>
+                    <StatusPill value={key.status} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Total</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_total)}</div></div>
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_used)}</div></div>
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_remaining)}</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No paid keys matched" body="Filter by key prefix or user ID to narrow a paid quota investigation." />
+          )}
+        </Panel>
+
+        <Panel>
+          <SectionHeading eyebrow="Hidden hosted" title="Hosted credit keys" body="Hosted credits stay operator-only in the current product surface and do not appear in user quota views." />
+          {hostedKeys.length ? (
+            <div className="space-y-3">
+              {hostedKeys.map((key) => (
+                <div key={key.id} className="panel-muted p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-white">{key.key_prefix}</div>
+                      <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
+                    </div>
+                    <StatusPill value={key.status} />
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Balance</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_balance)}</div></div>
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Reserved</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_reserved)}</div></div>
+                    <div className="panel-muted p-4"><div className="info-eyebrow-tight text-outline">Available</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber((key.credit_balance ?? 0) - (key.credit_reserved ?? 0))}</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No hosted keys matched" body="Hosted credit inventory will appear here when the current filter set matches hosted-enabled keys." />
+          )}
+        </Panel>
+      </div>
+    </div>
+  )
+}

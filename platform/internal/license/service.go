@@ -187,6 +187,10 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 	if err := s.usage.Create(ctx, event); err != nil {
 		return nil, err
 	}
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, key, nil, response.RewardRemaining)
+	if err != nil {
+		return nil, err
+	}
 	return response, nil
 }
 
@@ -215,6 +219,10 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 		return nil, false, err
 	}
 	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeReward, response, nil)); err != nil {
+		return nil, false, err
+	}
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, nil, balance.Remaining)
+	if err != nil {
 		return nil, false, err
 	}
 	return response, true, nil
@@ -246,6 +254,10 @@ func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckRespon
 
 	event := buildUsageEvent(req, model.UsageModeFree, response, nil)
 	if err := s.usage.Create(ctx, event); err != nil {
+		return nil, err
+	}
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, quota, response.RewardRemaining)
+	if err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -502,6 +514,57 @@ func (s *Service) rewardBalanceResponse(ctx context.Context, userID uint64) (*Co
 		resp.Remaining = balance.Remaining
 	}
 	return resp, nil
+}
+
+func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, freeQuota *model.DailyFreeQuota, rewardRemaining int) (*QuotaSnapshot, error) {
+	snapshot := &QuotaSnapshot{
+		FreeTrialDaily: FreeTrialDailySnapshot{
+			UsageDate:               s.currentUsageDate(),
+			Limit:                   s.defaultFreeLimit,
+			Used:                    0,
+			Remaining:               s.defaultFreeLimit,
+			BinaryOnly:              true,
+			IncludedInAccountTotals: false,
+		},
+		RewardQuota: RewardQuotaSnapshot{
+			Remaining: rewardRemaining,
+		},
+	}
+
+	if freeQuota == nil && s.freeQuotas != nil {
+		var err error
+		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if freeQuota != nil {
+		snapshot.FreeTrialDaily.UsageDate = freeQuota.UsageDate
+		snapshot.FreeTrialDaily.Limit = freeQuota.DailyLimit
+		snapshot.FreeTrialDaily.Used = freeQuota.DailyUsed
+		snapshot.FreeTrialDaily.Remaining = freeQuota.Remaining()
+	}
+
+	if snapshot.RewardQuota.Remaining == 0 && s.rewards != nil && req.UserID != 0 {
+		balance, err := s.rewards.Balance(ctx, req.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if balance != nil {
+			snapshot.RewardQuota.Remaining = balance.Remaining
+		}
+	}
+
+	if key != nil {
+		snapshot.PaidExternalQuota.CurrentKeyPrefix = key.KeyPrefix
+		if key.QuotaTotal != nil {
+			snapshot.PaidExternalQuota.CurrentKeyTotal = *key.QuotaTotal
+			snapshot.PaidExternalQuota.CurrentKeyUsed = key.QuotaUsed
+			snapshot.PaidExternalQuota.CurrentKeyRemaining = key.PaidQuotaRemaining()
+		}
+	}
+
+	return snapshot, nil
 }
 
 func (s *Service) currentUsageDate() string {

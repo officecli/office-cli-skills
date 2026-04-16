@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, Envelope, FreeQuota, HostedPricingRule, Order, Overview, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedPricingRule, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -30,8 +30,9 @@ export const api = {
   apiKeys: () => request<ApiKey[]>('/api/admin/api-keys'),
   createApiKey: (payload: Record<string, unknown>) => request<{ plaintext_key: string; key_prefix: string }>('/api/admin/api-keys', { method: 'POST', body: JSON.stringify(payload) }),
   updateApiKey: (id: number, payload: Record<string, unknown>) => request(`/api/admin/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  freeQuotas: (fingerprint = '') => request<FreeQuota[]>(`/api/admin/free-quotas?fingerprint=${encodeURIComponent(fingerprint)}`),
+  freeQuotas: (fingerprint = '', usageDate = '') => request<DailyFreeQuota[]>(`/api/admin/free-quotas?fingerprint=${encodeURIComponent(fingerprint)}&usage_date=${encodeURIComponent(usageDate)}`),
   updateFreeQuota: (id: number, free_limit: number) => request(`/api/admin/free-quotas/${id}`, { method: 'PATCH', body: JSON.stringify({ free_limit }) }),
+  quotaSources: (params: URLSearchParams) => request<QuotaSources>(`/api/admin/quota-sources?${params.toString()}`),
   usageEvents: (params: URLSearchParams) => request<UsageEvent[]>(`/api/admin/usage-events?${params.toString()}`),
   users: () => request<User[]>('/api/admin/users'),
   updateUser: (id: number, payload: Record<string, unknown>) => request(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),

@@ -57,6 +57,13 @@ type UpdateFreeQuotaRequest struct {
 	FreeLimit int `json:"free_limit"`
 }
 
+type QuotaSourcesFilter struct {
+	Fingerprint string `json:"fingerprint,omitempty"`
+	UsageDate   string `json:"usage_date,omitempty"`
+	KeyPrefix   string `json:"key_prefix,omitempty"`
+	UserID      uint64 `json:"user_id,omitempty"`
+}
+
 type UpdateOrderRequest struct {
 	Status *string `json:"status,omitempty"`
 	Note   *string `json:"note,omitempty"`

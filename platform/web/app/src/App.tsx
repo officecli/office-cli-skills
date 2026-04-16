@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage'
 import AccessDeniedPage from './pages/AccessDeniedPage'
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage'))
+const QuotaPage = lazy(() => import('./pages/QuotaPage'))
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
 const BillingPage = lazy(() => import('./pages/BillingPage'))
 const UsagePage = lazy(() => import('./pages/UsagePage'))
@@ -39,6 +40,7 @@ function ProtectedShell() {
             <Suspense fallback={<LoadingScreen />}>
               <Routes>
                 <Route path="/" element={<OverviewPage />} />
+                <Route path="/quota" element={<QuotaPage />} />
                 <Route path="/api-keys" element={<ApiKeysPage />} />
                 <Route path="/billing" element={<BillingPage />} />
                 <Route path="/usage" element={<UsagePage />} />

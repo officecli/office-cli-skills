@@ -1,4 +1,4 @@
-import type { ApiKey, AppGrowth, AppOverview, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, UsageEvent, User } from './types'
+import type { ApiKey, AppGrowth, AppOverview, AppQuotaSummary, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, UsageEvent, User } from './types'
 import { buildGoogleLoginURL } from './analytics'
 
 export class ApiError extends Error {
@@ -40,6 +40,7 @@ export const api = {
   login: (returnTo = '/app') => { window.location.href = buildGoogleLoginURL(returnTo) },
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   overview: () => request<AppOverview>('/api/app/overview'),
+  quotaSummary: () => request<AppQuotaSummary>('/api/app/quota-summary'),
   growth: () => request<AppGrowth>('/api/app/growth'),
   discordStatus: () => request<DiscordStatus>('/api/app/discord/status'),
   connectDiscord: (payload: { discord_user_id: string; username: string }) => request<ConnectDiscordResponse>('/api/app/discord/connect', { method: 'POST', body: JSON.stringify(payload) }),

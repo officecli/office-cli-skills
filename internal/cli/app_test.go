@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/officecli/officecli/engine"
+	licenseprovider "github.com/officecli/officecli/internal/license"
 	publishprovider "github.com/officecli/officecli/internal/providers/publish"
 )
 
@@ -1584,7 +1585,23 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 				Allowed:            true,
 				AccessMode:         LicenseAccessModePaid,
 				PlanName:           "pro",
+				FreeLimit:          10,
+				FreeUsed:           2,
+				FreeRemaining:      8,
+				RewardRemaining:    3,
 				PaidQuotaRemaining: 8,
+				PaidQuotaTotal:     12,
+				PaidQuotaUsed:      4,
+				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 10, Used: 2, Remaining: 8},
+					RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 3},
+					PaidExternalQuota: licenseprovider.PaidExternalQuotaSnapshot{
+						CurrentKeyPrefix:    "cop_live_demo",
+						CurrentKeyTotal:     12,
+						CurrentKeyUsed:      4,
+						CurrentKeyRemaining: 8,
+					},
+				},
 			},
 		}, nil
 	}
@@ -1594,7 +1611,7 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Paid generations remaining: 8") {
+	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward generations remaining: 3") || !strings.Contains(output, "Paid generations on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -1628,6 +1645,10 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 				Allowed:         true,
 				AccessMode:      LicenseAccessModeReward,
 				RewardRemaining: 5,
+				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 10, Used: 0, Remaining: 10},
+					RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 5},
+				},
 			},
 		}, nil
 	}
@@ -1637,7 +1658,7 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward generations remaining: 5") {
+	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward generations remaining: 5") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 0 used / 10 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -1810,8 +1831,13 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 			checkResult: &LicenseCheckResult{
 				Allowed:       true,
 				AccessMode:    LicenseAccessModeFree,
+				FreeLimit:     5,
+				FreeUsed:      2,
 				FreeRemaining: 3,
 				Message:       "Current mode: free.",
+				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 5, Used: 2, Remaining: 3},
+				},
 			},
 		}, nil
 	}
@@ -1824,7 +1850,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	if !strings.Contains(output, "Current access mode: free") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "Free generations remaining: 3") {
+	if !strings.Contains(output, "Free trial today (this machine, UTC): 5 total / 2 used / 3 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 	if !strings.Contains(output, "Access checks enabled: true") {

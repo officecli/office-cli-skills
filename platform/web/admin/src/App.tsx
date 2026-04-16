@@ -12,6 +12,7 @@ import GrowthPage from './pages/GrowthPage'
 import HostedPricingRulesPage from './pages/HostedPricingRulesPage'
 import NotFoundPage from './pages/NotFoundPage'
 import OrdersPage from './pages/OrdersPage'
+import QuotaSourcesPage from './pages/QuotaSourcesPage'
 import UsersPage from './pages/UsersPage'
 import UsageEventsPage from './pages/UsageEventsPage'
 
@@ -48,6 +49,7 @@ function ProtectedShell() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/billing-events" element={<BillingEventsPage />} />
+            <Route path="/quota-sources" element={<QuotaSourcesPage />} />
             <Route path="/free-quotas" element={<FreeQuotasPage />} />
             <Route path="/usage-events" element={<UsageEventsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -627,20 +627,23 @@ func (s *Store) UpdateAPIKey(ctx context.Context, id uint64, values map[string]a
 	return s.db.WithContext(ctx).Model(&model.APIKey{}).Where("id = ?", id).Updates(values).Error
 }
 
-func (s *Store) ListFreeQuotas(ctx context.Context, fingerprint string) ([]model.FreeQuota, error) {
-	query := s.db.WithContext(ctx).Model(&model.FreeQuota{})
+func (s *Store) ListDailyFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]model.DailyFreeQuota, error) {
+	query := s.db.WithContext(ctx).Model(&model.DailyFreeQuota{})
 	if fingerprint != "" {
 		query = query.Where("fingerprint_hash LIKE ?", "%"+fingerprint+"%")
 	}
-	var quotas []model.FreeQuota
+	if usageDate != "" {
+		query = query.Where("usage_date = ?", usageDate)
+	}
+	var quotas []model.DailyFreeQuota
 	if err := query.Order("updated_at desc").Find(&quotas).Error; err != nil {
 		return nil, err
 	}
 	return quotas, nil
 }
 
-func (s *Store) UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error {
-	return s.db.WithContext(ctx).Model(&model.FreeQuota{}).Where("id = ?", id).Update("free_limit", freeLimit).Error
+func (s *Store) UpdateDailyFreeQuota(ctx context.Context, id uint64, dailyLimit int) error {
+	return s.db.WithContext(ctx).Model(&model.DailyFreeQuota{}).Where("id = ?", id).Update("daily_limit", dailyLimit).Error
 }
 
 func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name string, avatarURL *string) (*model.User, error) {
@@ -994,7 +997,7 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	if err := s.db.WithContext(ctx).Model(&model.APIKey{}).Where("expires_at IS NOT NULL AND expires_at < ?", now).Count(&stats.ExpiredAPIKeys).Error; err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Model(&model.FreeQuota{}).Count(&stats.FreeMachines).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&model.DailyFreeQuota{}).Distinct("fingerprint_hash").Count(&stats.FreeMachines).Error; err != nil {
 		return nil, err
 	}
 	if err := s.db.WithContext(ctx).Model(&model.UsageEvent{}).Where("created_at >= ? AND charged = ?", dayAgo, true).Count(&stats.ConsumesLast24h).Error; err != nil {

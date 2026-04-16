@@ -22,7 +22,7 @@ describe('admin free quotas page', () => {
   it('shows the latest free quota limits returned by the admin API', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url === '/api/admin/free-quotas?fingerprint=') {
+      if (url === '/api/admin/free-quotas?fingerprint=&usage_date=') {
         return {
           ok: true,
           status: 200,
@@ -30,8 +30,10 @@ describe('admin free quotas page', () => {
             data: [{
               id: 3,
               fingerprint_hash: 'fp-demo-01',
-              free_limit: 15,
-              free_used: 3,
+              usage_date: '2026-04-16',
+              daily_limit: 15,
+              daily_used: 3,
+              remaining: 12,
               created_at: '2026-04-01T00:00:00Z',
               updated_at: '2026-04-01T03:00:00Z',
             }],
@@ -45,6 +47,7 @@ describe('admin free quotas page', () => {
     renderPage()
 
     expect(await screen.findByText(/fp-demo-01/i)).toBeInTheDocument()
+    expect(screen.getByText(/2026-04-16/i)).toBeInTheDocument()
     expect(screen.getByText('15')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()

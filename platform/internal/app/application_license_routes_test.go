@@ -61,8 +61,12 @@ func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerp
 func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := *f.quotas[fingerprint+"|"+usageDate]
-	return &quota, nil
+	quota := f.quotas[fingerprint+"|"+usageDate]
+	if quota == nil {
+		return nil, nil
+	}
+	copied := *quota
+	return &copied, nil
 }
 
 func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {

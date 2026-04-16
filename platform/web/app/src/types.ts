@@ -1,5 +1,9 @@
 export interface User { id: number; email: string; name: string; avatar_url?: string; status: string }
 export interface PricingPack { code: string; name: string; description: string; currency: string; amount_total: number; quota_amount: number; credit_amount?: number; pack_kind?: string }
+export interface TrialPolicy {
+  cli_binary_only: boolean
+  message: string
+}
 export interface AppOverview {
   api_key_count: number
   total_remaining: number
@@ -25,6 +29,19 @@ export interface AppGrowth {
   reward_grants: RewardGrant[]
   referrals: Referral[]
   discord_connection?: DiscordConnection
+}
+export interface RewardQuotaSummary {
+  remaining: number
+  grants: RewardGrant[]
+}
+export interface PaidExternalQuotaSummary {
+  total_remaining: number
+  keys: ApiKey[]
+}
+export interface AppQuotaSummary {
+  reward_quota: RewardQuotaSummary
+  paid_external_quota: PaidExternalQuotaSummary
+  trial_policy: TrialPolicy
 }
 export interface DiscordStatus {
   connection?: DiscordConnection

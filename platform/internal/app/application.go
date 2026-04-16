@@ -71,7 +71,7 @@ type adminRouteService interface {
 	ListAPIKeys(ctx context.Context) ([]model.APIKey, error)
 	CreateAPIKey(ctx context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error)
 	UpdateAPIKey(ctx context.Context, id uint64, req admin.UpdateAPIKeyRequest) error
-	ListFreeQuotas(ctx context.Context, fingerprint string) ([]model.FreeQuota, error)
+	ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error)
 	UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error
 	ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error)
 	ListUsers(ctx context.Context) ([]model.User, error)
@@ -80,6 +80,7 @@ type adminRouteService interface {
 	UpdateOrder(ctx context.Context, id uint64, req admin.UpdateOrderRequest) error
 	ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error)
 	Growth(ctx context.Context) (*admin.GrowthSnapshot, error)
+	QuotaSources(ctx context.Context, filter admin.QuotaSourcesFilter) (*admin.QuotaSources, error)
 	HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error)
 }
 
@@ -656,7 +657,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
 	protected.GET("/free-quotas", func(c *gin.Context) {
-		data, err := adminSvc.ListFreeQuotas(c.Request.Context(), c.Query("fingerprint"))
+		data, err := adminSvc.ListFreeQuotas(c.Request.Context(), c.Query("fingerprint"), c.Query("usage_date"))
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
@@ -751,6 +752,22 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	})
 	protected.GET("/growth", func(c *gin.Context) {
 		data, err := adminSvc.Growth(c.Request.Context())
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/quota-sources", func(c *gin.Context) {
+		filter := admin.QuotaSourcesFilter{
+			Fingerprint: c.Query("fingerprint"),
+			UsageDate:   c.Query("usage_date"),
+			KeyPrefix:   c.Query("key_prefix"),
+		}
+		if raw := c.Query("user_id"); raw != "" {
+			filter.UserID, _ = strconv.ParseUint(raw, 10, 64)
+		}
+		data, err := adminSvc.QuotaSources(c.Request.Context(), filter)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
@@ -1000,6 +1017,14 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 	protected.GET("/overview", func(c *gin.Context) {
 		userID := currentUserID(c)
 		data, err := appSvc.Overview(c.Request.Context(), userID)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/quota-summary", func(c *gin.Context) {
+		data, err := appSvc.QuotaSummary(c.Request.Context(), currentUserID(c))
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return

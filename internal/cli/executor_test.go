@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/officecli/officecli/engine"
+	licenseprovider "github.com/officecli/officecli/internal/license"
 )
 
 type fakeGenerator struct{}
@@ -302,6 +303,10 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 		LicenseCheck: &LicenseCheckResult{
 			Allowed:    true,
 			AccessMode: LicenseAccessModeFree,
+			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 3},
+				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 0},
+			},
 			CommitToken: UsageCommitToken{
 				FingerprintHash: "fp",
 				RequestID:       "req-free",
@@ -314,6 +319,9 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 
 	warnings := strings.Join(result.Warnings, "\n")
 	if !strings.Contains(warnings, "Current mode: free. 3 generations remaining.") {
+		t.Fatalf("warnings = %s", warnings)
+	}
+	if !strings.Contains(warnings, "Trial today on this machine: 3 remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeFree) {
@@ -341,6 +349,14 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 		LicenseCheck: &LicenseCheckResult{
 			Allowed:    true,
 			AccessMode: LicenseAccessModePaid,
+			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 9},
+				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 2},
+				PaidExternalQuota: licenseprovider.PaidExternalQuotaSnapshot{
+					CurrentKeyPrefix:    "cop_live_demo",
+					CurrentKeyRemaining: 7,
+				},
+			},
 			CommitToken: UsageCommitToken{
 				FingerprintHash: "fp",
 				RequestID:       "req-paid",
@@ -353,6 +369,9 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 
 	warnings := strings.Join(result.Warnings, "\n")
 	if !strings.Contains(warnings, "Current mode: paid. 7 generations remaining.") {
+		t.Fatalf("warnings = %s", warnings)
+	}
+	if !strings.Contains(warnings, "Paid quota on current key: 7 remaining.") || !strings.Contains(warnings, "Reward quota: 2 remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModePaid) {
@@ -380,6 +399,10 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 		LicenseCheck: &LicenseCheckResult{
 			Allowed:    true,
 			AccessMode: LicenseAccessModeReward,
+			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
+				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 10},
+				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 4},
+			},
 			CommitToken: UsageCommitToken{
 				FingerprintHash: "fp",
 				RequestID:       "req-reward",
@@ -392,6 +415,9 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 
 	warnings := strings.Join(result.Warnings, "\n")
 	if !strings.Contains(warnings, "Current mode: reward. 4 generations remaining.") {
+		t.Fatalf("warnings = %s", warnings)
+	}
+	if !strings.Contains(warnings, "Reward quota: 4 remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeReward) {

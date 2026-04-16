@@ -952,18 +952,25 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 			return err
 		}
 	}
-	if result.AccessMode == LicenseAccessModeFree {
-		if _, err := fmt.Fprintf(a.Stdout, "Free generations remaining: %d\n", result.FreeRemaining); err != nil {
+	if _, err := fmt.Fprintln(a.Stdout, ""); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(a.Stdout, "Quota summary"); err != nil {
+		return err
+	}
+	freeTrial, rewardQuota, paidQuota := quotaSnapshotSections(result)
+	if _, err := fmt.Fprintf(a.Stdout, "Free trial today (this machine, UTC): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Reward generations remaining: %d\n", rewardQuota.Remaining); err != nil {
+		return err
+	}
+	if paidQuota.CurrentKeyPrefix != "" {
+		if _, err := fmt.Fprintf(a.Stdout, "Paid generations on current key (%s): %d total / %d used / %d remaining\n", paidQuota.CurrentKeyPrefix, paidQuota.CurrentKeyTotal, paidQuota.CurrentKeyUsed, paidQuota.CurrentKeyRemaining); err != nil {
 			return err
 		}
-	}
-	if result.AccessMode == LicenseAccessModeReward {
-		if _, err := fmt.Fprintf(a.Stdout, "Reward generations remaining: %d\n", result.RewardRemaining); err != nil {
-			return err
-		}
-	}
-	if result.AccessMode == LicenseAccessModePaid {
-		if _, err := fmt.Fprintf(a.Stdout, "Paid generations remaining: %d\n", result.PaidQuotaRemaining); err != nil {
+	} else {
+		if _, err := fmt.Fprintln(a.Stdout, "Paid generations on current key: no paid API key configured"); err != nil {
 			return err
 		}
 	}
@@ -979,6 +986,33 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 		}
 	}
 	return nil
+}
+
+func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.FreeTrialDailySnapshot, licenseprovider.RewardQuotaSnapshot, licenseprovider.PaidExternalQuotaSnapshot) {
+	freeTrial := licenseprovider.FreeTrialDailySnapshot{
+		Limit:     result.FreeLimit,
+		Used:      result.FreeUsed,
+		Remaining: result.FreeRemaining,
+	}
+	rewardQuota := licenseprovider.RewardQuotaSnapshot{Remaining: result.RewardRemaining}
+	paidQuota := licenseprovider.PaidExternalQuotaSnapshot{
+		CurrentKeyTotal:     result.PaidQuotaTotal,
+		CurrentKeyUsed:      result.PaidQuotaUsed,
+		CurrentKeyRemaining: result.PaidQuotaRemaining,
+	}
+	if result.QuotaSnapshot == nil {
+		return freeTrial, rewardQuota, paidQuota
+	}
+	if snapshot := result.QuotaSnapshot.FreeTrialDaily; snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0 {
+		freeTrial = snapshot
+	}
+	if snapshot := result.QuotaSnapshot.RewardQuota; snapshot.Remaining > 0 || result.RewardRemaining == 0 {
+		rewardQuota = snapshot
+	}
+	if snapshot := result.QuotaSnapshot.PaidExternalQuota; snapshot.CurrentKeyPrefix != "" || snapshot.CurrentKeyTotal > 0 || snapshot.CurrentKeyUsed > 0 || snapshot.CurrentKeyRemaining > 0 {
+		paidQuota = snapshot
+	}
+	return freeTrial, rewardQuota, paidQuota
 }
 
 func (a *App) runAuthSetKey(ctx context.Context, cfg Config, key string) error {

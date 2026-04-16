@@ -99,7 +99,7 @@ func (f *fakeAdminRouteService) CreateAPIKey(_ context.Context, req admin.Create
 func (f *fakeAdminRouteService) UpdateAPIKey(_ context.Context, id uint64, req admin.UpdateAPIKeyRequest) error {
 	return nil
 }
-func (f *fakeAdminRouteService) ListFreeQuotas(_ context.Context, fingerprint string) ([]model.FreeQuota, error) {
+func (f *fakeAdminRouteService) ListFreeQuotas(_ context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error) {
 	return nil, nil
 }
 func (f *fakeAdminRouteService) UpdateFreeQuota(_ context.Context, id uint64, freeLimit int) error {
@@ -121,6 +121,9 @@ func (f *fakeAdminRouteService) ListBillingEvents(_ context.Context) ([]model.Bi
 }
 func (f *fakeAdminRouteService) Growth(_ context.Context) (*admin.GrowthSnapshot, error) {
 	return &admin.GrowthSnapshot{}, nil
+}
+func (f *fakeAdminRouteService) QuotaSources(_ context.Context, filter admin.QuotaSourcesFilter) (*admin.QuotaSources, error) {
+	return &admin.QuotaSources{}, nil
 }
 func (f *fakeAdminRouteService) HostedPricingRules(_ context.Context) ([]model.HostedPricingRule, error) {
 	return nil, nil

@@ -122,7 +122,47 @@ describe('platform app shell', () => {
     renderApp('/usage')
 
     expect(await screen.findByRole('heading', { name: /Recent workflow usage/i })).toBeInTheDocument()
-    expect(screen.getByText(/No usage events recorded/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No usage events recorded/i)).toBeInTheDocument()
+  })
+
+  it('renders the quota page with reward and paid account quota only', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/auth/me') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
+      }
+      if (url === '/api/app/quota-summary') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              reward_quota: {
+                remaining: 6,
+                grants: [{ source_type: 'invite_activation_reward', amount_total: 6, amount_used: 0, remaining: 6, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
+              },
+              paid_external_quota: {
+                total_remaining: 40,
+                keys: [{ id: 9, key_prefix: 'cop_live_demo', status: 'active', plan_name: 'Production', quota_total: 100, quota_used: 60, quota_remaining: 40, created_at: '2026-04-01T00:00:00Z' }],
+              },
+              trial_policy: {
+                cli_binary_only: true,
+                message: 'Anonymous trial counts only apply to the local officecli binary and never count as account balance.',
+              },
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderApp('/quota')
+
+    expect(await screen.findByRole('heading', { name: /Reward and paid quota/i })).toBeInTheDocument()
+    expect(await screen.findByText(/CLI trial only/i)).toBeInTheDocument()
+    expect(await screen.findByText(/cop_live_demo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/current browser trial status/i)).not.toBeInTheDocument()
   })
 
   it('renders the downloads page with brew, npm, and the stable install script', async () => {

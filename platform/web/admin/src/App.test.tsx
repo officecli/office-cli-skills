@@ -132,4 +132,40 @@ describe('platform admin shell', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/growth', expect.anything())
     })
   })
+
+  it('renders the quota sources route from the real admin API', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/quota-sources?') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              free_trial_devices: [{ id: 1, fingerprint_hash: 'fp-demo-01', usage_date: '2026-04-16', daily_limit: 10, daily_used: 2, remaining: 8, created_at: '2026-04-16T00:00:00Z', updated_at: '2026-04-16T01:00:00Z' }],
+              reward_grants: [],
+              paid_external_keys: [],
+              hosted_keys: [],
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/quota-sources']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /Quota sources/i })).toBeInTheDocument()
+    expect(await screen.findByText(/fp-demo-01/i)).toBeInTheDocument()
+  })
 })

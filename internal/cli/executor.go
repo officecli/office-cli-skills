@@ -89,6 +89,27 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 			default:
 				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: free. %d generations remaining.", consumeResult.Remaining))
 			}
+			if snapshot := job.LicenseCheck.QuotaSnapshot; snapshot != nil {
+				freeRemaining := snapshot.FreeTrialDaily.Remaining
+				if job.LicenseCheck.AccessMode == LicenseAccessModeFree {
+					freeRemaining = consumeResult.Remaining
+				}
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Trial today on this machine: %d remaining.", freeRemaining))
+
+				rewardRemaining := snapshot.RewardQuota.Remaining
+				if job.LicenseCheck.AccessMode == LicenseAccessModeReward {
+					rewardRemaining = consumeResult.Remaining
+				}
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Reward quota: %d remaining.", rewardRemaining))
+
+				paidRemaining := snapshot.PaidExternalQuota.CurrentKeyRemaining
+				if job.LicenseCheck.AccessMode == LicenseAccessModePaid {
+					paidRemaining = consumeResult.Remaining
+				}
+				if snapshot.PaidExternalQuota.CurrentKeyPrefix != "" || paidRemaining > 0 {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("Paid quota on current key: %d remaining.", paidRemaining))
+				}
+			}
 		}
 	} else if job.LicenseCheck != nil && job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: hosted. %d credits remaining.", job.LicenseCheck.CreditBalance))

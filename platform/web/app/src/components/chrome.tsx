@@ -1,4 +1,4 @@
-import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Workflow, Sparkles } from 'lucide-react'
+import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Wallet, Workflow, Sparkles } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
@@ -10,6 +10,9 @@ const navItems = [
     queryClient.prefetchQuery({ queryKey: ['app-overview'], queryFn: api.overview })
     queryClient.prefetchQuery({ queryKey: ['app-growth'], queryFn: api.growth })
     queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
+  }},
+  { to: '/quota', label: 'Quota', icon: Wallet, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-quota-summary'], queryFn: api.quotaSummary })
   }},
   { to: '/api-keys', label: 'API Keys', icon: KeyRound, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
     queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })

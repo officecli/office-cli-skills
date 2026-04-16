@@ -77,8 +77,12 @@ func (f *fakeFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerp
 func (f *fakeFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := *f.quotas[fingerprint+"|"+usageDate]
-	return &quota, nil
+	quota := f.quotas[fingerprint+"|"+usageDate]
+	if quota == nil {
+		return nil, nil
+	}
+	copied := *quota
+	return &copied, nil
 }
 
 func (f *fakeFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
@@ -248,6 +252,9 @@ func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
 	require.Equal(t, 10, resp.FreeLimit)
 	require.Equal(t, 10, resp.FreeRemaining)
+	require.NotNil(t, resp.QuotaSnapshot)
+	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
+	require.True(t, resp.QuotaSnapshot.FreeTrialDaily.BinaryOnly)
 	require.NotNil(t, resp.CommitToken)
 	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
 }
@@ -299,6 +306,8 @@ func TestCheckPaidKeyStatuses(t *testing.T) {
 				require.Equal(t, 10, resp.PaidQuotaTotal)
 				require.Equal(t, 2, resp.PaidQuotaUsed)
 				require.Equal(t, 8, resp.PaidQuotaRemaining)
+				require.NotNil(t, resp.QuotaSnapshot)
+				require.Equal(t, 8, resp.QuotaSnapshot.PaidExternalQuota.CurrentKeyRemaining)
 				require.NotNil(t, resp.CommitToken)
 				require.Equal(t, model.AccessModePaid, resp.CommitToken.AccessMode)
 			} else {
@@ -321,6 +330,9 @@ func TestCheckPrefersRewardBeforeFree(t *testing.T) {
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeReward, resp.AccessMode)
 	require.Equal(t, 4, resp.RewardRemaining)
+	require.NotNil(t, resp.QuotaSnapshot)
+	require.Equal(t, 4, resp.QuotaSnapshot.RewardQuota.Remaining)
+	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
 	require.NotNil(t, resp.CommitToken)
 	require.Equal(t, uint64(88), resp.CommitToken.UserID)
 	require.Equal(t, model.AccessModeReward, resp.CommitToken.AccessMode)

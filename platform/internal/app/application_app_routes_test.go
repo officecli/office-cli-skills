@@ -191,6 +191,54 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 	}
 }
 
+func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	store := &overviewRouteStore{
+		apiKeys: []model.APIKey{
+			{ID: 1, KeyPrefix: "cop_live_a", PlanName: "Starter", Status: model.APIKeyStatusActive, QuotaTotal: routeIntPtr(10), QuotaUsed: 4},
+			{ID: 2, KeyPrefix: "cop_live_b", PlanName: "Team", Status: model.APIKeyStatusDisabled, QuotaTotal: routeIntPtr(20), QuotaUsed: 5},
+		},
+		rewardGrants: []model.RewardGrant{{AmountTotal: 9, AmountUsed: 3, Reason: "invite activation reward", SourceType: model.RewardSourceInviteActivation}},
+	}
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
+
+	router := gin.New()
+	api := router.Group("/api")
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/app/quota-summary", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var body struct {
+		Data appuser.QuotaSummary `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Data.RewardQuota.Remaining != 6 {
+		t.Fatalf("reward remaining = %+v", body.Data)
+	}
+	if body.Data.PaidExternalQuota.TotalRemaining != 21 {
+		t.Fatalf("paid quota = %+v", body.Data)
+	}
+	if !body.Data.TrialPolicy.CLIBinaryOnly {
+		t.Fatalf("trial policy = %+v", body.Data.TrialPolicy)
+	}
+	if len(body.Data.PaidExternalQuota.Keys) != 2 || len(body.Data.RewardQuota.Grants) != 1 {
+		t.Fatalf("summary detail = %+v", body.Data)
+	}
+}
+
 type routeGrowthManager struct {
 	connection   *model.DiscordConnection
 	connectCalls int

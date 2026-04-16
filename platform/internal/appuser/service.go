@@ -84,6 +84,27 @@ type GrowthSnapshot struct {
 	DiscordConnection *DiscordConnectionView `json:"discord_connection,omitempty"`
 }
 
+type TrialPolicy struct {
+	CLIBinaryOnly bool   `json:"cli_binary_only"`
+	Message       string `json:"message"`
+}
+
+type RewardQuotaSummary struct {
+	Remaining int               `json:"remaining"`
+	Grants    []RewardGrantView `json:"grants"`
+}
+
+type PaidExternalQuotaSummary struct {
+	TotalRemaining int          `json:"total_remaining"`
+	Keys           []APIKeyView `json:"keys"`
+}
+
+type QuotaSummary struct {
+	RewardQuota       RewardQuotaSummary       `json:"reward_quota"`
+	PaidExternalQuota PaidExternalQuotaSummary `json:"paid_external_quota"`
+	TrialPolicy       TrialPolicy              `json:"trial_policy"`
+}
+
 type RewardGrantView struct {
 	SourceType   model.RewardSourceType `json:"source_type"`
 	AmountTotal  int                    `json:"amount_total"`
@@ -296,6 +317,51 @@ func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]model.U
 		return []model.UsageEvent{}, nil
 	}
 	return visible, nil
+}
+
+func (s *Service) QuotaSummary(ctx context.Context, userID uint64) (*QuotaSummary, error) {
+	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	rewardGrants, err := s.store.ListRewardGrantsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := &QuotaSummary{
+		RewardQuota: RewardQuotaSummary{
+			Grants: make([]RewardGrantView, 0, len(rewardGrants)),
+		},
+		PaidExternalQuota: PaidExternalQuotaSummary{
+			Keys: make([]APIKeyView, 0, len(keys)),
+		},
+		TrialPolicy: TrialPolicy{
+			CLIBinaryOnly: true,
+			Message:       "Anonymous trial counts only apply to the local officecli binary and never count as account balance.",
+		},
+	}
+
+	for _, grant := range rewardGrants {
+		summary.RewardQuota.Remaining += grant.Remaining()
+		summary.RewardQuota.Grants = append(summary.RewardQuota.Grants, RewardGrantView{
+			SourceType:   grant.SourceType,
+			AmountTotal:  grant.AmountTotal,
+			AmountUsed:   grant.AmountUsed,
+			Remaining:    grant.Remaining(),
+			Reason:       grant.Reason,
+			MetadataJSON: grant.MetadataJSON,
+			CreatedAt:    grant.CreatedAt,
+			UpdatedAt:    grant.UpdatedAt,
+		})
+	}
+
+	for _, key := range keys {
+		summary.PaidExternalQuota.TotalRemaining += key.PaidQuotaRemaining()
+		summary.PaidExternalQuota.Keys = append(summary.PaidExternalQuota.Keys, newAPIKeyView(key))
+	}
+
+	return summary, nil
 }
 
 func (s *Service) Growth(ctx context.Context, userID uint64) (*GrowthSnapshot, error) {
