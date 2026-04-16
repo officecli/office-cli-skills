@@ -1,34 +1,7 @@
 name: CLI CI
 
 on:
-  pull_request:
-    paths:
-      - 'cmd/**'
-      - 'engine/**'
-      - 'internal/**'
-      - 'pkg/**'
-      - 'examples/**'
-      - 'scripts/**'
-      - 'go.mod'
-      - 'Makefile'
-      - '.goreleaser.dist.yml'
-      - '.github/workflows/cli-publish-latest.yml'
-      - '.github/workflows/cli-ci.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'cmd/**'
-      - 'engine/**'
-      - 'internal/**'
-      - 'pkg/**'
-      - 'examples/**'
-      - 'scripts/**'
-      - 'go.mod'
-      - 'Makefile'
-      - '.goreleaser.dist.yml'
-      - '.github/workflows/cli-publish-latest.yml'
-      - '.github/workflows/cli-ci.yml'
+  workflow_dispatch:
 
 concurrency:
   group: cli-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

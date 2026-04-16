@@ -1,20 +1,6 @@
 name: CLI Publish Latest
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'cmd/**'
-      - 'engine/**'
-      - 'internal/**'
-      - 'pkg/**'
-      - 'go.mod'
-      - 'Makefile'
-      - 'scripts/build-latest-release-assets.sh'
-      - 'scripts/install-officecli.sh'
-      - 'scripts/sync-public-dist-repo.sh'
-      - '.github/workflows/cli-publish-latest.yml'
   workflow_dispatch:
 
 concurrency:

@@ -1,8 +1,6 @@
 name: CLI Installed E2E
 
 on:
-  schedule:
-    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       install_source:

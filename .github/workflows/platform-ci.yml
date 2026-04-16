@@ -1,16 +1,7 @@
 name: Platform CI
 
 on:
-  pull_request:
-    paths:
-      - 'platform/**'
-      - '.github/workflows/platform-ci.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - 'platform/**'
-      - '.github/workflows/platform-ci.yml'
+  workflow_dispatch:
 
 concurrency:
   group: platform-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
