@@ -18,13 +18,13 @@ const mockApi = () => {
             res.end(JSON.stringify({ data: {
               api_key_count: 2,
               total_remaining: 1000,
-              reward_remaining: 500,
+              reward_remaining: 10,
               invite_code: 'MOCK123',
-              invite_limit: 10,
-              invite_remaining: 5,
-              reward_per_invite: 100,
-              referral_count: 5,
-              activated_referral_count: 2,
+              invite_limit: 5,
+              invite_remaining: 3,
+              reward_per_invite: 10,
+              referral_count: 2,
+              activated_referral_count: 1,
               discord_connected: true,
               discord_guild_member: true,
               recent_usage_count: 10,
@@ -36,12 +36,34 @@ const mockApi = () => {
           if (req.url === '/api/app/growth') {
             res.end(JSON.stringify({ data: {
               invite_code: 'MOCK123',
-              invite_limit: 10,
-              invite_remaining: 5,
-              reward_per_invite: 100,
-              reward_remaining: 500,
-              reward_grants: [],
-              referrals: []
+              invite_limit: 5,
+              invite_remaining: 3,
+              reward_per_invite: 10,
+              reward_remaining: 10,
+              reward_grants: [
+                {
+                  source_type: 'invite_activation_reward',
+                  amount_total: 10,
+                  amount_used: 0,
+                  remaining: 10,
+                  reason: 'invite activation reward',
+                  metadata_json: '{}',
+                  created_at: '2026-04-01T00:00:00Z',
+                  updated_at: '2026-04-01T00:00:00Z',
+                },
+              ],
+              referrals: [
+                {
+                  invite_code: 'MOCK123',
+                  registered_at: '2026-04-01T00:00:00Z',
+                  activated_at: '2026-04-02T00:00:00Z',
+                  reward_granted_at: '2026-04-02T00:00:00Z',
+                },
+                {
+                  invite_code: 'MOCK123',
+                  registered_at: '2026-04-03T00:00:00Z',
+                },
+              ],
             } }))
             return
           }

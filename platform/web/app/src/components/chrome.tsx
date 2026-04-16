@@ -5,6 +5,8 @@ import { api } from '../api'
 import { cn } from '../lib/utils'
 import type { User } from '../types'
 
+const inviteRewardGuideHref = 'https://officecli.io/docs#invite-rewards'
+
 const navItems = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
     queryClient.prefetchQuery({ queryKey: ['app-overview'], queryFn: api.overview })
@@ -84,7 +86,7 @@ export function AppTopBar({ user }: { user: User }) {
         <div className="mt-2 text-2xl font-bold text-white">Production document control</div>
       </div>
       <div className="flex items-center gap-3">
-        <a href="https://officecli.io/docs" target="_blank" rel="noreferrer" className="ghost-button text-xs">Docs</a>
+        <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button text-xs">Docs</a>
         <a href="https://officecli.io/pricing" target="_blank" rel="noreferrer" className="ghost-button text-xs">Pricing</a>
         <div className="hidden rounded-full border border-outline-variant/20 px-4 py-2 text-right sm:block">
           <div className="info-eyebrow-mid text-outline">Operator</div>

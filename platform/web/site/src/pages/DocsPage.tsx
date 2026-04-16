@@ -7,6 +7,9 @@ import {
   agentSkillHighlights,
   commandGroups,
   docsLinks,
+  inviteRewardChecklists,
+  inviteRewardRules,
+  inviteRewardSteps,
   docsSections,
   promptExamples,
   promptingTips,
@@ -337,6 +340,70 @@ export default function DocsPage() {
             </div>
             <div className="rounded-3xl border border-outline-variant/10 bg-surface-low p-8">
               <Pricing standalone />
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="invite-rewards"
+              title="Invite Rewards"
+              description="Use this flow when you want to invite a teammate, understand when reward quota is granted, and know where to verify each stage in the app."
+            />
+            <div className="grid gap-6 md:grid-cols-3 mb-10">
+              {inviteRewardSteps.map((step) => (
+                <article key={step.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{step.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{step.detail}</p>
+                </article>
+              ))}
+            </div>
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr] mb-10">
+              <article className="rounded-3xl border border-outline-variant/10 bg-surface-low p-6">
+                <h3 className="font-headline text-2xl font-bold text-white mb-4">Invite link template</h3>
+                <CodeBlock command={docsLinks.inviteLinkTemplate} label="Share this pattern" />
+                <p className="mt-4 text-sm leading-relaxed text-outline-variant">
+                  Replace <code>&lt;your-invite-code&gt;</code> with the code shown in the app. The invited user must finish Google login from this invite-bearing URL so the backend can register the referral.
+                </p>
+              </article>
+              <article className="space-y-6">
+                {inviteRewardChecklists.map((group) => (
+                  <div key={group.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                    <h3 className="font-headline text-xl font-bold text-white mb-4">{group.title}</h3>
+                    <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
+                      {group.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </article>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 mb-10">
+              {inviteRewardRules.map((rule) => (
+                <article key={rule.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{rule.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{rule.detail}</p>
+                </article>
+              ))}
+            </div>
+            <div className="rounded-3xl border border-outline-variant/10 bg-surface-low p-8 mb-10">
+              <div className="text-primary font-headline text-xs uppercase tracking-widest mb-3">Current scope</div>
+              <div className="text-white text-lg font-semibold mb-3">What this guide intentionally does and does not promise</div>
+              <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
+                <li>Invite rewards currently describe the invite code, registration, activation, and reward-quota flow only.</li>
+                <li>Discord reward verification still depends on production-grade guild verification and should not be treated as fully launched automation.</li>
+                <li>Invite attribution analytics remain limited, so use the in-app referral timeline and reward ledger as the primary source of truth.</li>
+              </ul>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary transition-colors" href={docsLinks.platformAppURL}>
+                Open platform overview
+              </a>
+              <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary transition-colors" href={docsLinks.platformQuotaURL}>
+                Open quota page
+              </a>
             </div>
           </section>
 

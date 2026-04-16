@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import { EmptyState, KeyStat, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
+const inviteRewardGuideHref = 'https://officecli.io/docs#invite-rewards'
+
 export default function QuotaPage() {
   const { data, isLoading } = useQuery({ queryKey: ['app-quota-summary'], queryFn: api.quotaSummary })
   const rewardQuota = data?.reward_quota
@@ -22,7 +24,12 @@ export default function QuotaPage() {
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Reward quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(rewardQuota?.remaining)}</div>
-            <div className="mt-2 text-sm text-outline">Bonus generations granted by invite activation and future growth programs.</div>
+            <div className="mt-2 text-sm text-outline">
+              <div>Bonus generations granted by invite activation and future growth programs.</div>
+              <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-primary transition-colors hover:text-white">
+                How invite rewards work
+              </a>
+            </div>
           </div>
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-tertiary">Paid external quota</div>
@@ -54,6 +61,11 @@ export default function QuotaPage() {
           eyebrow="Rewards ledger"
           title="Reward grant detail"
           body="Each grant shows the original amount, what has been consumed, and what remains available now."
+          action={(
+            <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
+              Referral rules
+            </a>
+          )}
         />
         {isLoading ? null : grants.length ? (
           <div className="space-y-3">

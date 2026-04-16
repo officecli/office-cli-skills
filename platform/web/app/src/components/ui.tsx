@@ -18,7 +18,7 @@ export function SectionHeading({ eyebrow, title, body, action }: { eyebrow: stri
   )
 }
 
-export function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+export function MetricCard({ label, value, detail }: { label: string; value: string; detail: ReactNode }) {
   return (
     <div className="panel-muted p-5">
       <div className="info-eyebrow-mid text-outline">{label}</div>

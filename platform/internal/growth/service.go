@@ -28,7 +28,7 @@ var (
 
 const (
 	MaxReferralsPerInviter       = 5
-	InviteActivationRewardAmount = 2
+	InviteActivationRewardAmount = 10
 )
 
 type UserStore interface {

@@ -907,11 +907,13 @@ func (a *App) runNew(ctx context.Context, cfg Config, args []string) error {
 		return err
 	}
 	progress := NewProgressRenderer(a.Stdout, job.JSONOutput, isTerminalWriter(a.Stdout))
+	progress.SetTransientCompletions(true)
 	defer progress.Close()
 	result, err := a.executeGenerateJob(ctx, cfg, job, isTTY, progress, nil)
 	if err != nil {
 		return err
 	}
+	progress.Clear()
 	return RenderResult(a.Stdout, result, job.JSONOutput)
 }
 

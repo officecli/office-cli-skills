@@ -265,6 +265,50 @@ func TestAppRun_NewInvokesInstalledSkillPreflight(t *testing.T) {
 	}
 }
 
+func TestAppRun_NewSuppressesReadyPreflightJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' '{\"status\":\"ready\",\"officecli_found\":true,\"missing_items\":[]}'\n")
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return fakeAppLLMClient{jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"new", "docx", "Enterprise Collaboration Platform Overview", "--json", "--no-publish"}); err != nil {
+		t.Fatalf("Run(new): %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("json output invalid: %v, output=%s", err, stdout.String())
+	}
+	if payload["status"] != "success" {
+		t.Fatalf("status = %v", payload["status"])
+	}
+	if strings.Contains(stdout.String(), "officecli_found") || strings.Contains(stdout.String(), `"status":"ready"`) {
+		t.Fatalf("expected preflight json to be suppressed, got %s", stdout.String())
+	}
+}
+
 func TestAppRun_NewPreflightSetsSkipEnvForScriptChildren(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
@@ -624,11 +668,17 @@ func TestAppRun_NewTTYShowsSpinnerFrames(t *testing.T) {
 	if !strings.Contains(raw, "⠋") || !strings.Contains(raw, "⠙") {
 		t.Fatalf("expected spinner frames in tty output, got %q", raw)
 	}
-	history := strings.Join(stdout.History(), "\n")
-	for _, needle := range []string{"✔ Access check completed", "✔ Document generated", "Generation completed. Saved to"} {
-		if !strings.Contains(history, needle) {
-			t.Fatalf("tty history missing %q: %s", needle, history)
+	for _, needle := range []string{"✔ Access check completed", "✔ Document generated"} {
+		if !strings.Contains(raw, needle) {
+			t.Fatalf("expected transient tty output to include %q, got %q", needle, raw)
 		}
+	}
+	history := strings.Join(stdout.History(), "\n")
+	if strings.Contains(history, "✔ Access check completed") || strings.Contains(history, "✔ Document generated") {
+		t.Fatalf("tty history should not retain transient completion lines: %s", history)
+	}
+	if !strings.Contains(history, "Generation completed. Saved to") {
+		t.Fatalf("tty history missing final result: %s", history)
 	}
 }
 
@@ -826,6 +876,50 @@ func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
 	}
 	if job.DocumentType != engine.DocumentTypeReport {
 		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
+func TestRenderResult_HumanSummarizesQuotaInSingleLine(t *testing.T) {
+	var out bytes.Buffer
+	result := GenerateResult{
+		Status:             "success",
+		FilePath:           "/tmp/test.html",
+		DocumentType:       "report",
+		DocumentName:       "test.html",
+		AccessMode:         "paid",
+		Remaining:          109,
+		FreeRemaining:      10,
+		RewardRemaining:    0,
+		PaidQuotaRemaining: 109,
+		Warnings: []string{
+			"Current mode: paid. 109 document generations remaining.",
+			"Trial today on this machine: 10 remaining.",
+			"Reward quota: 0 remaining.",
+			"Paid quota on current key: 109 remaining.",
+			"Publishing is not configured, so online preview publishing was skipped.",
+		},
+	}
+
+	if err := RenderResult(&out, result, false); err != nil {
+		t.Fatalf("RenderResult: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Access: paid mode; 109 generations remaining; trial 10") {
+		t.Fatalf("missing access summary: %s", output)
+	}
+	for _, needle := range []string{
+		"Warning: Current mode: paid.",
+		"Warning: Trial today on this machine:",
+		"Warning: Reward quota:",
+		"Warning: Paid quota on current key:",
+	} {
+		if strings.Contains(output, needle) {
+			t.Fatalf("quota warning should not be rendered separately: %s", output)
+		}
+	}
+	if !strings.Contains(output, "Warning: Publishing is not configured, so online preview publishing was skipped.") {
+		t.Fatalf("expected non-quota warning to remain: %s", output)
 	}
 }
 

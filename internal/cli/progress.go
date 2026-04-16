@@ -44,14 +44,15 @@ type progressState struct {
 }
 
 type ProgressRenderer struct {
-	w         io.Writer
-	enabled   bool
-	isTTY     bool
-	mu        sync.Mutex
-	lastWidth int
-	state     progressState
-	stopCh    chan struct{}
-	doneCh    chan struct{}
+	w                    io.Writer
+	enabled              bool
+	isTTY                bool
+	transientCompletions bool
+	mu                   sync.Mutex
+	lastWidth            int
+	state                progressState
+	stopCh               chan struct{}
+	doneCh               chan struct{}
 }
 
 func NewProgressRenderer(w io.Writer, jsonOutput bool, isTTY bool) *ProgressRenderer {
@@ -62,6 +63,15 @@ func NewProgressRenderer(w io.Writer, jsonOutput bool, isTTY bool) *ProgressRend
 		go r.loop()
 	}
 	return r
+}
+
+func (r *ProgressRenderer) SetTransientCompletions(enabled bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.transientCompletions = enabled
 }
 
 func (r *ProgressRenderer) loop() {
@@ -108,6 +118,10 @@ func (r *ProgressRenderer) Emit(_ context.Context, event engine.ProgressEvent) {
 		r.renderDynamicLocked()
 	case "completed":
 		r.state.active = false
+		if r.transientCompletions {
+			r.writeTTYLineLocked(fmt.Sprintf("✔ %s", message), false)
+			return
+		}
 		r.writeTTYLineLocked(fmt.Sprintf("✔ %s", message), true)
 	case "failed":
 		r.state.active = false
@@ -144,6 +158,21 @@ func (r *ProgressRenderer) Close() {
 	<-r.doneCh
 	r.stopCh = nil
 	r.doneCh = nil
+}
+
+func (r *ProgressRenderer) Clear() {
+	if r == nil || !r.enabled || !r.isTTY || r.w == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.state = progressState{}
+	if r.lastWidth == 0 {
+		return
+	}
+	clear := strings.Repeat(" ", r.lastWidth)
+	_, _ = fmt.Fprintf(r.w, "\r%s\r", clear)
+	r.lastWidth = 0
 }
 
 func (r *ProgressRenderer) renderDynamicLocked() {

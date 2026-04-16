@@ -52,6 +52,7 @@ export const docsSections: DocsSectionLink[] = [
   { id: 'agents', label: 'Use With Agents' },
   { id: 'openclaw', label: 'Use With OpenClaw' },
   { id: 'pricing-rules', label: 'Pricing & Usage Rules' },
+  { id: 'invite-rewards', label: 'Invite Rewards' },
   { id: 'troubleshooting', label: 'Troubleshooting' },
 ]
 
@@ -351,8 +352,62 @@ export const usageRules: UsageRule[] = [
     detail: 'The CLI, app, and admin surfaces are expected to show the current free or paid quota state.',
   },
   {
-    title: 'Reward and referral mechanics are not public GA features yet',
-    detail: 'Reward grants, referral loops, and related social integrations should still be described as planned or reserved behavior.',
+    title: 'Invite rewards are available with current limits',
+    detail: 'Invite codes, referral progress, and reward quota are visible today, but Discord reward automation and attribution analytics are still partial.',
+  },
+]
+
+export const inviteRewardSteps: TipGroup[] = [
+  {
+    title: 'Find your invite code in the app',
+    detail: 'Open the platform Overview page and look at Reward Quota. That card shows the invite code currently attached to your account.',
+  },
+  {
+    title: 'Share the invite-bearing login link',
+    detail: 'A referral is registered only after the invited user finishes the Google login flow through a link that carries your invite code.',
+  },
+  {
+    title: 'Wait for activation before expecting quota',
+    detail: 'Registration and activation are different states. Bonus generations are granted only after the invited account completes its first successful generation.',
+  },
+]
+
+export const inviteRewardRules: UsageRule[] = [
+  {
+    title: 'Each account can invite up to 5 users',
+    detail: 'The current backend limit is five captured referrals per inviter account.',
+  },
+  {
+    title: 'Each activated referral adds 10 bonus generations',
+    detail: 'Reward quota increases only when the referral becomes activated, not when the invite link is merely shared.',
+  },
+  {
+    title: 'Google allowlist access still applies',
+    detail: 'The invited user must sign in with an allowlisted Google account or the login will be rejected before the referral flow can continue.',
+  },
+  {
+    title: 'Use app surfaces to verify progress',
+    detail: 'Overview shows Reward Quota, Referral Progress, and the referral timeline. Quota shows reward grant detail and current remaining reward balance.',
+  },
+]
+
+export const inviteRewardChecklists: DocsChecklist[] = [
+  {
+    title: 'How to share the flow',
+    items: [
+      'Copy your invite code from the app Overview page.',
+      'Replace the placeholder in the invite link template with that code.',
+      'Send the finished link to the teammate you want to invite.',
+      'Ask the invited user to complete Google login through that exact link.',
+    ],
+  },
+  {
+    title: 'How to verify the result',
+    items: [
+      'Use Referral Progress to see how many invite slots are still available.',
+      'Use the referral timeline to distinguish registered, activated, and reward-granted states.',
+      'Use Reward grant detail on the Quota page to confirm the bonus quota that landed on the account.',
+    ],
   },
 ]
 
@@ -377,7 +432,9 @@ export const troubleshootingTips: TipGroup[] = [
 
 export const docsLinks = {
   platformAppURL,
+  platformQuotaURL: `${platformAppURL}/quota`,
   platformBillingURL,
+  inviteLinkTemplate: `${platformAppURL}/login?invite=<your-invite-code>`,
   openClawInstallCommand: 'bash ./scripts/install-openclaw-skill.sh',
   codexBridgeCommand: 'officecli agent-bridge',
 }

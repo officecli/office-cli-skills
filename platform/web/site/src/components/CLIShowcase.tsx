@@ -107,20 +107,29 @@ export default function CLIShowcase() {
             </div>
             <CopyableCommand command="officecli config set-generation" />
             <CopyableCommand command='officecli new pptx "Q3 Business Review" --prompt-file ./brief.md' />
-            <motion.div 
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="text-outline-variant mt-4"
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-white mt-4"
             >
-              <span className="text-[#27c93f]">✔</span> Document generated
+              Generation completed. Saved to output/Q3_BUSINESS_REVIEW.PPTX
             </motion.div>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 1.5 }}
+              transition={{ delay: 0.7 }}
               className="text-white mt-2"
             >
-              Preview: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a> (Password: abcdef)
+              Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.1 }}
+              className="text-outline-variant"
+            >
+              Access: paid mode; 109 generations remaining; trial 10
             </motion.div>
           </div>
         </motion.div>

@@ -7,6 +7,8 @@ import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { trackEvent } from '../analytics'
 import { EmptyState, KeyStat, MetricCard, Panel, SectionHeading, StatusPill, Skeleton, SkeletonMetricCard, formatDate, formatNumber } from '../components/ui'
 
+const inviteRewardGuideHref = 'https://officecli.io/docs#invite-rewards'
+
 export default function OverviewPage() {
   const location = useLocation()
   const { data: overview, isLoading: isLoadingOverview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
@@ -22,7 +24,7 @@ export default function OverviewPage() {
   const referralCount = overview?.referral_count ?? referrals.length
   const activatedReferralCount = overview?.activated_referral_count ?? referrals.filter((referral) => referral.activated_at).length
   const inviteRemaining = overview?.invite_remaining ?? growth?.invite_remaining ?? Math.max(inviteLimit - referrals.length, 0)
-  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 2
+  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 10
   const discordParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const discordResult = discordParams.get('discord')
   const discordMessage = discordParams.get('discord_message')
@@ -118,7 +120,18 @@ export default function OverviewPage() {
         ) : (
           <>
             <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
-            <MetricCard label="Reward Quota" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} bonus generations per activated invite` : 'No invite code available yet'} />
+            <MetricCard
+              label="Reward Quota"
+              value={formatNumber(overview?.reward_remaining)}
+              detail={(
+                <div>
+                  <div>{inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} bonus generations per activated invite` : 'No invite code available yet'}</div>
+                  <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-primary transition-colors hover:text-white">
+                    How invite rewards work
+                  </a>
+                </div>
+              )}
+            />
             <MetricCard label="Referral Progress" value={`${formatNumber(referralCount)}/${formatNumber(inviteLimit)}`} detail={`${formatNumber(activatedReferralCount)} activated · ${formatNumber(inviteRemaining)} slots left`} />
             <MetricCard label="Discord Status" value={growthStatusValue} detail={discordConnection?.verification_blocked_reason ?? 'Guild membership determines Discord reward eligibility'} />
           </>
@@ -153,7 +166,16 @@ export default function OverviewPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <Panel>
-          <SectionHeading eyebrow="Rewards ledger" title="Reward grants and referral progress" body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} bonus generations to account quota.`} />
+          <SectionHeading
+            eyebrow="Rewards ledger"
+            title="Reward grants and referral progress"
+            body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} bonus generations to account quota.`}
+            action={(
+              <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
+                Full invite guide
+              </a>
+            )}
+          />
           {rewardGrants.length ? (
             <div className="space-y-3">
               {rewardGrants.map((grant) => (

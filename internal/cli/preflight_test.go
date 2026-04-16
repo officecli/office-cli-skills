@@ -2,6 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -41,5 +44,55 @@ func TestPreflightOutputFilter_PreservesNormalPromptAndErrors(t *testing.T) {
 	got := out.String()
 	if got != "Enter the generation service URL: Generation service configuration is missing\n" {
 		t.Fatalf("unexpected output: %q", got)
+	}
+}
+
+func TestPreflightOutputFilter_SuppressesReadyJSON(t *testing.T) {
+	var out bytes.Buffer
+	filter := newPreflightOutputFilter(&out)
+
+	if _, err := filter.Write([]byte(`{"status":"ready","missing_items":[]}`)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := filter.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+	status := filter.Status()
+	if status == nil || status.Status != "ready" {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestRunInstalledSkillPreflight_ReturnsReadableRepairableError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	scriptPath := filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(scriptPath, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"status":"repairable","missing_items":["generation_config","license_config"]}'
+exit 10
+`), 0o755); err != nil {
+		t.Fatalf("WriteFile(script): %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runInstalledSkillPreflight(context.Background(), bytes.NewBuffer(nil), &stdout, &stderr, "new", []string{"docx", "Quarterly Review"})
+	if err == nil {
+		t.Fatal("expected preflight error")
+	}
+	if err.Error() != "officecli setup is incomplete: missing generation config, access config" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("expected structured preflight output to be suppressed, stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }

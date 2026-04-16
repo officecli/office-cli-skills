@@ -170,16 +170,17 @@ export default function Hero() {
     pptx: {
       command: 'officecli new pptx --prompt-file ./brief.md',
       logLines: [
-        '✔ Access check completed',
-        '✔ Document content generation completed',
-        '✔ Local file write completed',
-        '✔ Online preview publishing completed',
-        '✔ Document generated',
+        'Generation completed. Saved to output/Q3_BOARD_REVIEW.PPTX',
       ],
       output: (
         <div className="space-y-4">
-          <div className="text-white">
-            Preview: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a> (Password: abcdef)
+          <div className="space-y-1.5">
+            <div className="text-white">
+              Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
+            </div>
+            <div className="text-outline-variant">
+              Access: paid mode; 109 generations remaining; trial 10
+            </div>
           </div>
           <HeroOutputFileCard
             filename="Q3_BOARD_REVIEW.PPTX"
@@ -199,16 +200,17 @@ export default function Hero() {
     docx: {
       command: 'officecli new docx --prompt "Write a 2-page project proposal for a new mobile app launch..."',
       logLines: [
-        '✔ Access check completed',
-        '✔ Document content generation completed',
-        '✔ Local file write completed',
-        '✔ Online preview publishing completed',
-        '✔ Document generated',
+        'Generation completed. Saved to output/PROJECT_PROPOSAL.DOCX',
       ],
       output: (
         <div className="space-y-4">
-          <div className="text-white">
-            Preview: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a> (Password: abcdef)
+          <div className="space-y-1.5">
+            <div className="text-white">
+              Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
+            </div>
+            <div className="text-outline-variant">
+              Access: paid mode; 109 generations remaining; trial 10
+            </div>
           </div>
           <HeroOutputFileCard
             filename="PROJECT_PROPOSAL.DOCX"
@@ -226,16 +228,17 @@ export default function Hero() {
     xlsx: {
       command: 'officecli new xlsx --prompt-file ./metrics.md',
       logLines: [
-        '✔ Access check completed',
-        '✔ Document content generation completed',
-        '✔ Local file write completed',
-        '✔ Online preview publishing completed',
-        '✔ Document generated',
+        'Generation completed. Saved to output/Q3_FINANCIAL_MODEL.XLSX',
       ],
       output: (
         <div className="space-y-4">
-          <div className="text-white">
-            Preview: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a> (Password: abcdef)
+          <div className="space-y-1.5">
+            <div className="text-white">
+              Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
+            </div>
+            <div className="text-outline-variant">
+              Access: paid mode; 109 generations remaining; trial 10
+            </div>
           </div>
           <HeroOutputFileCard
             filename="Q3_FINANCIAL_MODEL.XLSX"
@@ -253,13 +256,18 @@ export default function Hero() {
     report: {
       command: 'officecli new report "Q2 Business Review" --file ./data/q2-metrics.xlsx --prompt "Summarize revenue shifts and decision points for the board"',
       logLines: [
-        '✔ Access check completed',
-        '✔ Document content generation completed',
-        '✔ Local file write completed',
-        '✔ Document generated',
+        'Generation completed. Saved to output/Q2_BUSINESS_REVIEW.HTML',
       ],
       output: (
         <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="text-white">
+              Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
+            </div>
+            <div className="text-outline-variant">
+              Access: paid mode; 109 generations remaining; trial 10
+            </div>
+          </div>
           <div className="text-[10px] font-headline uppercase tracking-[0.25em] text-tertiary">
             REPORT output
           </div>
@@ -373,15 +381,9 @@ export default function Hero() {
               {current.logLines.map((line, i) => (
                 <div
                   key={line}
-                  className={`text-outline-variant ${i === current.logLines.length - 1 ? 'mb-6' : 'mb-2'}`}
+                  className={`${i === 0 ? 'text-white' : 'text-outline-variant'} ${i === current.logLines.length - 1 ? 'mb-6' : 'mb-2'}`}
                 >
-                  {line.startsWith('✔') ? (
-                    <>
-                      <span className="text-[#27c93f]">✔</span>{line.slice(1)}
-                    </>
-                  ) : (
-                    line
-                  )}
+                  {line}
                 </div>
               ))}
               {current.output}

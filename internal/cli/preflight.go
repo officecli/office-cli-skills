@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +28,7 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		return err
 	}
 	for _, script := range scripts {
-		retry, err := shouldRetryAfterScriptRefresh(script, func() error {
+		_, err := shouldRetryAfterScriptRefresh(script, func() error {
 			cmd := exec.CommandContext(ctx, "bash", script)
 			cmd.Env = append(os.Environ(), officeTaskPreflightSkipEnv+"=1")
 			if shouldSkipPublishPreflight(command, args) {
@@ -46,24 +48,74 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 			if flushErr := stderrFilter.Flush(); flushErr != nil && runErr == nil {
 				runErr = flushErr
 			}
+			if runErr != nil {
+				if statusErr := preflightStatusErrorFromFilters(stdoutFilter, stderrFilter); statusErr != nil {
+					return statusErr
+				}
+			}
 			return runErr
 		})
 		if err == nil {
 			continue
 		}
-		if retry {
-			continue
+		var statusErr *preflightStatusError
+		if errors.As(err, &statusErr) {
+			return statusErr
 		}
-		if err != nil {
-			return fmt.Errorf("skill preflight failed for %s: %w", script, err)
-		}
+		return fmt.Errorf("skill preflight failed for %s: %w", script, err)
 	}
 	return nil
+}
+
+type preflightStatusPayload struct {
+	Status        string   `json:"status"`
+	MissingItems  []string `json:"missing_items"`
+	FailureReason string   `json:"failure_reason,omitempty"`
+}
+
+type preflightStatusError struct {
+	payload preflightStatusPayload
+}
+
+func (e *preflightStatusError) Error() string {
+	if e == nil {
+		return ""
+	}
+	status := strings.ToLower(strings.TrimSpace(e.payload.Status))
+	missing := formatPreflightMissingItems(e.payload.MissingItems)
+	reason := strings.TrimSpace(e.payload.FailureReason)
+	switch status {
+	case "repairable":
+		if missing != "" {
+			return fmt.Sprintf("officecli setup is incomplete: missing %s", missing)
+		}
+		return "officecli setup is incomplete"
+	case "blocked":
+		if reason != "" && missing != "" {
+			return fmt.Sprintf("officecli setup failed: %s (missing %s)", reason, missing)
+		}
+		if reason != "" {
+			return fmt.Sprintf("officecli setup failed: %s", reason)
+		}
+		if missing != "" {
+			return fmt.Sprintf("officecli setup failed: missing %s", missing)
+		}
+		return "officecli setup failed"
+	default:
+		if reason != "" {
+			return fmt.Sprintf("officecli preflight failed: %s", reason)
+		}
+		if missing != "" {
+			return fmt.Sprintf("officecli preflight failed: missing %s", missing)
+		}
+		return "officecli preflight failed"
+	}
 }
 
 type preflightOutputFilter struct {
 	target  io.Writer
 	pending string
+	status  *preflightStatusPayload
 }
 
 func newPreflightOutputFilter(target io.Writer) *preflightOutputFilter {
@@ -82,14 +134,13 @@ func (f *preflightOutputFilter) Write(p []byte) (int, error) {
 		}
 		line := f.pending[:idx]
 		f.pending = f.pending[idx+1:]
-		if shouldSuppressPreflightLine(line) {
-			continue
-		}
-		if _, err := io.WriteString(f.target, line+"\n"); err != nil {
+		if err := f.writeLine(line + "\n"); err != nil {
 			return 0, err
 		}
 	}
-	if f.pending != "" && !looksLikeSuppressedPreflightPrefix(f.pending) {
+	if f.pending != "" &&
+		!looksLikeSuppressedPreflightPrefix(f.pending) &&
+		!looksLikePreflightJSONFragment(f.pending) {
 		if _, err := io.WriteString(f.target, f.pending); err != nil {
 			return 0, err
 		}
@@ -102,7 +153,13 @@ func (f *preflightOutputFilter) Flush() error {
 	if f == nil || f.target == nil || f.pending == "" {
 		return nil
 	}
-	if shouldSuppressPreflightLine(f.pending) || looksLikeSuppressedPreflightPrefix(f.pending) {
+	if err := f.writeLine(f.pending); err == nil {
+		f.pending = ""
+		return nil
+	}
+	if shouldSuppressPreflightLine(f.pending) ||
+		looksLikeSuppressedPreflightPrefix(f.pending) ||
+		looksLikePreflightJSONFragment(f.pending) {
 		f.pending = ""
 		return nil
 	}
@@ -111,10 +168,39 @@ func (f *preflightOutputFilter) Flush() error {
 	return err
 }
 
+func (f *preflightOutputFilter) writeLine(line string) error {
+	if f == nil {
+		return nil
+	}
+	if payload, ok := parsePreflightStatusPayload(line); ok {
+		f.status = &payload
+		return nil
+	}
+	if shouldSuppressPreflightLine(line) {
+		return nil
+	}
+	if _, err := io.WriteString(f.target, line); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *preflightOutputFilter) Status() *preflightStatusPayload {
+	if f == nil || f.status == nil {
+		return nil
+	}
+	payload := *f.status
+	payload.MissingItems = append([]string(nil), payload.MissingItems...)
+	return &payload
+}
+
 func shouldSuppressPreflightLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return false
+	}
+	if payload, ok := parsePreflightStatusPayload(trimmed); ok {
+		return strings.EqualFold(strings.TrimSpace(payload.Status), "ready")
 	}
 	for _, prefix := range suppressedPreflightPrefixes {
 		if strings.HasPrefix(trimmed, prefix) {
@@ -135,6 +221,69 @@ func looksLikeSuppressedPreflightPrefix(fragment string) bool {
 		}
 	}
 	return false
+}
+
+func looksLikePreflightJSONFragment(fragment string) bool {
+	trimmed := strings.TrimSpace(fragment)
+	if trimmed == "" {
+		return false
+	}
+	return strings.HasPrefix(trimmed, "{")
+}
+
+func parsePreflightStatusPayload(line string) (preflightStatusPayload, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "{") || !strings.HasSuffix(trimmed, "}") {
+		return preflightStatusPayload{}, false
+	}
+	var payload preflightStatusPayload
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return preflightStatusPayload{}, false
+	}
+	if strings.TrimSpace(payload.Status) == "" {
+		return preflightStatusPayload{}, false
+	}
+	return payload, true
+}
+
+func preflightStatusErrorFromFilters(filters ...*preflightOutputFilter) *preflightStatusError {
+	for _, filter := range filters {
+		if filter == nil {
+			continue
+		}
+		if payload := filter.Status(); payload != nil && !strings.EqualFold(strings.TrimSpace(payload.Status), "ready") {
+			return &preflightStatusError{payload: *payload}
+		}
+	}
+	return nil
+}
+
+func formatPreflightMissingItems(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	labels := make([]string, 0, len(items))
+	for _, item := range items {
+		switch strings.TrimSpace(item) {
+		case "officecli_binary":
+			labels = append(labels, "officecli binary")
+		case "cli_surface":
+			labels = append(labels, "CLI surface")
+		case "generation_config":
+			labels = append(labels, "generation config")
+		case "license_config":
+			labels = append(labels, "access config")
+		case "publish_config":
+			labels = append(labels, "publish config")
+		case "agent_bridge":
+			labels = append(labels, "agent bridge")
+		default:
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				labels = append(labels, strings.ReplaceAll(trimmed, "_", " "))
+			}
+		}
+	}
+	return strings.Join(labels, ", ")
 }
 
 var suppressedPreflightPrefixes = []string{

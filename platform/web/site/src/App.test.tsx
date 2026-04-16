@@ -107,6 +107,8 @@ describe('marketing site shell', () => {
     expect(screen.getAllByText('Use With Agents').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Use With OpenClaw').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Pricing & Usage Rules').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Invite Rewards').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Each activated referral adds 10 bonus generations/i)).toBeInTheDocument()
     expect(screen.getAllByText(/--prompt-file/i).length).toBeGreaterThan(0)
     expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
   })
