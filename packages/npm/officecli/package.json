@@ -1,6 +1,6 @@
 {
   "name": "officecli",
-  "version": "0.2.10",
+  "version": "0.2.12",
   "description": "NPM wrapper that installs the OfficeCLI binary from GitHub Releases.",
   "license": "UNLICENSED",
   "private": false,
