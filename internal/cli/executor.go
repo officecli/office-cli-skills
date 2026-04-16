@@ -120,9 +120,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file write completed")
 
 	if job.Publish {
-		if job.DocumentType == engine.DocumentTypeReport {
-			result.Warnings = append(result.Warnings, "Report publishing is not supported yet, so the report was saved as a local HTML file only.")
-		} else if e.publisher == nil {
+		if e.publisher == nil {
 			result.Warnings = append(result.Warnings, "Publishing is not configured, so online preview publishing was skipped.")
 		} else {
 			emitProgress(ctx, e.progress, progressStepPublish, "running", "Publishing online preview")

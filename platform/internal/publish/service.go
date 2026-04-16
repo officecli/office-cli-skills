@@ -198,7 +198,7 @@ func validateRequest(req Request) error {
 		return fmt.Errorf("file, document_type and document_name are required")
 	}
 	switch docType {
-	case "pptx", "docx", "xlsx":
+	case "pptx", "docx", "xlsx", "report":
 		return nil
 	default:
 		return fmt.Errorf("unsupported document_type")
@@ -229,11 +229,20 @@ func normalizeDocumentName(documentName, fileName, documentType string) string {
 		name = strings.TrimSpace(fileName)
 	}
 	name = filepath.Base(name)
-	ext := "." + strings.ToLower(strings.TrimSpace(documentType))
+	ext := normalizedDocumentExt(documentType)
 	if !strings.EqualFold(filepath.Ext(name), ext) {
 		name += ext
 	}
 	return name
+}
+
+func normalizedDocumentExt(documentType string) string {
+	switch strings.ToLower(strings.TrimSpace(documentType)) {
+	case "report":
+		return ".html"
+	default:
+		return "." + strings.ToLower(strings.TrimSpace(documentType))
+	}
 }
 
 func normalizeContentType(contentType, fileName string) string {

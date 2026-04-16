@@ -152,7 +152,7 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 	}
 }
 
-func TestExecutorSkipsPublishForReport(t *testing.T) {
+func TestExecutorPublishesReport(t *testing.T) {
 	tmpDir := t.TempDir()
 	executor := NewExecutor(htmlGenerator{}, fakePublisher{}, nil)
 
@@ -166,14 +166,14 @@ func TestExecutorSkipsPublishForReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if result.Published {
-		t.Fatalf("expected report publish to stay local: %+v", result)
+	if !result.Published {
+		t.Fatalf("expected report publish to succeed: %+v", result)
 	}
 	if _, err := os.Stat(result.FilePath); err != nil {
 		t.Fatalf("stat file: %v", err)
 	}
-	if !strings.Contains(strings.Join(result.Warnings, "\n"), "Report publishing is not supported yet") {
-		t.Fatalf("warnings = %#v", result.Warnings)
+	if result.AccessURL == "" || result.Password == "" || result.ExpiresAt == "" {
+		t.Fatalf("unexpected publish result: %+v", result)
 	}
 }
 

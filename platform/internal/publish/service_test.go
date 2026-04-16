@@ -190,6 +190,42 @@ func TestPublishCreatesLocalPreviewShare(t *testing.T) {
 	require.Equal(t, "pptx", shares.got.FileType)
 }
 
+func TestPublishAcceptsReportHTML(t *testing.T) {
+	quotaTotal := 100
+	apiKeys := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:         8,
+			Status:     model.APIKeyStatusActive,
+			PlanName:   "Growth",
+			KeyPrefix:  "cop_paid",
+			QuotaTotal: &quotaTotal,
+		},
+	}
+	objects := &fakeObjectStore{}
+	files := &fakeFileMetaStore{}
+	shares := &fakePreviewShareStore{}
+	svc := NewService(apiKeys, objects, files, shares, Config{
+		SiteBaseURL:          "https://officecli.io",
+		HashSalt:             "salt",
+		DefaultExpireSeconds: 3600,
+	})
+
+	result, err := svc.Publish(context.Background(), "Bearer demo", Request{
+		FileName:     "q2-business-review.html",
+		DocumentType: "report",
+		DocumentName: "Q2 Business Review",
+		ContentType:  "text/html; charset=utf-8",
+		Reader:       bytes.NewReader([]byte("<html><body>report</body></html>")),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "https://officecli.io/p/share-1", result.AccessURL)
+	require.Equal(t, "Q2 Business Review.html", files.meta.Name)
+	require.Equal(t, "report", shares.got.FileType)
+	require.Equal(t, "text/html; charset=utf-8", objects.putContentType)
+	require.Equal(t, "<html><body>report</body></html>", string(objects.putData))
+}
+
 func TestPublishRejectsMissingFileBytes(t *testing.T) {
 	quotaTotal := 1
 	svc := NewService(&fakeAPIKeyStore{

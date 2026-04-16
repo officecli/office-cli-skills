@@ -778,7 +778,7 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, sh
 			return
 		}
 		if shares.HasAccessCookie(c, share) {
-			sdkHandler.ServePageForFile(c, share.FileID)
+			servePreviewShare(c, share, sdkHandler, sdkProvider)
 			return
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderPasswordPage(share, "")))
@@ -803,7 +803,7 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, sh
 			return
 		}
 		shares.IssueAccessCookie(c, share)
-		sdkHandler.ServePageForFile(c, share.FileID)
+		servePreviewShare(c, share, sdkHandler, sdkProvider)
 	})
 
 	osdk := r.Group("/officesdk")
@@ -822,6 +822,27 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, sh
 	}, r.Engine)
 
 	registerOfficeSDKProxy(r.Engine, cfg)
+}
+
+func servePreviewShare(c *gin.Context, share *previewshare.PreviewShare, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+	if share != nil && strings.EqualFold(strings.TrimSpace(share.FileType), "report") {
+		serveReportPreview(c, share, sdkProvider)
+		return
+	}
+	sdkHandler.ServePageForFile(c, share.FileID)
+}
+
+func serveReportPreview(c *gin.Context, share *previewshare.PreviewShare, sdkProvider *officesdk.FileProvider) {
+	if c == nil || share == nil || sdkProvider == nil {
+		httpapi.Error(c, http.StatusInternalServerError, "report preview unavailable")
+		return
+	}
+	reportHTML, err := sdkProvider.ReadObject(c.Request.Context(), share.StorageKey)
+	if err != nil {
+		httpapi.Error(c, http.StatusNotFound, "report preview not found")
+		return
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderReportPage(share, reportHTML)))
 }
 
 func previewLoginURL(cfg Config, r *http.Request) string {

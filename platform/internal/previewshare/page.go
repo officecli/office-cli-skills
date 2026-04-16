@@ -1,8 +1,10 @@
 package previewshare
 
 import (
+	"encoding/json"
 	"fmt"
 	"html"
+	"strings"
 	"time"
 )
 
@@ -49,4 +51,45 @@ func RenderPasswordPage(share *PreviewShare, errorMessage string) string {
   </div>
 </body>
 </html>`, fileName, expiresAt, errHTML)
+}
+
+func RenderReportPage(share *PreviewShare, reportHTML []byte) string {
+	title := "OfficeCLI Report Preview"
+	if share != nil && strings.TrimSpace(share.FileName) != "" {
+		title = strings.TrimSpace(share.FileName)
+	}
+	reportJSON, _ := json.Marshal(string(reportHTML))
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>%s</title>
+  <style>
+    html, body { margin: 0; width: 100%%; height: 100%%; background: #0f172a; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #report-frame { width: 100%%; height: 100%%; border: 0; background: #fff; display: block; }
+    .loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #e2e8f0; background: linear-gradient(180deg, #0f172a, #1e293b); }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">Loading report preview...</div>
+  <iframe
+    id="report-frame"
+    title="OfficeCLI Report Preview"
+    sandbox="allow-scripts allow-downloads"
+    referrerpolicy="no-referrer"
+  ></iframe>
+  <script>
+    (function() {
+      var frame = document.getElementById("report-frame");
+      var loading = document.getElementById("loading");
+      frame.srcdoc = %s;
+      frame.addEventListener("load", function() {
+        if (loading) loading.style.display = "none";
+      }, { once: true });
+    })();
+  </script>
+</body>
+</html>`, html.EscapeString(title), string(reportJSON))
 }

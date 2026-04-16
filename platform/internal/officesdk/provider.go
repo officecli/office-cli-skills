@@ -220,6 +220,18 @@ func (p *FileProvider) CreateAssetsFile(_ *gin.Context, fileID string) (*sdkoffi
 	return &sdkoffice.CreateAssetsResponse{ID: fileID, Size: 1}, nil
 }
 
+func (p *FileProvider) ReadObject(ctx context.Context, storageKey string) ([]byte, error) {
+	if p == nil || p.objects == nil {
+		return nil, fmt.Errorf("preview object store unavailable")
+	}
+	obj, err := p.objects.GetObject(ctx, strings.TrimSpace(storageKey))
+	if err != nil {
+		return nil, err
+	}
+	defer obj.Close()
+	return io.ReadAll(obj)
+}
+
 func (p *FileProvider) pendingContentStorageKey(ctx context.Context, fileID string) (string, error) {
 	if p != nil && p.store != nil {
 		if pendingKey, err := p.store.GetPendingContentStorageKey(ctx, fileID); err == nil && pendingKey != "" {
