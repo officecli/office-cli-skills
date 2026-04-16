@@ -2,8 +2,11 @@ package billing
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,15 @@ type CheckoutSession struct {
 	ID         string
 	URL        string
 	CustomerID string
+}
+
+type CheckoutSessionDetails struct {
+	ID              string
+	PaymentStatus   string
+	PaymentIntentID string
+	CustomerID      string
+	Metadata        map[string]string
+	RawPayload      string
 }
 
 type WebhookEvent struct {
@@ -28,7 +40,15 @@ type WebhookEvent struct {
 
 type Gateway interface {
 	CreateCheckoutSession(ctx context.Context, req CheckoutRequest, pack model.PricingPack, customerID string) (*CheckoutSession, error)
+	GetCheckoutSession(ctx context.Context, sessionID string) (*CheckoutSessionDetails, error)
 	ParseWebhook(payload []byte, signature string) (*WebhookEvent, error)
+}
+
+type FinalizeOrderPaymentParams struct {
+	OrderID         uint64
+	PaymentIntentID string
+	CustomerID      string
+	BillingEvent    *model.BillingEvent
 }
 
 type Store interface {
@@ -43,6 +63,7 @@ type Store interface {
 	AddCreditBalanceToAPIKey(ctx context.Context, apiKeyID uint64, creditAmount int) (*model.APIKey, error)
 	CreateBillingEvent(ctx context.Context, event *model.BillingEvent) error
 	GetBillingEventByEventID(ctx context.Context, eventID string) (*model.BillingEvent, error)
+	FinalizeOrderPayment(ctx context.Context, params FinalizeOrderPaymentParams) (*model.Order, bool, error)
 	ListOrdersByUser(ctx context.Context, userID uint64) ([]model.Order, error)
 	ListOrders(ctx context.Context) ([]model.Order, error)
 	ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error)
@@ -55,12 +76,23 @@ type CheckoutRequest struct {
 	TargetAPIKeyID uint64 `json:"target_api_key_id"`
 }
 
+type ReconcileOrderRequest struct {
+	UserID            uint64 `json:"-"`
+	CheckoutSessionID string `json:"checkout_session_id"`
+}
+
 type Service struct {
 	store   Store
 	gateway Gateway
 	mu      sync.RWMutex
 	packs   map[string]model.PricingPack
 }
+
+var (
+	ErrCheckoutSessionIDRequired = errors.New("checkout session id is required")
+	ErrOrderNotFound             = errors.New("order not found")
+	ErrOrderForbidden            = errors.New("order does not belong to current user")
+)
 
 func NewService(store Store, gateway Gateway, packs []model.PricingPack) *Service {
 	byCode := make(map[string]model.PricingPack, len(packs))
@@ -188,37 +220,8 @@ func (s *Service) HandleWebhook(ctx context.Context, payload []byte, signature s
 			_ = s.store.CreateBillingEvent(ctx, billEvent)
 			return fmt.Errorf("%s", msg)
 		}
-		updates := map[string]any{"status": model.OrderStatusPaid}
-		if event.PaymentIntentID != "" {
-			updates["stripe_payment_intent_id"] = event.PaymentIntentID
-		}
-		if event.CustomerID != "" {
-			updates["stripe_customer_id"] = event.CustomerID
-			_, _ = s.store.GetOrCreateStripeCustomer(ctx, order.UserID, event.CustomerID)
-		}
-		if err := s.store.UpdateOrder(ctx, order.ID, updates); err != nil {
-			return err
-		}
-		if order.TargetAPIKeyID != nil {
-			switch order.PackKind {
-			case model.PackKindHostedCredits:
-				if _, err := s.store.AddCreditBalanceToAPIKey(ctx, *order.TargetAPIKeyID, order.CreditAmount); err != nil {
-					return err
-				}
-			default:
-				if _, err := s.store.AddPaidQuotaToAPIKey(ctx, *order.TargetAPIKeyID, order.QuotaAmount); err != nil {
-					return err
-				}
-			}
-		}
-		processedAt := time.Now().UTC()
-		billEvent.OrderID = &order.ID
-		billEvent.ProcessedAt = &processedAt
-		if err := s.store.CreateBillingEvent(ctx, billEvent); err != nil {
-			return err
-		}
-		_ = s.store.CreateAuditLog(ctx, "order.paid", "order", fmt.Sprintf("%d", order.ID), event.RawPayload)
-		return nil
+		_, _, err = s.finalizePaidOrder(ctx, order, billEvent, event.PaymentIntentID, event.CustomerID)
+		return err
 	case "payment_intent.payment_failed":
 		order, _ := s.store.GetOrderByCheckoutSessionID(ctx, event.CheckoutSessionID)
 		if order != nil {
@@ -249,4 +252,73 @@ func (s *Service) ListOrders(ctx context.Context) ([]model.Order, error) {
 
 func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error) {
 	return s.store.ListBillingEvents(ctx)
+}
+
+func (s *Service) ReconcileCheckoutSession(ctx context.Context, req ReconcileOrderRequest) (*model.Order, error) {
+	sessionID := strings.TrimSpace(req.CheckoutSessionID)
+	if sessionID == "" {
+		return nil, ErrCheckoutSessionIDRequired
+	}
+	order, err := s.store.GetOrderByCheckoutSessionID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case order == nil:
+		return nil, ErrOrderNotFound
+	case order.UserID != req.UserID:
+		return nil, ErrOrderForbidden
+	case order.Status != model.OrderStatusPending:
+		return order, nil
+	}
+
+	session, err := s.gateway.GetCheckoutSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil || session.PaymentStatus != "paid" {
+		refreshed, getErr := s.store.GetOrderByID(ctx, order.ID)
+		if getErr != nil {
+			return nil, getErr
+		}
+		if refreshed == nil {
+			return nil, ErrOrderNotFound
+		}
+		return refreshed, nil
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"id":             session.ID,
+		"payment_status": session.PaymentStatus,
+		"payment_intent": session.PaymentIntentID,
+		"customer":       session.CustomerID,
+		"metadata":       session.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	billEvent := &model.BillingEvent{
+		EventID:     "reconcile:checkout_session.paid:" + session.ID,
+		EventType:   "checkout.session.reconciled",
+		Status:      model.BillingEventStatusHandled,
+		PayloadJSON: string(payload),
+	}
+	updated, _, err := s.finalizePaidOrder(ctx, order, billEvent, session.PaymentIntentID, session.CustomerID)
+	return updated, err
+}
+
+func (s *Service) finalizePaidOrder(ctx context.Context, order *model.Order, billEvent *model.BillingEvent, paymentIntentID string, customerID string) (*model.Order, bool, error) {
+	updated, transitioned, err := s.store.FinalizeOrderPayment(ctx, FinalizeOrderPaymentParams{
+		OrderID:         order.ID,
+		PaymentIntentID: paymentIntentID,
+		CustomerID:      customerID,
+		BillingEvent:    billEvent,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if transitioned && billEvent != nil {
+		_ = s.store.CreateAuditLog(ctx, "order.paid", "order", fmt.Sprintf("%d", order.ID), billEvent.PayloadJSON)
+	}
+	return updated, transitioned, nil
 }

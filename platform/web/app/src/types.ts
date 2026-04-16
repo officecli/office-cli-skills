@@ -55,7 +55,7 @@ export interface ConnectDiscordResponse {
   reward_idempotency_key?: string
 }
 export interface ApiKey { id: number; key_prefix: string; status: 'active' | 'disabled'; plan_name: string; note?: string; expires_at?: string; quota_total?: number; quota_used: number; quota_remaining: number; created_at: string; last_used_at?: string }
-export interface Order { id: number; status: string; currency: string; amount_total: number; pack_code: string; pack_name: string; pack_kind?: string; quota_amount: number; credit_amount?: number; target_api_key_id?: number; created_at: string }
+export interface Order { id: number; status: string; currency: string; amount_total: number; pack_code: string; pack_name: string; pack_kind?: string; quota_amount: number; credit_amount?: number; target_api_key_id?: number; stripe_checkout_session_id?: string; stripe_payment_intent_id?: string; created_at: string }
 export interface UsageEvent { id: number; mode: string; action: string; result: string; created_at: string; fingerprint_hash: string; reason_code?: string; runtime_mode?: string; provider?: string; model_name?: string; prompt_tokens?: number; completion_tokens?: number; image_count?: number; settled_credits?: number }
 export interface RewardGrant { source_type: string; amount_total: number; amount_used: number; remaining: number; reason: string; metadata_json: string; created_at: string; updated_at: string }
 export interface Referral { invite_code: string; registered_at: string; activated_at?: string; reward_granted_at?: string }

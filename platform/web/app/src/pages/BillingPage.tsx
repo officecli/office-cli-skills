@@ -1,19 +1,33 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, CreditCard } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { ArrowRight, Copy, CreditCard } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 import { redirectTo } from '../lib/navigation'
+import type { ApiKey, Order } from '../types'
 
 export default function BillingPage() {
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { data: pricing = [] } = useQuery({ queryKey: ['pricing'], queryFn: api.pricing })
   const { data: keys = [] } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
-  const { data: orders = [] } = useQuery({ queryKey: ['app-orders'], queryFn: api.orders })
+  const pendingPollInterval = 5000
+  const { data: orders = [] } = useQuery({
+    queryKey: ['app-orders'],
+    queryFn: api.orders,
+    refetchInterval: (query) => query.state.data?.some((item) => item.status === 'pending') ? pendingPollInterval : false,
+  })
   const activeKeys = useMemo(() => keys.filter((item) => item.status === 'active'), [keys])
+  const keyByID = useMemo(() => new Map(keys.map((item) => [item.id, item])), [keys])
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const checkoutSessionID = searchParams.get('session_id')?.trim() ?? ''
+  const shouldAttemptReconcile = searchParams.get('status') === 'success' && checkoutSessionID !== ''
   const [selectedKey, setSelectedKey] = useState<number | null>(null)
+  const [copiedReference, setCopiedReference] = useState<string | null>(null)
+  const [reconciledSessionID, setReconciledSessionID] = useState<string | null>(null)
 
   const checkout = useMutation({
     mutationFn: ({ packCode, keyID }: { packCode: string; keyID: number }) => api.checkout({ pack_code: packCode, target_api_key_id: keyID }),
@@ -22,11 +36,36 @@ export default function BillingPage() {
       redirectTo(result.checkout_url)
     },
   })
+  const reconcile = useMutation({
+    mutationFn: ({ sessionID }: { sessionID: string }) => api.reconcileOrder({ checkout_session_id: sessionID }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['app-orders'] })
+    },
+  })
 
   const activeKey = useMemo(() => activeKeys.find((item) => item.id === selectedKey), [activeKeys, selectedKey])
   const checkoutError = checkout.error instanceof ApiError
     ? `${checkout.error.message}${checkout.error.requestId ? ` (request_id: ${checkout.error.requestId})` : ''}`
     : checkout.error?.message
+  const reconcileError = reconcile.error instanceof ApiError
+    ? `${reconcile.error.message}${reconcile.error.requestId ? ` (request_id: ${reconcile.error.requestId})` : ''}`
+    : reconcile.error?.message
+
+  useEffect(() => {
+    if (!shouldAttemptReconcile || reconciledSessionID === checkoutSessionID) {
+      return
+    }
+    setReconciledSessionID(checkoutSessionID)
+    reconcile.mutate({ sessionID: checkoutSessionID })
+  }, [checkoutSessionID, reconcile, reconciledSessionID, shouldAttemptReconcile])
+
+  async function copyReference(reference: string) {
+    await navigator.clipboard?.writeText(reference)
+    setCopiedReference(reference)
+    window.setTimeout(() => {
+      setCopiedReference((current) => current === reference ? null : current)
+    }, 1500)
+  }
 
   return (
     <div className="space-y-8">
@@ -94,13 +133,35 @@ export default function BillingPage() {
 
       <Panel>
         <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase remains visible here for reconciliation." />
+        {reconcile.isPending ? (
+          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 p-4 text-sm text-white">
+            Payment returned from Stripe. Syncing the latest checkout status into this workspace now.
+          </div>
+        ) : null}
+        {reconcileError ? (
+          <div className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+            Stripe payment sync failed: {reconcileError}
+          </div>
+        ) : null}
         {orders.length ? (
           <div className="space-y-3">
             {orders.map((order) => (
               <div key={order.id} className="panel-muted flex flex-wrap items-center justify-between gap-4 p-5">
                 <div>
-                  <div className="text-lg font-semibold text-white">Order #{order.id}</div>
-                  <div className="mt-1 text-sm text-outline">{order.pack_name} / created {formatDate(order.created_at)}</div>
+                  <div className="text-lg font-semibold text-white">{order.pack_name}</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-outline">
+                    <span>Stripe order</span>
+                    <span className="rounded-md border border-outline-variant/20 bg-surface-container-high/50 px-2 py-1 font-mono text-xs text-white">
+                      {stripeOrderReference(order) || 'pending assignment'}
+                    </span>
+                    {stripeOrderReference(order) ? (
+                      <button type="button" className="ghost-button" onClick={() => copyReference(stripeOrderReference(order)!)}>
+                        <Copy size={14} /> {copiedReference === stripeOrderReference(order) ? 'Copied' : 'Copy'}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-sm text-outline">{targetAPIKeyLabel(order, keyByID)}</div>
+                  <div className="mt-1 text-xs text-outline">Internal order #{order.id} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} document generations</div>
@@ -115,4 +176,19 @@ export default function BillingPage() {
       </Panel>
     </div>
   )
+}
+
+function stripeOrderReference(order: Order) {
+  return order.stripe_payment_intent_id || order.stripe_checkout_session_id || ''
+}
+
+function targetAPIKeyLabel(order: Order, keyByID: Map<number, ApiKey>) {
+  if (!order.target_api_key_id) {
+    return 'API key not recorded for this order.'
+  }
+  const key = keyByID.get(order.target_api_key_id)
+  if (!key) {
+    return `API key #${order.target_api_key_id}`
+  }
+  return `API key ${key.key_prefix} / #${key.id} / ${key.plan_name}`
 }

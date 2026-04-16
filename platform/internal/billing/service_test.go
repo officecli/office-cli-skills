@@ -10,8 +10,10 @@ import (
 )
 
 type fakeGateway struct {
-	called         bool
-	lastCustomerID string
+	called          bool
+	lastCustomerID  string
+	checkoutSession *CheckoutSessionDetails
+	webhookEvent    *WebhookEvent
 }
 
 func (f *fakeGateway) CreateCheckoutSession(_ context.Context, _ CheckoutRequest, _ model.PricingPack, customerID string) (*CheckoutSession, error) {
@@ -24,16 +26,30 @@ func (f *fakeGateway) CreateCheckoutSession(_ context.Context, _ CheckoutRequest
 	}, nil
 }
 
+func (f *fakeGateway) GetCheckoutSession(_ context.Context, _ string) (*CheckoutSessionDetails, error) {
+	if f.checkoutSession == nil {
+		return &CheckoutSessionDetails{}, nil
+	}
+	cloned := *f.checkoutSession
+	return &cloned, nil
+}
+
 func (f *fakeGateway) ParseWebhook(_ []byte, _ string) (*WebhookEvent, error) {
-	return nil, nil
+	if f.webhookEvent == nil {
+		return nil, nil
+	}
+	cloned := *f.webhookEvent
+	return &cloned, nil
 }
 
 type fakeStore struct {
-	apiKeys           map[uint64]*model.APIKey
-	orders            []*model.Order
-	updateOrderCalls  int
-	stripeCustomer    *model.StripeCustomer
-	createdAuditCount int
+	apiKeys              map[uint64]*model.APIKey
+	orders               []*model.Order
+	billingEvents        map[string]*model.BillingEvent
+	updateOrderCalls     int
+	stripeCustomer       *model.StripeCustomer
+	createdAuditCount    int
+	finalizePaymentCalls int
 }
 
 func (f *fakeStore) GetOrCreateStripeCustomer(_ context.Context, userID uint64, customerID string) (*model.StripeCustomer, error) {
@@ -113,12 +129,66 @@ func (f *fakeStore) AddCreditBalanceToAPIKey(_ context.Context, apiKeyID uint64,
 	return &cloned, nil
 }
 
-func (f *fakeStore) CreateBillingEvent(_ context.Context, _ *model.BillingEvent) error {
+func (f *fakeStore) CreateBillingEvent(_ context.Context, event *model.BillingEvent) error {
+	if event == nil {
+		return nil
+	}
+	if f.billingEvents == nil {
+		f.billingEvents = make(map[string]*model.BillingEvent)
+	}
+	cloned := *event
+	f.billingEvents[event.EventID] = &cloned
 	return nil
 }
 
-func (f *fakeStore) GetBillingEventByEventID(_ context.Context, _ string) (*model.BillingEvent, error) {
+func (f *fakeStore) GetBillingEventByEventID(_ context.Context, eventID string) (*model.BillingEvent, error) {
+	if event := f.billingEvents[eventID]; event != nil {
+		cloned := *event
+		return &cloned, nil
+	}
 	return nil, nil
+}
+
+func (f *fakeStore) FinalizeOrderPayment(_ context.Context, params FinalizeOrderPaymentParams) (*model.Order, bool, error) {
+	f.finalizePaymentCalls++
+	for _, order := range f.orders {
+		if order.ID != params.OrderID {
+			continue
+		}
+		if order.Status != model.OrderStatusPending {
+			cloned := *order
+			return &cloned, false, nil
+		}
+		order.Status = model.OrderStatusPaid
+		if params.PaymentIntentID != "" {
+			paymentIntentID := params.PaymentIntentID
+			order.StripePaymentIntentID = &paymentIntentID
+		}
+		if params.CustomerID != "" {
+			customerID := params.CustomerID
+			order.StripeCustomerID = &customerID
+			f.stripeCustomer = &model.StripeCustomer{UserID: order.UserID, StripeCustomerID: customerID}
+		}
+		if order.TargetAPIKeyID != nil {
+			switch order.PackKind {
+			case model.PackKindHostedCredits:
+				_, _ = f.AddCreditBalanceToAPIKey(context.Background(), *order.TargetAPIKeyID, order.CreditAmount)
+			default:
+				_, _ = f.AddPaidQuotaToAPIKey(context.Background(), *order.TargetAPIKeyID, order.QuotaAmount)
+			}
+		}
+		if params.BillingEvent != nil {
+			if f.billingEvents == nil {
+				f.billingEvents = make(map[string]*model.BillingEvent)
+			}
+			clonedEvent := *params.BillingEvent
+			clonedEvent.OrderID = &order.ID
+			f.billingEvents[clonedEvent.EventID] = &clonedEvent
+		}
+		cloned := *order
+		return &cloned, true, nil
+	}
+	return nil, false, nil
 }
 
 func (f *fakeStore) ListOrdersByUser(_ context.Context, _ uint64) ([]model.Order, error) {
@@ -248,4 +318,131 @@ func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
 
 func uint64Ptr(v uint64) *uint64 {
 	return &v
+}
+
+func TestReconcileCheckoutSessionMarksPendingOrderPaidOnce(t *testing.T) {
+	t.Parallel()
+
+	quota := 10
+	sessionID := "cs_test_paid"
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "pack_100",
+			PackName:                "100 Credits",
+			PackKind:                model.PackKindExternalGeneration,
+			QuotaAmount:             100,
+			TargetAPIKeyID:          uint64Ptr(7),
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		checkoutSession: &CheckoutSessionDetails{
+			ID:              sessionID,
+			PaymentStatus:   "paid",
+			PaymentIntentID: "pi_test_123",
+			CustomerID:      "cus_test_123",
+			Metadata:        map[string]string{"target_api_key_id": "7"},
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+
+	order, err := svc.ReconcileCheckoutSession(context.Background(), ReconcileOrderRequest{
+		UserID:            42,
+		CheckoutSessionID: sessionID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.Equal(t, model.OrderStatusPaid, order.Status)
+	require.NotNil(t, order.StripePaymentIntentID)
+	require.Equal(t, "pi_test_123", *order.StripePaymentIntentID)
+	require.Equal(t, 1, store.finalizePaymentCalls)
+	require.Equal(t, 110, *store.apiKeys[7].QuotaTotal)
+	require.Contains(t, store.billingEvents, "reconcile:checkout_session.paid:"+sessionID)
+
+	order, err = svc.ReconcileCheckoutSession(context.Background(), ReconcileOrderRequest{
+		UserID:            42,
+		CheckoutSessionID: sessionID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.Equal(t, model.OrderStatusPaid, order.Status)
+	require.Equal(t, 1, store.finalizePaymentCalls)
+	require.Equal(t, 110, *store.apiKeys[7].QuotaTotal)
+	require.Equal(t, 1, store.createdAuditCount)
+}
+
+func TestHandleWebhookAndReconcileRemainIdempotent(t *testing.T) {
+	t.Parallel()
+
+	quota := 5
+	sessionID := "cs_test_123"
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "pack_100",
+			PackName:                "100 Credits",
+			PackKind:                model.PackKindExternalGeneration,
+			QuotaAmount:             100,
+			TargetAPIKeyID:          uint64Ptr(7),
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_1",
+			Type:              "checkout.session.completed",
+			CheckoutSessionID: sessionID,
+			PaymentIntentID:   "pi_test_123",
+			CustomerID:        "cus_test_123",
+			RawPayload:        `{"id":"evt_1"}`,
+		},
+		checkoutSession: &CheckoutSessionDetails{
+			ID:              sessionID,
+			PaymentStatus:   "paid",
+			PaymentIntentID: "pi_test_123",
+			CustomerID:      "cus_test_123",
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+	require.Equal(t, model.OrderStatusPaid, store.orders[0].Status)
+	require.Equal(t, 105, *store.apiKeys[7].QuotaTotal)
+	require.Equal(t, 1, store.createdAuditCount)
+
+	order, err := svc.ReconcileCheckoutSession(context.Background(), ReconcileOrderRequest{
+		UserID:            42,
+		CheckoutSessionID: sessionID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.Equal(t, model.OrderStatusPaid, order.Status)
+	require.Equal(t, 105, *store.apiKeys[7].QuotaTotal)
+	require.Equal(t, 1, store.createdAuditCount)
 }

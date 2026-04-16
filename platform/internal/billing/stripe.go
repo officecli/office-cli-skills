@@ -40,6 +40,35 @@ func (g *StripeGateway) CreateCheckoutSession(ctx context.Context, req CheckoutR
 	return result, nil
 }
 
+func (g *StripeGateway) GetCheckoutSession(ctx context.Context, sessionID string) (*CheckoutSessionDetails, error) {
+	if g.secretKey == "" {
+		return nil, fmt.Errorf("stripe secret key is not configured")
+	}
+	params := &stripe.CheckoutSessionParams{}
+	params.Context = ctx
+	retrieved, err := session.Get(sessionID, params)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(retrieved)
+	if err != nil {
+		return nil, err
+	}
+	result := &CheckoutSessionDetails{
+		ID:            retrieved.ID,
+		PaymentStatus: string(retrieved.PaymentStatus),
+		Metadata:      retrieved.Metadata,
+		RawPayload:    string(payload),
+	}
+	if retrieved.PaymentIntent != nil {
+		result.PaymentIntentID = retrieved.PaymentIntent.ID
+	}
+	if retrieved.Customer != nil {
+		result.CustomerID = retrieved.Customer.ID
+	}
+	return result, nil
+}
+
 func (g *StripeGateway) checkoutSessionParams(req CheckoutRequest, pack model.PricingPack, customerID string) *stripe.CheckoutSessionParams {
 	params := &stripe.CheckoutSessionParams{
 		Mode:       stripe.String(string(stripe.CheckoutSessionModePayment)),

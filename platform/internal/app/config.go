@@ -129,7 +129,7 @@ func LoadConfig() (Config, error) {
 		AdminGoogleAllowlist:         parseCSVList(os.Getenv("ADMIN_GOOGLE_ALLOWLIST")),
 		StripeSecretKey:              os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret:          os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		StripeSuccessURL:             mustEnvDefault("STRIPE_SUCCESS_URL", "https://platform.officecli.io/app/billing?status=success"),
+		StripeSuccessURL:             mustEnvDefault("STRIPE_SUCCESS_URL", "https://platform.officecli.io/app/billing?status=success&session_id={CHECKOUT_SESSION_ID}"),
 		StripeCancelURL:              mustEnvDefault("STRIPE_CANCEL_URL", "https://platform.officecli.io/app/billing?status=cancel"),
 		ExternalUnitPriceCents:       mustEnvInt64("EXTERNAL_UNIT_PRICE_CENTS", 5),
 		External500PriceRatio:        mustEnvDefault("EXTERNAL_500_PRICE_RATIO", "449/495"),

@@ -1,15 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as navigation from '../lib/navigation'
 import BillingPage from './BillingPage'
 
 const fetchMock = vi.fn()
 
-function renderPage() {
+function renderPage(path = '/billing') {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <BillingPage />
+      <MemoryRouter initialEntries={[path]}>
+        <BillingPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -57,6 +60,8 @@ describe('billing page', () => {
               pack_name: 'External 100',
               pack_kind: 'external_generation',
               quota_amount: 100,
+              target_api_key_id: 7,
+              stripe_payment_intent_id: 'pi_test_123',
               created_at: '2026-04-03T00:00:00Z',
             }],
           }),
@@ -68,9 +73,11 @@ describe('billing page', () => {
 
     renderPage()
 
-    expect(await screen.findByText('External 100')).toBeInTheDocument()
+    expect((await screen.findAllByText('External 100')).length).toBeGreaterThan(0)
     expect(screen.getByText(/100 document generations for lightweight evaluation and individual workflows\./i)).toBeInTheDocument()
     expect(screen.getByText(/100 document generations per purchase/i)).toBeInTheDocument()
+    expect(screen.getByText('pi_test_123')).toBeInTheDocument()
+    expect(screen.getByText(/API key #7/i)).toBeInTheDocument()
     expect(screen.queryByText(/hosted/i)).not.toBeInTheDocument()
   })
 
@@ -210,5 +217,92 @@ describe('billing page', () => {
     fireEvent.click(checkoutButton)
 
     expect(await screen.findByText(/Checkout failed: target api key is disabled \(request_id: req_checkout_123\)/i)).toBeInTheDocument()
+  })
+
+  it('reconciles a successful checkout return and refreshes recent billing activity', async () => {
+    let ordersCallCount = 0
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/api-keys') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 7,
+              key_prefix: 'cop_live_demo',
+              status: 'active',
+              plan_name: 'Production',
+              quota_total: 100,
+              quota_used: 0,
+              quota_remaining: 100,
+              created_at: '2026-04-03T00:00:00Z',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/orders') {
+        ordersCallCount++
+        const status = ordersCallCount > 1 ? 'paid' : 'pending'
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 11,
+              status,
+              currency: 'usd',
+              amount_total: 500,
+              pack_code: 'external-100',
+              pack_name: 'External 100',
+              pack_kind: 'external_generation',
+              quota_amount: 100,
+              target_api_key_id: 7,
+              stripe_checkout_session_id: 'cs_test_123',
+              stripe_payment_intent_id: status === 'paid' ? 'pi_test_123' : undefined,
+              created_at: '2026-04-03T00:00:00Z',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/orders/reconcile') {
+        expect(init?.method).toBe('POST')
+        expect(init?.body).toBe(JSON.stringify({ checkout_session_id: 'cs_test_123' }))
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              id: 11,
+              status: 'paid',
+              currency: 'usd',
+              amount_total: 500,
+              pack_code: 'external-100',
+              pack_name: 'External 100',
+              pack_kind: 'external_generation',
+              quota_amount: 100,
+              target_api_key_id: 7,
+              stripe_checkout_session_id: 'cs_test_123',
+              stripe_payment_intent_id: 'pi_test_123',
+              created_at: '2026-04-03T00:00:00Z',
+            },
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage('/billing?status=success&session_id=cs_test_123')
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/app/orders/reconcile', expect.objectContaining({
+        method: 'POST',
+      }))
+    })
+    expect(await screen.findByText('pi_test_123')).toBeInTheDocument()
   })
 })

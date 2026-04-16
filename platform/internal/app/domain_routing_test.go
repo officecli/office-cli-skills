@@ -24,7 +24,7 @@ func TestLoadConfigDefaultsUseProductionDomains(t *testing.T) {
 	if cfg.GoogleRedirectURL != "https://platform.officecli.io/api/auth/google/callback" {
 		t.Fatalf("GoogleRedirectURL = %q", cfg.GoogleRedirectURL)
 	}
-	if cfg.StripeSuccessURL != "https://platform.officecli.io/app/billing?status=success" {
+	if cfg.StripeSuccessURL != "https://platform.officecli.io/app/billing?status=success&session_id={CHECKOUT_SESSION_ID}" {
 		t.Fatalf("StripeSuccessURL = %q", cfg.StripeSuccessURL)
 	}
 	if cfg.StripeCancelURL != "https://platform.officecli.io/app/billing?status=cancel" {

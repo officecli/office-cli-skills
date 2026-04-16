@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/officecli/officecli/platform/internal/billing"
 	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 )
@@ -937,6 +938,79 @@ func (s *Store) GetOrderByCheckoutSessionID(ctx context.Context, sessionID strin
 	return &order, nil
 }
 
+func (s *Store) FinalizeOrderPayment(ctx context.Context, params billing.FinalizeOrderPaymentParams) (*model.Order, bool, error) {
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, false, tx.Error
+	}
+	defer rollbackOnPanic(tx)
+
+	var order model.Order
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&order, params.OrderID).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if order.Status != model.OrderStatusPending {
+		tx.Rollback()
+		return &order, false, nil
+	}
+
+	order.Status = model.OrderStatusPaid
+	if paymentIntentID := strings.TrimSpace(params.PaymentIntentID); paymentIntentID != "" {
+		order.StripePaymentIntentID = &paymentIntentID
+	}
+	if customerID := strings.TrimSpace(params.CustomerID); customerID != "" {
+		order.StripeCustomerID = &customerID
+	}
+	if err := tx.Save(&order).Error; err != nil {
+		tx.Rollback()
+		return nil, false, err
+	}
+
+	if customerID := strings.TrimSpace(params.CustomerID); customerID != "" {
+		if err := upsertStripeCustomerTx(tx, order.UserID, customerID); err != nil {
+			tx.Rollback()
+			return nil, false, err
+		}
+	}
+
+	if order.TargetAPIKeyID != nil {
+		switch order.PackKind {
+		case model.PackKindHostedCredits:
+			if err := addCreditBalanceToAPIKeyTx(tx, *order.TargetAPIKeyID, order.CreditAmount); err != nil {
+				tx.Rollback()
+				return nil, false, err
+			}
+		default:
+			if err := addPaidQuotaToAPIKeyTx(tx, *order.TargetAPIKeyID, order.QuotaAmount); err != nil {
+				tx.Rollback()
+				return nil, false, err
+			}
+		}
+	}
+
+	if params.BillingEvent != nil {
+		event := *params.BillingEvent
+		event.OrderID = &order.ID
+		if event.ProcessedAt == nil {
+			processedAt := time.Now().UTC()
+			event.ProcessedAt = &processedAt
+		}
+		if err := tx.Create(&event).Error; err != nil {
+			tx.Rollback()
+			return nil, false, err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, false, err
+	}
+	return &order, true, nil
+}
+
 func (s *Store) ListOrdersByUser(ctx context.Context, userID uint64) ([]model.Order, error) {
 	var orders []model.Order
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at desc").Find(&orders).Error; err != nil {
@@ -955,6 +1029,53 @@ func (s *Store) ListOrders(ctx context.Context) ([]model.Order, error) {
 
 func (s *Store) UpdateOrder(ctx context.Context, id uint64, values map[string]any) error {
 	return s.db.WithContext(ctx).Model(&model.Order{}).Where("id = ?", id).Updates(values).Error
+}
+
+func upsertStripeCustomerTx(tx *gorm.DB, userID uint64, customerID string) error {
+	var existing model.StripeCustomer
+	err := tx.Where("user_id = ?", userID).First(&existing).Error
+	switch {
+	case err == nil:
+		if existing.StripeCustomerID == customerID {
+			return nil
+		}
+		existing.StripeCustomerID = customerID
+		return tx.Save(&existing).Error
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return err
+	}
+	return tx.Create(&model.StripeCustomer{UserID: userID, StripeCustomerID: customerID}).Error
+}
+
+func addPaidQuotaToAPIKeyTx(tx *gorm.DB, apiKeyID uint64, quotaAmount int) error {
+	var key model.APIKey
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&key, apiKeyID).Error; err != nil {
+		return err
+	}
+	if key.QuotaTotal == nil {
+		total := 0
+		key.QuotaTotal = &total
+	}
+	*key.QuotaTotal += quotaAmount
+	return tx.Save(&key).Error
+}
+
+func addCreditBalanceToAPIKeyTx(tx *gorm.DB, apiKeyID uint64, creditAmount int) error {
+	var key model.APIKey
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&key, apiKeyID).Error; err != nil {
+		return err
+	}
+	key.CreditBalance += creditAmount
+	key.HostedEnabled = true
+	switch key.AllowedModes {
+	case "", "external_only":
+		key.AllowedModes = "hybrid"
+	}
+	if key.DefaultRuntimeMode == nil || strings.TrimSpace(*key.DefaultRuntimeMode) == "" || strings.TrimSpace(*key.DefaultRuntimeMode) == "external" {
+		defaultRuntimeMode := "hosted"
+		key.DefaultRuntimeMode = &defaultRuntimeMode
+	}
+	return tx.Save(&key).Error
 }
 
 func (s *Store) CreateBillingEvent(ctx context.Context, event *model.BillingEvent) error {

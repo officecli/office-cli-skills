@@ -1117,6 +1117,25 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 		}
 		httpapi.JSON(c, http.StatusOK, filtered)
 	})
+	protected.POST("/orders/reconcile", func(c *gin.Context) {
+		var req billing.ReconcileOrderRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.UserID = currentUserID(c)
+		order, err := billingSvc.ReconcileCheckoutSession(c.Request.Context(), req)
+		switch {
+		case err == nil:
+			httpapi.JSON(c, http.StatusOK, order)
+		case errors.Is(err, billing.ErrCheckoutSessionIDRequired):
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+		case errors.Is(err, billing.ErrOrderNotFound), errors.Is(err, billing.ErrOrderForbidden):
+			httpapi.Error(c, http.StatusNotFound, err.Error())
+		default:
+			httpapi.Error(c, http.StatusBadGateway, err.Error())
+		}
+	})
 	protected.GET("/pricing", func(c *gin.Context) {
 		httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing()))
 	})
