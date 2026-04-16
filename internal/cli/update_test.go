@@ -161,6 +161,7 @@ func TestVersionIsOlder(t *testing.T) {
 	}{
 		{name: "older patch", current: "0.2.5", latest: "0.2.6", want: true},
 		{name: "same version", current: "0.2.6", latest: "0.2.6", want: false},
+		{name: "same version with mixed prefix", current: "0.2.8", latest: "v0.2.8", want: false},
 		{name: "newer patch", current: "0.2.7", latest: "0.2.6", want: false},
 		{name: "prefixed version", current: "v0.2.5", latest: "0.2.6", want: true},
 		{name: "non numeric fallback", current: "dev-build", latest: "latest", want: true},
@@ -170,6 +171,50 @@ func TestVersionIsOlder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := versionIsOlder(tc.current, tc.latest); got != tc.want {
 				t.Fatalf("versionIsOlder(%q, %q) = %t, want %t", tc.current, tc.latest, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLatestReleaseIsNewer(t *testing.T) {
+	testCases := []struct {
+		name              string
+		currentVersion    string
+		latestVersion     string
+		currentBuildDate  string
+		latestPublishedAt string
+		want              bool
+	}{
+		{
+			name:              "same version ignores newer release publish time",
+			currentVersion:    "0.2.8",
+			latestVersion:     "v0.2.8",
+			currentBuildDate:  "2026-04-07T09:00:00Z",
+			latestPublishedAt: "2026-04-08T09:00:00Z",
+			want:              false,
+		},
+		{
+			name:              "older version reports update",
+			currentVersion:    "0.2.7",
+			latestVersion:     "v0.2.8",
+			currentBuildDate:  "2026-04-08T09:00:00Z",
+			latestPublishedAt: "2026-04-07T09:00:00Z",
+			want:              true,
+		},
+		{
+			name:              "falls back to publish time when version cannot be compared",
+			currentVersion:    "build-123",
+			latestVersion:     "latest",
+			currentBuildDate:  "2026-04-07T09:00:00Z",
+			latestPublishedAt: "2026-04-08T09:00:00Z",
+			want:              true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := latestReleaseIsNewer(tc.currentVersion, tc.latestVersion, tc.currentBuildDate, tc.latestPublishedAt); got != tc.want {
+				t.Fatalf("latestReleaseIsNewer(%q, %q, %q, %q) = %t, want %t", tc.currentVersion, tc.latestVersion, tc.currentBuildDate, tc.latestPublishedAt, got, tc.want)
 			}
 		})
 	}

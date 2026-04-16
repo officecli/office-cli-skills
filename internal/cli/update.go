@@ -458,9 +458,7 @@ func checkLatestReleaseForUpdates(ctx context.Context, execPath string) (UpdateI
 			repo,
 		),
 	}
-	buildTime, buildErr := time.Parse(time.RFC3339, strings.TrimSpace(BuildDate))
-	publishedAt, publishErr := time.Parse(time.RFC3339, strings.TrimSpace(release.PublishedAt))
-	if buildErr == nil && publishErr == nil && buildTime.Before(publishedAt) {
+	if latestReleaseIsNewer(info.CurrentVersion, info.LatestVersionLabel, info.CurrentBuildDate, info.LatestPublishedAt) {
 		info.Available = true
 	}
 	return info, nil
@@ -782,7 +780,25 @@ func updateCommandForPackageManager(manager string) string {
 	return strings.TrimSpace(name + " " + strings.Join(args, " "))
 }
 
+func latestReleaseIsNewer(currentVersion, latestVersionLabel, currentBuildDate, latestPublishedAt string) bool {
+	if cmp, comparable := compareVersions(currentVersion, latestVersionLabel); comparable {
+		return cmp < 0
+	}
+	buildTime, buildErr := time.Parse(time.RFC3339, strings.TrimSpace(currentBuildDate))
+	publishedAt, publishErr := time.Parse(time.RFC3339, strings.TrimSpace(latestPublishedAt))
+	return buildErr == nil && publishErr == nil && buildTime.Before(publishedAt)
+}
+
 func versionIsOlder(current, latest string) bool {
+	if cmp, comparable := compareVersions(current, latest); comparable {
+		return cmp < 0
+	}
+	currentTrimmed := normalizeVersionLabel(current)
+	latestTrimmed := normalizeVersionLabel(latest)
+	return currentTrimmed != "" && latestTrimmed != "" && currentTrimmed != latestTrimmed
+}
+
+func compareVersions(current, latest string) (int, bool) {
 	currentParts, currentOK := parseVersionParts(current)
 	latestParts, latestOK := parseVersionParts(latest)
 	if currentOK && latestOK {
@@ -800,21 +816,24 @@ func versionIsOlder(current, latest string) bool {
 				latestPart = latestParts[i]
 			}
 			if currentPart < latestPart {
-				return true
+				return -1, true
 			}
 			if currentPart > latestPart {
-				return false
+				return 1, true
 			}
 		}
-		return false
+		return 0, true
 	}
-	currentTrimmed := strings.TrimSpace(strings.TrimPrefix(current, "v"))
-	latestTrimmed := strings.TrimSpace(strings.TrimPrefix(latest, "v"))
-	return currentTrimmed != "" && latestTrimmed != "" && currentTrimmed != latestTrimmed
+	currentTrimmed := normalizeVersionLabel(current)
+	latestTrimmed := normalizeVersionLabel(latest)
+	if currentTrimmed != "" && latestTrimmed != "" && strings.EqualFold(currentTrimmed, latestTrimmed) {
+		return 0, true
+	}
+	return 0, false
 }
 
 func parseVersionParts(raw string) ([]int, bool) {
-	trimmed := strings.TrimSpace(strings.TrimPrefix(raw, "v"))
+	trimmed := normalizeVersionLabel(raw)
 	if trimmed == "" {
 		return nil, false
 	}
@@ -841,6 +860,17 @@ func parseVersionParts(raw string) ([]int, bool) {
 		values = append(values, value)
 	}
 	return values, true
+}
+
+func normalizeVersionLabel(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if first := trimmed[0]; first == 'v' || first == 'V' {
+		trimmed = strings.TrimSpace(trimmed[1:])
+	}
+	return trimmed
 }
 
 func userHomeDirOrEmpty() string {
