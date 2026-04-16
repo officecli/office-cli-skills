@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import InstallTabs from '../components/InstallTabs'
 import Pricing from '../components/Pricing'
+import CodeBlock from '../components/CodeBlock'
 import {
   agentSkillHighlights,
   commandGroups,
@@ -25,7 +27,7 @@ function SectionHeading({
   description?: string
 }) {
   return (
-    <div id={id} className="scroll-mt-28">
+    <div id={id} className="scroll-mt-16 mb-8">
       <h2 className="font-headline text-3xl md:text-4xl font-bold text-white tracking-tight mb-4">{title}</h2>
       {description ? <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">{description}</p> : null}
     </div>
@@ -33,257 +35,330 @@ function SectionHeading({
 }
 
 export default function DocsPage() {
+  const [activeSection, setActiveSection] = useState<string>('')
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Find the first intersecting entry
+        const visibleEntries = entries.filter((entry) => entry.isIntersecting)
+        if (visibleEntries.length > 0) {
+          // Sort by intersection ratio to get the most visible one, or just take the first
+          setActiveSection(visibleEntries[0].target.id)
+        }
+      },
+      {
+        rootMargin: '-100px 0px -60% 0px',
+        threshold: 0,
+      }
+    )
+
+    docsSections.forEach((section) => {
+      const el = document.getElementById(section.id)
+      if (el) observer.observe(el)
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <main className="overflow-x-hidden pt-28 px-8 md:px-16 max-w-[1440px] mx-auto pb-24">
-      <section className="max-w-4xl">
-        <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Docs</span>
-        <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">
-          OfficeCLI documentation for AI document generation and REPORT workflows
-        </h1>
-        <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
-          Use this page as the product docs hub for installation, command patterns, prompting guidance, agent integration, OpenClaw setup, troubleshooting, and pricing-aware usage rules.
-        </p>
-      </section>
-
-      <section className="mt-12 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-        {docsSections.map((section) => (
-          <a
-            key={section.id}
-            className="rounded-2xl border border-outline-variant/10 bg-surface-low px-5 py-4 text-sm font-headline uppercase tracking-widest text-outline-variant hover:border-primary/30 hover:text-white"
-            href={`#${section.id}`}
-          >
-            {section.label}
-          </a>
-        ))}
-      </section>
-
-      <section className="mt-16 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="quickstart"
-          title="Quickstart"
-          description="Install OfficeCLI, configure access and generation, then create your first PPTX, DOCX, XLSX, or REPORT output."
-        />
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {quickstartChecklist.map((group) => (
-            <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-4">{group.title}</h3>
-              <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
-                {group.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
+    <main className="mx-auto max-w-[1440px] px-8 md:px-16 pt-16 pb-24 flex flex-col md:flex-row gap-12 lg:gap-24">
+      {/* Mobile Nav (Dropdown or simple list) */}
+      <div className="md:hidden mb-8">
+        <div className="text-primary font-headline text-xs uppercase tracking-widest mb-4">Table of Contents</div>
+        <div className="flex flex-wrap gap-2">
+          {docsSections.map((section) => (
+            <a
+              key={section.id}
+              href={`#${section.id}`}
+              className={`rounded-full border px-4 py-2 text-xs font-headline uppercase tracking-widest transition-colors ${
+                activeSection === section.id
+                  ? 'border-primary/50 bg-primary/10 text-primary'
+                  : 'border-outline-variant/20 bg-surface-low text-outline-variant hover:border-primary/30 hover:text-white'
+              }`}
+            >
+              {section.label}
+            </a>
           ))}
         </div>
-      </section>
+      </div>
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="install-update-uninstall"
-          title="Install / Update / Uninstall"
-          description="Choose the install path that matches your environment, then use the right upgrade or removal command for that channel."
-        />
-        <div className="mt-10">
-          <InstallTabs
-            compact
-            headline="Install OfficeCLI on macOS or Linux"
-            intro="Use Homebrew, npm, the Linux install script, or manual release archives. Pick the channel you want to keep using for future updates."
-          />
-        </div>
-        <div className="mt-10 grid gap-6 lg:grid-cols-2">
-          <article className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-            <h3 className="font-headline text-2xl font-bold text-white mb-4">Update methods</h3>
-            <div className="space-y-4">
-              {updateMethods.map((item) => (
-                <div key={item.command} className="rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                  <div className="text-xs font-headline uppercase tracking-widest text-primary mb-2">{item.label}</div>
-                  <code className="block text-sm text-white break-all">{item.command}</code>
-                  <p className="mt-3 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
-                </div>
+      {/* Sidebar Nav (Desktop) */}
+      <aside className="hidden md:block w-64 shrink-0">
+        <nav className="sticky top-16 flex flex-col gap-1">
+          <div className="text-primary font-headline text-xs uppercase tracking-widest mb-4 px-3">On this page</div>
+          {docsSections.map((section) => {
+            const isActive = activeSection === section.id
+            return (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className={`px-3 py-2 rounded-lg text-sm font-headline uppercase tracking-widest transition-colors ${
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-outline-variant hover:bg-surface-low hover:text-white'
+                }`}
+              >
+                {section.label}
+              </a>
+            )
+          })}
+        </nav>
+      </aside>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 max-w-4xl">
+        <section className="mb-16">
+          <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Docs</span>
+          <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">
+            OfficeCLI documentation for AI document generation
+          </h1>
+          <p className="text-outline-variant text-lg leading-relaxed">
+            Use this page as the product docs hub for installation, command patterns, prompting guidance, agent integration, OpenClaw setup, troubleshooting, and pricing-aware usage rules.
+          </p>
+        </section>
+
+        <div className="space-y-24">
+          <section>
+            <SectionHeading
+              id="quickstart"
+              title="Quickstart"
+              description="Install OfficeCLI, configure access and generation, then create your first PPTX, DOCX, XLSX, or REPORT output."
+            />
+            <div className="grid gap-6 md:grid-cols-3">
+              {quickstartChecklist.map((group) => (
+                <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-4">{group.title}</h3>
+                  <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
+                    {group.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </article>
               ))}
             </div>
-          </article>
-          <article className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-            <h3 className="font-headline text-2xl font-bold text-white mb-4">Uninstall methods</h3>
-            <div className="space-y-4">
-              {uninstallMethods.map((item) => (
-                <div key={item.command} className="rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                  <div className="text-xs font-headline uppercase tracking-widest text-primary mb-2">{item.label}</div>
-                  <code className="block text-sm text-white break-all">{item.command}</code>
-                  <p className="mt-3 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      </section>
+          </section>
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="command-reference"
-          title="Command Reference"
-          description="The current surface centers on configuration, access checks, generation, review, upgrade, and the agent bridge."
-        />
-        <div className="mt-10 space-y-6">
-          {commandGroups.map((group) => (
-            <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-4">{group.title}</h3>
-              <code className="block rounded-2xl border border-outline-variant/10 bg-background px-5 py-4 text-sm text-white break-all">
-                {group.command}
-              </code>
-              <p className="mt-4 text-outline-variant leading-relaxed">{group.summary}</p>
-              {group.notes?.length ? (
-                <ul className="mt-4 space-y-2 text-sm text-outline-variant">
-                  {group.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {group.examples?.length ? (
-                <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                  {group.examples.map((example) => (
-                    <div key={example.command} className="rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                      <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-2">{example.label}</div>
-                      <code className="block text-sm text-white break-all">{example.command}</code>
-                      <p className="mt-3 text-sm leading-relaxed text-outline-variant">{example.detail}</p>
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="install-update-uninstall"
+              title="Install / Update / Uninstall"
+              description="Choose the install path that matches your environment, then use the right upgrade or removal command for that channel."
+            />
+            <div className="mb-10">
+              <InstallTabs
+                compact
+                headline="Install OfficeCLI on macOS or Linux"
+                intro="Use Homebrew, npm, the Linux install script, or manual release archives. Pick the channel you want to keep using for future updates."
+              />
+            </div>
+            <div className="grid gap-8 lg:grid-cols-2">
+              <article>
+                <h3 className="font-headline text-2xl font-bold text-white mb-6">Update methods</h3>
+                <div className="space-y-6">
+                  {updateMethods.map((item) => (
+                    <div key={item.command}>
+                      <CodeBlock command={item.command} label={item.label} />
+                      <p className="mt-3 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
                     </div>
                   ))}
                 </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="prompting-tips"
-          title="Prompting Tips"
-          description="Prompt quality is still the strongest lever for predictable AI document generation."
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {promptingTips.map((tip) => (
-            <article key={tip.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-3">{tip.title}</h3>
-              <p className="text-outline-variant leading-relaxed">{tip.detail}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="prompt-cookbook"
-          title="Prompt Cookbook"
-          description="These examples show both direct prompts and prompt-file flows such as --prompt-file for reusable templates."
-        />
-        <div className="mt-10 grid gap-6">
-          {promptExamples.map((example) => (
-            <article key={example.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <div className="text-xs font-headline uppercase tracking-widest text-primary mb-3">{example.format}</div>
-              <h3 className="font-headline text-2xl font-bold text-white mb-4">{example.title}</h3>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                  <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-2">Direct prompt</div>
-                  <code className="block text-sm text-white break-all">{example.directCommand}</code>
+              </article>
+              <article>
+                <h3 className="font-headline text-2xl font-bold text-white mb-6">Uninstall methods</h3>
+                <div className="space-y-6">
+                  {uninstallMethods.map((item) => (
+                    <div key={item.command}>
+                      <CodeBlock command={item.command} label={item.label} />
+                      <p className="mt-3 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className="rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                  <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-2">Prompt file</div>
-                  <code className="block text-sm text-white break-all">{example.fileCommand}</code>
-                </div>
-              </div>
-              <div className="mt-4 rounded-2xl border border-outline-variant/10 bg-background px-5 py-4">
-                <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-2">{example.promptFileName}</div>
-                <pre className="whitespace-pre-wrap text-sm leading-relaxed text-outline-variant">{example.prompt}</pre>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+              </article>
+            </div>
+          </section>
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="agents"
-          title="Use With Agents"
-          description="OfficeCLI already exposes agent-oriented workflows for Codex, Claude Code, and local automation clients."
-        />
-        <div className="mt-10 grid gap-6 md:grid-cols-2">
-          {agentSkillHighlights.map((group) => (
-            <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-4">{group.title}</h3>
-              <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
-                {group.items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
-      </section>
+          <div className="h-px bg-outline-variant/10 w-full" />
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="openclaw"
-          title="Use With OpenClaw"
-          description="OpenClaw clients should install the skill bundle, then use the OfficeCLI bridge instead of parsing human CLI output."
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          <article className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-            <div className="text-xs font-headline uppercase tracking-widest text-primary mb-2">Install</div>
-            <code className="block text-sm text-white break-all">{docsLinks.openClawInstallCommand}</code>
-          </article>
-          <article className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-            <div className="text-xs font-headline uppercase tracking-widest text-primary mb-2">Bridge</div>
-            <code className="block text-sm text-white break-all">{docsLinks.codexBridgeCommand}</code>
-          </article>
-        </div>
-      </section>
+          <section>
+            <SectionHeading
+              id="command-reference"
+              title="Command Reference"
+              description="The current surface centers on configuration, access checks, generation, review, upgrade, and the agent bridge."
+            />
+            <div className="space-y-12">
+              {commandGroups.map((group) => (
+                <article key={group.title}>
+                  <h3 className="font-headline text-2xl font-bold text-white mb-4">{group.title}</h3>
+                  <CodeBlock command={group.command} />
+                  <p className="mt-4 text-outline-variant leading-relaxed">{group.summary}</p>
+                  {group.notes?.length ? (
+                    <ul className="mt-4 space-y-2 text-sm text-outline-variant list-disc list-inside">
+                      {group.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {group.examples?.length ? (
+                    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                      {group.examples.map((example) => (
+                        <div key={example.command}>
+                          <CodeBlock command={example.command} label={example.label} />
+                          <p className="mt-3 text-sm leading-relaxed text-outline-variant">{example.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="pricing-rules"
-          title="Pricing & Usage Rules"
-          description="Pricing and quota behavior are surfaced through the platform and can be validated from the public pricing API and billing workspace."
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {usageRules.map((rule) => (
-            <article key={rule.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-3">{rule.title}</h3>
-              <p className="text-outline-variant leading-relaxed">{rule.detail}</p>
-            </article>
-          ))}
-        </div>
-        <div className="mt-8 flex flex-wrap gap-4">
-          <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary" href={docsLinks.platformAppURL}>
-            Open platform app
-          </a>
-          <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary" href={docsLinks.platformBillingURL}>
-            Open billing workspace
-          </a>
-          <Link className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary" to="/download">
-            Install the CLI
-          </Link>
-        </div>
-        <div className="mt-8">
-          <Pricing standalone />
-        </div>
-      </section>
+          <div className="h-px bg-outline-variant/10 w-full" />
 
-      <section className="mt-12 rounded-3xl border border-outline-variant/10 bg-surface-low p-8 md:p-10">
-        <SectionHeading
-          id="troubleshooting"
-          title="Troubleshooting"
-          description="Use these checks first when generation output, images, publish links, or access behavior look wrong."
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {troubleshootingTips.map((tip) => (
-            <article key={tip.title} className="rounded-2xl border border-outline-variant/10 bg-background/60 p-6">
-              <h3 className="font-headline text-2xl font-bold text-white mb-3">{tip.title}</h3>
-              <p className="text-outline-variant leading-relaxed">{tip.detail}</p>
-            </article>
-          ))}
+          <section>
+            <SectionHeading
+              id="prompting-tips"
+              title="Prompting Tips"
+              description="Prompt quality is still the strongest lever for predictable AI document generation."
+            />
+            <div className="grid gap-6 md:grid-cols-2">
+              {promptingTips.map((tip) => (
+                <article key={tip.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{tip.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{tip.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="prompt-cookbook"
+              title="Prompt Cookbook"
+              description="These examples show both direct prompts and prompt-file flows such as --prompt-file for reusable templates."
+            />
+            <div className="space-y-12">
+              {promptExamples.map((example) => (
+                <article key={example.title}>
+                  <div className="text-xs font-headline uppercase tracking-widest text-primary mb-3">{example.format}</div>
+                  <h3 className="font-headline text-2xl font-bold text-white mb-6">{example.title}</h3>
+                  <div className="grid gap-6 lg:grid-cols-2 mb-6">
+                    <div>
+                      <CodeBlock command={example.directCommand} label="Direct prompt" />
+                    </div>
+                    <div>
+                      <CodeBlock command={example.fileCommand} label="Prompt file" />
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-outline-variant/10 bg-surface-low overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant/10 bg-surface">
+                      <div className="text-xs font-headline uppercase tracking-widest text-tertiary">{example.promptFileName}</div>
+                    </div>
+                    <div className="px-5 py-4">
+                      <pre className="whitespace-pre-wrap text-sm leading-relaxed text-outline-variant font-mono">{example.prompt}</pre>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="agents"
+              title="Use With Agents"
+              description="OfficeCLI already exposes agent-oriented workflows for Codex, Claude Code, and local automation clients."
+            />
+            <div className="grid gap-6 md:grid-cols-2">
+              {agentSkillHighlights.map((group) => (
+                <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-4">{group.title}</h3>
+                  <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
+                    {group.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="openclaw"
+              title="Use With OpenClaw"
+              description="OpenClaw clients should install the skill bundle, then use the OfficeCLI bridge instead of parsing human CLI output."
+            />
+            <div className="grid gap-6 md:grid-cols-2">
+              <article>
+                <CodeBlock command={docsLinks.openClawInstallCommand} label="Install" />
+              </article>
+              <article>
+                <CodeBlock command={docsLinks.codexBridgeCommand} label="Bridge" />
+              </article>
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="pricing-rules"
+              title="Pricing & Usage Rules"
+              description="Pricing and quota behavior are surfaced through the platform and can be validated from the public pricing API and billing workspace."
+            />
+            <div className="grid gap-6 md:grid-cols-2 mb-10">
+              {usageRules.map((rule) => (
+                <article key={rule.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{rule.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{rule.detail}</p>
+                </article>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-4 mb-12">
+              <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary transition-colors" href={docsLinks.platformAppURL}>
+                Open platform app
+              </a>
+              <a className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary transition-colors" href={docsLinks.platformBillingURL}>
+                Open billing workspace
+              </a>
+              <Link className="rounded-full border border-outline-variant/20 px-5 py-3 font-semibold text-white hover:border-primary/30 hover:text-primary transition-colors" to="/download">
+                Install the CLI
+              </Link>
+            </div>
+            <div className="rounded-3xl border border-outline-variant/10 bg-surface-low p-8">
+              <Pricing standalone />
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="troubleshooting"
+              title="Troubleshooting"
+              description="Use these checks first when generation output, images, publish links, or access behavior look wrong."
+            />
+            <div className="grid gap-6 md:grid-cols-2">
+              {troubleshootingTips.map((tip) => (
+                <article key={tip.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{tip.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{tip.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </main>
   )
 }

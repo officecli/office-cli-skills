@@ -29,7 +29,7 @@ export const installTabs: InstallTabContent[] = [
     commands: [
       {
         label: 'Homebrew',
-        command: 'brew install officecli/homebrew-officecli/officecli',
+        command: 'brew tap officecli/officecli && brew install officecli',
         detail: 'Best default for Apple Silicon and Intel Macs.',
       },
       {

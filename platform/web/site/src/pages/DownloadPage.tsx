@@ -40,7 +40,7 @@ export default function DownloadPage() {
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Optional platform features</h2>
           <p className="text-outline-variant leading-relaxed mb-6">
-            Use platform to manage paid access, hosted runtime features, API keys, billing, and optional online preview publishing.
+            Use platform to manage paid access, API keys, billing, and optional online preview publishing.
           </p>
           <div className="flex flex-wrap gap-4">
             <a className="inline-flex bg-gradient-to-br from-primary to-primary-container text-[#002e6b] px-6 py-3 rounded-md font-bold" href={platformAppHref} onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.downloadClick, { surface: 'site', placement: 'download-page', ...extractAttributionParams(location.search) })}>Open platform</a>

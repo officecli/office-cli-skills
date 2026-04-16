@@ -57,7 +57,7 @@ export const homeFAQs: FAQEntry[] = [
   },
   {
     q: 'When do I need platform.officecli.io?',
-    a: 'Use the platform when you need paid access management, hosted runtime features, billing, API-key workflows, or optional online preview publishing.',
+    a: 'Use the platform when you need paid access management, billing, API-key workflows, or optional online preview publishing.',
   },
 ]
 
@@ -130,17 +130,17 @@ export const routeSEO: Record<string, RouteSEO> = {
   '/pricing': buildRouteSEO(
     '/pricing',
     'OfficeCLI Pricing | Paid access for document automation workflows',
-    'See OfficeCLI pricing for hosted access, billing-aware document automation workflows, and secure checkout for recurring team usage.',
+    'See OfficeCLI pricing for platform access, billing-aware document automation workflows, and secure checkout for recurring team usage.',
   ),
   '/faq': buildRouteSEO(
     '/faq',
     'OfficeCLI FAQ | AI document generation CLI answers',
-    'Read answers about OfficeCLI installation, supported formats, REPORT outputs, local-first usage, and optional hosted platform features.',
+    'Read answers about OfficeCLI installation, supported formats, REPORT outputs, local-first usage, and optional platform features.',
   ),
   '/login': buildRouteSEO(
     '/login',
-    'OfficeCLI Login | Open the hosted platform',
-    'Open the OfficeCLI platform for hosted runtime access, billing-aware workflows, API keys, and authenticated console features.',
+    'OfficeCLI Login | Open the platform',
+    'Open the OfficeCLI platform for platform access, billing-aware workflows, API keys, and authenticated console features.',
   ),
 }
 

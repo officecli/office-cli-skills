@@ -28,7 +28,7 @@ function SiteShell() {
 
   return (
     <div className="min-h-screen bg-background text-white selection:bg-primary/30">
-      <Navbar />
+      {location.pathname !== '/docs' && <Navbar />}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/pricing" element={<PricingPage />} />

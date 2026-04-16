@@ -4,7 +4,7 @@ import { Terminal, Settings2, WandSparkles, ScanText } from 'lucide-react'
 export default function Workflow() {
   const steps = [
     { icon: <Terminal className="text-primary" />, title: 'Install', subtitle: 'Binary via brew, npm, script, or manual release' },
-    { icon: <Settings2 className="text-tertiary" />, title: 'Connect', subtitle: 'Point the runtime at your LLM or hosted mode' },
+    { icon: <Settings2 className="text-tertiary" />, title: 'Connect', subtitle: 'Point the runtime at your LLM endpoint' },
     { icon: <WandSparkles className="text-secondary" />, title: 'Operate', subtitle: 'Run a document operation from the terminal' },
     { icon: <ScanText className="text-primary-container" />, title: 'Review', subtitle: 'Score, review, publish, or automate the result' },
   ]
@@ -14,7 +14,7 @@ export default function Workflow() {
       <div className="max-w-[1440px] mx-auto px-8 md:px-16 text-center">
         <h2 className="font-headline text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">Use AI Document Automation in Real Workflows</h2>
         <p className="text-outline-variant text-lg max-w-3xl mx-auto mb-16">
-          Keep the document path local when you want a lightweight setup, then layer in hosted runtime, paid access, or preview publishing only when those features matter.
+          Keep the document path local when you want a lightweight setup, then layer in platform features, paid access, or preview publishing only when those features matter.
         </p>
         <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative">
           <div className="hidden md:block absolute top-1/2 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-outline-variant/30 to-transparent -translate-y-1/2 z-0"></div>
