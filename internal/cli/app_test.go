@@ -1223,6 +1223,102 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	}
 }
 
+func TestAppRun_InteractiveUpdatePromptStopsParentBeforeNewXLSXGeneration(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	outputDir := filepath.Join(tmpDir, "output")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{OutputDir: outputDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	stdout := &terminalBuffer{}
+	var stderr bytes.Buffer
+	app := NewApp(stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("1\n")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.12"
+	BuildDate = "2026-04-16T10:37:00Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.12",
+			LatestVersionLabel:  "0.2.13",
+			InstallMethod:       InstallMethodScript,
+			Channel:             UpdateChannelLatest,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "curl -fsSL https://example.com/install.sh | bash",
+		}, nil
+	}
+
+	updated := false
+	restarted := false
+	preflightCalls := 0
+	licenseClientCalls := 0
+	llmClientCalls := 0
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		updated = true
+		return nil
+	}
+	app.restartCommand = func(ctx context.Context, info UpdateInfo, args []string) error {
+		restarted = true
+		if len(args) < 4 || args[0] != "new" || args[1] != "xlsx" || args[2] != "Sales Analysis" {
+			t.Fatalf("unexpected restart args: %v", args)
+		}
+		return nil
+	}
+	app.officeTaskPreflight = func(ctx context.Context, command string, args []string) error {
+		preflightCalls++
+		return nil
+	}
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		licenseClientCalls++
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		llmClientCalls++
+		return fakeAppLLMClient{jsonResponse: `{"title":"Quarterly Sales Analysis Workbook","sheets":[{"name":"Summary","headers":["Region","Revenue","Year-over-Year Growth","Owner","Target Attainment"],"rows":[["North America","2.4M","+12%","Avery","108%"],["Europe","1.8M","+9%","Jordan","101%"]]},{"name":"Regional Analysis","headers":["Region","Revenue","Year-over-Year Growth","Owner","Target Attainment"],"rows":[["APAC","1.5M","+15%","Taylor","112%"],["LATAM","0.9M","+7%","Morgan","97%"]]}]}`}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"new", "xlsx", "Sales Analysis", "--prompt", "Generate a quarterly sales analysis workbook with a summary sheet and a regional analysis sheet. Include region, revenue, year-over-year growth, owner, and target attainment with plausible demo data.", "--no-publish"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !updated || !restarted {
+		t.Fatalf("updated=%t restarted=%t", updated, restarted)
+	}
+	if preflightCalls != 0 {
+		t.Fatalf("preflightCalls = %d, want 0", preflightCalls)
+	}
+	if licenseClientCalls != 0 {
+		t.Fatalf("licenseClientCalls = %d, want 0", licenseClientCalls)
+	}
+	if llmClientCalls != 0 {
+		t.Fatalf("llmClientCalls = %d, want 0", llmClientCalls)
+	}
+	if entries, err := os.ReadDir(outputDir); err == nil && len(entries) > 0 {
+		t.Fatalf("expected no generated files before restart handoff, found %d", len(entries))
+	}
+	if strings.Contains(stdout.String(), "Generation completed. Saved to") {
+		t.Fatalf("parent process should not render generation output: %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 	t.Setenv(updateCheckSkipEnv, "0")
 	stdout := &terminalBuffer{}
