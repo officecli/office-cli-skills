@@ -60,12 +60,22 @@ It should own:
 - public-facing metadata that points to public endpoints only
 - the trusted-publishing workflow that actually runs `npm publish`
 
+### Public CI control plane
+
+Suggested repository: `officecli/officecli-ci`
+
+It should own:
+
+- release and operations workflows that check out the private source repository
+- the active `CLI Release`, `NPM Publish`, and installed E2E workflows
+- the GitHub Actions entrypoints used for public binary and npm publication
+
 ## Release Flows
 
 Versioned release flow:
 
 1. Create a `vX.Y.Z` tag in the private source repository
-2. Trigger the `CLI Release` GitHub Action
+2. Trigger the public `CLI Release` workflow in `officecli/officecli-ci`
 3. Build darwin and linux artifacts for amd64 and arm64 with GoReleaser
 4. Publish artifacts to the public distribution repository
 5. Sync the Homebrew tap formula
@@ -74,14 +84,14 @@ Npm wrapper flow:
 
 1. Update `packages/npm/officecli/package.json` to the target version
 2. Ensure the matching `vX.Y.Z` binary release already exists in `officecli/officecli-dist`
-3. Sync the wrapper files to `officecli/officecli-npm`
-4. Let the public npm repository publish the package with trusted publishing
+3. Trigger the public `NPM Publish` workflow in `officecli/officecli-ci`
+4. Let the public control plane publish the package with trusted publishing
 5. Verify `npm install -g officecli` still resolves the matching binary release
 
 Rolling latest flow:
 
 1. Push to `main`
-2. Trigger the `CLI Publish Latest` GitHub Action
+2. Let the public CI control plane decide whether a rolling latest publish should run
 3. Build `officecli_latest_*` artifacts
 4. Replace the public `latest` release assets
 5. Sync the install script and distribution metadata

@@ -233,7 +233,7 @@ Scope:
 
 Current repository assets that belong here:
 
-- [`/.github/workflows/cli-installed-e2e.yml`](/home/ubuntu/workspace/officecli/.github/workflows/cli-installed-e2e.yml)
+- the public control-plane workflow `CLI Installed E2E` in `officecli/officecli-ci`
 - production inspection scripts
 - release checklist and deployment verification docs
 

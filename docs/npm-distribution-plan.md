@@ -52,9 +52,9 @@ officecli --version
 
 CI:
 
-- `.github/workflows/npm-wrapper-ci.yml`
-- `.github/workflows/npm-publish.yml`
-- `.github/workflows/sync-public-npm.yml`
+- `officecli/officecli-ci` workflow `NPM Publish`
+- `officecli/officecli-ci` workflow `Private Main CI`
+- optional public wrapper sync automation if the public npm metadata repository is still maintained separately
 
 ## Release Guardrails
 
