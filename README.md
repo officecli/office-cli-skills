@@ -1,22 +1,37 @@
-# OfficeCLI Skills
+# OfficeCLI Skills for Claude Code, Codex, and AI Agents
 
-This repository contains the public Claude Code and OpenClaw skill packages for the closed-source
-`officecli` product.
+`officecli-skills` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
+Claude Code, Codex, and other AI agents run local Office document workflows. Use this repository when
+you need an AI agent skill for `pptx`, `docx`, `xlsx`, or workbook-backed `report` tasks, and you want
+generation to stay on the same machine through a local `officecli` runtime instead of a hosted plugin
+backend.
 
-The primary plugin currently intended for Anthropic marketplace review is:
+This repository is the public distribution surface for:
 
-- `officecli`
+- Claude Code marketplace metadata
+- the `officecli` skill for general Office document workflows
+- the `openclaw-officecli` package for OpenClaw-oriented integrations
+- direct install scripts for local Codex-style skill installs
 
-This repository also includes:
+Related product page:
 
-- a Claude Code marketplace definition
-- a Claude Code plugin wrapper for `officecli`
-- a Claude Code plugin wrapper for `openclaw-officecli`
-- public skill definitions and install scripts
+- `https://officecli.io/claude-code-codex-office-skills`
 
-## Claude Code
+## What OfficeCLI Skills supports
 
-### Marketplace source
+The public `officecli` skill is designed for agent workflows such as:
+
+- AI PPTX generation for decks, proposals, and executive briefings
+- AI DOCX drafting for retrospectives, memos, and customer-facing documents
+- AI XLSX generation for workbooks, trackers, and analysis sheets
+- report workflows routed through OfficeCLI when a workbook-backed report artifact is needed
+- capability checks before execution so the agent can decide whether OfficeCLI supports the request
+
+## Supported agent runtimes
+
+### Claude Code
+
+Use the marketplace source when you want Claude Code to install the OfficeCLI plugin directly.
 
 Add the OfficeCLI marketplace source:
 
@@ -30,44 +45,9 @@ Install the primary plugin:
 /plugin install officecli@officecli-skills
 ```
 
-### What the plugin does
+### Codex and other local agents
 
-The `officecli` plugin helps Claude Code handle local Office document workflows for:
-
-- `pptx`
-- `docx`
-- `xlsx`
-- generate or convert supported Office files through a local `officecli` installation
-- check whether a requested workflow is supported before execution
-- keep Office file generation on the local machine instead of using a hosted plugin backend
-
-### Requirements
-
-- Claude Code with plugin support
-- a local `officecli` binary
-- local OfficeCLI generation and license configuration
-- permission for Claude Code to invoke local commands on the same machine
-
-### Quick verification
-
-After installation, verify the local dependency chain:
-
-```bash
-officecli --version
-officecli config status
-```
-
-Then use Claude Code for a supported Office document request such as:
-
-```text
-Create a 6-slide PPTX introducing our enterprise collaboration platform.
-```
-
-## Direct install scripts
-
-If you want the public skill files without marketplace installation, use the direct installer.
-
-### Codex-style local skill install
+Use the direct installer when you want the public skill files without marketplace installation.
 
 Use `wget`:
 
@@ -87,9 +67,10 @@ If you only want the skill and do not want to auto-install the binary:
 curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | AUTO_INSTALL_BINARY=0 bash -s -- officecli
 ```
 
-## OpenClaw Install
+### OpenClaw
 
-If you want OpenClaw users to generate local Office files directly from Telegram, Discord, Slack, or other channels, install the OpenClaw-facing skill package:
+If you want OpenClaw users to generate local Office files directly from Telegram, Discord, Slack, or
+other channels, install the OpenClaw-facing skill package.
 
 Use `wget`:
 
@@ -115,45 +96,58 @@ If you only want the OpenClaw skill and do not want to auto-install the binary:
 curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
 ```
 
-After installation, 3 more steps are still required before the skill can be used:
+## Requirements
 
-1. Configure `officecli` itself:
+- a local `officecli` binary
+- local OfficeCLI generation and license configuration
+- permission for the agent client to invoke local commands on the same machine
+
+Quick verification after installation:
 
 ```bash
-officecli config set-generation
-officecli config set-license
+officecli --version
+officecli config status
 ```
 
-2. Attach `openclaw-officecli` to your OpenClaw agent in `~/.openclaw/config.yaml` and ensure the agent can use `shell` and `file_read`.
+For OpenClaw, also verify:
 
-3. Restart OpenClaw, then verify both `officecli --version` and `officecli agent-bridge` work on the same host where OpenClaw runs.
+```bash
+officecli agent-bridge
+```
 
-For PPT generation, agents should first read `initialize` / `capabilities/get` and use
-`document_generation.pptx.image_support` as the machine-readable contract for image behavior.
-If a user wants a text-only deck, the agent should send `enable_images=false`.
-If a generated PPT has no images, rerun `officecli config set-generation` and check
-`image_base_url`, `image_api_key`, and `image_model`.
+## How OfficeCLI and officecli-skills fit together
 
-## Safety and scope
+- `OfficeCLI` is the local Office document engine
+- `officecli-skills` is the public GitHub repository for skills, plugin wrappers, and installers
+- `officecli` is the general skill for Claude Code, Codex, and other local agents
+- `openclaw-officecli` is the OpenClaw-oriented package
 
-- this repository distributes local skill wrappers, not a hosted SaaS integration
-- Office file generation is executed through the user's local `officecli` installation
-- this repository does not contain the closed-source OfficeCLI implementation
-- the primary marketplace submission target is `officecli`, not `openclaw-officecli`
+## FAQ
 
-## Scope
+### Is this repository a hosted SaaS plugin backend?
 
-- Public `SKILL.md` content and examples
-- Claude Code marketplace metadata and plugin wrappers
-- No closed-source `officecli` implementation code
-- No private repository metadata or internal deployment details
+No. This repository distributes local skill wrappers, not a hosted plugin backend.
+
+### Can Claude Code create PPTX, DOCX, XLSX, or report outputs with this repository?
+
+Yes, when the local `officecli` runtime is installed and configured. The repository tells the agent how
+to route supported Office tasks into OfficeCLI.
+
+### Why does this repository mention Codex as well as Claude Code?
+
+Because marketplace install is only one entrypoint. This repository also distributes direct skill files
+for Codex-style local agents and other agent runtimes.
+
+### Does this repository contain the OfficeCLI implementation?
+
+No. It contains public skill definitions, plugin wrappers, examples, and install scripts only.
 
 ## Layout
 
 - `.claude-plugin/marketplace.json`: Claude Code marketplace definition
 - `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
 - `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
-- `skills/officecli/`: public skill definition
+- `skills/officecli/`: public OfficeCLI skill definition
 - `skills/openclaw-officecli/`: public OpenClaw skill definition
 - `scripts/install-skill.sh`: shell installer for direct `wget` / `curl` usage
 - `scripts/install-openclaw-skill.sh`: shell installer for OpenClaw users
