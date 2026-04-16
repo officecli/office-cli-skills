@@ -13,7 +13,13 @@ import '@fontsource/jetbrains-mono/500.css'
 import App from './App'
 import './index.css'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
+import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, SkeletonDataTable, formatDate } from '../components/ui'
 
 export default function UsagePage() {
-  const { data } = useQuery({ queryKey: ['app-usage'], queryFn: api.usage })
+  const { data, isLoading } = useQuery({ queryKey: ['app-usage'], queryFn: api.usage })
   const events = Array.isArray(data) ? data : []
 
   return (
     <Panel>
       <SectionHeading eyebrow="Execution trail" title="Recent workflow usage" body="Track which requests were allowed, what mode they used, and why any call was blocked before it reached document generation." />
-      {events.length ? (
+      {isLoading ? (
+        <SkeletonDataTable columns={6} rows={5} />
+      ) : events.length ? (
         <DataTable
           headers={['Mode', 'Action', 'Result', 'Fingerprint', 'Reason', 'Timestamp']}
           rows={events.map((event) => [

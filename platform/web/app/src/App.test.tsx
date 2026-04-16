@@ -138,7 +138,7 @@ describe('platform app shell', () => {
     renderApp('/downloads')
 
     expect(await screen.findByRole('heading', { name: /Install OfficeCLI for document operations/i })).toBeInTheDocument()
-    expect(screen.getByText(/brew install officecli\/homebrew-officecli\/officecli/i)).toBeInTheDocument()
+    expect(screen.getByText(/brew tap officecli\/officecli && brew install officecli/i)).toBeInTheDocument()
     expect(screen.getByText(/npm install -g officecli/i)).toBeInTheDocument()
     expect(screen.getByText(/raw\.githubusercontent\.com\/officecli\/officecli\/main\/scripts\/install-officecli\.sh/i)).toBeInTheDocument()
     expect(screen.queryByText(/officecli\.io\/install\.sh/i)).not.toBeInTheDocument()

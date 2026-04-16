@@ -5,13 +5,13 @@ import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { trackEvent } from '../analytics'
-import { EmptyState, KeyStat, MetricCard, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { EmptyState, KeyStat, MetricCard, Panel, SectionHeading, StatusPill, Skeleton, SkeletonMetricCard, formatDate, formatNumber } from '../components/ui'
 
 export default function OverviewPage() {
   const location = useLocation()
-  const { data: overview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
-  const { data: growth } = useQuery({ queryKey: ['app-growth'], queryFn: api.growth })
-  const { data: apiKeys = [] } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
+  const { data: overview, isLoading: isLoadingOverview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
+  const { data: growth, isLoading: isLoadingGrowth } = useQuery({ queryKey: ['app-growth'], queryFn: api.growth })
+  const { data: apiKeys = [], isLoading: isLoadingApiKeys } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
 
   const featuredKey = apiKeys[0]
   const rewardGrants = growth?.reward_grants ?? []
@@ -67,13 +67,29 @@ export default function OverviewPage() {
         />
         <div className="overview-shell">
           <div className="panel-muted grid gap-4 p-6 md:grid-cols-3">
-            <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
-            <MetricCard label="External Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining external document generations across all keys" />
-            <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External requests recorded recently" />
+            {isLoadingOverview ? (
+              <>
+                <SkeletonMetricCard />
+                <SkeletonMetricCard />
+                <SkeletonMetricCard />
+              </>
+            ) : (
+              <>
+                <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
+                <MetricCard label="External Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining external document generations across all keys" />
+                <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External requests recorded recently" />
+              </>
+            )}
           </div>
           <div className="panel-muted p-6">
             <div className="info-eyebrow text-tertiary">Lead key</div>
-            {featuredKey ? (
+            {isLoadingApiKeys ? (
+              <div className="mt-4 space-y-4">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            ) : featuredKey ? (
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -92,10 +108,21 @@ export default function OverviewPage() {
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
-        <MetricCard label="Reward Credits" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} credits per activated invite` : 'No invite code available yet'} />
-        <MetricCard label="Referral Progress" value={`${formatNumber(referralCount)}/${formatNumber(inviteLimit)}`} detail={`${formatNumber(activatedReferralCount)} activated · ${formatNumber(inviteRemaining)} slots left`} />
-        <MetricCard label="Discord Status" value={growthStatusValue} detail={discordConnection?.verification_blocked_reason ?? 'Guild membership determines Discord reward eligibility'} />
+        {isLoadingOverview || isLoadingGrowth ? (
+          <>
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+            <SkeletonMetricCard />
+          </>
+        ) : (
+          <>
+            <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
+            <MetricCard label="Reward Credits" value={formatNumber(overview?.reward_remaining)} detail={inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} credits per activated invite` : 'No invite code available yet'} />
+            <MetricCard label="Referral Progress" value={`${formatNumber(referralCount)}/${formatNumber(inviteLimit)}`} detail={`${formatNumber(activatedReferralCount)} activated · ${formatNumber(inviteRemaining)} slots left`} />
+            <MetricCard label="Discord Status" value={growthStatusValue} detail={discordConnection?.verification_blocked_reason ?? 'Guild membership determines Discord reward eligibility'} />
+          </>
+        )}
       </div>
 
       <Panel>

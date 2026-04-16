@@ -1,19 +1,33 @@
 import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Workflow, Sparkles } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { cn } from '../lib/utils'
 import type { User } from '../types'
 
 const navItems = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard },
-  { to: '/api-keys', label: 'API Keys', icon: KeyRound },
-  { to: '/billing', label: 'Billing', icon: CreditCard },
-  { to: '/usage', label: 'Usage', icon: Workflow },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-overview'], queryFn: api.overview })
+    queryClient.prefetchQuery({ queryKey: ['app-growth'], queryFn: api.growth })
+    queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
+  }},
+  { to: '/api-keys', label: 'API Keys', icon: KeyRound, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
+  }},
+  { to: '/billing', label: 'Billing', icon: CreditCard, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['pricing'], queryFn: api.pricing })
+    queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
+    queryClient.prefetchQuery({ queryKey: ['app-orders'], queryFn: api.orders })
+  }},
+  { to: '/usage', label: 'Usage', icon: Workflow, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-usage'], queryFn: api.usage })
+  }},
   { to: '/downloads', label: 'Downloads', icon: Download },
 ]
 
 export function AppSidebar({ user }: { user: User }) {
+  const queryClient = useQueryClient()
+  
   return (
     <aside className="sidebar-shell fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-outline-variant/20 px-5 py-6 lg:flex">
       <Link to="/" className="mb-10 flex items-center gap-4">
@@ -38,6 +52,7 @@ export function AppSidebar({ user }: { user: User }) {
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            onMouseEnter={() => item.prefetch?.(queryClient)}
             className={({ isActive }) => cn(
               'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-outline hover:bg-surface-container-high hover:text-white',
               isActive && 'active-nav-item bg-surface-container-high text-white',

@@ -71,4 +71,39 @@ export function EmptyState({ title, body }: { title: string; body: string }) {
   )
 }
 
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('animate-pulse rounded-md bg-surface-container-high/50', className)} />
+}
+
+export function SkeletonMetricCard() {
+  return (
+    <div className="panel-muted p-5">
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="mt-3 h-9 w-16" />
+      <Skeleton className="mt-2 h-4 w-48" />
+    </div>
+  )
+}
+
+export function SkeletonDataTable({ columns, rows = 3 }: { columns: number; rows?: number }) {
+  return (
+    <div className="soft-panel overflow-hidden border border-outline-variant/15">
+      <div className="info-eyebrow-tight grid bg-surface-container-high/70 text-outline" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {Array.from({ length: columns }).map((_, i) => (
+          <div key={i} className="px-4 py-3"><Skeleton className="h-4 w-full" /></div>
+        ))}
+      </div>
+      <div className="divide-y divide-outline-variant/10">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="grid items-center bg-surface-container-low/40 text-sm" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+            {Array.from({ length: columns }).map((_, j) => (
+              <div key={j} className="px-4 py-4 text-outline"><Skeleton className="h-4 w-full" /></div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export { formatDate, formatNumber }

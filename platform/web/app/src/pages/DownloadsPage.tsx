@@ -4,7 +4,7 @@ import { Panel, SectionHeading } from '../components/ui'
 const commands = [
   {
     title: 'Homebrew on macOS',
-    command: 'brew install officecli/homebrew-officecli/officecli',
+    command: 'brew tap officecli/officecli && brew install officecli',
     detail: 'Recommended for Apple Silicon and Intel Macs.',
   },
   {
