@@ -40,7 +40,7 @@ jobs:
       DIST_REPO: ${{ github.event_name == 'workflow_dispatch' && inputs.dist_repo || 'officecli/officecli-dist' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup Node
         uses: actions/setup-node@v6

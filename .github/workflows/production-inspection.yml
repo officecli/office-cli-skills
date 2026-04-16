@@ -17,7 +17,7 @@ jobs:
       PLATFORM_BASE_URL: ${{ vars.INSPECTION_PLATFORM_BASE_URL || 'https://platform.officecli.io' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Run readonly checks
         id: readonly
@@ -64,7 +64,7 @@ jobs:
       INSPECTION_REQUEST_PREFIX: inspection
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Run isolated write checks
         id: isolated
@@ -108,7 +108,7 @@ jobs:
       DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Download readonly artifact
         if: always()

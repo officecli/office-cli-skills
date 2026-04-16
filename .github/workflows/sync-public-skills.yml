@@ -18,7 +18,7 @@ jobs:
       PUBLIC_SKILLS_DEFAULT_BRANCH: ${{ vars.PUBLIC_SKILLS_DEFAULT_BRANCH || 'main' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Sync public skills repository
         env:

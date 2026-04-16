@@ -50,7 +50,7 @@ jobs:
       OFFICESDK_JWT_SECRET: ${{ secrets.PLATFORM_OFFICESDK_JWT_SECRET }}
     steps:
       - name: Checkout target ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
@@ -63,7 +63,7 @@ jobs:
           cache-dependency-path: platform/go.sum
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: '22'
           cache: npm
