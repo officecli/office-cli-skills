@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,8 @@ const (
 	defaultUpdateCheckURL   = "https://api.github.com/repos/%s/releases/latest"
 	defaultInstallScriptURL = "https://raw.githubusercontent.com/%s/%s/scripts/install-officecli.sh"
 )
+
+var errCommandHandledByRestart = errors.New("command already handled by restarted process")
 
 type InstallMethod string
 
@@ -121,7 +124,10 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 	if a.restartCommand == nil {
 		return nil
 	}
-	return a.restartCommand(ctx, info, args)
+	if err := a.restartCommand(ctx, info, args); err != nil {
+		return err
+	}
+	return errCommandHandledByRestart
 }
 
 func (a *App) safeCheckForUpdates(ctx context.Context) (UpdateInfo, error) {

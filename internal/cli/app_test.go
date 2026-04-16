@@ -1215,6 +1215,9 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 	if !strings.Contains(stdout.String(), "1. Update now and continue") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
+	if strings.Contains(stdout.String(), "Config file:") {
+		t.Fatalf("current process should stop after restart, stdout = %q", stdout.String())
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q", stderr.String())
 	}

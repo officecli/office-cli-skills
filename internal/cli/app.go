@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -127,6 +128,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		}
 	}
 	if err := a.maybeHandleUpdate(ctx, args); err != nil {
+		if errors.Is(err, errCommandHandledByRestart) {
+			return nil
+		}
 		return err
 	}
 	switch args[0] {
