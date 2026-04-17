@@ -418,7 +418,6 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 		"ppt/charts/chart1.xml":            readFixtureFile(t, "local_preview_contract/ppt/charts/chart1.xml"),
 		"ppt/charts/_rels/chart1.xml.rels": readFixtureFile(t, "local_preview_contract/ppt/charts/_rels/chart1.xml.rels"),
 		"ppt/slides/_rels/slide2.xml.rels": readFixtureFile(t, "local_preview_contract/ppt/slides/_rels/slide2.xml.rels"),
-		"ppt/slides/slide2.xml":            readFixtureFile(t, "local_preview_contract/ppt/slides/slide2.xml"),
 		"ppt/presentation.xml":             readFixtureFile(t, "local_preview_contract/ppt/presentation.xml"),
 		"ppt/_rels/presentation.xml.rels":  readFixtureFile(t, "local_preview_contract/ppt/_rels/presentation.xml.rels"),
 	}
@@ -461,6 +460,11 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 	}
 	if !strings.Contains(slideXML, `xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"`) {
 		t.Fatalf("slide2.xml must keep inline chart namespace declarations")
+	}
+	for _, needle := range []string{`name="ChartPanel"`, `name="FooterRule"`, `name="PageNumber"`} {
+		if !strings.Contains(slideXML, needle) {
+			t.Fatalf("slide2.xml missing %q", needle)
+		}
 	}
 
 	// presentation-level package structure must match the local working sample

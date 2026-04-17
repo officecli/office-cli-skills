@@ -448,12 +448,12 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
       "imagePos": "right",
       "source": "Optional data source"
     }`
-		imageRules = `- Prefer images for 1-3 content slides, not every slide.
+		imageRules = `- Use images sparingly. Prefer 0-1 image slide in the whole deck, and only when the page clearly benefits from a hero visual.
 - On image slides, only output hasImage, imagePrompt, and imagePos. imagePos must be one of right, left, background, center, top, bottom, or diagonal.
 - imagePrompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
 - Do not add images to chart or dashboard layouts.
-- Prefer images for product UI, usage scenarios, or training steps. By default do not add images to market analysis, competitive landscape, business review, or action recommendation slides.
-- On image slides, keep only 2-3 short points to avoid overcrowding text and visuals.`
+- Prefer images for title-cover hero visuals, product UI, usage scenarios, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, or action recommendation slides.
+- On image slides, keep only 1-2 short points so text remains secondary to the visual.`
 	}
 	outlineRules := buildArchetypePromptRules(archetype)
 	return fmt.Sprintf(`Generate a JSON structure for a PPT presentation based on the following request.
@@ -487,10 +487,11 @@ Return JSON only. Do not add any extra commentary:
 }
 
 Requirements:
-	- Keep the deck to 5-7 slides, preferably 6.
+	- Keep the deck to 5-8 slides, usually 6-7.
 	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
-	- Prefer an overview or key takeaway on slide 2, and action items or next steps on the final slide.
+	- For business decks, slide 2 should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+	- Prefer a storyline such as cover -> summary -> supporting evidence/capabilities -> detail -> action, but adapt the exact page count and page roles to the prompt instead of forcing a rigid template.
 	- Every slide must include variant. title can only use title-center or title-split. For content prefer bullets, sections-grid, comparison, timeline, or image-right. Use chart-focus for chart and kpi-band for dashboard.
 	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
@@ -607,7 +608,8 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		return nil
 	}
 
-	warnings := make([]engine.GenerateIssue, 0, 2)
+	const maxSlides = 8
+	warnings := make([]engine.GenerateIssue, 0, 3)
 	payload.Title = trimRunes(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"), 30)
 	archetype := detectPPTXArchetype(fallback, payload.Title)
 	payload.StylePreset = suggestStylePreset(firstNonEmpty(strings.TrimSpace(payload.StylePreset), strings.TrimSpace(requestedStyle)), archetype)
@@ -618,7 +620,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
-		if len(slides) >= 9 {
+		if len(slides) >= maxSlides {
 			slidesTrimmed = true
 			break
 		}
@@ -630,9 +632,9 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 			continue
 		}
 		slides = append(slides, expandSlideForDensity(normalized)...)
-		if len(slides) > 9 {
+		if len(slides) > maxSlides {
 			slidesTrimmed = true
-			slides = slides[:9]
+			slides = slides[:maxSlides]
 			break
 		}
 	}
@@ -675,6 +677,11 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	}
 
 	slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
+	slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
+	if len(slides) > maxSlides {
+		slidesTrimmed = true
+		slides = slides[:maxSlides]
+	}
 
 	payload.Slides = slides
 
@@ -682,7 +689,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		warnings = append(warnings, engine.GenerateIssue{
 			Code:    "WARN_PPT_SLIDES_TRIMMED",
 			Field:   "slides",
-			Message: "The generated deck exceeded quality limits and was automatically trimmed to 9 slides or fewer.",
+			Message: "The generated deck exceeded quality limits and was automatically trimmed to 8 slides or fewer.",
 		})
 	}
 	if imagesAdjusted {
@@ -696,9 +703,9 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 }
 
 func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enableImages bool, imageBudget *int) (officegen.Slide, bool) {
-	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 18)
-	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 28)
-	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 40)
+	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 22)
+	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 30)
+	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
 
 	switch {
@@ -713,7 +720,7 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 	}
 	slide.Variant = normalizeSlideVariant(slide)
 
-	slide.Points = normalizePoints(slide.Points, 4, 34)
+	slide.Points = normalizePoints(slide.Points, 4, 32)
 	slide.Sections = normalizeSections(slide.Sections, 3)
 	slide.Metrics = normalizeMetrics(slide.Metrics, 4)
 	slide.Chart = normalizeChart(slide.Chart)
@@ -808,7 +815,7 @@ func normalizeSections(sections []officegen.SlideSection, limit int) []officegen
 	out := make([]officegen.SlideSection, 0, len(sections))
 	for _, section := range sections {
 		heading := fitTextForLayout(cleanSentence(section.Heading), 12)
-		detail := fitTextForLayout(cleanSentence(section.Detail), 28)
+		detail := fitTextForLayout(cleanSentence(section.Detail), 30)
 		if heading == "" && detail == "" {
 			continue
 		}
@@ -832,7 +839,7 @@ func normalizeMetrics(metrics []officegen.MetricCard, limit int) []officegen.Met
 	for _, metric := range metrics {
 		label := fitTextForLayout(cleanSentence(metric.Label), 12)
 		value := fitTextForLayout(strings.TrimSpace(metric.Value), 12)
-		note := fitTextForLayout(cleanSentence(metric.Note), 18)
+		note := fitTextForLayout(cleanSentence(metric.Note), 20)
 		if label == "" || value == "" {
 			continue
 		}
@@ -882,6 +889,367 @@ func suggestStylePreset(style string, archetype pptxArchetype) string {
 		return officegen.StylePresetTrainingManual
 	default:
 		return officegen.StylePresetTechContrast
+	}
+}
+
+func rebalanceNarrativeSlides(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
+	if len(slides) == 0 {
+		return slides
+	}
+	slides = ensureMinimumNarrativeSlides(slides, deckTitle, archetype)
+	if len(slides) > 1 && shouldInsertOverviewSlide(slides[1]) && len(slides) < maxSlides {
+		slides = insertSlide(slides, 1, defaultSummarySlide(archetype, deckTitle))
+	}
+	if len(slides) > 1 {
+		slides[1] = enforceOverviewSlide(slides[1], archetype)
+	}
+	slides = ensureEvidenceCoverage(slides, deckTitle, archetype, maxSlides)
+	slides = ensureClosingActionSlide(slides, deckTitle, archetype, maxSlides)
+	return slides
+}
+
+func insertSlide(slides []officegen.Slide, idx int, slide officegen.Slide) []officegen.Slide {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(slides) {
+		idx = len(slides)
+	}
+	slides = append(slides, officegen.Slide{})
+	copy(slides[idx+1:], slides[idx:])
+	slides[idx] = slide
+	return slides
+}
+
+func ensureMinimumNarrativeSlides(slides []officegen.Slide, deckTitle string, archetype pptxArchetype) []officegen.Slide {
+	for len(slides) < 4 {
+		switch len(slides) {
+		case 1:
+			slides = append(slides, defaultSummarySlide(archetype, deckTitle))
+		case 2:
+			slides = append(slides, defaultSupportingSlide(archetype, deckTitle))
+		case 3:
+			slides = append(slides, defaultActionSlide(archetype, deckTitle))
+		default:
+			return slides
+		}
+	}
+	return slides
+}
+
+func defaultSummarySlide(archetype pptxArchetype, deckTitle string) officegen.Slide {
+	switch archetype {
+	case pptxArchetypeCompany:
+		slide := officegen.Slide{
+			Title:    "Key Takeaways",
+			Layout:   "content",
+			Subtitle: "Lead with the outcome, then explain the capabilities behind it",
+			Sections: []officegen.SlideSection{
+				{Heading: "Unified Work", Detail: "Bring messages, docs, approvals, and follow-up into one flow"},
+				{Heading: "Visible ROI", Detail: "Anchor the story in cycle time, on-time work, and reuse metrics"},
+				{Heading: "Safe Rollout", Detail: "Move from pilot to scale with governance and adoption checkpoints"},
+			},
+		}
+		slide.Variant = normalizeSlideVariant(slide)
+		return slide
+	case pptxArchetypeGeneral:
+		slide := officegen.Slide{
+			Title:    "Executive Summary",
+			Layout:   "content",
+			Subtitle: "Lead with the decision, then support it slide by slide",
+			Sections: []officegen.SlideSection{
+				{Heading: "Core Insight", Detail: "State the main conclusion in direct business language"},
+				{Heading: "Why It Matters", Detail: "Summarize the impact, risk, or upside behind the conclusion"},
+				{Heading: "Decision", Detail: "Clarify what should happen next and who needs to move"},
+			},
+		}
+		slide.Variant = normalizeSlideVariant(slide)
+		return slide
+	default:
+		slide := defaultArchetypeSlide(archetype, 1, deckTitle)
+		slide.Variant = normalizeSlideVariant(slide)
+		return slide
+	}
+}
+
+func defaultSupportingSlide(archetype pptxArchetype, deckTitle string) officegen.Slide {
+	if archetype != pptxArchetypeGeneral {
+		slide := defaultArchetypeSlide(archetype, 2, deckTitle)
+		slide.Variant = normalizeSlideVariant(slide)
+		return slide
+	}
+	slide := officegen.Slide{
+		Title:    "What Matters Most",
+		Layout:   "content",
+		Subtitle: "Support the headline with the few facts that change the decision",
+		Sections: []officegen.SlideSection{
+			{Heading: "Signal", Detail: "Show the strongest evidence behind the conclusion"},
+			{Heading: "Tradeoff", Detail: "Explain what becomes easier, faster, or safer"},
+			{Heading: "Constraint", Detail: "Call out the key limit, dependency, or condition"},
+		},
+	}
+	slide.Variant = normalizeSlideVariant(slide)
+	return slide
+}
+
+func defaultActionSlide(archetype pptxArchetype, deckTitle string) officegen.Slide {
+	if archetype != pptxArchetypeGeneral {
+		slide := defaultArchetypeSlide(archetype, 5, deckTitle)
+		slide.Variant = normalizeSlideVariant(slide)
+		return slide
+	}
+	slide := officegen.Slide{
+		Title:    "Next Steps",
+		Layout:   "content",
+		Subtitle: "Close with a small set of actions, owners, and validation points",
+		Sections: []officegen.SlideSection{
+			{Heading: "This Week", Detail: "Owner defines the decision scope and confirms the first milestone"},
+			{Heading: "30 Days", Detail: "Team executes the first proof point and tracks the lead metric"},
+			{Heading: "Review", Detail: "Leadership decides whether to scale based on evidence and adoption"},
+		},
+	}
+	slide.Variant = normalizeSlideVariant(slide)
+	return slide
+}
+
+func enforceOverviewSlide(slide officegen.Slide, archetype pptxArchetype) officegen.Slide {
+	if slideLayoutName(slide) == "chart" || slideLayoutName(slide) == "dashboard" {
+		return defaultSummarySlide(archetype, slide.Title)
+	}
+	if len(slide.Sections) == 0 && len(slide.Points) >= 3 {
+		if sections := pointsToSummarySections(slide.Points, 3); len(sections) > 0 {
+			slide.Sections = sections
+			slide.Points = nil
+		}
+	}
+	if !looksLikeOverviewSlide(slide) || isPlaceholderSlideTitle(slide.Title) {
+		slide.Title = summaryTitleForArchetype(archetype)
+	}
+	if strings.TrimSpace(slide.Subtitle) == "" || isPlaceholderSlideTitle(slide.Subtitle) {
+		slide.Subtitle = summarySubtitleForArchetype(archetype)
+	}
+	slide.Layout = "content"
+	slide.HasImage = false
+	slide.ImagePrompt = ""
+	slide.ImagePos = ""
+	slide.Variant = normalizeSlideVariant(slide)
+	return slide
+}
+
+func ensureEvidenceCoverage(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
+	if archetype != pptxArchetypeMarket && archetype != pptxArchetypeOps {
+		return slides
+	}
+	for idx := 1; idx < len(slides); idx++ {
+		switch slideLayoutName(slides[idx]) {
+		case "chart", "dashboard":
+			return slides
+		}
+	}
+	evidenceSlide := defaultSupportingSlide(archetype, deckTitle)
+	if len(slides) > 2 && isReplaceableNarrativeSlide(slides[2]) {
+		slides[2] = evidenceSlide
+		return slides
+	}
+	if len(slides) < maxSlides {
+		insertIdx := 2
+		if insertIdx > len(slides) {
+			insertIdx = len(slides)
+		}
+		slides = append(slides, officegen.Slide{})
+		copy(slides[insertIdx+1:], slides[insertIdx:])
+		slides[insertIdx] = evidenceSlide
+	}
+	return slides
+}
+
+func ensureClosingActionSlide(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
+	if len(slides) == 0 {
+		return slides
+	}
+	lastIdx := len(slides) - 1
+	last := slides[lastIdx]
+	if isActionSlide(last) || looksLikeClosingSlide(last) {
+		if isPlaceholderSlideTitle(last.Title) {
+			last.Title = actionTitleForArchetype(archetype)
+		}
+		if strings.TrimSpace(last.Subtitle) == "" || isPlaceholderSlideTitle(last.Subtitle) {
+			last.Subtitle = actionSubtitleForArchetype(archetype)
+		}
+		last = normalizeActionSlide(last)
+		last.Layout = "content"
+		last.HasImage = false
+		last.ImagePrompt = ""
+		last.ImagePos = ""
+		last.Variant = normalizeSlideVariant(last)
+		slides[lastIdx] = last
+		return slides
+	}
+	if len(slides) < maxSlides {
+		return append(slides, defaultActionSlide(archetype, deckTitle))
+	}
+	if isReplaceableNarrativeSlide(last) || slideLayoutName(last) == "content" {
+		slides[lastIdx] = defaultActionSlide(archetype, deckTitle)
+	}
+	return slides
+}
+
+func pointsToSummarySections(points []string, limit int) []officegen.SlideSection {
+	sections := make([]officegen.SlideSection, 0, len(points))
+	for idx, point := range points {
+		heading, detail := pointToSection(point, idx)
+		if heading == "" && detail == "" {
+			continue
+		}
+		if strings.HasPrefix(heading, "Step ") || heading == "" {
+			heading = fmt.Sprintf("Takeaway %d", idx+1)
+		}
+		if detail == "" {
+			detail = fitTextForLayout(cleanSentence(point), 24)
+		}
+		sections = append(sections, officegen.SlideSection{
+			Heading: heading,
+			Detail:  detail,
+		})
+		if limit > 0 && len(sections) >= limit {
+			break
+		}
+	}
+	return normalizeSections(sections, limit)
+}
+
+func summaryTitleForArchetype(archetype pptxArchetype) string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return "Key Takeaways"
+	case pptxArchetypeMarket:
+		return "Key Takeaways"
+	case pptxArchetypeOps:
+		return "Business Takeaways"
+	case pptxArchetypeTraining:
+		return "Learning Goals"
+	default:
+		return "Executive Summary"
+	}
+}
+
+func summarySubtitleForArchetype(archetype pptxArchetype) string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return "Lead with the outcome, then explain the capabilities behind it"
+	case pptxArchetypeMarket:
+		return "Start with the market call, then support it with evidence"
+	case pptxArchetypeOps:
+		return "Start with the operating conclusion, then show what is driving it"
+	case pptxArchetypeTraining:
+		return "Clarify what the audience should learn before stepping into detail"
+	default:
+		return "Lead with the decision, then support it slide by slide"
+	}
+}
+
+func actionTitleForArchetype(archetype pptxArchetype) string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return "Rollout Path"
+	case pptxArchetypeMarket:
+		return "Entry Recommendations"
+	case pptxArchetypeOps:
+		return "Execution Actions"
+	case pptxArchetypeTraining:
+		return "Next Practice Steps"
+	default:
+		return "Next Steps"
+	}
+}
+
+func actionSubtitleForArchetype(archetype pptxArchetype) string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return "Close with staged rollout actions, owners, and proof points"
+	case pptxArchetypeMarket:
+		return "Close with the market sequence, owner, and validation window"
+	case pptxArchetypeOps:
+		return "Close with repair actions, owner, and the metric to track"
+	case pptxArchetypeTraining:
+		return "Close with the next commands, practice loop, and caution points"
+	default:
+		return "Close with a small set of actions, owners, and validation points"
+	}
+}
+
+func looksLikeOverviewSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"summary", "takeaway", "overview", "learning goal", "headline", "key point"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeClosingSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func isReplaceableNarrativeSlide(slide officegen.Slide) bool {
+	if isWeakArchetypeSlide(slide) {
+		return true
+	}
+	if isPlaceholderSlideTitle(slide.Title) {
+		return true
+	}
+	return strings.TrimSpace(slide.Subtitle) == "" &&
+		len(slide.Points) <= 1 &&
+		len(slide.Sections) == 0 &&
+		len(slide.Metrics) == 0 &&
+		slide.Chart == nil
+}
+
+func shouldInsertOverviewSlide(slide officegen.Slide) bool {
+	switch slideLayoutName(slide) {
+	case "chart", "dashboard":
+		return true
+	}
+	if slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "" {
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"product", "scenario", "workflow", "interface", "demo", "experience"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPlaceholderSlideTitle(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case text == "":
+		return true
+	case strings.HasPrefix(text, "part "),
+		strings.HasPrefix(text, "slide "),
+		strings.HasPrefix(text, "section "),
+		strings.HasPrefix(text, "first slide"),
+		strings.HasPrefix(text, "second slide"),
+		strings.HasPrefix(text, "third slide"),
+		strings.HasPrefix(text, "fourth slide"),
+		strings.HasPrefix(text, "fifth slide"),
+		strings.HasPrefix(text, "sixth slide"),
+		strings.HasPrefix(text, "seventh slide"),
+		strings.HasPrefix(text, "eighth slide"),
+		text == "overview deck",
+		text == "content slide":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -996,10 +1364,6 @@ func softlyApplyArchetypeDefaults(slides []officegen.Slide, archetype pptxArchet
 	if archetype == pptxArchetypeGeneral {
 		return slides
 	}
-	slides = ensureMinimumSlides(slides, 6, archetype, deckTitle)
-	if len(slides) > 8 {
-		return slides
-	}
 	defaults := make([]officegen.Slide, 0, 6)
 	for i := 0; i < 6; i++ {
 		defaults = append(defaults, defaultArchetypeSlide(archetype, i, deckTitle))
@@ -1058,7 +1422,7 @@ func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {
 		Type:       chartType,
 		Categories: categories,
 		Values:     values,
-		Title:      fitTextForLayout(firstNonEmpty(chart.Title, "Key Data Comparison"), 16),
+		Title:      fitTextForLayout(firstNonEmpty(chart.Title, "Key Data Comparison"), 20),
 	}
 }
 
@@ -1156,13 +1520,13 @@ func allowImageForSlide(slide officegen.Slide) bool {
 	if len(slide.Points) > 3 {
 		return false
 	}
-	text := strings.TrimSpace(slide.Title + " " + slide.Subtitle)
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
 	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence"} {
 		if strings.Contains(text, keyword) {
 			return false
 		}
 	}
-	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow"} {
+	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow", "experience", "demo"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1196,7 +1560,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 	if slide.Chart != nil || len(slide.Metrics) > 0 {
 		return slide
 	}
-	text := strings.TrimSpace(slide.Title + " " + slide.Subtitle)
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
 	if strings.Contains(text, "value") {
 		slide.Layout = "dashboard"
 		slide.Metrics = normalizeMetrics([]officegen.MetricCard{
@@ -1234,7 +1598,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 }
 
 func detectPPTXArchetype(description, title string) pptxArchetype {
-	text := strings.TrimSpace(description + " " + title)
+	text := strings.ToLower(strings.TrimSpace(description + " " + title))
 	switch {
 	case strings.Contains(text, "enterprise collaboration platform"):
 		return pptxArchetypeCompany
@@ -1252,22 +1616,22 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 func buildArchetypePromptRules(archetype pptxArchetype) string {
 	switch archetype {
 	case pptxArchetypeCompany:
-		return `- Use a fixed 6-slide structure for this topic: 1 cover, 2 solution overview, 3 core capabilities, 4 customer value, 5 use cases, 6 rollout path.
+		return `- For this topic, a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path, but adapt the exact slide count to the prompt.
 - Slide 4 should prefer dashboard or quantified evidence instead of abstract slogans.
 - Slide 5 should use sections to emphasize scenario, action, and benefit without repeating slide 4.
 - Slide 6 should use sections with time, owner, and validation criteria. The whole deck should use at most one image slide, preferably on core capabilities.`
 	case pptxArchetypeMarket:
-		return `- Use a fixed 6-slide structure for this topic: 1 cover, 2 key takeaways, 3 market size, 4 regional opportunities, 5 competitive landscape, 6 entry recommendations.
+		return `- For this topic, a strong storyline is usually cover -> key takeaways -> market size -> regional opportunities -> competitive landscape -> entry recommendations, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and include a source. Do not present market size as plain text judgment.
 - Slide 4 should use sections, and slide 5 should prefer points or card-style comparison so the two slides handle region choice and competition separately.
 - Slide 6 should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeOps:
-		return `- Use a fixed 6-slide structure for this topic: 1 cover, 2 business takeaways, 3 core metrics, 4 issue diagnosis, 5 next-quarter priorities, 6 execution actions.
+		return `- For this topic, a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and clearly state the data framing or comparison period.
 - Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
 - Slides 5-6 must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeTraining:
-		return `- Use a fixed 6-slide structure for this topic: 1 cover, 2 learning goals, 3 installation and setup, 4 common commands, 5 example workflow, 6 cautions.
+		return `- For this topic, a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions, but adapt the exact slide count to the prompt.
 - Slides 3-6 should prefer sections organized by step, command, and result.
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
@@ -1656,8 +2020,8 @@ func enforceTrainingSkeleton(slides []officegen.Slide) {
 }
 
 func isActionSlide(slide officegen.Slide) bool {
-	text := strings.TrimSpace(slide.Title + " " + slide.Subtitle)
-	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action"} {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1779,7 +2143,7 @@ func shouldDowngradeChart(slide officegen.Slide) bool {
 	if slide.Chart == nil {
 		return false
 	}
-	text := strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Chart.Title)
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Chart.Title))
 	for _, keyword := range []string{"milestone", "cadence", "plan", "roadmap", "step", "workflow", "risk", "next step"} {
 		if strings.Contains(text, keyword) {
 			return true

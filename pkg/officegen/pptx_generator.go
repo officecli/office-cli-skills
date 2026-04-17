@@ -817,10 +817,32 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
 
 // generateFooterXML builds footer XML for the bottom of the slide.
 // It currently renders the data source only and starts shape ids from baseID.
-func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *SlideTheme) string {
-	_, _ = slideNum, totalSlides
+func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *SlideTheme, stylePreset PPTXStylePreset) string {
 	textColor := getTextColor(theme)
+	lineColor := strings.TrimSpace(stylePreset.FooterLineColor)
+	if lineColor == "" {
+		lineColor = theme.AccentColor
+	}
 	result := ""
+
+	result += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="FooterRule"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="500000" y="6200000"/>
+                        <a:ext cx="11100000" cy="0"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="line"><a:avLst/></a:prstGeom>
+                    <a:ln w="12700">
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="34000"/></a:srgbClr></a:solidFill>
+                    </a:ln>
+                </p:spPr>
+            </p:sp>`, baseID, lineColor)
 
 	// Data-source footnote in the lower-left corner.
 	if source != "" {
@@ -833,8 +855,8 @@ func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *
                 </p:nvSpPr>
                 <p:spPr>
                     <a:xfrm>
-                        <a:off x="400000" y="6500000"/>
-                        <a:ext cx="9000000" cy="280000"/>
+                        <a:off x="500000" y="6320000"/>
+                        <a:ext cx="8500000" cy="260000"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
@@ -845,14 +867,47 @@ func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *
                         <a:pPr algn="l"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="900" i="1">
-                                <a:solidFill><a:srgbClr val="%s"><a:alpha val="60000"/></a:srgbClr></a:solidFill>
+                                <a:solidFill><a:srgbClr val="%s"><a:alpha val="52000"/></a:srgbClr></a:solidFill>
                             </a:rPr>
                             <a:t>%s</a:t>
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>`, baseID, textColor, escapeXML(source))
+            </p:sp>`, baseID+1, textColor, escapeXML(source))
 	}
+
+	pageLabel := fmt.Sprintf("%02d", slideNum)
+	if totalSlides > 0 {
+		pageLabel = fmt.Sprintf("%02d/%02d", slideNum, totalSlides)
+	}
+	result += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="PageNumber"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="10300000" y="6300000"/>
+                        <a:ext cx="1200000" cy="260000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="b"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="r"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="900">
+                                <a:solidFill><a:srgbClr val="%s"><a:alpha val="56000"/></a:srgbClr></a:solidFill>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>`, baseID+2, textColor, pageLabel)
 
 	return result
 }
@@ -945,6 +1000,28 @@ func createSolidOverlayXML(shapeID int, name, color string, alpha int, x, y, cx,
             </p:sp>`, shapeID, escapeXML(name), x, y, cx, cy, color, alpha)
 }
 
+func createFramedPanelXML(shapeID int, name, fillColor string, fillAlpha int, lineColor string, lineAlpha int, x, y, cx, cy int) string {
+	return fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="%s"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 2800"/></a:avLst></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
+                    <a:ln w="12700">
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
+                    </a:ln>
+                </p:spPr>
+            </p:sp>`, shapeID, escapeXML(name), x, y, cx, cy, fillColor, fillAlpha, lineColor, lineAlpha)
+}
+
 // createTitleSlideXML builds XML for the title slide.
 func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
@@ -967,6 +1044,13 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 	}
 	imageXML := ""
 	overlayXML := ""
+	titlePanelXML := ""
+	panelAlpha := 72000
+	panelLineAlpha := 12000
+	if isDarkTheme(theme) {
+		panelAlpha = 18000
+		panelLineAlpha = 18000
+	}
 	if imagePos == "background" {
 		titleColor = "FFFFFF"
 		subtitleColor = "FFFFFF"
@@ -977,6 +1061,8 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 		subtitleY = 5450000
 		decorY = 4700000
 		imageXML = createImagePictureXML(90, "CenterImage", "rId2", 2460000, 1550000, 7272000, 3200000, slide.ImageData)
+	} else {
+		titlePanelXML = createFramedPanelXML(92, "TitlePanel", stylePreset.BackgroundOverlay, panelAlpha, theme.AccentColor, panelLineAlpha, titleX-250000, titleY-450000, titleCX+500000, 2500000)
 	}
 
 	subtitle := slide.Subtitle
@@ -1004,7 +1090,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
                     <a:bodyPr anchor="t"/>
                     <a:lstStyle/>
                     <a:p>
-                        <a:pPr algn="ctr"/>
+                        <a:pPr algn="%s"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="2000">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
@@ -1015,7 +1101,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>`, subtitleX, subtitleY, subtitleCX, subtitleCY, subtitleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
+            </p:sp>`, subtitleX, subtitleY, subtitleCX, subtitleCY, titleAlign, subtitleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
 	}
 
 	// Decorative line.
@@ -1058,7 +1144,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
                     <a:chOff x="0" y="0"/>
                     <a:chExt cx="0" cy="0"/>
                 </a:xfrm>
-            </p:grpSpPr>%s%s
+            </p:grpSpPr>%s%s%s
             <p:sp>
                 <p:nvSpPr>
                     <p:cNvPr id="2" name="Title"/>
@@ -1090,7 +1176,7 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
             </p:sp>%s%s%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, imageXML, overlayXML, titleX, titleY, titleCX, titleCY, titleAlign, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), decorLineXML, subtitleXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
+</p:sld>`, bgXML, imageXML, overlayXML, titlePanelXML, titleX, titleY, titleCX, titleCY, titleAlign, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), decorLineXML, subtitleXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
 }
 
 func splitPointCard(point string) (string, string) {
@@ -1109,7 +1195,7 @@ func splitPointCard(point string) (string, string) {
 	return "", point
 }
 
-func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily string) string {
+func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
 	if len(points) == 0 {
 		return ""
 	}
@@ -1150,9 +1236,9 @@ func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textCol
                         <a:ext cx="%d" cy="%d"/>
                     </a:xfrm>
                     <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
-                    <a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="94000"/></a:srgbClr></a:solidFill>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
                     <a:ln w="12700">
-                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill>
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="16000"/></a:srgbClr></a:solidFill>
                     </a:ln>
                 </p:spPr>
                 <p:txBody>
@@ -1186,7 +1272,7 @@ func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textCol
                     <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                     <a:ln><a:noFill/></a:ln>
                 </p:spPr>
-            </p:sp>`, cardID, idx+1, x, cardY, cx, cardHeight, accentColor, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(displayText), accentID, idx+1, x, cardY, cardHeight, accentColor))
+            </p:sp>`, cardID, idx+1, x, cardY, cx, cardHeight, cardFill, cardAlpha, accentColor, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(displayText), accentID, idx+1, x, cardY, cardHeight, accentColor))
 	}
 	return sb.String()
 }
@@ -1329,6 +1415,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 	titleY, titleCY := 300000, 700000
 	subtitleY := 1000000
 	imageXML := ""
+	contentPanelXML := ""
 	if slide.Variant == "image-right" {
 		imagePos = "right"
 	}
@@ -1361,6 +1448,10 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 	}
 
 	// Accent block on the left side of the title.
+	titleAccentColor := strings.TrimSpace(stylePreset.SectionBadgeFill)
+	if titleAccentColor == "" {
+		titleAccentColor = accentColor
+	}
 	titleDecoXML := fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -1377,7 +1468,11 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                     <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                     <a:ln><a:noFill/></a:ln>
                 </p:spPr>
-            </p:sp>`, titleCY-200000, accentColor)
+            </p:sp>`, titleCY-200000, titleAccentColor)
+
+	if len(slide.Sections) == 0 && (imagePos != "" || slide.Content != "" || slide.Variant == "bullets") {
+		contentPanelXML = createFramedPanelXML(6, "ContentPanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, contentX, contentY-100000, contentCX, contentCY+100000)
+	}
 
 	// Build the main content area.
 	contentXML := ""
@@ -1385,7 +1480,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
 	} else if len(slide.Points) > 0 {
 		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
-			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily)
+			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
 		} else {
 			// Bullet layout: one paragraph per point with bullet markers.
 			// Adjust spacing and font size dynamically based on point count.
@@ -1533,16 +1628,16 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>%s%s%s%s
+            </p:sp>%s%s%s%s%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, contentXML, imageXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
+</p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, contentPanelXML, contentXML, imageXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
 }
 
 // createChartSlideXML builds XML for a slide that contains an embedded chart.
 // createChartAsShapesSlideXML renders chart data as DrawingML shapes (colored bars + labels)
 // instead of embedded OOXML chart objects, for OfficeSDK compatibility.
-func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideTheme, _ PPTXStylePreset, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1558,6 +1653,7 @@ func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideThe
 	if slide.Chart != nil && len(slide.Chart.Values) > 0 {
 		chartShapesXML = g.renderChartAsShapes(slide.Chart, theme, bgColor, &shapeID)
 	}
+	chartPanelXML := createFramedPanelXML(5, "ChartPanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, theme.AccentColor, 12000, 850000, 1350000, 10400000, 4200000)
 
 	// Points below chart area
 	pointsXML := ""
@@ -1614,11 +1710,11 @@ func (g *PPTXGenerator) createChartAsShapesSlideXML(slide Slide, theme *SlideThe
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>%s%s%s%s
+            </p:sp>%s%s%s%s%s
         </p:spTree>
     </p:cSld>
 </p:sld>`, bgXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title),
-		subtitleXML, chartShapesXML, pointsXML, generateFooterXML(slide.Source, slideNum, totalSlides, 100, theme))
+		subtitleXML, chartPanelXML, chartShapesXML, pointsXML, generateFooterXML(slide.Source, slideNum, totalSlides, 100, theme, stylePreset))
 }
 
 // renderChartAsShapes renders chart data as colored rectangles with labels
@@ -1854,6 +1950,7 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, styl
 
 	// Subtitle
 	subtitleXML := generateSubtitleXML(slide.Subtitle, 6, 1000000, theme)
+	chartPanelXML := createFramedPanelXML(4, "ChartPanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, theme.AccentColor, 12000, 850000, 1350000, 10400000, 4200000)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" 
@@ -1904,7 +2001,7 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, styl
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>%s
+            </p:sp>%s%s
             <p:graphicFrame>
                 <p:nvGraphicFramePr>
                     <p:cNvPr id="5" name="Chart %d"/>
@@ -1925,7 +2022,7 @@ func (g *PPTXGenerator) createChartSlideXML(slide Slide, theme *SlideTheme, styl
             </p:graphicFrame>%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, chartIndex, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme))
+</p:sld>`, bgXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, chartPanelXML, chartIndex, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
 }
 
 // createDashboardSlideXML builds dashboard-layout XML with metric cards,
@@ -1939,6 +2036,14 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 	eaFontFamily := theme.EAFontFamily
 	primaryColor := theme.PrimaryColor
 	accentColor := getSafeTextColorForBg(theme.AccentColor, bgColor)
+	metricFill := stylePreset.ContentCardFill
+	if strings.TrimSpace(metricFill) == "" {
+		metricFill = "FFFFFF"
+	}
+	metricFillAlpha := stylePreset.ContentCardAlpha
+	if metricFillAlpha <= 0 {
+		metricFillAlpha = 96000
+	}
 
 	// Accent block on the left side of the title.
 	titleDecoXML := fmt.Sprintf(`
@@ -2000,10 +2105,10 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                         <a:ext cx="%d" cy="%d"/>
                     </a:xfrm>
                     <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 5000"/></a:avLst></a:prstGeom>
-                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="92000"/></a:srgbClr></a:solidFill>
-                    <a:ln w="9525"><a:solidFill><a:srgbClr val="%s"><a:alpha val="90000"/></a:srgbClr></a:solidFill></a:ln>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
+                    <a:ln w="9525"><a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill></a:ln>
                 </p:spPr>
-            </p:sp>`, shapeID, i, cardX, cardY, cardWidth, cardHeight, primaryColor, primaryColor)
+            </p:sp>`, shapeID, i, cardX, cardY, cardWidth, cardHeight, metricFill, metricFillAlpha, accentColor)
 
 			// Card text content.
 			noteXML := ""
@@ -2013,13 +2118,13 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                         <a:pPr algn="ctr"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="1100">
-                                <a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="76000"/></a:srgbClr></a:solidFill>
+                                <a:solidFill><a:srgbClr val="%s"><a:alpha val="62000"/></a:srgbClr></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
                             </a:rPr>
                             <a:t>%s</a:t>
                         </a:r>
-                    </a:p>`, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Note))
+                    </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Note))
 			}
 
 			metricsXML += fmt.Sprintf(`
@@ -2043,7 +2148,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                         <a:pPr algn="ctr"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="1200">
-                                <a:solidFill><a:srgbClr val="FFFFFF"><a:alpha val="76000"/></a:srgbClr></a:solidFill>
+                                <a:solidFill><a:srgbClr val="%s"><a:alpha val="62000"/></a:srgbClr></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
                             </a:rPr>
@@ -2054,7 +2159,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                         <a:pPr algn="ctr"/>
                         <a:r>
                             <a:rPr lang="zh-CN" sz="3000" b="1">
-                                <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
                             </a:rPr>
@@ -2063,8 +2168,8 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     </a:p>%s
                 </p:txBody>
             </p:sp>`, shapeID+1, i, cardX, cardY, cardWidth, cardHeight,
-				escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Label),
-				escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Value),
+				textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Label),
+				primaryColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Value),
 				noteXML)
 		}
 	}
@@ -2198,7 +2303,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
             </p:sp>`, lowerY, pointsParagraphs)
 	}
 
-	footerXML := generateFooterXML(slide.Source, slideNum, totalSlides, 60, theme)
+	footerXML := generateFooterXML(slide.Source, slideNum, totalSlides, 60, theme, stylePreset)
 
 	// Subtitle.
 	dashSubtitleXML := generateSubtitleXML(slide.Subtitle, 55, 750000, theme)

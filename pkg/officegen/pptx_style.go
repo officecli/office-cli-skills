@@ -78,10 +78,10 @@ func ResolveStylePreset(value string) PPTXStylePreset {
 			ID:                StylePresetTechContrast,
 			TitleAlign:        "l",
 			TitleAccentShape:  "rect",
-			ContentCardFill:   "FFFFFF",
-			ContentCardAlpha:  95000,
-			SectionBadgeFill:  "0F172A",
-			FooterLineColor:   "0F172A",
+			ContentCardFill:   "F8FAFC",
+			ContentCardAlpha:  98000,
+			SectionBadgeFill:  "1D4ED8",
+			FooterLineColor:   "CBD5E1",
 			BackgroundOverlay: "E2E8F0",
 		}
 	}
@@ -130,14 +130,14 @@ func DefaultThemeForPreset(preset string) *SlideTheme {
 		}
 	default:
 		return &SlideTheme{
-			PrimaryColor:   "2563EB",
-			AccentColor:    "0F172A",
-			HighlightColor: "22C55E",
+			PrimaryColor:   "0F172A",
+			AccentColor:    "2563EB",
+			HighlightColor: "0F766E",
 			BackgroundType: "gradient",
-			BgColor1:       "EEF4FF",
-			BgColor2:       "F8FAFC",
+			BgColor1:       "F8FAFC",
+			BgColor2:       "EEF2FF",
 			TextColor:      "0F172A",
-			TitleTextColor: "0F172A",
+			TitleTextColor: "020617",
 			FontFamily:     "Aptos",
 			EAFontFamily:   "Microsoft YaHei",
 		}
