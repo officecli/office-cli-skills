@@ -149,6 +149,35 @@ func TestServiceGenerateDOCXWithFakeLLM(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
+	service := NewService(&fakeLLMClient{
+		jsonResponse: `{"title":"Sales Workbook","sheets":[{"name":"Pipeline","headers":["Region","Amount"],"rows":[["East","100"],["West","120"]]}]}`,
+	}, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeXLSX,
+		Prompt:       "Create a regional sales workbook",
+		Topic:        "Sales Workbook",
+		Mode:         "fast",
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if doc.DocumentName != "Sales_Workbook.xlsx" {
+		t.Fatalf("document name = %q", doc.DocumentName)
+	}
+
+	contentXMLs, err := ooxmledit.ExtractContentXML(doc.Bytes, ooxmledit.FileTypeXLSX)
+	if err != nil {
+		t.Fatalf("ExtractContentXML: %v", err)
+	}
+	if !strings.Contains(contentXMLs["xl/workbook.xml"], "Pipeline") ||
+		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
+		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "120") {
+		t.Fatalf("workbook xml = %q\nshared strings = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"])
+	}
+}
+
 func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
 		jsonResponse: `{
