@@ -248,11 +248,15 @@ record_real_result() {
   local local_preview_path
   local local_preview_data_path
   local access_url
+  local password
+  local expires_at
 
   artifact_path="$(json_field "${json_path}" "file_path")"
   local_preview_path="$(json_field "${json_path}" "local_preview_path")"
   local_preview_data_path="$(json_field "${json_path}" "local_preview_data_path")"
   access_url="$(json_field "${json_path}" "access_url")"
+  password="$(json_field "${json_path}" "password")"
+  expires_at="$(json_field "${json_path}" "expires_at")"
 
   RESULT_LABELS+=("${label}")
   RESULT_STATUSES+=("PASS")
@@ -267,6 +271,12 @@ record_real_result() {
   fi
   if [[ -n "${access_url}" ]]; then
     info "Online preview: ${access_url}"
+    if [[ -n "${password}" ]]; then
+      info "Online preview password: ${password}"
+    fi
+    if [[ -n "${expires_at}" ]]; then
+      info "Online preview expires at: ${expires_at}"
+    fi
   fi
 }
 
