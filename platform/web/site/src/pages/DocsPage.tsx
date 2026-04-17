@@ -279,6 +279,15 @@ export default function DocsPage() {
               title="Use With Agents"
               description="OfficeCLI already exposes agent-oriented workflows for Codex, Claude Code, and local automation clients."
             />
+            <div className="mb-8 rounded-2xl border border-outline-variant/10 bg-surface-low p-6">
+              <p className="max-w-3xl text-sm leading-relaxed text-outline-variant">
+                Need the public landing page for search-driven installs and GitHub repository context? Visit{' '}
+                <Link className="text-primary transition-colors hover:text-tertiary" to="/claude-code-codex-office-skills">
+                  OfficeCLI Skills for Claude Code, Codex, and AI agents
+                </Link>
+                .
+              </p>
+            </div>
             <div className="grid gap-6 md:grid-cols-2">
               {agentSkillHighlights.map((group) => (
                 <article key={group.title} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-6">

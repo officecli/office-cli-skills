@@ -78,6 +78,22 @@ describe('marketing site shell', () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/docs')
   })
 
+  it('renders the agent skills landing page with route-specific metadata', () => {
+    render(
+      <MemoryRouter initialEntries={['/claude-code-codex-office-skills']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: /OfficeCLI Skills for Claude Code, Codex, and AI Agents/i, level: 1 }),
+    ).toBeInTheDocument()
+    expect(document.title).toContain('OfficeCLI Skills for Claude Code, Codex, and AI Agents')
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      'https://officecli.io/claude-code-codex-office-skills',
+    )
+  })
+
   it('opens the product docs navbar item in a new browser tab', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -153,6 +169,7 @@ describe('site metadata and assets', () => {
 
     expect(robots).toContain('Sitemap: https://officecli.io/sitemap.xml')
     expect(sitemap).toContain('<loc>https://officecli.io/docs</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/claude-code-codex-office-skills</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/download</loc>')
   })
 
@@ -162,5 +179,12 @@ describe('site metadata and assets', () => {
     expect(html).toContain('<main')
     expect(html).toContain('REPORT Outputs From One AI CLI')
     expect(html).toContain('id="faq"')
+  })
+
+  it('renders prerendered agent skills html with search-focused copy', () => {
+    const html = renderRouteApp('/claude-code-codex-office-skills')
+
+    expect(html).toContain('OfficeCLI Skills for Claude Code, Codex, and AI Agents')
+    expect(html).toContain('public GitHub repository and install surface')
   })
 })

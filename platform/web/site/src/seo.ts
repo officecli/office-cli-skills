@@ -33,6 +33,9 @@ const defaultImage = `${siteBaseURL}/og-cover.svg`
 const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows'
 const homeDescription =
   'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, and REPORT outputs. Generate files from the terminal with your own LLM endpoint, without a backend stack or cluster.'
+const agentSkillsTitle = 'OfficeCLI Skills for Claude Code, Codex, and AI Agents | PPTX, DOCX, XLSX, and Report Workflows'
+const agentSkillsDescription =
+  'Explore OfficeCLI Skills for Claude Code, Codex, and AI agents. Install local skills and plugins for PPTX, DOCX, XLSX, and report workflows through the public officecli-skills repository.'
 
 export const homeFAQs: FAQEntry[] = [
   {
@@ -58,6 +61,25 @@ export const homeFAQs: FAQEntry[] = [
   {
     q: 'When do I need platform.officecli.io?',
     a: 'Use the platform when you need paid access management, billing, API-key workflows, or optional online preview publishing.',
+  },
+]
+
+export const agentSkillsFAQs: FAQEntry[] = [
+  {
+    q: 'What is OfficeCLI Skills?',
+    a: 'OfficeCLI Skills is the public GitHub repository that distributes OfficeCLI skill definitions, plugin wrappers, and install scripts for Claude Code, Codex, and other AI agent runtimes.',
+  },
+  {
+    q: 'Can Claude Code create PPTX, DOCX, XLSX, and report outputs through OfficeCLI Skills?',
+    a: 'Yes. With a working local OfficeCLI runtime, the public skill repo provides the agent-facing installation and routing layer for supported Office document workflows.',
+  },
+  {
+    q: 'Why does this page mention Codex as well as Claude Code?',
+    a: 'Because the same public repository also supports direct local skill installation for Codex-style agents, not only marketplace installation for Claude Code.',
+  },
+  {
+    q: 'Is officecli-skills a hosted plugin backend?',
+    a: 'No. It is a public distribution repository for local wrappers, skill files, and documentation. Office document generation still runs through the user-controlled OfficeCLI runtime on the same machine.',
   },
 ]
 
@@ -115,8 +137,29 @@ const homeJSONLD: RouteSEO['jsonLd'] = [
   },
 ]
 
+const agentSkillsJSONLD: RouteSEO['jsonLd'] = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: agentSkillsFAQs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.a,
+      },
+    })),
+  },
+]
+
 export const routeSEO: Record<string, RouteSEO> = {
   '/': buildRouteSEO('/', homeTitle, homeDescription, homeJSONLD),
+  '/claude-code-codex-office-skills': buildRouteSEO(
+    '/claude-code-codex-office-skills',
+    agentSkillsTitle,
+    agentSkillsDescription,
+    agentSkillsJSONLD,
+  ),
   '/docs': buildRouteSEO(
     '/docs',
     'OfficeCLI Docs | PPTX, DOCX, XLSX, and REPORT capabilities',

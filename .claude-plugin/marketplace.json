@@ -4,14 +4,14 @@
     "name": "officecli"
   },
   "metadata": {
-    "description": "OfficeCLI skills marketplace for Claude Code",
+    "description": "OfficeCLI skills marketplace for Claude Code PPTX, DOCX, XLSX, and report workflows",
     "version": "0.1.0"
   },
   "plugins": [
     {
       "name": "officecli",
       "source": "./plugins/officecli",
-      "description": "Office document handling skill for PPTX, DOCX, and XLSX"
+      "description": "Office document skill for PPTX, DOCX, XLSX, and report workflows"
     },
     {
       "name": "openclaw-officecli",

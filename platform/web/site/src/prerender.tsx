@@ -3,6 +3,29 @@ function compact(lines: string[]) {
 }
 
 export function renderRouteApp(pathname: string) {
+  if (pathname === '/claude-code-codex-office-skills') {
+    return compact([
+      '<div class="min-h-screen bg-background text-white selection:bg-primary/30">',
+      '  <main class="overflow-x-hidden">',
+      '    <section class="px-8 md:px-16 pt-24 pb-20 max-w-[1440px] mx-auto">',
+      '      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/8 text-primary text-xs font-headline uppercase tracking-[0.28em] mb-6 border border-primary/25">AI agent Office document skills</span>',
+      '      <h1 class="font-headline text-5xl md:text-7xl font-bold tracking-tight text-white max-w-5xl">OfficeCLI Skills for Claude Code, Codex, and AI Agents</h1>',
+      '      <p class="text-lg md:text-xl text-outline-variant leading-relaxed max-w-4xl mt-6">OfficeCLI Skills is the public GitHub repository and install surface for Claude Code, Codex, and other AI agents that need local PPTX, DOCX, XLSX, and workbook-backed report workflows. It packages marketplace metadata, public skill bundles, install scripts, and agent-facing guidance so Office document automation stays on the same machine through OfficeCLI.</p>',
+      '    </section>',
+      '    <section class="px-8 md:px-16 py-6 max-w-[1440px] mx-auto">',
+      '      <h2 class="font-headline text-4xl font-bold text-white mb-4">Supported workflows</h2>',
+      '      <p class="text-outline-variant text-lg leading-relaxed max-w-3xl">Use this repository when the search intent is about Claude Code office plugins, Codex office skills, AI agent PPTX generation, DOCX drafting, XLSX creation, or workbook-backed report automation.</p>',
+      '    </section>',
+      '    <section class="px-8 md:px-16 py-12 max-w-[1440px] mx-auto">',
+      '      <h2 class="font-headline text-4xl font-bold text-white mb-4">Install paths</h2>',
+      '      <p class="text-outline-variant text-lg leading-relaxed max-w-3xl">Choose Claude Code marketplace install, direct Codex-style skill install, or the OpenClaw installer depending on the agent runtime.</p>',
+      '      <p class="text-outline-variant text-sm leading-relaxed max-w-3xl mt-4">GitHub repository: https://github.com/officecli/officecli-skills</p>',
+      '    </section>',
+      '  </main>',
+      '</div>',
+    ])
+  }
+
   if (pathname !== '/') {
     return '<main class="overflow-x-hidden"></main>'
   }

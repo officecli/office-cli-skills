@@ -4,7 +4,7 @@ description: Generate local PPTX, DOCX, and XLSX files through officecli agent-b
 author: officecli
 license: MIT
 entrypoint: SKILL.md
-homepage: https://github.com/officecli/officecli-skills
+homepage: https://officecli.io/claude-code-codex-office-skills
 repository: https://github.com/officecli/officecli-skills
 tags:
   - office

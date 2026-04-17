@@ -9,6 +9,7 @@ import FAQPage from './pages/FAQPage'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import PricingPage from './pages/PricingPage'
+import AgentSkillsPage from './pages/AgentSkillsPage'
 import { applyDocumentSEO, getRouteSEO } from './seo'
 
 function SiteShell() {
@@ -34,6 +35,7 @@ function SiteShell() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/docs" element={<DocsPage />} />
+        <Route path="/claude-code-codex-office-skills" element={<AgentSkillsPage />} />
         <Route path="/faq" element={<FAQPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

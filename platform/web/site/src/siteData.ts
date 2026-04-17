@@ -25,6 +25,7 @@ export const footerGroups = [
     title: 'Product',
     links: [
       { label: 'Install the CLI', to: '/#download', external: false },
+      { label: 'Agent Skills', to: '/claude-code-codex-office-skills', external: false },
       { label: 'Product Docs', to: '/docs', external: false },
       { label: 'Console', to: platformAppURL, external: true },
     ],
