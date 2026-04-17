@@ -88,13 +88,11 @@ Npm wrapper flow:
 4. Let the public control plane publish the package with trusted publishing
 5. Verify `npm install -g officecli` still resolves the matching binary release
 
-Rolling latest flow:
+Current stable retention flow:
 
-1. Push to `main`
-2. Let the public CI control plane decide whether a rolling latest publish should run
-3. Build `officecli_latest_*` artifacts
-4. Replace the public `latest` release assets
-5. Sync the install script and distribution metadata
+1. Publish the newest `vX.Y.Z` release to `officecli/officecli-dist`
+2. Sync the Homebrew formula and distribution install script
+3. Prune older public dist releases and tags so only the newest stable release remains
 
 ## Required Repository Variables
 
@@ -131,6 +129,7 @@ Run at least:
 ```bash
 go test ./...
 bash -n scripts/install-officecli.sh
+bash -n scripts/prune-public-dist-releases.sh
 bash -n scripts/sync-public-dist-repo.sh
 bash -n scripts/sync-homebrew-tap.sh
 bash -n scripts/sync-public-npm-repo.sh
@@ -147,3 +146,9 @@ Public repositories must not include:
 - business credentials beyond CI secret names
 - deployment environment details
 - internal docs or commit history
+
+Current policy:
+
+- public dist keeps only the newest stable release
+- Homebrew keeps only the single current `Formula/officecli.rb`
+- the npm wrapper installs only the package-matched stable release and no longer supports `latest` or historical version overrides

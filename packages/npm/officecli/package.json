@@ -16,6 +16,7 @@
   "scripts": {
     "postinstall": "node ./scripts/postinstall.js",
     "smoke:version": "node ./bin/officecli.js --version",
+    "test": "node --test ./test/install.test.js",
     "pack:dry-run": "npm pack --dry-run",
     "check:release-version": "node ./scripts/check-release-version.js"
   },

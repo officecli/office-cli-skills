@@ -453,7 +453,7 @@ func (a *App) runUpgrade(ctx context.Context, args []string) error {
 		_, err := fmt.Fprintf(a.Stdout, "officecli is already up to date (%s).\n", fallbackString(info.CurrentVersion, "unknown"))
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "latest")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest stable %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "current stable")); err != nil {
 		return err
 	}
 	if strings.TrimSpace(info.UpdateCommand) != "" {

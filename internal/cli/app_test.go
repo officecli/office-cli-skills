@@ -1099,7 +1099,7 @@ func TestAppRun_UpgradeCommandUpdatesImmediately(t *testing.T) {
 		t.Fatal("performUpdate was not called")
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "Update available for officecli: current 0.2.5, latest 0.2.6.") {
+	if !strings.Contains(output, "Update available for officecli: current 0.2.5, latest stable 0.2.6.") {
 		t.Fatalf("stdout = %q", output)
 	}
 	if !strings.Contains(output, "Suggested update command: npm install -g officecli") {
@@ -1179,7 +1179,7 @@ func TestAppRun_InteractiveUpdatePromptRunsUpdaterAndRestarts(t *testing.T) {
 		return UpdateInfo{
 			Available:           true,
 			CurrentVersion:      "0.2.2",
-			LatestVersionLabel:  "latest",
+			LatestVersionLabel:  "0.2.6",
 			InstallMethod:       InstallMethodScript,
 			Channel:             UpdateChannelLatest,
 			AutoUpdateSupported: true,
@@ -1335,7 +1335,7 @@ func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 		return UpdateInfo{
 			Available:           true,
 			CurrentVersion:      "0.2.2",
-			LatestVersionLabel:  "latest",
+			LatestVersionLabel:  "0.2.6",
 			InstallMethod:       InstallMethodScript,
 			Channel:             UpdateChannelLatest,
 			AutoUpdateSupported: true,

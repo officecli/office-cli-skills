@@ -93,7 +93,7 @@ func (a *App) maybeHandleUpdate(ctx context.Context, args []string) error {
 	if err != nil || !info.Available {
 		return nil
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "latest")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Update available for officecli: current %s, latest stable %s.\n", fallbackString(info.CurrentVersion, "unknown"), fallbackString(info.LatestVersionLabel, "current stable")); err != nil {
 		return err
 	}
 	if strings.TrimSpace(info.UpdateCommand) != "" {
@@ -449,7 +449,7 @@ func checkLatestReleaseForUpdates(ctx context.Context, execPath string) (UpdateI
 		CurrentVersion:      Version,
 		CurrentCommit:       Commit,
 		CurrentBuildDate:    BuildDate,
-		LatestVersionLabel:  fallbackString(strings.TrimSpace(release.TagName), "latest"),
+		LatestVersionLabel:  fallbackString(strings.TrimSpace(release.TagName), "current stable"),
 		LatestPublishedAt:   strings.TrimSpace(release.PublishedAt),
 		AutoUpdateSupported: true,
 		InstallDir:          installDir,

@@ -19,7 +19,7 @@ officecli --version
 ## Version Mapping
 
 - npm package version `0.2.13` downloads OfficeCLI release `v0.2.13`
-- set `OFFICECLI_NPM_VERSION=latest` to test the rolling latest release
+- the wrapper installs only the current stable binary that matches the package version
 
 ## Supported Platforms
 
@@ -33,9 +33,9 @@ Windows is not supported yet because the current public binary release flow only
 ## Environment Overrides
 
 - `OFFICECLI_NPM_DIST_REPO`: override the GitHub release repository, default `officecli/officecli-dist`
-- `OFFICECLI_NPM_VERSION`: override the target OfficeCLI version, default the npm package version
-- `OFFICECLI_NPM_LATEST_TAG`: override the rolling release tag, default `latest`
 - `OFFICECLI_NPM_SKIP_DOWNLOAD=1`: skip the postinstall download step
+
+Legacy environment variables `OFFICECLI_NPM_VERSION` and `OFFICECLI_NPM_LATEST_TAG` are no longer supported because public distribution now keeps only the current stable release.
 
 ## Local Validation
 

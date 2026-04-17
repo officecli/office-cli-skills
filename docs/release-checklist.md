@@ -22,7 +22,7 @@ Use this checklist before declaring a release or production rollout complete.
 ## Distribution
 
 - tagged release artifacts exist where expected
-- rolling latest artifacts are updated where expected
+- public distribution keeps only the current stable release
 - public distribution repository is in sync
 - Homebrew tap formula points to the expected asset and checksum
 - skills repository, if updated, does not change binary semantics

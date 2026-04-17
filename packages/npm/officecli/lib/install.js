@@ -15,9 +15,9 @@ const RUNTIME_DIR = path.join(PACKAGE_ROOT, "runtime");
 const BINARY_NAME = "officecli";
 const BINARY_PATH = path.join(RUNTIME_DIR, BINARY_NAME);
 const METADATA_PATH = path.join(RUNTIME_DIR, "metadata.json");
-const DEFAULT_DIST_REPO = process.env.OFFICECLI_NPM_DIST_REPO || "officecli/officecli-dist";
-const DEFAULT_LATEST_TAG = process.env.OFFICECLI_NPM_LATEST_TAG || "latest";
-const DEFAULT_VERSION = process.env.OFFICECLI_NPM_VERSION || pkg.version;
+const DIST_REPO_ENV = "OFFICECLI_NPM_DIST_REPO";
+const LEGACY_VERSION_ENV = "OFFICECLI_NPM_VERSION";
+const LEGACY_LATEST_TAG_ENV = "OFFICECLI_NPM_LATEST_TAG";
 const PROGRESS_INTERVAL_MS = 1000;
 
 function detectPackageManager() {
@@ -133,6 +133,10 @@ function getBinaryPath() {
   return BINARY_PATH;
 }
 
+function resolveDistRepo() {
+  return String(process.env[DIST_REPO_ENV] || "officecli/officecli-dist").trim();
+}
+
 function resolvePlatform() {
   const platformMap = {
     darwin: "darwin",
@@ -157,31 +161,29 @@ function resolvePlatform() {
 }
 
 function resolveRequestedVersion() {
-  const raw = String(DEFAULT_VERSION || "").trim();
-  if (!raw || raw === "latest") {
-    return { requestedVersion: "latest", releaseTag: DEFAULT_LATEST_TAG };
+  for (const name of [LEGACY_VERSION_ENV, LEGACY_LATEST_TAG_ENV]) {
+    const value = String(process.env[name] || "").trim();
+    if (value) {
+      throw new Error(
+        `${name} is no longer supported. The officecli npm wrapper now installs only the current stable release that matches package.json version.`
+      );
+    }
   }
 
+  const raw = String(pkg.version || "").trim();
+  if (!raw) {
+    throw new Error("package.json version is required");
+  }
   const normalized = raw.startsWith("v") ? raw.slice(1) : raw;
   return { requestedVersion: normalized, releaseTag: `v${normalized}` };
 }
 
 function archiveName(version, platform, arch) {
-  if (version === "latest") {
-    return `officecli_latest_${platform}_${arch}.tar.gz`;
-  }
   return `officecli_${version}_${platform}_${arch}.tar.gz`;
 }
 
 function releaseBaseUrl(distRepo, releaseTag) {
   return `https://github.com/${distRepo}/releases/download/${releaseTag}`;
-}
-
-function githubApiUrl(distRepo, latestTag) {
-  if (latestTag === "latest") {
-    return `https://api.github.com/repos/${distRepo}/releases/latest`;
-  }
-  return `https://api.github.com/repos/${distRepo}/releases/tags/${latestTag}`;
 }
 
 function download(url) {
@@ -358,16 +360,6 @@ function downloadToFile(url, outputPath, label) {
   });
 }
 
-async function resolveLatestReleaseTag(distRepo, latestTag) {
-  const payload = await download(githubApiUrl(distRepo, latestTag));
-  const data = JSON.parse(payload.toString("utf8"));
-  const tagName = String(data.tag_name || "").trim();
-  if (!tagName) {
-    throw new Error(`failed to resolve release tag from ${distRepo}`);
-  }
-  return tagName;
-}
-
 function readChecksum(checksumText, expectedName) {
   const lines = checksumText.split(/\r?\n/);
   for (const line of lines) {
@@ -433,52 +425,29 @@ async function saveMetadata(metadata) {
 
 async function installBinary({ verbose = true } = {}) {
   const { platform, arch } = resolvePlatform();
-  const distRepo = DEFAULT_DIST_REPO;
+  const distRepo = resolveDistRepo();
   const { requestedVersion, releaseTag } = resolveRequestedVersion();
   const packageManager = detectPackageManager();
-  let effectiveVersion = requestedVersion;
-  let effectiveTag = releaseTag;
-  let archive = archiveName(effectiveVersion, platform, arch);
-  let baseUrl = releaseBaseUrl(distRepo, effectiveTag);
+  const archive = archiveName(requestedVersion, platform, arch);
+  const baseUrl = releaseBaseUrl(distRepo, releaseTag);
 
   if (verbose) {
     console.log(`installing officecli ${requestedVersion} for ${platform}/${arch} from ${distRepo}`);
   }
 
-  let archiveSha256;
-  let archivePath;
-  let tempDir;
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
   try {
-    tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
-    archivePath = path.join(tempDir, archive);
+    const archivePath = path.join(tempDir, archive);
     const archiveDownload = await downloadToFile(`${baseUrl}/${archive}`, archivePath, archive);
-    archiveSha256 = archiveDownload.sha256;
-  } catch (error) {
-    if (requestedVersion !== "latest") {
-      throw error;
+    const checksumsBuffer = await download(`${baseUrl}/checksums.txt`);
+    const expectedChecksum = readChecksum(checksumsBuffer.toString("utf8"), archive);
+    if (verbose) {
+      console.log(`verifying checksum for ${archive}`);
     }
-    effectiveTag = await resolveLatestReleaseTag(distRepo, DEFAULT_LATEST_TAG);
-    effectiveVersion = effectiveTag.replace(/^v/, "");
-    archive = archiveName(effectiveVersion, platform, arch);
-    baseUrl = releaseBaseUrl(distRepo, effectiveTag);
-    if (!tempDir) {
-      tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "officecli-npm-"));
+    if (expectedChecksum !== archiveDownload.sha256) {
+      throw new Error(`checksum mismatch for ${archive}`);
     }
-    archivePath = path.join(tempDir, archive);
-    const archiveDownload = await downloadToFile(`${baseUrl}/${archive}`, archivePath, archive);
-    archiveSha256 = archiveDownload.sha256;
-  }
 
-  const checksumsBuffer = await download(`${baseUrl}/checksums.txt`);
-  const expectedChecksum = readChecksum(checksumsBuffer.toString("utf8"), archive);
-  if (verbose) {
-    console.log(`verifying checksum for ${archive}`);
-  }
-  if (expectedChecksum !== archiveSha256) {
-    throw new Error(`checksum mismatch for ${archive}`);
-  }
-
-  try {
     if (verbose) {
       console.log(`extracting ${archive}`);
     }
@@ -490,14 +459,14 @@ async function installBinary({ verbose = true } = {}) {
     await saveMetadata({
       distRepo,
       requestedVersion,
-      installedVersion: effectiveVersion,
-      releaseTag: effectiveTag,
+      installedVersion: requestedVersion,
+      releaseTag,
       packageManager,
       platform,
       arch
     });
     if (verbose) {
-      console.log(`installed officecli ${effectiveVersion} to ${BINARY_PATH}`);
+      console.log(`installed officecli ${requestedVersion} to ${BINARY_PATH}`);
     }
   } finally {
     await fsp.rm(tempDir, { recursive: true, force: true });
@@ -517,9 +486,7 @@ async function ensureInstalled({ verbose = true } = {}) {
 
   if (fs.existsSync(BINARY_PATH) && metadata) {
     const platformMatches = metadata.platform === platform && metadata.arch === arch;
-    const versionMatches =
-      metadata.requestedVersion === requestedVersion ||
-      (requestedVersion === "latest" && typeof metadata.installedVersion === "string");
+    const versionMatches = metadata.requestedVersion === requestedVersion;
     if (platformMatches && versionMatches) {
       return BINARY_PATH;
     }
@@ -529,10 +496,13 @@ async function ensureInstalled({ verbose = true } = {}) {
 }
 
 module.exports = {
+  archiveName,
   detectPackageManager,
   ensureInstalled,
   getBinaryPath,
   installBinary,
   loadMetadata,
+  resolveDistRepo,
+  resolveRequestedVersion,
   saveMetadata
 };

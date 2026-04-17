@@ -7,7 +7,6 @@ VERSION="${VERSION:-stable}"
 PREFIX="${PREFIX:-/usr/local}"
 BIN_DIR="${BIN_DIR:-${PREFIX}/bin}"
 INSTALL_DIR="${INSTALL_DIR:-${BIN_DIR}}"
-LATEST_TAG="${LATEST_TAG:-latest}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -33,10 +32,12 @@ resolve_version() {
       echo "stable"
       ;;
     latest)
-      echo "latest"
+      echo "VERSION=latest is no longer supported. Public distribution now keeps only the current stable release. Leave VERSION unset or set VERSION=stable." >&2
+      exit 1
       ;;
     *)
-      echo "${VERSION#v}"
+      echo "VERSION=${VERSION} is no longer supported. Public distribution now keeps only the current stable release. Leave VERSION unset or set VERSION=stable." >&2
+      exit 1
       ;;
   esac
 }
@@ -45,10 +46,6 @@ archive_name_for_version() {
   local version="$1"
   local os="$2"
   local arch="$3"
-  if [[ "${version}" == "latest" ]]; then
-    echo "officecli_latest_${os}_${arch}.tar.gz"
-    return
-  fi
   echo "officecli_${version}_${os}_${arch}.tar.gz"
 }
 
@@ -127,46 +124,26 @@ if [[ "${os}" != "linux" && "${os}" != "darwin" ]]; then
 fi
 
 resolved_version="$(resolve_version)"
-display_version="${resolved_version}"
-if [[ "${resolved_version}" == "latest" ]]; then
-  tag="${LATEST_TAG}"
-  archive_name="$(archive_name_for_version latest "${os}" "${arch}")"
-elif [[ "${resolved_version}" == "stable" ]]; then
-  tag="$(resolve_latest_release_tag)"
-  if [[ -z "${tag}" ]]; then
-    echo "failed to resolve latest stable release tag for ${DIST_REPO}" >&2
-    exit 1
-  fi
-  resolved_version="${tag#v}"
-  display_version="${tag}"
-  archive_name="$(archive_name_for_version "${resolved_version}" "${os}" "${arch}")"
-else
-  tag="v${resolved_version}"
-  archive_name="$(archive_name_for_version "${resolved_version}" "${os}" "${arch}")"
+if [[ "${resolved_version}" != "stable" ]]; then
+  echo "unexpected install mode: ${resolved_version}" >&2
+  exit 1
 fi
+
+tag="$(resolve_latest_release_tag)"
+if [[ -z "${tag}" ]]; then
+  echo "failed to resolve the current stable release tag for ${DIST_REPO}" >&2
+  exit 1
+fi
+
+resolved_version="${tag#v}"
+display_version="${tag}"
+archive_name="$(archive_name_for_version "${resolved_version}" "${os}" "${arch}")"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
 base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
-
-if [[ "${resolved_version}" == "latest" ]]; then
-  if ! download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}" 2>/dev/null; then
-    fallback_tag="$(resolve_latest_release_tag)"
-    if [[ -z "${fallback_tag}" ]]; then
-      echo "failed to resolve latest release tag for ${DIST_REPO}" >&2
-      exit 1
-    fi
-    display_version="${fallback_tag}"
-    fallback_version="${fallback_tag#v}"
-    tag="${fallback_tag}"
-    archive_name="$(archive_name_for_version "${fallback_version}" "${os}" "${arch}")"
-    base_url="https://github.com/${DIST_REPO}/releases/download/${tag}"
-    download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
-  fi
-else
-  download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
-fi
+download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
 
 download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt"
 verify_checksum "${archive_name}" "${tmpdir}/checksums.txt"

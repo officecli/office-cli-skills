@@ -202,9 +202,9 @@ func TestLatestReleaseIsNewer(t *testing.T) {
 			want:              true,
 		},
 		{
-			name:              "falls back to publish time when version cannot be compared",
+			name:              "falls back to publish time when stable label cannot be compared",
 			currentVersion:    "build-123",
-			latestVersion:     "latest",
+			latestVersion:     "current stable",
 			currentBuildDate:  "2026-04-07T09:00:00Z",
 			latestPublishedAt: "2026-04-08T09:00:00Z",
 			want:              true,

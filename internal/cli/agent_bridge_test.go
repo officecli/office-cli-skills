@@ -222,7 +222,7 @@ func TestAgentBridgeCapabilitiesIncludeUpdateInfo(t *testing.T) {
 		return UpdateInfo{
 			Available:           true,
 			CurrentVersion:      "0.2.2",
-			LatestVersionLabel:  "latest",
+			LatestVersionLabel:  "0.2.6",
 			InstallMethod:       InstallMethodScript,
 			Channel:             UpdateChannelLatest,
 			AutoUpdateSupported: true,

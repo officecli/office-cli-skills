@@ -29,14 +29,14 @@ The initial package lives at `packages/npm/officecli` and contains:
 - supported CPU: `x64`, `arm64`
 - default dist repo: `officecli/officecli-dist`
 - default release version: npm package version
-- optional override to `latest` via `OFFICECLI_NPM_VERSION=latest`
+- no runtime override to `latest` or historical versions
 
 ## Remaining Work Before Publish
 
 1. Create the public npm repository, for example `officecli/officecli-npm`
 2. Configure `PUBLIC_NPM_REPO` and `PUBLIC_NPM_REPO_TOKEN` in the private source repository
 3. Configure npm trusted publishing against the public npm repository
-4. Decide whether npm publish should track stable tags only or also rolling prereleases
+4. Decide whether legacy npm versions should be manually deprecated in the registry when release governance requires it
 5. Decide whether Windows support should be added to the binary release flow
 
 ## Validation
@@ -63,3 +63,4 @@ CI:
 - `NPM Publish` uses GitHub OIDC trusted publishing instead of a long-lived `NPM_TOKEN`
 - the npm package metadata should not expose the private source repository URL
 - the public npm repository should add its own public `repository.url` during sync
+- the npm wrapper no longer supports `OFFICECLI_NPM_VERSION` or `OFFICECLI_NPM_LATEST_TAG`
