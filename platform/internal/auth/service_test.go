@@ -129,6 +129,20 @@ func TestLoginURLStoresInviteCodeInOAuthState(t *testing.T) {
 	}
 }
 
+func TestLoginURLNormalizesAppRelativeReturnToInOAuthState(t *testing.T) {
+	sessions := newFakeSessionStore()
+	svc := NewService(fakeOAuthProvider{}, &fakeAuthUserStore{}, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil, nil)
+
+	_, err := svc.LoginURL(context.Background(), "/billing?status=success", "")
+	require.NoError(t, err)
+	require.Len(t, sessions.payloads, 1)
+
+	for _, raw := range sessions.payloads {
+		payload := raw.(map[string]string)
+		require.Equal(t, "/app/billing?status=success", payload["return_to"])
+	}
+}
+
 func TestHandleCallbackRegistersReferralFromOAuthState(t *testing.T) {
 	sessions := newFakeSessionStore()
 	state := "oauth-state"
@@ -187,6 +201,30 @@ func TestHandleCallbackIgnoresInviteLimitError(t *testing.T) {
 	require.Contains(t, rawCookie, "cookie:")
 }
 
+func TestHandleCallbackNormalizesLegacyAppRelativeReturnTo(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/billing?status=success&session_id=cs_test_123",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042"}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "demo@example.com", Name: "Demo"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"demo@example.com"},
+	)
+
+	_, _, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+	require.Equal(t, "/app/billing?status=success&session_id=cs_test_123", returnTo)
+}
+
 func TestHandleCallbackRejectsNonAllowlistedEmail(t *testing.T) {
 	sessions := newFakeSessionStore()
 	state := "oauth-state"
@@ -238,6 +276,30 @@ func TestHandleCallbackAllowsAnyEmailWhenAllowlistWildcardIsConfigured(t *testin
 	require.Equal(t, uint64(42), user.ID)
 	require.Equal(t, "/app", returnTo)
 	require.Contains(t, rawCookie, "cookie:")
+}
+
+func TestHandleCallbackKeepsAbsolutePreviewReturnTo(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "https://officecli.io/p/share-token",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042", Status: model.UserStatusActive}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "anyone@example.com", Name: "Anyone"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"*"},
+	)
+
+	_, _, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+	require.Equal(t, "https://officecli.io/p/share-token", returnTo)
 }
 
 func TestHandleCallbackRejectsDisabledUser(t *testing.T) {

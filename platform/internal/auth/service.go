@@ -92,9 +92,33 @@ func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, 
 	}
 }
 
+func normalizeReturnTo(returnTo string) string {
+	requested := strings.TrimSpace(returnTo)
+	if requested == "" {
+		return "/app"
+	}
+	lower := strings.ToLower(requested)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return requested
+	}
+	if !strings.HasPrefix(requested, "/") {
+		return "/app"
+	}
+	if requested == "/app" || strings.HasPrefix(requested, "/app/") || strings.HasPrefix(requested, "/app?") || strings.HasPrefix(requested, "/app#") {
+		return requested
+	}
+	if requested == "/" {
+		return "/app"
+	}
+	if strings.HasPrefix(requested, "/?") || strings.HasPrefix(requested, "/#") {
+		return "/app" + strings.TrimPrefix(requested, "/")
+	}
+	return "/app" + requested
+}
+
 func (s *Service) LoginURL(ctx context.Context, returnTo, inviteCode string) (string, error) {
 	state := uuid.NewString()
-	payload := map[string]string{"return_to": returnTo}
+	payload := map[string]string{"return_to": normalizeReturnTo(returnTo)}
 	if normalizedInviteCode := strings.TrimSpace(inviteCode); normalizedInviteCode != "" {
 		payload["invite_code"] = normalizedInviteCode
 	}
@@ -155,10 +179,7 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 	if err != nil {
 		return nil, "", "", err
 	}
-	returnTo := "/app"
-	if payload["return_to"] != "" {
-		returnTo = payload["return_to"]
-	}
+	returnTo := normalizeReturnTo(payload["return_to"])
 	return user, rawCookie, returnTo, nil
 }
 

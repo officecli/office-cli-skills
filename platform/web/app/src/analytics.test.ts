@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildGoogleLoginURL } from './analytics'
+import { buildGoogleLoginURL, normalizeAppReturnTo } from './analytics'
 
 describe('app analytics helpers', () => {
   afterEach(() => {
@@ -21,6 +21,17 @@ describe('app analytics helpers', () => {
     expect(url.searchParams.get('return_to')).toBe('/app')
     expect(url.searchParams.get('invite')).toBe('invite-xyz')
     expect(url.searchParams.get('utm_source')).toBe('pricing')
+  })
+
+  it('normalizes app-internal return targets under /app before redirecting to google login', () => {
+    const loginURL = buildGoogleLoginURL('/billing?status=success&session_id=cs_test_123')
+    const url = new URL(loginURL, 'https://platform.officecli.io')
+
+    expect(url.searchParams.get('return_to')).toBe('/app/billing?status=success&session_id=cs_test_123')
+  })
+
+  it('keeps absolute preview return targets unchanged', () => {
+    expect(normalizeAppReturnTo('https://officecli.io/p/share-token')).toBe('https://officecli.io/p/share-token')
   })
 
   it('initializes gtag using arguments objects so ga4 can consume the queue', async () => {

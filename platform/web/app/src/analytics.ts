@@ -21,6 +21,7 @@ declare global {
 
 const measurementID = import.meta.env.VITE_GA4_MEASUREMENT_ID?.trim()
 let analyticsInitialized = false
+const appBasePath = '/app'
 
 export function analyticsEnabled() {
   return Boolean(measurementID)
@@ -59,9 +60,29 @@ export function extractAttributionParams(currentSearch: string) {
   )
 }
 
+export function normalizeAppReturnTo(returnTo = appBasePath) {
+  const requested = returnTo.trim()
+  if (!requested) return appBasePath
+  if (/^https?:\/\//i.test(requested)) return requested
+  if (!requested.startsWith('/')) return appBasePath
+  if (
+    requested === appBasePath ||
+    requested.startsWith(`${appBasePath}/`) ||
+    requested.startsWith(`${appBasePath}?`) ||
+    requested.startsWith(`${appBasePath}#`)
+  ) {
+    return requested
+  }
+  if (requested === '/') return appBasePath
+  if (requested.startsWith('/?') || requested.startsWith('/#')) {
+    return `${appBasePath}${requested.slice(1)}`
+  }
+  return `${appBasePath}${requested}`
+}
+
 export function buildGoogleLoginURL(returnTo = '/app', currentSearch = window.location.search) {
   const url = new URL('/api/auth/google/login', window.location.origin)
-  url.searchParams.set('return_to', returnTo)
+  url.searchParams.set('return_to', normalizeAppReturnTo(returnTo))
 
   const attrs = extractAttributionParams(currentSearch)
   for (const [key, value] of Object.entries(attrs)) {
