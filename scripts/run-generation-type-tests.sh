@@ -7,42 +7,85 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/local-test-common.sh"
 
 ALL_TYPES=(pptx docx xlsx report)
-SELECTED_TYPES=("$@")
+SELECTED_TYPES=()
 RESULT_LABELS=()
 RESULT_STATUSES=()
 FAILURES=0
 
+DEFAULT_MODE="real"
+if [[ -n "${CI:-}" ]]; then
+  DEFAULT_MODE="unit"
+fi
+
+MODE="${DEFAULT_MODE}"
+PUBLISH_MODE="auto"
+KEEP_LICENSE_CHECKS=0
+REAL_OUTPUT_ROOT=""
+
+PPTX_PATTERN='^(TestServiceGeneratePPTX.*|TestBuildPPTXPrompt_.*|TestNormalizePPTXPayload_.*|TestBuildPPTXFromJSON_.*|TestPPTX.*|TestTargetAspectRatioForSlide)$'
+DOCX_PATTERN='^(TestServiceGenerateDOCX.*|TestBuildDOCXPrompt_AndBuildDOCXFromJSON|TestNewDOCXGeneratorAvailable)$'
+XLSX_PATTERN='^(TestServiceGenerateXLSX.*|TestBuildXLSXPrompt_AndBuildXLSXFromJSON)$'
+REPORT_PATTERN='^(TestServiceGenerateReport.*|TestBuildReportPrompt_AndBuildReportFromJSON|TestBuildReport_RendersEChartsAndSectionContent|TestNormalizeReport_NormalizesUnsupportedChartType)$'
+
 usage() {
   cat <<'EOF'
 Usage:
-  bash ./scripts/run-generation-type-tests.sh [pptx|docx|xlsx|report ...]
+  bash ./scripts/run-generation-type-tests.sh [--real|--unit] [--publish|--no-publish] [--keep-license-checks] [pptx|docx|xlsx|report ...]
 
 Description:
-  Run generation-focused Go tests for all four document types by default
-  and print a PASS/FAIL summary at the end.
+  Run generation checks for the selected document types.
+
+  Default behavior:
+  - Local shell: run real end-to-end generation against the current source checkout.
+  - CI: run fast Go unit tests only.
+
+  Real mode:
+  - Builds the current source once and runs actual `officecli new ...` commands.
+  - `pptx` also emits local HTML/JSON preview sidecars.
+  - If publishing is configured, preview URLs are printed as part of the result summary.
+  - To make source builds work without release-only license proof embedding, real mode
+    disables access checks by default. Use `--keep-license-checks` to preserve them.
 
 Examples:
   bash ./scripts/run-generation-type-tests.sh
-  bash ./scripts/run-generation-type-tests.sh pptx report
+  bash ./scripts/run-generation-type-tests.sh --unit
+  bash ./scripts/run-generation-type-tests.sh --real pptx report
+  bash ./scripts/run-generation-type-tests.sh --real --publish pptx
 EOF
 }
 
-if [[ ${#SELECTED_TYPES[@]} -eq 0 ]]; then
-  SELECTED_TYPES=("${ALL_TYPES[@]}")
-fi
+json_field() {
+  local json_path="$1"
+  local field="$2"
 
-should_run() {
-  local expected="$1"
-  local current
-  for current in "${SELECTED_TYPES[@]}"; do
-    if [[ "${current}" == "${expected}" ]]; then
-      return 0
-    fi
-  done
-  return 1
+  python3 - "$json_path" "$field" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+field = sys.argv[2]
+
+with open(path, "r", encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+value = payload
+for part in field.split("."):
+    if isinstance(value, dict):
+        value = value.get(part)
+    else:
+        value = None
+        break
+
+if value is None:
+    print("")
+elif isinstance(value, bool):
+    print("true" if value else "false")
+else:
+    print(value)
+PY
 }
 
-run_suite() {
+run_unit_suite() {
   local label="$1"
   shift
 
@@ -60,50 +103,406 @@ run_suite() {
   fi
 }
 
-for type in "${SELECTED_TYPES[@]}"; do
-  case "${type}" in
-    pptx|docx|xlsx|report) ;;
-    -h|--help|help)
-      usage
-      exit 0
+should_run() {
+  local expected="$1"
+  local current
+
+  for current in "${SELECTED_TYPES[@]}"; do
+    if [[ "${current}" == "${expected}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      pptx|docx|xlsx|report)
+        SELECTED_TYPES+=("$1")
+        ;;
+      --real)
+        MODE="real"
+        ;;
+      --unit)
+        MODE="unit"
+        ;;
+      --publish)
+        PUBLISH_MODE="yes"
+        ;;
+      --no-publish)
+        PUBLISH_MODE="no"
+        ;;
+      --keep-license-checks)
+        KEEP_LICENSE_CHECKS=1
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      *)
+        usage
+        fail "unsupported option or generation type: $1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ ${#SELECTED_TYPES[@]} -eq 0 ]]; then
+    SELECTED_TYPES=("${ALL_TYPES[@]}")
+  fi
+}
+
+ensure_real_env() {
+  local skill_check="${REPO_ROOT}/skills/officecli/check-officecli-env.sh"
+  local status_json
+  local generation_ready
+  local publish_ready
+
+  if [[ ! -x "${skill_check}" ]]; then
+    fail "missing OfficeCLI env check script: ${skill_check}"
+  fi
+
+  status_json="$(cd "${REPO_ROOT}" && "${skill_check}")"
+  generation_ready="$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1]).get("generation_ready") else "false")' "${status_json}")"
+  publish_ready="$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1]).get("publish_ready") else "false")' "${status_json}")"
+
+  if [[ "${generation_ready}" != "true" ]]; then
+    fail "generation environment is not ready for real mode"
+  fi
+
+  REAL_PUBLISH_READY="${publish_ready}"
+}
+
+build_real_binary() {
+  local build_dir="${REPO_ROOT}/.tmp/generation-type-tests"
+
+  mkdir -p "${build_dir}"
+  REAL_BINARY_PATH="${build_dir}/officecli-generation-tests"
+
+  phase "Building source binary"
+  info "Running command: go build -o ${REAL_BINARY_PATH} ./cmd/officecli"
+  (cd "${REPO_ROOT}" && go build -o "${REAL_BINARY_PATH}" ./cmd/officecli)
+  pass "Built current source binary"
+}
+
+real_runtime_env() {
+  local env_items=("OFFICECLI_SKIP_SKILL_PREFLIGHT=1")
+
+  if [[ ${KEEP_LICENSE_CHECKS} -eq 0 ]]; then
+    env_items+=("OFFICE_CLI_LICENSE_ENABLED=0")
+  fi
+
+  printf '%s\n' "${env_items[@]}"
+}
+
+run_real_command() {
+  local json_path="$1"
+  shift
+
+  local env_items=()
+  local item
+  while IFS= read -r item; do
+    [[ -n "${item}" ]] && env_items+=("${item}")
+  done < <(real_runtime_env)
+
+  (
+    cd "${REPO_ROOT}"
+    env "${env_items[@]}" "${REAL_BINARY_PATH}" "$@" > "${json_path}"
+  )
+}
+
+resolve_publish_flag() {
+  case "${PUBLISH_MODE}" in
+    yes)
+      if [[ "${REAL_PUBLISH_READY}" != "true" ]]; then
+        fail "publish was requested, but publish config is not ready"
+      fi
+      printf '%s\n' "--publish"
+      ;;
+    no)
+      printf '%s\n' "--no-publish"
+      ;;
+    auto)
+      if [[ "${REAL_PUBLISH_READY}" == "true" ]]; then
+        printf '%s\n' "--publish"
+      else
+        printf '%s\n' "--no-publish"
+      fi
       ;;
     *)
-      usage
-      fail "unsupported generation type: ${type}"
+      fail "unsupported publish mode: ${PUBLISH_MODE}"
       ;;
   esac
-done
+}
 
-PPTX_PATTERN='^(TestServiceGeneratePPTX.*|TestBuildPPTXPrompt_.*|TestNormalizePPTXPayload_.*|TestBuildPPTXFromJSON_.*|TestPPTX.*|TestTargetAspectRatioForSlide)$'
-DOCX_PATTERN='^(TestServiceGenerateDOCX.*|TestBuildDOCXPrompt_AndBuildDOCXFromJSON|TestNewDOCXGeneratorAvailable)$'
-XLSX_PATTERN='^(TestServiceGenerateXLSX.*|TestBuildXLSXPrompt_AndBuildXLSXFromJSON)$'
-REPORT_PATTERN='^(TestServiceGenerateReport.*|TestBuildReportPrompt_AndBuildReportFromJSON|TestBuildReport_RendersEChartsAndSectionContent|TestNormalizeReport_NormalizesUnsupportedChartType)$'
+real_case_dir() {
+  local label="$1"
+  printf '%s/%s\n' "${REAL_OUTPUT_ROOT}" "${label}"
+}
 
-phase "Document generation test matrix"
+record_real_result() {
+  local label="$1"
+  local json_path="$2"
+  local artifact_path
+  local local_preview_path
+  local local_preview_data_path
+  local access_url
 
-if should_run pptx; then
-  run_suite pptx go test ./internal/runtime ./pkg/officegen -count=1 -run "${PPTX_PATTERN}"
-fi
+  artifact_path="$(json_field "${json_path}" "file_path")"
+  local_preview_path="$(json_field "${json_path}" "local_preview_path")"
+  local_preview_data_path="$(json_field "${json_path}" "local_preview_data_path")"
+  access_url="$(json_field "${json_path}" "access_url")"
 
-if should_run docx; then
-  run_suite docx go test ./internal/runtime ./engine/generate ./pkg/officegen -count=1 -run "${DOCX_PATTERN}"
-fi
+  RESULT_LABELS+=("${label}")
+  RESULT_STATUSES+=("PASS")
 
-if should_run xlsx; then
-  run_suite xlsx go test ./internal/runtime ./engine/generate -count=1 -run "${XLSX_PATTERN}"
-fi
+  pass "${label} real generation completed"
+  info "Artifact: ${artifact_path}"
+  if [[ -n "${local_preview_path}" ]]; then
+    info "Local preview: ${local_preview_path}"
+  fi
+  if [[ -n "${local_preview_data_path}" ]]; then
+    info "Local preview data: ${local_preview_data_path}"
+  fi
+  if [[ -n "${access_url}" ]]; then
+    info "Online preview: ${access_url}"
+  fi
+}
 
-if should_run report; then
-  run_suite report go test ./internal/runtime ./engine/generate ./pkg/officegen -count=1 -run "${REPORT_PATTERN}"
-fi
+record_real_failure() {
+  local label="$1"
 
-phase "Generation test summary"
-for ((i = 0; i < ${#RESULT_LABELS[@]}; i++)); do
-  printf '[%s] [%-4s] %s\n' "$(timestamp)" "${RESULT_STATUSES[i]}" "${RESULT_LABELS[i]}"
-done
+  RESULT_LABELS+=("${label}")
+  RESULT_STATUSES+=("FAIL")
+  FAILURES=$((FAILURES + 1))
+  warn "${label} real generation failed"
+}
 
-if [[ ${FAILURES} -eq 0 ]]; then
-  pass "All ${#RESULT_LABELS[@]} generation suites passed"
-else
-  fail "${FAILURES} of ${#RESULT_LABELS[@]} generation suites failed"
-fi
+run_real_pptx() {
+  local label="pptx"
+  local case_dir
+  local json_path
+  local publish_flag
+
+  case_dir="$(real_case_dir "${label}")"
+  json_path="${case_dir}/result.json"
+  publish_flag="$(resolve_publish_flag)"
+
+  mkdir -p "${case_dir}"
+  phase "${label} real generation"
+  info "Output directory: ${case_dir}"
+
+  if run_real_command "${json_path}" new pptx "OfficeCLI 真实生成预览测试" \
+    --prompt "生成一个 5 页中文产品介绍，面向企业管理层，覆盖定位、核心能力、业务收益、落地路径和风险提示。" \
+    --style executive-dark \
+    --audience "企业管理层" \
+    --lang zh-CN \
+    --local-preview \
+    --json \
+    --out "${case_dir}" \
+    "${publish_flag}"; then
+    record_real_result "${label}" "${json_path}"
+  else
+    record_real_failure "${label}"
+  fi
+}
+
+run_real_docx() {
+  local label="docx"
+  local case_dir
+  local json_path
+  local publish_flag
+
+  case_dir="$(real_case_dir "${label}")"
+  json_path="${case_dir}/result.json"
+  publish_flag="$(resolve_publish_flag)"
+
+  mkdir -p "${case_dir}"
+  phase "${label} real generation"
+  info "Output directory: ${case_dir}"
+
+  if run_real_command "${json_path}" new docx "OfficeCLI 真实生成文档测试" \
+    --prompt "写一份中文项目复盘文档，面向管理层，包含背景、成果、问题、原因分析和下一步行动。" \
+    --audience "管理层" \
+    --lang zh-CN \
+    --json \
+    --out "${case_dir}" \
+    "${publish_flag}"; then
+    record_real_result "${label}" "${json_path}"
+  else
+    record_real_failure "${label}"
+  fi
+}
+
+run_real_xlsx() {
+  local label="xlsx"
+  local case_dir
+  local json_path
+  local publish_flag
+
+  case_dir="$(real_case_dir "${label}")"
+  json_path="${case_dir}/result.json"
+  publish_flag="$(resolve_publish_flag)"
+
+  mkdir -p "${case_dir}"
+  phase "${label} real generation"
+  info "Output directory: ${case_dir}"
+
+  if run_real_command "${json_path}" new xlsx "OfficeCLI 真实生成工作簿测试" \
+    --prompt "生成一个中文经营分析工作簿，至少包含汇总和区域分析两张表，字段包含区域、收入、同比、负责人和风险等级，并填充合理示例数据。" \
+    --audience "经营分析团队" \
+    --lang zh-CN \
+    --json \
+    --out "${case_dir}" \
+    "${publish_flag}"; then
+    record_real_result "${label}" "${json_path}"
+  else
+    record_real_failure "${label}"
+  fi
+}
+
+run_real_report() {
+  local label="report"
+  local case_dir
+  local workbook_dir
+  local workbook_json
+  local report_json
+  local workbook_path
+  local publish_flag
+
+  case_dir="$(real_case_dir "${label}")"
+  workbook_dir="${case_dir}/source-workbook"
+  workbook_json="${workbook_dir}/result.json"
+  report_json="${case_dir}/result.json"
+  publish_flag="$(resolve_publish_flag)"
+
+  mkdir -p "${workbook_dir}" "${case_dir}"
+  phase "${label} real generation"
+  info "Preparing source workbook in: ${workbook_dir}"
+
+  if ! run_real_command "${workbook_json}" new xlsx "OfficeCLI 报告测试源工作簿" \
+    --prompt "生成一个中文季度经营数据工作簿，至少包含收入、成本、区域和负责人等字段，并填充合理示例数据。" \
+    --audience "经营分析团队" \
+    --lang zh-CN \
+    --json \
+    --out "${workbook_dir}" \
+    --no-publish; then
+    record_real_failure "${label}"
+    return
+  fi
+
+  workbook_path="$(json_field "${workbook_json}" "file_path")"
+  info "Source workbook: ${workbook_path}"
+  info "Output directory: ${case_dir}"
+
+  if run_real_command "${report_json}" new report "OfficeCLI 真实生成报告测试" \
+    --file "${workbook_path}" \
+    --prompt "基于工作簿生成一份中文经营分析报告，输出结论优先，包含关键指标、主要发现、风险提示和管理建议。" \
+    --audience "管理层" \
+    --lang zh-CN \
+    --json \
+    --out "${case_dir}" \
+    "${publish_flag}"; then
+    record_real_result "${label}" "${report_json}"
+  else
+    record_real_failure "${label}"
+  fi
+}
+
+run_real_mode() {
+  local timestamp_utc
+
+  ensure_real_env
+  build_real_binary
+
+  timestamp_utc="$(date -u +"%Y%m%dT%H%M%SZ")"
+  REAL_OUTPUT_ROOT="${REPO_ROOT}/output/generation-type-tests/${timestamp_utc}"
+  mkdir -p "${REAL_OUTPUT_ROOT}"
+
+  phase "Document generation real matrix"
+  info "Mode: real"
+  info "Output root: ${REAL_OUTPUT_ROOT}"
+  if [[ ${KEEP_LICENSE_CHECKS} -eq 0 ]]; then
+    info "Access checks: disabled for source-built binary validation"
+  else
+    info "Access checks: preserved from current config"
+  fi
+  if [[ "${REAL_PUBLISH_READY}" == "true" ]]; then
+    info "Publish config: ready"
+  else
+    info "Publish config: not ready; local artifacts only"
+  fi
+
+  if should_run pptx; then
+    run_real_pptx
+  fi
+
+  if should_run docx; then
+    run_real_docx
+  fi
+
+  if should_run xlsx; then
+    run_real_xlsx
+  fi
+
+  if should_run report; then
+    run_real_report
+  fi
+}
+
+run_unit_mode() {
+  phase "Document generation test matrix"
+
+  if should_run pptx; then
+    run_unit_suite pptx go test ./internal/runtime ./pkg/officegen -count=1 -run "${PPTX_PATTERN}"
+  fi
+
+  if should_run docx; then
+    run_unit_suite docx go test ./internal/runtime ./engine/generate ./pkg/officegen -count=1 -run "${DOCX_PATTERN}"
+  fi
+
+  if should_run xlsx; then
+    run_unit_suite xlsx go test ./internal/runtime ./engine/generate -count=1 -run "${XLSX_PATTERN}"
+  fi
+
+  if should_run report; then
+    run_unit_suite report go test ./internal/runtime ./engine/generate ./pkg/officegen -count=1 -run "${REPORT_PATTERN}"
+  fi
+}
+
+print_summary() {
+  local i
+
+  phase "Generation test summary"
+  info "Mode used: ${MODE}"
+  for ((i = 0; i < ${#RESULT_LABELS[@]}; i++)); do
+    printf '[%s] [%-4s] %s\n' "$(timestamp)" "${RESULT_STATUSES[i]}" "${RESULT_LABELS[i]}"
+  done
+
+  if [[ ${FAILURES} -eq 0 ]]; then
+    pass "All ${#RESULT_LABELS[@]} generation suites passed"
+  else
+    fail "${FAILURES} of ${#RESULT_LABELS[@]} generation suites failed"
+  fi
+}
+
+main() {
+  parse_args "$@"
+
+  case "${MODE}" in
+    real)
+      run_real_mode
+      ;;
+    unit)
+      run_unit_mode
+      ;;
+    *)
+      fail "unsupported mode: ${MODE}"
+      ;;
+  esac
+
+  print_summary
+}
+
+main "$@"
