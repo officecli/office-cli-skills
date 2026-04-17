@@ -12,6 +12,7 @@ output/
 .omx/
 .playwright-cli/
 .inspection-reports/
+/.tmp/
 platform/web/*/vite.config.js
 platform/web/*/vite.config.d.ts
 .inspection-reports/
