@@ -18,4 +18,5 @@ platform/web/*/vite.config.d.ts
 packages/npm/officecli/runtime/
 .env.local
 platform/tmp/
+tmp/
 test-results/
