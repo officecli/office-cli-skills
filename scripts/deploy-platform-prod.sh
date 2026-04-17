@@ -374,7 +374,7 @@ PY
 assert_secret_keys() {
   local missing=()
   local key
-  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET; do
+  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
@@ -385,6 +385,15 @@ assert_secret_keys() {
   local app_env
   app_env="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.APP_ENV}' | base64 -d)"
   [[ "${app_env}" == "production" ]] || die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} must set APP_ENV=production"
+  local stripe_secret_key stripe_webhook_secret
+  stripe_secret_key="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.STRIPE_SECRET_KEY}' | base64 -d)"
+  case "${stripe_secret_key}" in
+    sk_live_*|rk_live_*) ;;
+    sk_test_*|rk_test_*) die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} must use a Stripe live key in STRIPE_SECRET_KEY" ;;
+    *) die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} has an invalid STRIPE_SECRET_KEY format" ;;
+  esac
+  stripe_webhook_secret="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.STRIPE_WEBHOOK_SECRET}' | base64 -d)"
+  [[ "${stripe_webhook_secret}" == whsec_* ]] || die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} has an invalid STRIPE_WEBHOOK_SECRET format"
 }
 
 ensure_postgres_secret() {
@@ -732,7 +741,7 @@ PY
 assert_secret_keys() {
   local missing=()
   local key
-  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET; do
+  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
@@ -743,6 +752,15 @@ assert_secret_keys() {
   local app_env
   app_env="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.APP_ENV}' | base64 -d)"
   [[ "${app_env}" == "production" ]] || die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} must set APP_ENV=production"
+  local stripe_secret_key stripe_webhook_secret
+  stripe_secret_key="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.STRIPE_SECRET_KEY}' | base64 -d)"
+  case "${stripe_secret_key}" in
+    sk_live_*|rk_live_*) ;;
+    sk_test_*|rk_test_*) die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} must use a Stripe live key in STRIPE_SECRET_KEY" ;;
+    *) die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} has an invalid STRIPE_SECRET_KEY format" ;;
+  esac
+  stripe_webhook_secret="$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o jsonpath='{.data.STRIPE_WEBHOOK_SECRET}' | base64 -d)"
+  [[ "${stripe_webhook_secret}" == whsec_* ]] || die "Secret ${KUBE_NAMESPACE}/${SECRET_NAME} has an invalid STRIPE_WEBHOOK_SECRET format"
 }
 
 ensure_postgres_secret() {

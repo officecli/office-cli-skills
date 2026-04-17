@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stripe/stripe-go/v82"
+
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -173,6 +175,9 @@ func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*mod
 	}
 
 	session, err := s.gateway.CreateCheckoutSession(ctx, req, pack, customerID)
+	if err != nil && shouldRetryCheckoutWithoutCustomer(err, customerID) {
+		session, err = s.gateway.CreateCheckoutSession(ctx, req, pack, "")
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -252,6 +257,19 @@ func (s *Service) ListOrders(ctx context.Context) ([]model.Order, error) {
 
 func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error) {
 	return s.store.ListBillingEvents(ctx)
+}
+
+func shouldRetryCheckoutWithoutCustomer(err error, customerID string) bool {
+	if strings.TrimSpace(customerID) == "" {
+		return false
+	}
+	var stripeErr *stripe.Error
+	if !errors.As(err, &stripeErr) || stripeErr == nil {
+		return false
+	}
+	return stripeErr.Type == stripe.ErrorTypeInvalidRequest &&
+		stripeErr.Code == stripe.ErrorCodeResourceMissing &&
+		strings.TrimSpace(stripeErr.Param) == "customer"
 }
 
 func (s *Service) ReconcileCheckoutSession(ctx context.Context, req ReconcileOrderRequest) (*model.Order, error) {

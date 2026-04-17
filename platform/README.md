@@ -101,6 +101,8 @@ Recommended production base URLs:
 - `PLATFORM_BASE_URL`: platform base URL
 - `GOOGLE_REDIRECT_URL`: Google OAuth callback URL
 - `APP_GOOGLE_ALLOWLIST`: comma-separated allowlist for app sign-in; set to `*` to allow any Google account
+- `STRIPE_SECRET_KEY`: Stripe server-side secret key; production must use a live key
+- `STRIPE_WEBHOOK_SECRET`: Stripe webhook signing secret
 - `STRIPE_SUCCESS_URL`: Stripe success redirect
 - `STRIPE_CANCEL_URL`: Stripe cancel redirect
 - `EXTERNAL_UNIT_PRICE_CENTS`: base external price per document, in cents
@@ -112,7 +114,7 @@ Recommended production base URLs:
 - `HOSTED_LLM_PROVIDER`: hosted upstream provider id
 - `HOSTED_PRICING_RULES_JSON`: hosted credit pricing rules
 
-In production, the service must fail fast if required secrets are missing or still set to example values.
+In production, the service must fail fast if required secrets are missing, still set to example values, or Stripe is configured with test keys.
 
 ## Operational Notes
 

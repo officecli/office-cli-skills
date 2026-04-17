@@ -360,6 +360,12 @@ func validateProductionSecrets(cfg Config) error {
 	if strings.TrimSpace(cfg.APIKeyHashSalt) == "" || cfg.APIKeyHashSalt == "change-me-salt" {
 		return fmt.Errorf("API_KEY_HASH_SALT must be explicitly configured in production")
 	}
+	if err := validateStripeSecretKey(cfg.StripeSecretKey); err != nil {
+		return err
+	}
+	if err := validateStripeWebhookSecret(cfg.StripeWebhookSecret); err != nil {
+		return err
+	}
 	if strings.TrimSpace(cfg.LicenseProofSeed) == "" || cfg.LicenseProofSeed == "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" {
 		return fmt.Errorf("LICENSE_PROOF_SEED must be explicitly configured in production")
 	}
@@ -376,6 +382,32 @@ func validateLicenseProofSeed(raw string) error {
 	}
 	if len(decoded) != 32 {
 		return fmt.Errorf("LICENSE_PROOF_SEED must decode to 32 bytes")
+	}
+	return nil
+}
+
+func validateStripeSecretKey(raw string) error {
+	key := strings.TrimSpace(raw)
+	if key == "" {
+		return fmt.Errorf("STRIPE_SECRET_KEY must be explicitly configured in production")
+	}
+	switch {
+	case strings.HasPrefix(key, "sk_live_"), strings.HasPrefix(key, "rk_live_"):
+		return nil
+	case strings.HasPrefix(key, "sk_test_"), strings.HasPrefix(key, "rk_test_"):
+		return fmt.Errorf("STRIPE_SECRET_KEY must use a Stripe live key in production")
+	default:
+		return fmt.Errorf("STRIPE_SECRET_KEY must be a Stripe live secret or restricted key in production")
+	}
+}
+
+func validateStripeWebhookSecret(raw string) error {
+	secret := strings.TrimSpace(raw)
+	if secret == "" {
+		return fmt.Errorf("STRIPE_WEBHOOK_SECRET must be explicitly configured in production")
+	}
+	if !strings.HasPrefix(secret, "whsec_") {
+		return fmt.Errorf("STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret")
 	}
 	return nil
 }

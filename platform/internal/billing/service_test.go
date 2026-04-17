@@ -5,20 +5,41 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stripe/stripe-go/v82"
 
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
 type fakeGateway struct {
-	called          bool
-	lastCustomerID  string
-	checkoutSession *CheckoutSessionDetails
-	webhookEvent    *WebhookEvent
+	called                bool
+	lastCustomerID        string
+	customerIDs           []string
+	createCheckoutErrs    []error
+	createCheckoutResults []*CheckoutSession
+	checkoutSession       *CheckoutSessionDetails
+	webhookEvent          *WebhookEvent
 }
 
 func (f *fakeGateway) CreateCheckoutSession(_ context.Context, _ CheckoutRequest, _ model.PricingPack, customerID string) (*CheckoutSession, error) {
 	f.called = true
 	f.lastCustomerID = customerID
+	f.customerIDs = append(f.customerIDs, customerID)
+	if len(f.createCheckoutErrs) > 0 {
+		err := f.createCheckoutErrs[0]
+		f.createCheckoutErrs = f.createCheckoutErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(f.createCheckoutResults) > 0 {
+		result := f.createCheckoutResults[0]
+		f.createCheckoutResults = f.createCheckoutResults[1:]
+		if result == nil {
+			return nil, nil
+		}
+		cloned := *result
+		return &cloned, nil
+	}
 	return &CheckoutSession{
 		ID:         "cs_test_123",
 		URL:        "https://checkout.stripe.test/session/cs_test_123",
@@ -314,6 +335,93 @@ func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
 	require.NotEmpty(t, checkoutURL)
 	require.True(t, gateway.called)
 	require.Equal(t, "cus_existing_123", gateway.lastCustomerID)
+}
+
+func TestCreateCheckoutRetriesWithoutStoredStripeCustomerWhenStripeCustomerIsMissing(t *testing.T) {
+	t.Parallel()
+
+	quota := 10
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+		stripeCustomer: &model.StripeCustomer{
+			UserID:           42,
+			StripeCustomerID: "cus_test_legacy",
+		},
+	}
+	gateway := &fakeGateway{
+		createCheckoutErrs: []error{
+			&stripe.Error{
+				Type:  stripe.ErrorTypeInvalidRequest,
+				Code:  stripe.ErrorCodeResourceMissing,
+				Param: "customer",
+				Msg:   "No such customer: 'cus_test_legacy'",
+			},
+			nil,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
+		UserID:         42,
+		PackCode:       "pack_100",
+		TargetAPIKeyID: 7,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.Equal(t, []string{"cus_test_legacy", ""}, gateway.customerIDs)
+}
+
+func TestCreateCheckoutDoesNotRetryWithoutCustomerForOtherStripeErrors(t *testing.T) {
+	t.Parallel()
+
+	quota := 10
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+		stripeCustomer: &model.StripeCustomer{
+			UserID:           42,
+			StripeCustomerID: "cus_live_existing",
+		},
+	}
+	gateway := &fakeGateway{
+		createCheckoutErrs: []error{
+			&stripe.Error{
+				Type:  stripe.ErrorTypeInvalidRequest,
+				Code:  stripe.ErrorCodeParameterMissing,
+				Param: "success_url",
+				Msg:   "Missing required param: success_url",
+			},
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
+		UserID:         42,
+		PackCode:       "pack_100",
+		TargetAPIKeyID: 7,
+	})
+
+	require.Error(t, err)
+	require.Nil(t, order)
+	require.Empty(t, checkoutURL)
+	require.Equal(t, []string{"cus_live_existing"}, gateway.customerIDs)
 }
 
 func uint64Ptr(v uint64) *uint64 {
