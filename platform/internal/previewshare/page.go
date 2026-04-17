@@ -53,6 +53,45 @@ func RenderPasswordPage(share *PreviewShare, errorMessage string) string {
 </html>`, fileName, expiresAt, errHTML)
 }
 
+func RenderLoginPage(share *PreviewShare, loginURL, errorMessage string) string {
+	fileName := ""
+	expiresAt := ""
+	if share != nil {
+		fileName = html.EscapeString(share.FileName)
+		expiresAt = share.ExpiresAt.Local().Format(time.RFC3339)
+	}
+	errHTML := ""
+	if errorMessage != "" {
+		errHTML = `<div class="error">` + html.EscapeString(errorMessage) + `</div>`
+	}
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In To Open Preview</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: linear-gradient(135deg, #f8fafc, #e2e8f0); min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #0f172a; }
+    .card { width: min(440px, calc(100vw - 32px)); background: #fff; border-radius: 20px; padding: 28px; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12); }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    p { margin: 0 0 16px; color: #475569; }
+    .meta { margin-bottom: 18px; font-size: 13px; color: #64748b; }
+    .error { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 14px; }
+    .button { display: inline-flex; width: 100%%; justify-content: center; align-items: center; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: #0f172a; color: #fff; text-decoration: none; font-size: 16px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Sign In To Open Preview</h1>
+    <p>This preview requires a signed-in OfficeCLI account before access can continue.</p>
+    <div class="meta">File: %s<br>Available until: %s</div>
+    %s
+    <a class="button" href="%s">Continue To Sign In</a>
+  </div>
+</body>
+</html>`, fileName, expiresAt, errHTML, html.EscapeString(strings.TrimSpace(loginURL)))
+}
+
 func RenderReportPage(share *PreviewShare, reportHTML []byte) string {
 	title := "OfficeCLI Report Preview"
 	if share != nil && strings.TrimSpace(share.FileName) != "" {

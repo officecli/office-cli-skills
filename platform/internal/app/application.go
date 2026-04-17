@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -784,7 +785,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	})
 }
 
-func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
 	if shares == nil || sdkHandler == nil || sdkProvider == nil {
 		return
 	}
@@ -798,12 +799,20 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, _ authRouteService, sh
 			servePreviewShare(c, share, sdkHandler, sdkProvider)
 			return
 		}
+		if !hasPreviewLogin(c, authSvc) {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderLoginPage(share, previewLoginURL(cfg, c.Request), "")))
+			return
+		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderPasswordPage(share, "")))
 	})
 	r.POST("/p/:shareToken", func(c *gin.Context) {
 		share, status, err := shares.ValidateEntryRequest(c.Request.Context(), c.Param("shareToken"))
 		if err != nil {
 			httpapi.Error(c, status, err.Error())
+			return
+		}
+		if !hasPreviewLogin(c, authSvc) {
+			c.Data(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(previewshare.RenderLoginPage(share, previewLoginURL(cfg, c.Request), "Sign in is required before opening this preview.")))
 			return
 		}
 		password := strings.TrimSpace(c.PostForm("password"))
@@ -880,6 +889,21 @@ func currentRequestURL(r *http.Request) string {
 	return base + r.URL.RequestURI()
 }
 
+func hasPreviewLogin(c *gin.Context, authSvc authRouteService) bool {
+	if authSvc == nil {
+		return true
+	}
+	if c == nil {
+		return false
+	}
+	raw, err := c.Cookie("cop_app_session")
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return false
+	}
+	_, err = authSvc.Me(c.Request.Context(), raw)
+	return err == nil
+}
+
 func officesdkRequestBaseURL(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -914,11 +938,16 @@ func registerOfficeSDKProxy(router *gin.Engine, cfg Config) {
 	proxy := httputil.NewSingleHostReverseProxy(parsed)
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
-		originalHost := req.Host
+		publicHost := forwardedRequestHost(req)
+		publicProto := forwardedRequestProto(req)
 		originalDirector(req)
-		req.Host = parsed.Host
-		if originalHost != "" {
-			req.Header.Set("X-Forwarded-Host", originalHost)
+		if publicHost != "" {
+			req.Host = publicHost
+			req.Header.Set("X-Forwarded-Host", publicHost)
+		}
+		if publicProto != "" {
+			req.Header.Set("X-Forwarded-Proto", publicProto)
+			req.Header.Set("X-Forwarded-Port", forwardedRequestPort(publicHost, publicProto))
 		}
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -928,6 +957,46 @@ func registerOfficeSDKProxy(router *gin.Engine, cfg Config) {
 	router.Any("/sdk/turbo-ai/*path", func(c *gin.Context) {
 		proxy.ServeHTTP(c.Writer, c.Request)
 	})
+}
+
+func forwardedRequestHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); host != "" {
+		return host
+	}
+	return strings.TrimSpace(r.Host)
+}
+
+func forwardedRequestProto(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); scheme != "" {
+		return scheme
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func forwardedRequestPort(host, proto string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		if strings.EqualFold(strings.TrimSpace(proto), "https") {
+			return "443"
+		}
+		return "80"
+	}
+	if _, port, err := net.SplitHostPort(host); err == nil && strings.TrimSpace(port) != "" {
+		return port
+	}
+	if strings.EqualFold(strings.TrimSpace(proto), "https") {
+		return "443"
+	}
+	return "80"
 }
 
 func rewriteOfficeSDKProxyLocation(resp *http.Response) {

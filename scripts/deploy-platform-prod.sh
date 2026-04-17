@@ -44,6 +44,9 @@ Usage:
   scripts/deploy-platform-prod.sh [tag]
 
 Notes:
+  - Preferred operator entry point is the public control-plane workflow `officecli/officecli-ci` -> `Platform Deploy`.
+  - This script remains the deploy implementation invoked by that workflow.
+  - Run this script directly only when debugging the deploy script itself or during an emergency recovery.
   - If no tag is provided, a tag like v0.1.0-prod-YYYYMMDD-N is generated automatically.
   - Runs local Go tests and builds web/site + web/app + web/admin.
   - Builds a linux/amd64 image, uploads the archive to the production server, and imports it into k3s containerd.

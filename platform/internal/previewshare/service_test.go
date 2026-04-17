@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -35,8 +36,8 @@ func (f *fakeObjectCleaner) DeleteObject(_ context.Context, key string) error {
 
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", url.QueryEscape(t.Name()))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	dbPath := filepath.Join(t.TempDir(), url.QueryEscape(t.Name())+".db")
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s", dbPath)), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&PreviewShare{}))
 	return db
@@ -118,6 +119,35 @@ func TestRequireShareAccessAllowsInternalCallbackWithoutCookie(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "http://host.docker.internal:29001/officesdk/proxy/download?key=preview%2Ffile-1%2Foriginal%2Fdemo.pptx", nil)
 	c.Request.Host = "host.docker.internal:29001"
 	c.Request.RemoteAddr = "172.17.0.2:45678"
+
+	resolved, status, err := service.RequireShareAccess(c, "file-1")
+	require.NoError(t, err)
+	require.Equal(t, 0, status)
+	require.NotNil(t, resolved)
+	require.Equal(t, share.ShareToken, resolved.ShareToken)
+}
+
+func TestRequireShareAccessAllowsTrustedPublicHostFromPrivateIPWithoutCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := newTestDB(t)
+	service := NewService(db, "secret", ".officecli.io", nil, nil)
+	service.now = func() time.Time {
+		return time.Date(2026, 4, 15, 12, 0, 0, 0, time.UTC)
+	}
+
+	share, err := service.Create(t.Context(), CreateParams{
+		FileID:     "file-1",
+		StorageKey: "preview/file-1/original/demo.pptx",
+		FileName:   "demo.pptx",
+		FileType:   "pptx",
+		ExpiresAt:  service.now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "https://officecli.io/v1/thirdparty/files/file-1", nil)
+	c.Request.Host = "officecli.io"
+	c.Request.RemoteAddr = "10.42.0.1:45678"
 
 	resolved, status, err := service.RequireShareAccess(c, "file-1")
 	require.NoError(t, err)

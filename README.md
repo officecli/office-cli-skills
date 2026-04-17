@@ -202,4 +202,4 @@ Check the current license status:
 
 - The CLI binary is the source of truth for generation, licensing, publishing, and update behavior.
 - Agent-facing skills must not be used to work around missing binary capabilities.
-- The platform production environment is not deployed through a standard remote-image workflow. Read [`docs/platform-production-deploy.md`](/home/ubuntu/workspace/officecli/docs/platform-production-deploy.md) before changing production deployment behavior.
+- The platform production environment is not deployed through a standard remote-image workflow. The release control plane lives in `officecli/officecli-ci`, while the underlying deploy implementation still follows the non-registry image upload path described in [`docs/platform-production-deploy.md`](/home/ubuntu/workspace/officecli/docs/platform-production-deploy.md).

@@ -136,7 +136,6 @@ func (f fakeDiscordOAuthRouteService) HandleCallback(_ context.Context, _, _ str
 }
 
 func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{
@@ -192,7 +191,6 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 }
 
 func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{
@@ -277,7 +275,6 @@ func (g *routeGrowthManager) GrantDiscordJoinReward(_ context.Context, _ uint64,
 }
 
 func TestRegisterAppRoutesDiscordConnectReturnsBlockedVerificationStatus(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{
@@ -326,7 +323,6 @@ func TestRegisterAppRoutesDiscordConnectReturnsBlockedVerificationStatus(t *test
 }
 
 func TestRegisterAppRoutesDiscordStatusReturnsCurrentSnapshot(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{
@@ -374,7 +370,6 @@ func TestRegisterAppRoutesDiscordStatusReturnsCurrentSnapshot(t *testing.T) {
 }
 
 func TestRegisterAppRoutesDiscordLoginRedirectsBackWhenOAuthUnavailable(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{user: &model.User{ID: 42, InviteCode: "invite-xyz"}}

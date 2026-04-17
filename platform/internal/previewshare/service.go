@@ -251,10 +251,13 @@ func (s *Service) isAllowedInternalRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil {
 		return false
 	}
-	if !isInternalRequestHost(c.Request.Host, c.GetHeader("X-Forwarded-Host")) {
+	if !isPrivateOrLoopbackIP(c.ClientIP(), c.Request.RemoteAddr) {
 		return false
 	}
-	return isPrivateOrLoopbackIP(c.ClientIP(), c.Request.RemoteAddr)
+	if isInternalRequestHost(c.Request.Host, c.GetHeader("X-Forwarded-Host")) {
+		return true
+	}
+	return s.isTrustedPublicHost(c.Request.Host, c.GetHeader("X-Forwarded-Host"))
 }
 
 func isInternalRequestHost(hosts ...string) bool {
@@ -279,6 +282,40 @@ func isInternalRequestHost(hosts ...string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Service) isTrustedPublicHost(hosts ...string) bool {
+	if s == nil {
+		return false
+	}
+	cookieDomain := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(s.cookieDomain, ".")))
+	if cookieDomain == "" {
+		return false
+	}
+	for _, host := range hosts {
+		hostName := canonicalHostName(host)
+		if hostName == "" {
+			continue
+		}
+		if hostName == cookieDomain || strings.HasSuffix(hostName, "."+cookieDomain) {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalHostName(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	hostName := host
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		hostName = parsedHost
+	} else {
+		hostName = strings.Trim(host, "[]")
+	}
+	return strings.ToLower(strings.TrimSpace(hostName))
 }
 
 func isPrivateOrLoopbackIP(values ...string) bool {
