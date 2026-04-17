@@ -382,8 +382,8 @@ export const inviteRewardRules: UsageRule[] = [
     detail: 'Reward quota increases only when the referral becomes activated, not when the invite link is merely shared.',
   },
   {
-    title: 'Google allowlist access still applies',
-    detail: 'The invited user must sign in with an allowlisted Google account or the login will be rejected before the referral flow can continue.',
+    title: 'Current app access policy still applies',
+    detail: 'The invited user must finish Google sign-in and satisfy the current app access policy before the referral flow can continue.',
   },
   {
     title: 'Use app surfaces to verify progress',

@@ -61,14 +61,21 @@ type Service struct {
 	sessionTTL time.Duration
 	codec      CookieCodec
 	allowlist  map[string]struct{}
+	allowAll   bool
 }
 
 func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, cookieName string, sessionTTL time.Duration, codec CookieCodec, referrals ReferralRegistrar, allowlist []string) *Service {
 	normalizedAllowlist := make(map[string]struct{}, len(allowlist))
+	allowAll := false
 	for _, email := range allowlist {
 		normalized := strings.ToLower(strings.TrimSpace(email))
 		if normalized == "" {
 			continue
+		}
+		if normalized == "*" {
+			allowAll = true
+			normalizedAllowlist = map[string]struct{}{}
+			break
 		}
 		normalizedAllowlist[normalized] = struct{}{}
 	}
@@ -81,6 +88,7 @@ func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, 
 		sessionTTL: sessionTTL,
 		codec:      codec,
 		allowlist:  normalizedAllowlist,
+		allowAll:   allowAll,
 	}
 }
 
@@ -109,13 +117,15 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 		return nil, "", "", err
 	}
 	normalizedEmail := strings.ToLower(strings.TrimSpace(googleUser.Email))
-	if _, allowed := s.allowlist[normalizedEmail]; !allowed {
-		s.writeAuditLog(ctx, "app.google_login_denied", normalizedEmail, map[string]any{
-			"email":  normalizedEmail,
-			"name":   googleUser.Name,
-			"reason": "email_not_allowlisted",
-		})
-		return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "email_not_allowlisted"}
+	if !s.allowAll {
+		if _, allowed := s.allowlist[normalizedEmail]; !allowed {
+			s.writeAuditLog(ctx, "app.google_login_denied", normalizedEmail, map[string]any{
+				"email":  normalizedEmail,
+				"name":   googleUser.Name,
+				"reason": "email_not_allowlisted",
+			})
+			return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "email_not_allowlisted"}
+		}
 	}
 	user, err := s.users.SaveGoogleUser(ctx, googleUser.Subject, normalizedEmail, googleUser.Name, googleUser.AvatarURL)
 	if err != nil {

@@ -100,7 +100,7 @@ Recommended production base URLs:
 - `SITE_BASE_URL`: site base URL
 - `PLATFORM_BASE_URL`: platform base URL
 - `GOOGLE_REDIRECT_URL`: Google OAuth callback URL
-- `APP_GOOGLE_ALLOWLIST`: comma-separated allowlist for app sign-in
+- `APP_GOOGLE_ALLOWLIST`: comma-separated allowlist for app sign-in; set to `*` to allow any Google account
 - `STRIPE_SUCCESS_URL`: Stripe success redirect
 - `STRIPE_CANCEL_URL`: Stripe cancel redirect
 - `EXTERNAL_UNIT_PRICE_CENTS`: base external price per document, in cents

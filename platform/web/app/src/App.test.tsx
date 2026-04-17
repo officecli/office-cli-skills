@@ -29,7 +29,7 @@ describe('platform app shell', () => {
 
     renderApp('/')
 
-    expect(await screen.findByRole('heading', { name: /Authorized Google accounts only/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
     expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
@@ -46,7 +46,7 @@ describe('platform app shell', () => {
 
     renderApp('/billing?status=success')
 
-    expect(await screen.findByRole('heading', { name: /Authorized Google accounts only/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Continue with Google/i }))
 
     expect(loginSpy).toHaveBeenCalledWith('/billing?status=success')

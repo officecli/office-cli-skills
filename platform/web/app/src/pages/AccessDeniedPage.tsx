@@ -13,7 +13,7 @@ export default function AccessDeniedPage() {
           <div className="relative">
             <span className="chip border-error/20 bg-error/10 text-error">App access denied</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an app session because the account is not present in the app allowlist or has been disabled.</p>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an app session because it is not authorized by the current app access policy or has been disabled.</p>
 
             <div className="terminal-card mt-8 p-5">
               <div className="flex items-start gap-3">
@@ -34,7 +34,7 @@ export default function AccessDeniedPage() {
                 <ArrowLeft size={16} />
                 Back to sign in
               </Link>
-              <a href="mailto:hello@officecli.io?subject=App%20allowlist%20request" className="ghost-button">
+              <a href="mailto:hello@officecli.io?subject=App%20access%20request" className="ghost-button">
                 <ShieldBan size={16} />
                 Contact an administrator
               </a>

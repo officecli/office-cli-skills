@@ -214,6 +214,32 @@ func TestHandleCallbackRejectsNonAllowlistedEmail(t *testing.T) {
 	require.Equal(t, "email_not_allowlisted", denied.Reason)
 }
 
+func TestHandleCallbackAllowsAnyEmailWhenAllowlistWildcardIsConfigured(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/app",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042", Status: model.UserStatusActive}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "anyone@example.com", Name: "Anyone"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"*"},
+	)
+
+	user, rawCookie, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+	require.Equal(t, uint64(42), user.ID)
+	require.Equal(t, "/app", returnTo)
+	require.Contains(t, rawCookie, "cookie:")
+}
+
 func TestHandleCallbackRejectsDisabledUser(t *testing.T) {
 	sessions := newFakeSessionStore()
 	state := "oauth-state"
