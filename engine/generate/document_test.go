@@ -15,18 +15,33 @@ func TestBuildDOCXPrompt_AndBuildDOCXFromJSON(t *testing.T) {
 		}
 	}
 
-	fileBytes, fileName, err := BuildDOCXFromJSON(`{"title":"Project Retrospective","sections":[{"heading":"Background","level":1,"paragraphs":["First paragraph"]}]}`, "fallback")
+	fileBytes, fileName, previewHTML, previewJSON, err := BuildDOCXArtifactFromJSON(`{
+		"title":"Project Retrospective",
+		"subtitle":"Leadership readout for the quarter",
+		"theme":{"preset":"executive"},
+		"blocks":[
+			{"type":"heading","level":1,"text":"Background"},
+			{"type":"paragraph","text":"First paragraph"},
+			{"type":"callout","title":"Decision","text":"Prioritize the automation workstream."},
+			{"type":"table","title":"Action plan","columns":["Workstream","Owner"],"rows":[["Automation","Ops"]]}
+		]
+	}`, "fallback", "formal", true)
 	if err != nil {
-		t.Fatalf("BuildDOCXFromJSON: %v", err)
+		t.Fatalf("BuildDOCXArtifactFromJSON: %v", err)
 	}
 	if fileName != "Project_Retrospective.docx" {
 		t.Fatalf("fileName = %q", fileName)
+	}
+	if !strings.Contains(string(previewHTML), "Action plan") || !strings.Contains(string(previewJSON), `"type": "callout"`) {
+		t.Fatalf("preview missing semantic blocks:\nhtml=%s\njson=%s", string(previewHTML), string(previewJSON))
 	}
 	contentXMLs, err := ooxmledit.ExtractContentXML(fileBytes, ooxmledit.FileTypeDOCX)
 	if err != nil {
 		t.Fatalf("ExtractContentXML: %v", err)
 	}
-	if !strings.Contains(contentXMLs["word/document.xml"], "Project Retrospective") || !strings.Contains(contentXMLs["word/document.xml"], "First paragraph") {
+	if !strings.Contains(contentXMLs["word/document.xml"], "Project Retrospective") ||
+		!strings.Contains(contentXMLs["word/document.xml"], "First paragraph") ||
+		!strings.Contains(contentXMLs["word/document.xml"], "<w:tbl>") {
 		t.Fatalf("document xml = %q", contentXMLs["word/document.xml"])
 	}
 }
@@ -37,19 +52,42 @@ func TestBuildXLSXPrompt_AndBuildXLSXFromJSON(t *testing.T) {
 		t.Fatalf("prompt = %s", prompt)
 	}
 
-	fileBytes, fileName, err := BuildXLSXFromJSON(`{"title":"Sales Workbook","sheets":[{"name":"Sheet1","headers":["Region","Amount"],"rows":[["East","100"]]}]}`, "fallback")
+	fileBytes, fileName, previewHTML, previewJSON, err := BuildXLSXArtifactFromJSON(`{
+		"title":"Sales Workbook",
+		"subtitle":"Regional pipeline snapshot",
+		"theme":{"preset":"analysis"},
+		"sheets":[
+			{
+				"name":"Sheet1",
+				"purpose":"Compare regional commercial performance",
+				"summary":[{"label":"Top Region","value":"East"}],
+				"columns":[
+					{"label":"Region","type":"string"},
+					{"label":"Amount","type":"currency"},
+					{"label":"YoY","type":"percent"}
+				],
+				"rows":[["East","100","12%"],["West","120","8%"]],
+				"showTotals": true
+			}
+		]
+	}`, "fallback", "analysis", true)
 	if err != nil {
-		t.Fatalf("BuildXLSXFromJSON: %v", err)
+		t.Fatalf("BuildXLSXArtifactFromJSON: %v", err)
 	}
 	if fileName != "Sales_Workbook.xlsx" {
 		t.Fatalf("fileName = %q", fileName)
+	}
+	if !strings.Contains(string(previewHTML), "Top Region") || !strings.Contains(string(previewJSON), `"type": "currency"`) {
+		t.Fatalf("preview missing workbook semantics:\nhtml=%s\njson=%s", string(previewHTML), string(previewJSON))
 	}
 	contentXMLs, err := ooxmledit.ExtractContentXML(fileBytes, ooxmledit.FileTypeXLSX)
 	if err != nil {
 		t.Fatalf("ExtractContentXML: %v", err)
 	}
-	if !strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") || !strings.Contains(contentXMLs["xl/sharedStrings.xml"], "100") {
-		t.Fatalf("sharedStrings = %q", contentXMLs["xl/sharedStrings.xml"])
+	if !strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "<autoFilter") ||
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "<f>SUBTOTAL") {
+		t.Fatalf("sharedStrings = %q\nsheet1=%q", contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
 	}
 }
 

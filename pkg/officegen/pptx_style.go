@@ -90,57 +90,13 @@ func ResolveStylePreset(value string) PPTXStylePreset {
 func DefaultThemeForPreset(preset string) *SlideTheme {
 	switch NormalizeStylePreset(preset) {
 	case StylePresetExecutiveDark:
-		return &SlideTheme{
-			PrimaryColor:   "1F2937",
-			AccentColor:    "F97316",
-			HighlightColor: "FDBA74",
-			BackgroundType: "dark",
-			BgColor1:       "0B1020",
-			BgColor2:       "111827",
-			TextColor:      "E5E7EB",
-			TitleTextColor: "FFFFFF",
-			FontFamily:     "Aptos",
-			EAFontFamily:   "Microsoft YaHei",
-		}
+		return documentThemeToSlideTheme(DefaultDocumentTheme(DocumentPresetExecutive))
 	case StylePresetEditorialLight:
-		return &SlideTheme{
-			PrimaryColor:   "7C2D12",
-			AccentColor:    "D97706",
-			HighlightColor: "B45309",
-			BackgroundType: "solid",
-			BgColor1:       "F8F5EF",
-			BgColor2:       "F8F5EF",
-			TextColor:      "292524",
-			TitleTextColor: "1C1917",
-			FontFamily:     "Georgia",
-			EAFontFamily:   "Noto Serif CJK SC",
-		}
+		return documentThemeToSlideTheme(DefaultDocumentTheme(DocumentPresetEditorial))
 	case StylePresetTrainingManual:
-		return &SlideTheme{
-			PrimaryColor:   "2563EB",
-			AccentColor:    "0F172A",
-			HighlightColor: "60A5FA",
-			BackgroundType: "gradient",
-			BgColor1:       "EFF6FF",
-			BgColor2:       "FFFFFF",
-			TextColor:      "0F172A",
-			TitleTextColor: "0F172A",
-			FontFamily:     "Aptos",
-			EAFontFamily:   "Microsoft YaHei",
-		}
+		return documentThemeToSlideTheme(DefaultDocumentTheme(DocumentPresetTraining))
 	default:
-		return &SlideTheme{
-			PrimaryColor:   "0F172A",
-			AccentColor:    "2563EB",
-			HighlightColor: "0F766E",
-			BackgroundType: "gradient",
-			BgColor1:       "F8FAFC",
-			BgColor2:       "EEF2FF",
-			TextColor:      "0F172A",
-			TitleTextColor: "020617",
-			FontFamily:     "Aptos",
-			EAFontFamily:   "Microsoft YaHei",
-		}
+		return documentThemeToSlideTheme(DefaultDocumentTheme(DocumentPresetAnalysis))
 	}
 }
 
@@ -229,7 +185,11 @@ func BuildLocalPreviewHTML(title, preset string, theme *SlideTheme, slides []Sli
 		if strings.TrimSpace(slide.Source) != "" {
 			body.WriteString(fmt.Sprintf("<p class=\"source\">%s</p>", html.EscapeString(slide.Source)))
 		}
-		slideCards.WriteString(fmt.Sprintf("<section class=\"slide\"><div class=\"slide-no\">%02d</div><h2>%s</h2><p class=\"meta\">layout=%s / variant=%s</p>%s</section>", idx+1, html.EscapeString(slide.Title), html.EscapeString(resolvedLayout(slide)), html.EscapeString(strings.TrimSpace(slide.Variant)), body.String()))
+		role := strings.TrimSpace(slide.Role)
+		if role == "" {
+			role = "detail"
+		}
+		slideCards.WriteString(fmt.Sprintf("<section class=\"slide\"><div class=\"slide-no\">%02d</div><h2>%s</h2><p class=\"meta\">role=%s / layout=%s / variant=%s</p>%s</section>", idx+1, html.EscapeString(slide.Title), html.EscapeString(role), html.EscapeString(resolvedLayout(slide)), html.EscapeString(strings.TrimSpace(slide.Variant)), body.String()))
 	}
 	var warningHTML string
 	if len(warnings) > 0 {

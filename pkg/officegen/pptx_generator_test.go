@@ -479,6 +479,61 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 	}
 }
 
+func TestPPTXContentPatternComparisonRendersStructuredCards(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "Before vs After",
+			Layout:  "content",
+			Variant: "comparison",
+			Sections: []SlideSection{
+				{Heading: "Before", Detail: "Teams pass files manually and approvals stall across departments."},
+				{Heading: "After", Detail: "Requests route in one workflow with visible owners and auditable status."},
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Comparison Pattern", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
+	for _, needle := range []string{`name="ComparisonCard1"`, `name="ComparisonCard2"`, `name="ComparisonDivider"`} {
+		if !strings.Contains(slideXML, needle) {
+			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
+		}
+	}
+}
+
+func TestPPTXContentPatternTimelineRendersNodesAndConnectors(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "Rollout Plan",
+			Layout:  "content",
+			Variant: "timeline",
+			Sections: []SlideSection{
+				{Heading: "Discover", Detail: "Confirm scope, owner map, and the pilot workflow."},
+				{Heading: "Pilot", Detail: "Launch one controlled scenario and measure adoption."},
+				{Heading: "Expand", Detail: "Add adjacent teams after validating cycle-time gains."},
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Timeline Pattern", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
+	for _, needle := range []string{`name="TimelineNode1"`, `name="TimelineConnector1"`, `name="TimelineCard2"`} {
+		if !strings.Contains(slideXML, needle) {
+			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
+		}
+	}
+}
+
 func readFixtureFile(t *testing.T, relativePath string) string {
 	t.Helper()
 

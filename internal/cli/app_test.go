@@ -845,6 +845,20 @@ func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T)
 	}
 }
 
+func TestBuildGenerateJob_DocxAllowsLocalPreview(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"docx",
+		"Board Memo",
+		"--local-preview",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if !job.LocalPreview {
+		t.Fatal("expected docx local preview to be enabled")
+	}
+}
+
 func TestBuildGenerateJob_ReportRequiresWorkbookFile(t *testing.T) {
 	_, err := BuildGenerateJob([]string{
 		"report",

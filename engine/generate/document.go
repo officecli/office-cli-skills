@@ -9,37 +9,39 @@ import (
 )
 
 type DOCXTarget = PromptTarget
-
 type XLSXTarget = PromptTarget
-
 type ReportTarget = PromptTarget
 
 func BuildDOCXPrompt(description string, target DOCXTarget) string {
-	return fmt.Sprintf(`Generate a JSON structure for a Word document based on the following request.
+	return fmt.Sprintf(`Generate a JSON structure for a high-quality Word document.
 
 Request: %s
 %s
 
-Return only valid JSON in exactly this shape:
+Return JSON only in exactly this shape:
 {
   "title": "Document title",
-  "sections": [
-    {
-      "heading": "Section heading",
-      "level": 1,
-      "paragraphs": ["Paragraph 1", "Paragraph 2"]
-    }
+  "subtitle": "One-sentence framing",
+  "theme": {"preset": "executive"},
+  "blocks": [
+    {"type":"heading","level":1,"text":"Executive Summary"},
+    {"type":"paragraph","text":"Dense professional prose."},
+    {"type":"callout","title":"Decision","text":"What matters most."},
+    {"type":"bullets","items":["Point 1","Point 2"]},
+    {"type":"table","title":"Operating plan","columns":["Workstream","Owner","Next step"],"rows":[["A","B","C"]]}
   ]
 }
 
 Requirements:
-- Build a complete document structure
-- Include title, body, conclusion, and other relevant sections
-- Keep the content professional and logically structured`, description, FormatDocumentPromptTarget(target))
+- Build a polished business document, not a loose note dump
+- Use 5-10 blocks with clear structure
+- Prefer a mix of headings, paragraphs, bullets, and one callout when useful
+- Include a table whenever the request benefits from comparison, plan tracking, or structured evidence
+- Keep wording concise, professional, and publication-ready`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildDOCXBestSpecPrompt(description string, target DOCXTarget) string {
-	return fmt.Sprintf(`First produce a structural blueprint for the following Word document request.
+	return fmt.Sprintf(`First produce a structural blueprint for a polished Word document.
 
 Request: %s
 %s
@@ -47,17 +49,17 @@ Request: %s
 Return JSON only:
 {
   "title":"Document title",
-  "goal":"Document goal",
-  "audience":"Target readers",
-  "tone":"Writing tone",
+  "subtitle":"One-sentence framing",
+  "theme":{"preset":"executive"},
   "sections":[
-    {"heading":"Section heading","summary":"Core content this section should cover"}
+    {"heading":"Section heading","goal":"Why this section exists","preferredBlocks":["paragraph","bullets","table"]}
   ]
 }
 
 Requirements:
-- Define the structure only, not the full prose
-- Keep the section order complete and ready for expansion`, description, FormatDocumentPromptTarget(target))
+- Design the structure only, not the full prose
+- Keep the section order complete and implementable
+- Make block choices explicit when a table, bullets, or callout would improve readability`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildDOCXBestDraftPrompt(description string, target DOCXTarget, spec string) string {
@@ -69,53 +71,54 @@ Request: %s
 Blueprint:
 %s
 
-Return JSON in exactly this shape:
-{
-  "title": "Document title",
-  "sections": [
-    {
-      "heading": "Section heading",
-      "level": 1,
-      "paragraphs": ["Paragraph 1", "Paragraph 2"]
-    }
-  ]
-}
+Return JSON in the same schema as the DOCX document payload.
 
 Requirements:
-- Expand every section into delivery-ready prose
-- Avoid filler and keep the information density high
+- Expand the blueprint into delivery-ready content
+- Preserve strong structure and information density
 - Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
 func BuildXLSXPrompt(description string, target XLSXTarget) string {
-	return fmt.Sprintf(`Generate a JSON structure for an Excel workbook based on the following request.
+	return fmt.Sprintf(`Generate a JSON structure for a professional Excel workbook.
 
 Request: %s
 %s
 
-Return only valid JSON in exactly this shape:
+Return JSON only in exactly this shape:
 {
   "title": "Workbook title",
+  "subtitle": "One-sentence framing",
+  "theme": {"preset": "analysis"},
   "sheets": [
     {
-      "name": "Sheet1",
-      "headers": ["Column 1", "Column 2", "Column 3"],
-      "rows": [
-        ["Value 1", "Value 2", "Value 3"],
-        ["Value 4", "Value 5", "Value 6"]
-      ]
+      "name":"Executive Summary",
+      "purpose":"What this sheet helps answer",
+      "summary":[{"label":"Top KPI","value":"$12.4M"}],
+      "columns":[
+        {"label":"Region","type":"string"},
+        {"label":"Revenue","type":"currency"},
+        {"label":"YoY","type":"percent"}
+      ],
+      "rows":[
+        ["North America","1280000","12%%"],
+        ["Europe","960000","8%%"]
+      ],
+      "showTotals": true
     }
   ]
 }
 
 Requirements:
-- Generate meaningful data
-- Include headers and data rows
-- Keep the data format clean and consistent`, description, FormatDocumentPromptTarget(target))
+- Build a workbook that feels analysis-ready, not raw CSV dumped into Excel
+- Use typed columns: string, number, currency, percent, date, bool, or formula
+- Keep every row aligned with the column definitions
+- Include summary items when the request suggests KPI framing
+- Use 1-3 sheets unless the request clearly needs more`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildXLSXBestSpecPrompt(description string, target XLSXTarget) string {
-	return fmt.Sprintf(`First produce a workbook blueprint for the following Excel request.
+	return fmt.Sprintf(`First produce a blueprint for a professional Excel workbook.
 
 Request: %s
 %s
@@ -123,21 +126,27 @@ Request: %s
 Return JSON only:
 {
   "title":"Workbook title",
-  "goal":"Analysis goal",
-  "audience":"Target users",
-  "analysisDimensions":["Dimension 1","Dimension 2"],
+  "subtitle":"Workbook framing",
+  "theme":{"preset":"analysis"},
   "sheets":[
-    {"name":"Sheet1","columns":["Column 1","Column 2"],"summary":"What analysis this sheet covers"}
+    {
+      "name":"Sheet1",
+      "purpose":"What analysis this sheet covers",
+      "summary":[{"label":"KPI","value":"Target metric"}],
+      "columns":[{"label":"Column 1","type":"string"},{"label":"Column 2","type":"currency"}],
+      "showTotals": true
+    }
   ]
 }
 
 Requirements:
 - Plan the workbook structure before filling in data
-- Align sheet names and columns with the request`, description, FormatDocumentPromptTarget(target))
+- Keep the sheet list compact and decision-oriented
+- Use column types that match the intended analysis`, description, FormatDocumentPromptTarget(target))
 }
 
 func BuildXLSXBestDraftPrompt(description string, target XLSXTarget, spec string) string {
-	return fmt.Sprintf(`Generate the final Excel JSON from the request and workbook blueprint below.
+	return fmt.Sprintf(`Generate the final Excel workbook JSON from the request and workbook blueprint below.
 
 Request: %s
 %s
@@ -145,24 +154,11 @@ Request: %s
 Workbook blueprint:
 %s
 
-Return JSON in exactly this shape:
-{
-  "title": "Workbook title",
-  "sheets": [
-    {
-      "name": "Sheet1",
-      "headers": ["Column 1", "Column 2", "Column 3"],
-      "rows": [
-        ["Value 1", "Value 2", "Value 3"],
-        ["Value 4", "Value 5", "Value 6"]
-      ]
-    }
-  ]
-}
+Return JSON in the same schema as the XLSX workbook payload.
 
 Requirements:
-- Match the blueprint's column definitions
-- Provide at least 2 valid data rows per sheet
+- Match the blueprint's sheet goals and column definitions
+- Provide at least 2 valid data rows per sheet when the sheet is tabular
 - Do not output anything outside the JSON object`, description, FormatDocumentPromptTarget(target), spec)
 }
 
@@ -296,79 +292,168 @@ func FormatDocumentPromptTarget(target PromptTarget) string {
 }
 
 func BuildDOCXFromJSON(content, fallbackDescription string) ([]byte, string, error) {
-	content = RepairUnescapedQuotes(ExtractJSON(content))
+	fileBytes, fileName, _, _, err := BuildDOCXArtifactFromJSON(content, fallbackDescription, "", false)
+	return fileBytes, fileName, err
+}
 
-	var llmResp struct {
-		Title    string `json:"title"`
-		Sections []struct {
-			Heading    string   `json:"heading"`
-			Level      int      `json:"level"`
-			Paragraphs []string `json:"paragraphs"`
-		} `json:"sections"`
-	}
-	if err := json.Unmarshal([]byte(content), &llmResp); err != nil {
-		return nil, "", fmt.Errorf("parse LLM response: %w", err)
-	}
-
-	paragraphs := []officegen.DocxParagraph{{Text: llmResp.Title, Level: 1, IsBold: true}}
-	for _, sec := range llmResp.Sections {
-		level := sec.Level
-		if level <= 0 {
-			level = 2
-		}
-		paragraphs = append(paragraphs, officegen.DocxParagraph{Text: sec.Heading, Level: level})
-		for _, p := range sec.Paragraphs {
-			paragraphs = append(paragraphs, officegen.DocxParagraph{Text: p, Level: 0})
-		}
-	}
-
-	fileBytes, err := officegen.NewDOCXGenerator().Generate(paragraphs, officegen.DOCXOptions{Title: llmResp.Title, Creator: "OfficeCLI"})
+func BuildDOCXArtifactFromJSON(content, fallbackDescription, style string, localPreview bool) ([]byte, string, []byte, []byte, error) {
+	spec, title, err := parseDOCXSpec(content, fallbackDescription)
 	if err != nil {
-		return nil, "", fmt.Errorf("generate docx: %w", err)
+		return nil, "", nil, nil, err
 	}
-
-	title := llmResp.Title
-	if title == "" {
-		title = ExtractTitleFromDescription(fallbackDescription)
+	fileBytes, err := officegen.NewDOCXGenerator().GenerateSpec(spec, officegen.DOCXOptions{
+		Title:   title,
+		Creator: "OfficeCLI",
+		Style:   style,
+	})
+	if err != nil {
+		return nil, "", nil, nil, fmt.Errorf("generate docx: %w", err)
 	}
-	return fileBytes, fmt.Sprintf("%s.docx", SanitizeFileName(title)), nil
+	var previewHTML []byte
+	var previewJSON []byte
+	if localPreview {
+		previewJSON, _ = officegen.BuildDOCXPreviewJSON(spec, style)
+		previewHTML = officegen.BuildDOCXPreviewHTML(spec, style)
+	}
+	return fileBytes, fmt.Sprintf("%s.docx", SanitizeFileName(title)), previewHTML, previewJSON, nil
 }
 
 func BuildXLSXFromJSON(content, fallbackDescription string) ([]byte, string, error) {
-	content = RepairUnescapedQuotes(ExtractJSON(content))
+	fileBytes, fileName, _, _, err := BuildXLSXArtifactFromJSON(content, fallbackDescription, "", false)
+	return fileBytes, fileName, err
+}
 
-	var llmResp struct {
-		Title  string `json:"title"`
-		Sheets []struct {
-			Name    string     `json:"name"`
-			Headers []string   `json:"headers"`
-			Rows    [][]string `json:"rows"`
-		} `json:"sheets"`
-	}
-	if err := json.Unmarshal([]byte(content), &llmResp); err != nil {
-		return nil, "", fmt.Errorf("parse LLM response: %w", err)
-	}
-
-	sheets := make([]officegen.XlsxSheet, 0, len(llmResp.Sheets))
-	for _, sh := range llmResp.Sheets {
-		rows := make([][]string, 0, len(sh.Rows)+1)
-		if len(sh.Headers) > 0 {
-			rows = append(rows, sh.Headers)
-		}
-		rows = append(rows, sh.Rows...)
-		sheets = append(sheets, officegen.XlsxSheet{Name: sh.Name, Rows: rows})
-	}
-
-	fileBytes, err := officegen.NewXLSXGenerator().Generate(sheets, officegen.XLSXOptions{Title: llmResp.Title, Creator: "OfficeCLI"})
+func BuildXLSXArtifactFromJSON(content, fallbackDescription, style string, localPreview bool) ([]byte, string, []byte, []byte, error) {
+	spec, title, err := parseXLSXSpec(content, fallbackDescription)
 	if err != nil {
-		return nil, "", fmt.Errorf("generate xlsx: %w", err)
+		return nil, "", nil, nil, err
+	}
+	fileBytes, err := officegen.NewXLSXGenerator().GenerateWorkbook(spec, officegen.XLSXOptions{
+		Title:   title,
+		Creator: "OfficeCLI",
+		Style:   style,
+	})
+	if err != nil {
+		return nil, "", nil, nil, fmt.Errorf("generate xlsx: %w", err)
+	}
+	var previewHTML []byte
+	var previewJSON []byte
+	if localPreview {
+		previewJSON, _ = officegen.BuildXLSXPreviewJSON(spec, style)
+		previewHTML = officegen.BuildXLSXPreviewHTML(spec, style)
+	}
+	return fileBytes, fmt.Sprintf("%s.xlsx", SanitizeFileName(title)), previewHTML, previewJSON, nil
+}
+
+func parseDOCXSpec(content, fallbackDescription string) (officegen.DocxDocumentSpec, string, error) {
+	content = RepairUnescapedQuotes(ExtractJSON(content))
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return officegen.DocxDocumentSpec{}, "", fmt.Errorf("parse LLM response: %w", err)
 	}
 
-	title := llmResp.Title
+	var spec officegen.DocxDocumentSpec
+	if _, ok := raw["blocks"]; ok {
+		if err := json.Unmarshal([]byte(content), &spec); err != nil {
+			return officegen.DocxDocumentSpec{}, "", fmt.Errorf("parse docx spec: %w", err)
+		}
+	} else {
+		var legacy struct {
+			Title    string `json:"title"`
+			Subtitle string `json:"subtitle"`
+			Sections []struct {
+				Heading    string   `json:"heading"`
+				Level      int      `json:"level"`
+				Paragraphs []string `json:"paragraphs"`
+			} `json:"sections"`
+		}
+		if err := json.Unmarshal([]byte(content), &legacy); err != nil {
+			return officegen.DocxDocumentSpec{}, "", fmt.Errorf("parse legacy docx payload: %w", err)
+		}
+		spec.Title = strings.TrimSpace(legacy.Title)
+		spec.Subtitle = strings.TrimSpace(legacy.Subtitle)
+		for _, sec := range legacy.Sections {
+			level := sec.Level
+			if level <= 0 {
+				level = 2
+			}
+			spec.Blocks = append(spec.Blocks, officegen.DocxBlock{
+				Type:  "heading",
+				Level: level,
+				Text:  strings.TrimSpace(sec.Heading),
+			})
+			for _, paragraph := range sec.Paragraphs {
+				spec.Blocks = append(spec.Blocks, officegen.DocxBlock{
+					Type: "paragraph",
+					Text: strings.TrimSpace(paragraph),
+				})
+			}
+		}
+	}
+	title := strings.TrimSpace(spec.Title)
 	if title == "" {
 		title = ExtractTitleFromDescription(fallbackDescription)
+		spec.Title = title
 	}
-	return fileBytes, fmt.Sprintf("%s.xlsx", SanitizeFileName(title)), nil
+	return spec, title, nil
+}
+
+func parseXLSXSpec(content, fallbackDescription string) (officegen.XlsxWorkbookSpec, string, error) {
+	content = RepairUnescapedQuotes(ExtractJSON(content))
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return officegen.XlsxWorkbookSpec{}, "", fmt.Errorf("parse LLM response: %w", err)
+	}
+
+	var spec officegen.XlsxWorkbookSpec
+	if hasXLSXSemanticSheets(raw) {
+		if err := json.Unmarshal([]byte(content), &spec); err != nil {
+			return officegen.XlsxWorkbookSpec{}, "", fmt.Errorf("parse xlsx spec: %w", err)
+		}
+	} else {
+		var legacy struct {
+			Title  string `json:"title"`
+			Sheets []struct {
+				Name    string     `json:"name"`
+				Headers []string   `json:"headers"`
+				Rows    [][]string `json:"rows"`
+			} `json:"sheets"`
+		}
+		if err := json.Unmarshal([]byte(content), &legacy); err != nil {
+			return officegen.XlsxWorkbookSpec{}, "", fmt.Errorf("parse legacy xlsx payload: %w", err)
+		}
+		spec.Title = strings.TrimSpace(legacy.Title)
+		for _, sheet := range legacy.Sheets {
+			columns := make([]officegen.XlsxColumn, 0, len(sheet.Headers))
+			for _, header := range sheet.Headers {
+				columns = append(columns, officegen.XlsxColumn{Label: strings.TrimSpace(header)})
+			}
+			spec.Sheets = append(spec.Sheets, officegen.XlsxSheetSpec{
+				Name:       strings.TrimSpace(sheet.Name),
+				Columns:    columns,
+				Rows:       sheet.Rows,
+				AutoFilter: true,
+			})
+		}
+	}
+	title := strings.TrimSpace(spec.Title)
+	if title == "" {
+		title = ExtractTitleFromDescription(fallbackDescription)
+		spec.Title = title
+	}
+	return spec, title, nil
+}
+
+func hasXLSXSemanticSheets(raw map[string]json.RawMessage) bool {
+	var envelopes []map[string]json.RawMessage
+	if data, ok := raw["sheets"]; ok {
+		if err := json.Unmarshal(data, &envelopes); err == nil && len(envelopes) > 0 {
+			if _, ok := envelopes[0]["columns"]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func BuildReportFromJSON(content, fallbackDescription string) ([]byte, string, error) {

@@ -50,6 +50,7 @@ type SlideSection struct {
 
 // Slide represents a single slide.
 type Slide struct {
+	Role        string         `json:"role,omitempty"`     // cover | summary | evidence | detail | action
 	Title       string         `json:"title"`              // Slide title.
 	Content     string         `json:"content"`            // Slide body content.
 	IsTitle     bool           `json:"isTitle"`            // Whether this is a title slide.
@@ -88,15 +89,7 @@ func NewPPTXGenerator() *PPTXGenerator {
 
 // defaultTheme returns the default theme palette.
 func defaultTheme() *SlideTheme {
-	return &SlideTheme{
-		PrimaryColor:   "1A73E8",
-		AccentColor:    "E8710A",
-		BackgroundType: "gradient",
-		BgColor1:       "F0F4FF",
-		BgColor2:       "FFFFFF",
-		FontFamily:     "Helvetica Neue",
-		EAFontFamily:   "PingFang SC",
-	}
+	return documentThemeToSlideTheme(DefaultDocumentTheme(DocumentPresetAnalysis))
 }
 
 // getTheme resolves a theme by filling in missing defaults.
@@ -1179,6 +1172,77 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 </p:sld>`, bgXML, imageXML, overlayXML, titlePanelXML, titleX, titleY, titleCX, titleCY, titleAlign, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), decorLineXML, subtitleXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
 }
 
+type contentPattern string
+
+const (
+	contentPatternEmpty        contentPattern = "empty"
+	contentPatternPointCards   contentPattern = "point-cards"
+	contentPatternSectionCards contentPattern = "section-cards"
+	contentPatternBulletList   contentPattern = "bullet-list"
+	contentPatternProse        contentPattern = "prose"
+	contentPatternComparison   contentPattern = "comparison"
+	contentPatternTimeline     contentPattern = "timeline"
+)
+
+func resolveContentPattern(slide Slide, imagePos string) contentPattern {
+	if canRenderTimelinePattern(slide) {
+		return contentPatternTimeline
+	}
+	if canRenderComparisonPattern(slide) {
+		return contentPatternComparison
+	}
+	if len(slide.Sections) > 0 {
+		return contentPatternSectionCards
+	}
+	if len(slide.Points) > 0 {
+		if imagePos != "" && imagePos != "bottom" && imagePos != "top" {
+			return contentPatternBulletList
+		}
+		return contentPatternPointCards
+	}
+	if strings.TrimSpace(slide.Content) != "" {
+		return contentPatternProse
+	}
+	return contentPatternEmpty
+}
+
+func canRenderComparisonPattern(slide Slide) bool {
+	variant := strings.ToLower(strings.TrimSpace(slide.Variant))
+	if variant == "comparison" {
+		return len(slide.Sections) >= 2 || len(slide.Points) >= 2
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Role + " " + slide.Title + " " + slide.Subtitle))
+	if len(slide.Sections) == 2 || len(slide.Points) == 2 {
+		for _, keyword := range []string{"compare", "comparison", "before", "after", "with", "without", "versus", "vs"} {
+			if strings.Contains(text, keyword) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func canRenderTimelinePattern(slide Slide) bool {
+	if len(slide.Sections) < 3 || len(slide.Sections) > 4 {
+		return false
+	}
+	variant := strings.ToLower(strings.TrimSpace(slide.Variant))
+	if variant == "timeline" {
+		return true
+	}
+	role := strings.ToLower(strings.TrimSpace(slide.Role))
+	if role == "action" {
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"timeline", "roadmap", "cadence", "plan", "rollout", "phase", "milestone", "step"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 func splitPointCard(point string) (string, string) {
 	point = strings.TrimSpace(point)
 	for _, sep := range []string{"：", ":"} {
@@ -1193,6 +1257,550 @@ func splitPointCard(point string) (string, string) {
 		}
 	}
 	return "", point
+}
+
+func comparisonSectionsForSlide(slide Slide) []SlideSection {
+	if len(slide.Sections) >= 2 {
+		return []SlideSection{slide.Sections[0], slide.Sections[1]}
+	}
+	if len(slide.Points) >= 2 {
+		sections := make([]SlideSection, 0, 2)
+		for idx, point := range slide.Points[:2] {
+			heading, body := splitPointCard(point)
+			if heading == "" {
+				heading = fmt.Sprintf("Option %d", idx+1)
+				body = point
+			}
+			sections = append(sections, SlideSection{
+				Heading: heading,
+				Detail:  body,
+			})
+		}
+		return sections
+	}
+	return nil
+}
+
+func createBulletListXML(points []string, x, y, cx, cy int, textColor, fontFamily, eaFontFamily string) string {
+	if len(points) == 0 {
+		return ""
+	}
+
+	pointCount := len(points)
+	pointFontSize := 2000
+	pointSpcBefore := 600
+	anchor := "ctr"
+	if pointCount <= 3 {
+		pointFontSize = 2200
+		pointSpcBefore = 1200
+	} else if pointCount <= 4 {
+		pointSpcBefore = 800
+	} else {
+		pointFontSize = 1800
+		anchor = "t"
+	}
+
+	var paragraphs strings.Builder
+	for idx, point := range points {
+		spcBefore := pointSpcBefore
+		if idx == 0 && anchor == "t" {
+			spcBefore = 0
+		}
+		paragraphs.WriteString(fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr marL="342900" indent="-342900" algn="l">
+                            <a:spcBef><a:spcPts val="%d"/></a:spcBef>
+                            <a:buFont typeface="%s"/>
+                            <a:buChar char="●"/>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, spcBefore, escapeXML(fontFamily), pointFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point)))
+	}
+
+	return fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="30" name="ContentBulletList"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="%s" lIns="180000" tIns="180000" rIns="120000" bIns="120000"/>
+                    <a:lstStyle/>%s
+                </p:txBody>
+            </p:sp>`, x, y, cx, cy, anchor, paragraphs.String())
+}
+
+func createProseBodyXML(content string, x, y, cx, cy int, textColor, fontFamily, eaFontFamily string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+
+	contentFontSize := 2000
+	contentLen := len([]rune(content))
+	if contentLen > 500 {
+		contentFontSize = 1600
+	} else if contentLen > 200 {
+		contentFontSize = 1800
+	}
+	if contentFontSize < 1400 {
+		contentFontSize = 1400
+	}
+
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	paragraphs := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		paragraphs = append(paragraphs, line)
+	}
+	if len(paragraphs) == 0 {
+		paragraphs = []string{content}
+	}
+
+	anchor := "ctr"
+	if len(paragraphs) > 1 || contentLen > 260 {
+		anchor = "t"
+	}
+
+	var body strings.Builder
+	for idx, paragraph := range paragraphs {
+		spcBefore := 0
+		if idx > 0 {
+			spcBefore = 900
+		}
+		body.WriteString(fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr algn="l">
+                            <a:spcBef><a:spcPts val="%d"/></a:spcBef>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, spcBefore, contentFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(paragraph)))
+	}
+
+	return fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="31" name="ContentProse"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="%s" lIns="180000" tIns="180000" rIns="120000" bIns="120000"/>
+                    <a:lstStyle/>%s
+                </p:txBody>
+            </p:sp>`, x, y, cx, cy, anchor, body.String())
+}
+
+func createComparisonCardsXML(slide Slide, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	sections := comparisonSectionsForSlide(slide)
+	if len(sections) < 2 {
+		return ""
+	}
+
+	gapX := 260000
+	cardW := (cx - gapX) / 2
+	cardY := y + 180000
+	cardH := cy - 260000
+	if cardH < 2200000 {
+		cardH = 2200000
+	}
+
+	leftBadgeColor := accentColor
+	rightBadgeColor := blendColor(accentColor, cardFill, 0.35)
+	leftBadgeTextColor := getSafeTextColorForBg("FFFFFF", leftBadgeColor)
+	rightBadgeTextColor := getSafeTextColorForBg("FFFFFF", rightBadgeColor)
+	dividerFill := blendColor(accentColor, cardFill, 0.65)
+	dividerTextColor := getSafeTextColorForBg(textColor, dividerFill)
+
+	var sb strings.Builder
+	for idx, section := range sections[:2] {
+		cardX := x + idx*(cardW+gapX)
+		cardID := 60 + idx*4
+		badgeID := cardID + 1
+		headingID := cardID + 2
+		bodyID := cardID + 3
+		badgeColor := leftBadgeColor
+		badgeTextColor := leftBadgeTextColor
+		if idx == 1 {
+			badgeColor = rightBadgeColor
+			badgeTextColor = rightBadgeTextColor
+		}
+
+		sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="ComparisonCard%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
+                    <a:ln w="12700">
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill>
+                    </a:ln>
+                </p:spPr>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="ComparisonBadge%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="360000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                    <a:ln><a:noFill/></a:ln>
+                </p:spPr>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="ComparisonHeading%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="600000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="l"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="2200" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="ComparisonBody%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t" lIns="80000" tIns="20000" rIns="40000" bIns="0"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="l"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1800">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>`,
+			cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor,
+			badgeID, idx+1, cardX+220000, cardY+180000, 1500000, badgeColor,
+			headingID, idx+1, cardX+220000, cardY+700000, cardW-440000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading),
+			bodyID, idx+1, cardX+220000, cardY+1450000, cardW-440000, cardH-1650000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+
+		sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="ComparisonBadgeText%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="360000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="ctr"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="ctr"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1200" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>`, bodyID+10, idx+1, cardX+220000, cardY+180000, 1500000, badgeTextColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading)))
+	}
+
+	centerX := x + cardW + gapX/2 - 280000
+	centerY := y + cy/2 - 280000
+	sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="78" name="ComparisonDivider"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="560000" cy="560000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="72000"/></a:srgbClr></a:solidFill>
+                    <a:ln><a:noFill/></a:ln>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="ctr"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="ctr"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1600" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>VS</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>`, centerX, centerY, dividerFill, dividerTextColor, escapeXML(fontFamily), escapeXML(eaFontFamily)))
+
+	return sb.String()
+}
+
+func createTimelineCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	if len(sections) < 3 {
+		return ""
+	}
+
+	count := len(sections)
+	gapX := 180000
+	cardW := (cx - gapX*(count-1)) / count
+	if cardW < 2100000 {
+		cardW = 2100000
+	}
+	totalWidth := cardW*count + gapX*(count-1)
+	startX := x + (cx-totalWidth)/2
+	if totalWidth > cx {
+		startX = x
+		cardW = (cx - gapX*(count-1)) / count
+	}
+
+	railY := y + 420000
+	nodeSize := 260000
+	cardY := y + 780000
+	cardH := cy - 980000
+	if cardH < 1800000 {
+		cardH = 1800000
+	}
+	nodeTextColor := getSafeTextColorForBg("FFFFFF", accentColor)
+
+	var sb strings.Builder
+	for idx, section := range sections {
+		cardX := startX + idx*(cardW+gapX)
+		centerX := cardX + cardW/2
+		nodeX := centerX - nodeSize/2
+		connectorID := 80 + idx*5
+		nodeID := connectorID + 1
+		nodeLabelID := connectorID + 2
+		cardID := connectorID + 3
+		bodyID := connectorID + 4
+
+		if idx < count-1 {
+			nextCenterX := centerX + cardW + gapX
+			sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="TimelineConnector%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="0"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="line"><a:avLst/></a:prstGeom>
+                    <a:ln w="19050">
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="48000"/></a:srgbClr></a:solidFill>
+                    </a:ln>
+                </p:spPr>
+            </p:sp>`, connectorID, idx+1, centerX+nodeSize/2, railY+nodeSize/2, nextCenterX-centerX-nodeSize, accentColor))
+		}
+
+		sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="TimelineNode%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                    <a:ln><a:noFill/></a:ln>
+                </p:spPr>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="TimelineNodeLabel%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="ctr"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="ctr"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1200" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%02d</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="TimelineCard%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom>
+                    <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
+                    <a:ln w="12700">
+                        <a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill>
+                    </a:ln>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t" lIns="160000" tIns="180000" rIns="160000" bIns="120000"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="ctr"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1500" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="TimelineBody%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t" lIns="120000" tIns="20000" rIns="120000" bIns="0"/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr algn="ctr"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1500">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>
+                </p:txBody>
+            </p:sp>`,
+			nodeID, idx+1, nodeX, railY, nodeSize, nodeSize, accentColor,
+			nodeLabelID, idx+1, nodeX, railY, nodeSize, nodeSize, nodeTextColor, escapeXML(fontFamily), escapeXML(eaFontFamily), idx+1,
+			cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading),
+			bodyID, idx+1, cardX+80000, cardY+620000, cardW-160000, cardH-700000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+	}
+
+	return sb.String()
 }
 
 func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
@@ -1470,111 +2078,30 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                 </p:spPr>
             </p:sp>`, titleCY-200000, titleAccentColor)
 
-	if len(slide.Sections) == 0 && (imagePos != "" || slide.Content != "" || slide.Variant == "bullets") {
+	pattern := resolveContentPattern(slide, imagePos)
+	if pattern != contentPatternEmpty &&
+		pattern != contentPatternSectionCards &&
+		pattern != contentPatternComparison &&
+		pattern != contentPatternTimeline &&
+		(len(slide.Sections) == 0 && (imagePos != "" || slide.Content != "" || slide.Variant == "bullets")) {
 		contentPanelXML = createFramedPanelXML(6, "ContentPanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, contentX, contentY-100000, contentCX, contentCY+100000)
 	}
 
 	// Build the main content area.
 	contentXML := ""
-	if len(slide.Sections) > 0 {
+	switch pattern {
+	case contentPatternSectionCards:
 		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
-	} else if len(slide.Points) > 0 {
-		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
-			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
-		} else {
-			// Bullet layout: one paragraph per point with bullet markers.
-			// Adjust spacing and font size dynamically based on point count.
-			pointCount := len(slide.Points)
-			pointFontSize := 2000 // Default 20pt.
-			pointSpcBefore := 600 // Default spacing before paragraph.
-			if pointCount <= 3 {
-				pointFontSize = 2200 // Fewer bullets can use larger text.
-				pointSpcBefore = 1200
-			} else if pointCount <= 4 {
-				pointSpcBefore = 800
-			}
-			paragraphs := ""
-			for _, point := range slide.Points {
-				paragraphs += fmt.Sprintf(`
-                    <a:p>
-                        <a:pPr marL="342900" indent="-342900" algn="l">
-                            <a:spcBef><a:spcPts val="%d"/></a:spcBef>
-                            <a:buFont typeface="Arial"/>
-                            <a:buChar char="●"/>
-                        </a:pPr>
-                        <a:r>
-                            <a:rPr lang="zh-CN" sz="%d">
-                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
-                                <a:latin typeface="%s"/>
-                                <a:ea typeface="%s"/>
-                            </a:rPr>
-                            <a:t>%s</a:t>
-                        </a:r>
-                    </a:p>`, pointSpcBefore, pointFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
-			}
-			contentXML = fmt.Sprintf(`
-            <p:sp>
-                <p:nvSpPr>
-                    <p:cNvPr id="3" name="Content"/>
-                    <p:cNvSpPr/>
-                    <p:nvPr/>
-                </p:nvSpPr>
-                <p:spPr>
-                    <a:xfrm>
-                        <a:off x="%d" y="%d"/>
-                        <a:ext cx="%d" cy="%d"/>
-                    </a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                </p:spPr>
-                <p:txBody>
-                    <a:bodyPr anchor="ctr"/>
-                    <a:lstStyle/>%s
-                </p:txBody>
-            </p:sp>`, contentX, contentY, contentCX, contentCY, paragraphs)
-		}
-	} else if slide.Content != "" {
-		// Plain-text content: adjust font size based on length, with a lower bound.
-		contentFontSize := 2000 // Default 20pt.
-		contentLen := len([]rune(slide.Content))
-		if contentLen > 500 {
-			contentFontSize = 1600 // 16pt.
-		} else if contentLen > 200 {
-			contentFontSize = 1800 // 18pt.
-		}
-		// Keep the font size at or above 14pt.
-		if contentFontSize < 1400 {
-			contentFontSize = 1400
-		}
-		contentXML = fmt.Sprintf(`
-            <p:sp>
-                <p:nvSpPr>
-                    <p:cNvPr id="3" name="Content"/>
-                    <p:cNvSpPr/>
-                    <p:nvPr/>
-                </p:nvSpPr>
-                <p:spPr>
-                    <a:xfrm>
-                        <a:off x="%d" y="%d"/>
-                        <a:ext cx="%d" cy="%d"/>
-                    </a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                </p:spPr>
-                <p:txBody>
-                    <a:bodyPr anchor="ctr"/>
-                    <a:lstStyle/>
-                    <a:p>
-                        <a:pPr algn="l"/>
-                        <a:r>
-                            <a:rPr lang="zh-CN" sz="%d">
-                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
-                                <a:latin typeface="%s"/>
-                                <a:ea typeface="%s"/>
-                            </a:rPr>
-                            <a:t>%s</a:t>
-                        </a:r>
-                    </a:p>
-                </p:txBody>
-            </p:sp>`, contentX, contentY, contentCX, contentCY, contentFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Content))
+	case contentPatternPointCards:
+		contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+	case contentPatternBulletList:
+		contentXML = createBulletListXML(slide.Points, contentX, contentY, contentCX, contentCY, textColor, fontFamily, eaFontFamily)
+	case contentPatternProse:
+		contentXML = createProseBodyXML(slide.Content, contentX, contentY, contentCX, contentCY, textColor, fontFamily, eaFontFamily)
+	case contentPatternComparison:
+		contentXML = createComparisonCardsXML(slide, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+	case contentPatternTimeline:
+		contentXML = createTimelineCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
 	}
 
 	// Subtitle.

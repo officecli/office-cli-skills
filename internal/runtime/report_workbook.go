@@ -18,12 +18,14 @@ var (
 	workbookSheetRE = regexp.MustCompile(`(?s)<sheet\b[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"[^>]*/?>`)
 	workbookRelRE   = regexp.MustCompile(`(?s)<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*/?>`)
 	sharedStringRE  = regexp.MustCompile(`(?s)<si>\s*(?:<r>.*?</r>\s*)*<t[^>]*>(.*?)</t>.*?</si>`)
-	rowRE           = regexp.MustCompile(`(?s)<row\b[^>]*>(.*?)</row>`)
+	rowRE           = regexp.MustCompile(`(?s)<row\b([^>]*)>(.*?)</row>`)
 	cellRE          = regexp.MustCompile(`(?s)<c\b([^>]*)>(.*?)</c>`)
 	valueRE         = regexp.MustCompile(`(?s)<v>(.*?)</v>`)
 	inlineStringRE  = regexp.MustCompile(`(?s)<is>.*?<t[^>]*>(.*?)</t>.*?</is>`)
 	cellTypeRE      = regexp.MustCompile(`\bt="([^"]+)"`)
 	cellRefRE       = regexp.MustCompile(`\br="([A-Z]+)\d+"`)
+	rowNumRE        = regexp.MustCompile(`\br="(\d+)"`)
+	autoFilterRE    = regexp.MustCompile(`(?s)<autoFilter\b[^>]*ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"[^>]*/?>`)
 )
 
 func loadWorkbookSheetsFromFile(path string) ([]officegen.XlsxSheet, error) {
@@ -120,13 +122,26 @@ func extractSharedStrings(sharedStringsXML string) []string {
 }
 
 func parseWorksheetRows(sheetXML string, sharedStrings []string) [][]string {
+	startRow := 1
+	if match := autoFilterRE.FindStringSubmatch(sheetXML); len(match) == 5 {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(match[2])); err == nil && parsed > 0 {
+			startRow = parsed
+		}
+	}
 	rows := make([][]string, 0)
 	for _, rowMatch := range rowRE.FindAllStringSubmatch(sheetXML, -1) {
-		if len(rowMatch) != 2 {
+		if len(rowMatch) != 3 {
+			continue
+		}
+		rowIndex := 0
+		if idxMatch := rowNumRE.FindStringSubmatch(rowMatch[1]); len(idxMatch) == 2 {
+			rowIndex, _ = strconv.Atoi(strings.TrimSpace(idxMatch[1]))
+		}
+		if rowIndex > 0 && rowIndex < startRow {
 			continue
 		}
 		rowCells := make([]string, 0)
-		for _, cellMatch := range cellRE.FindAllStringSubmatch(rowMatch[1], -1) {
+		for _, cellMatch := range cellRE.FindAllStringSubmatch(rowMatch[2], -1) {
 			if len(cellMatch) != 3 {
 				continue
 			}

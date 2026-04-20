@@ -298,7 +298,7 @@ Common options:
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
-  --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --local-preview         Generate local HTML/JSON preview sidecars
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
   --no-images             Disable automatic PPT images
@@ -377,7 +377,7 @@ Common options:
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
-  --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --local-preview         Generate local HTML/JSON preview sidecars
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
   --no-images             Disable automatic PPT images
