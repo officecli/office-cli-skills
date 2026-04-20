@@ -361,6 +361,7 @@ const pptxStructuredSchema = `{
         "properties": {
           "role": { "type": "string" },
           "layout": { "type": "string" },
+          "variant": { "type": "string" },
           "headline": { "type": "string" },
           "takeaway": { "type": "string" },
           "blocks": {
@@ -471,6 +472,7 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 	slideExample := `    {
       "role": "summary",
       "layout": "content",
+      "variant": "sections-grid",
       "headline": "Key Takeaways",
       "takeaway": "Lead with the conclusion",
       "blocks": [
@@ -497,6 +499,7 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 		slideExample = `    {
       "role": "detail",
       "layout": "content",
+      "variant": "image-right",
       "headline": "Section Title",
       "takeaway": "One-sentence takeaway",
       "blocks": [
@@ -531,6 +534,8 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 Request: %s
 %s
 
+Build the deck in a layout-first way. Decide the deck sequence first, then assign one proven slide pattern to each page before writing content.
+
 Return JSON only. Do not add any extra commentary:
 {
   "title": "Presentation Title",
@@ -554,6 +559,7 @@ Return JSON only. Do not add any extra commentary:
     {
       "role": "cover",
       "layout": "title",
+      "variant": "title-center",
       "headline": "Cover Title",
       "takeaway": "Subtitle",
       "blocks": [],
@@ -571,16 +577,19 @@ Requirements:
 	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
 	- Use role to make the storyline explicit: cover, summary, evidence, detail, or action.
+	- Use variant to declare the visual pattern. Valid variants are title-center, title-split, sections-grid, feature-grid, pillar-list, point-cards, stat-band, chart-context, comparison, timeline, image-right, bullets, or prose.
 	- Use blocks to separate message types. Valid block types are narrative, bullets, sections, metrics, and chart.
 	- For business decks, slide 2 should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
 	- Prefer a storyline such as cover -> summary -> supporting evidence/capabilities -> detail -> action, but adapt the exact page count and page roles to the prompt instead of forcing a rigid template.
 	- Each slide should express only one core idea. Keep headlines concise. takeaway must be a takeaway sentence for the slide.
+- Use a slide pattern library instead of repeating the same structure. Never use the same variant on two consecutive slides.
+- Prefer conclusion-first business pacing: summary pages use sections-grid or stat-band; capability/scenario pages use feature-grid, pillar-list, or comparison; quantified evidence pages use chart-context or stat-band; closing pages use timeline or sections-grid.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
 - For comparisons, steps, regions, roles, or training paths, prefer sections blocks with short heading and concise detail.
 - For customer value, business review, market size, or competitive comparison, prefer evidence-based expression with chart or metrics blocks. If reliable numbers are unavailable, use 2-3 structured sections instead of long bullets.
 - If the topic is market analysis, industry research, or business review, the deck must include at least one chart or dashboard slide with source or data framing.
 - Action recommendations, rollout plans, release cadence, and training paths must use sections or metrics and show at least two of time, owner, or acceptance criteria.
-- Keep content slide points to 3-4 concise bullets and avoid repetitive filler.
+- Keep content slide points to 3-4 concise bullets and avoid repetitive filler. Avoid bullet-only slides unless image split or narrative fallback is truly necessary.
 - Use at most 3 sections, at most 4 dashboard metrics, and at most 5 chart categories.
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
 - When a chart fits, put it inside a chart block with type, categories, values, and title, plus 2-3 takeaway points in another block when needed.
@@ -839,8 +848,8 @@ func analyzePPTXSlide(slide officegen.Slide, idx int) pptxSlideSignals {
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
 	return pptxSlideSignals{
 		Role:         role,
-		WantsChart:   slide.Chart != nil || strings.Contains(text, "market size") || strings.Contains(text, "trend") || strings.Contains(text, "benchmark"),
-		WantsMetrics: len(slide.Metrics) > 0 || strings.Contains(text, "kpi") || strings.Contains(text, "metric") || strings.Contains(text, "value"),
+		WantsChart:   slide.Chart != nil || strings.Contains(text, "market size") || strings.Contains(text, "trend") || strings.Contains(text, "benchmark") || strings.Contains(text, "市场规模") || strings.Contains(text, "趋势") || strings.Contains(text, "对比"),
+		WantsMetrics: len(slide.Metrics) > 0 || strings.Contains(text, "kpi") || strings.Contains(text, "metric") || strings.Contains(text, "value") || strings.Contains(text, "指标") || strings.Contains(text, "价值") || strings.Contains(text, "roi"),
 		WantsImage:   slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "",
 	}
 }
@@ -886,7 +895,7 @@ func inferPPTXSlideRole(slide officegen.Slide, idx int) pptxSlideRole {
 		return pptxSlideRoleSummary
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
-	for _, keyword := range []string{"market", "revenue", "growth", "pipeline", "benchmark", "analysis", "evidence", "result", "review", "performance", "value"} {
+	for _, keyword := range []string{"market", "revenue", "growth", "pipeline", "benchmark", "analysis", "evidence", "result", "review", "performance", "value", "市场", "收入", "增长", "分析", "证据", "结果", "复盘", "业绩", "指标", "价值"} {
 		if strings.Contains(text, keyword) {
 			return pptxSlideRoleEvidence
 		}
@@ -1511,7 +1520,7 @@ func looksLikeOverviewSlide(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"summary", "takeaway", "overview", "learning goal", "headline", "key point"} {
+	for _, keyword := range []string{"summary", "takeaway", "overview", "learning goal", "headline", "key point", "总结", "要点", "概览", "学习目标", "核心结论", "关键点"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1524,7 +1533,7 @@ func looksLikeClosingSlide(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action"} {
+	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action", "下一步", "行动", "决策", "建议", "推进", "实施计划", "落地路径"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1562,7 +1571,7 @@ func shouldInsertOverviewSlide(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"product", "scenario", "workflow", "interface", "demo", "experience"} {
+	for _, keyword := range []string{"product", "scenario", "workflow", "interface", "demo", "experience", "产品", "场景", "流程", "界面", "演示", "体验"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1595,42 +1604,7 @@ func isPlaceholderSlideTitle(value string) bool {
 }
 
 func normalizeSlideVariant(slide officegen.Slide) string {
-	role := slideRoleName(slide, 0)
-	switch strings.TrimSpace(slide.Layout) {
-	case "title":
-		if slide.HasImage {
-			return "title-split"
-		}
-		if strings.TrimSpace(slide.Variant) == "title-split" {
-			return "title-split"
-		}
-		return "title-center"
-	case "chart":
-		return "chart-focus"
-	case "dashboard":
-		return "kpi-band"
-	default:
-		switch strings.TrimSpace(slide.Variant) {
-		case "sections-grid", "comparison", "timeline", "image-right", "bullets":
-			return strings.TrimSpace(slide.Variant)
-		}
-		if shouldUseTimelineVariant(slide) {
-			return "timeline"
-		}
-		if shouldUseComparisonVariant(slide) {
-			return "comparison"
-		}
-		if role == pptxSlideRoleSummary || role == pptxSlideRoleAction {
-			return "sections-grid"
-		}
-		if slide.HasImage {
-			return "image-right"
-		}
-		if len(slide.Sections) > 0 {
-			return "sections-grid"
-		}
-		return "bullets"
-	}
+	return chooseSlideVariant(slide, "")
 }
 
 func shouldUseTimelineVariant(slide officegen.Slide) bool {
@@ -1641,7 +1615,7 @@ func shouldUseTimelineVariant(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"timeline", "roadmap", "rollout", "plan", "phase", "milestone", "step"} {
+	for _, keyword := range []string{"timeline", "roadmap", "rollout", "plan", "phase", "milestone", "step", "时间线", "路线图", "推进", "计划", "阶段", "里程碑", "步骤"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1654,12 +1628,207 @@ func shouldUseComparisonVariant(slide officegen.Slide) bool {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Role))
-	for _, keyword := range []string{"compare", "comparison", "before", "after", "with", "without", "versus", "vs"} {
+	for _, keyword := range []string{"compare", "comparison", "before", "after", "with", "without", "versus", "vs", "对比", "比较", "前后", "之前", "之后", "有无", "方案a", "方案b"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
 	}
 	return false
+}
+
+func shouldUseFeatureGridVariant(slide officegen.Slide) bool {
+	if len(slide.Sections) == 4 {
+		return true
+	}
+	return len(slide.Points) == 4 && !slide.HasImage
+}
+
+func shouldUsePillarListVariant(slide officegen.Slide) bool {
+	if len(slide.Sections) < 3 {
+		return false
+	}
+	if shouldUseTimelineVariant(slide) {
+		return false
+	}
+	return len(slide.Sections) <= 4
+}
+
+func slideVariantCandidates(slide officegen.Slide) []string {
+	layout := slideLayoutName(slide)
+	role := slideRoleName(slide, 0)
+	explicit := strings.ToLower(strings.TrimSpace(slide.Variant))
+	candidates := make([]string, 0, 8)
+	add := func(values ...string) {
+		for _, value := range values {
+			value = strings.ToLower(strings.TrimSpace(value))
+			if value == "" {
+				continue
+			}
+			for _, existing := range candidates {
+				if existing == value {
+					goto next
+				}
+			}
+			candidates = append(candidates, value)
+		next:
+		}
+	}
+
+	switch layout {
+	case "title":
+		add(explicit)
+		if slide.HasImage {
+			add("title-split", "title-center")
+		} else {
+			add("title-center", "title-split")
+		}
+	case "chart":
+		add(explicit, "chart-context", "chart-focus")
+	case "dashboard":
+		add(explicit)
+		if len(slide.Metrics) >= 2 {
+			add("stat-band", "kpi-band")
+		} else {
+			add("kpi-band", "stat-band")
+		}
+	default:
+		add(explicit)
+		if shouldUseTimelineVariant(slide) {
+			add("timeline")
+		}
+		if shouldUseComparisonVariant(slide) {
+			add("comparison")
+		}
+		if shouldUseFeatureGridVariant(slide) {
+			add("feature-grid")
+		}
+		if role == pptxSlideRoleSummary || role == pptxSlideRoleAction {
+			add("sections-grid")
+		}
+		if shouldUsePillarListVariant(slide) {
+			add("pillar-list")
+		}
+		if len(slide.Sections) > 0 {
+			add("sections-grid")
+		}
+		if slide.HasImage {
+			add("image-right")
+		}
+		if len(slide.Points) > 0 {
+			add("point-cards", "bullets")
+		}
+		if strings.TrimSpace(slide.Content) != "" {
+			add("prose")
+		}
+		add("bullets")
+	}
+
+	filtered := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		switch candidate {
+		case "title-center", "title-split":
+			if layout == "title" {
+				filtered = append(filtered, candidate)
+			}
+		case "chart-context", "chart-focus":
+			if layout == "chart" {
+				filtered = append(filtered, candidate)
+			}
+		case "stat-band", "kpi-band":
+			if layout == "dashboard" {
+				filtered = append(filtered, candidate)
+			}
+		case "timeline":
+			if shouldUseTimelineVariant(slide) {
+				filtered = append(filtered, candidate)
+			}
+		case "comparison":
+			if shouldUseComparisonVariant(slide) {
+				filtered = append(filtered, candidate)
+			}
+		case "feature-grid":
+			if shouldUseFeatureGridVariant(slide) {
+				filtered = append(filtered, candidate)
+			}
+		case "pillar-list":
+			if shouldUsePillarListVariant(slide) {
+				filtered = append(filtered, candidate)
+			}
+		case "sections-grid":
+			if len(slide.Sections) > 0 {
+				filtered = append(filtered, candidate)
+			}
+		case "image-right":
+			if slide.HasImage {
+				filtered = append(filtered, candidate)
+			}
+		case "point-cards", "bullets":
+			if len(slide.Points) > 0 {
+				filtered = append(filtered, candidate)
+			}
+		case "prose":
+			if strings.TrimSpace(slide.Content) != "" {
+				filtered = append(filtered, candidate)
+			}
+		}
+	}
+
+	if len(filtered) == 0 {
+		switch layout {
+		case "title":
+			return []string{"title-center"}
+		case "chart":
+			return []string{"chart-context"}
+		case "dashboard":
+			return []string{"stat-band"}
+		default:
+			return []string{"bullets"}
+		}
+	}
+	return filtered
+}
+
+func slidePatternSignature(slide officegen.Slide, variant string) string {
+	return slideLayoutName(slide) + ":" + strings.TrimSpace(variant)
+}
+
+func chooseSlideVariant(slide officegen.Slide, prevSignature string) string {
+	candidates := slideVariantCandidates(slide)
+	if prevSignature == "" {
+		return candidates[0]
+	}
+	for _, candidate := range candidates {
+		if slidePatternSignature(slide, candidate) != prevSignature {
+			return candidate
+		}
+	}
+	return candidates[0]
+}
+
+func diversifySlideForPattern(slide officegen.Slide) officegen.Slide {
+	if slideLayoutName(slide) != "content" {
+		return slide
+	}
+	if len(slide.Sections) == 0 && len(slide.Points) >= 3 {
+		sections := pointsToSummarySections(slide.Points, minInt(len(slide.Points), 4))
+		if len(sections) >= 3 {
+			slide.Sections = sections
+			if len(slide.Points) <= 4 {
+				slide.Points = nil
+			}
+		}
+	}
+	if len(slide.Sections) == 0 && len(slide.Metrics) >= 2 {
+		slide.Layout = "dashboard"
+	}
+	return slide
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
@@ -1669,6 +1838,10 @@ func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
 	case slide.HasImage && len(slide.Points) > 3:
 		return splitSlidePoints(slide, 3)
 	case shouldUseTimelineVariant(slide):
+		return []officegen.Slide{slide}
+	case shouldUseFeatureGridVariant(slide):
+		return []officegen.Slide{slide}
+	case shouldUsePillarListVariant(slide):
 		return []officegen.Slide{slide}
 	case len(slide.Sections) > 3:
 		return splitSlideSections(slide, 3)
@@ -1743,12 +1916,8 @@ func splitSlideMetrics(slide officegen.Slide, chunk int) []officegen.Slide {
 }
 
 func rebalanceAdjacentLayouts(slides []officegen.Slide) []officegen.Slide {
-	for idx := 1; idx < len(slides); idx++ {
-		prevLayout := slideLayoutName(slides[idx-1])
-		currLayout := slideLayoutName(slides[idx])
-		if prevLayout != currLayout || currLayout != "content" {
-			continue
-		}
+	prevSignature := ""
+	for idx := range slides {
 		role := slideRoleName(slides[idx], idx)
 		if (role == pptxSlideRoleSummary || role == pptxSlideRoleAction) && len(slides[idx].Sections) == 0 && len(slides[idx].Points) > 0 {
 			if sections := pointsToSummarySections(slides[idx].Points, 3); len(sections) > 0 {
@@ -1758,7 +1927,12 @@ func rebalanceAdjacentLayouts(slides []officegen.Slide) []officegen.Slide {
 				}
 			}
 		}
-		slides[idx].Variant = normalizeSlideVariant(slides[idx])
+		slides[idx].Variant = chooseSlideVariant(slides[idx], prevSignature)
+		if idx > 0 && slidePatternSignature(slides[idx], slides[idx].Variant) == prevSignature {
+			slides[idx] = diversifySlideForPattern(slides[idx])
+			slides[idx].Variant = chooseSlideVariant(slides[idx], prevSignature)
+		}
+		prevSignature = slidePatternSignature(slides[idx], slides[idx].Variant)
 	}
 	return slides
 }
@@ -1955,12 +2129,12 @@ func allowImageForSlide(slide officegen.Slide) bool {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence"} {
+	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence", "市场", "行业", "竞争", "复盘", "价值", "建议", "下一步", "推进", "区域", "机会", "风险", "运营", "数据", "节奏"} {
 		if strings.Contains(text, keyword) {
 			return false
 		}
 	}
-	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow", "experience", "demo"} {
+	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow", "experience", "demo", "产品", "界面", "场景", "培训", "流程", "体验", "演示"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1995,7 +2169,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 		return slide
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	if strings.Contains(text, "value") {
+	if strings.Contains(text, "value") || strings.Contains(text, "价值") || strings.Contains(text, "roi") || strings.Contains(text, "收益") {
 		slide.Layout = "dashboard"
 		slide.Metrics = normalizeMetrics([]officegen.MetricCard{
 			{Label: "Approval Cycle Time", Value: "-30%", Note: "Pilot target"},
@@ -2010,7 +2184,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 		}
 		return slide
 	}
-	if strings.Contains(text, "market size") || strings.Contains(text, "market space") {
+	if strings.Contains(text, "market size") || strings.Contains(text, "market space") || strings.Contains(text, "市场规模") || strings.Contains(text, "市场空间") {
 		slide.Layout = "chart"
 		slide.Chart = normalizeChart(&officegen.ChartData{
 			Type:       "bar",
@@ -2034,13 +2208,22 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 func detectPPTXArchetype(description, title string) pptxArchetype {
 	text := strings.ToLower(strings.TrimSpace(description + " " + title))
 	switch {
-	case strings.Contains(text, "enterprise collaboration platform"):
+	case strings.Contains(text, "enterprise collaboration platform"),
+		strings.Contains(text, "协作平台"),
+		strings.Contains(text, "企业协作"),
+		strings.Contains(text, "办公协作"),
+		strings.Contains(text, "saas 产品介绍"),
+		strings.Contains(text, "产品介绍"),
+		strings.Contains(text, "客户方案"):
 		return pptxArchetypeCompany
-	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion"):
+	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion") ||
+		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海") || strings.Contains(text, "行业研究"):
 		return pptxArchetypeMarket
-	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review"):
+	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review") ||
+		strings.Contains(text, "业务复盘") || strings.Contains(text, "经营分析") || strings.Contains(text, "季度复盘") || strings.Contains(text, "运营复盘") || strings.Contains(text, "数据报告"):
 		return pptxArchetypeOps
-	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide"):
+	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
+		strings.Contains(text, "培训") || strings.Contains(text, "上手指南") || strings.Contains(text, "新员工") || strings.Contains(text, "教程"):
 		return pptxArchetypeTraining
 	default:
 		return pptxArchetypeGeneral
@@ -2051,21 +2234,26 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 	switch archetype {
 	case pptxArchetypeCompany:
 		return `- For this topic, a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path, but adapt the exact slide count to the prompt.
-- Slide 4 should prefer dashboard or quantified evidence instead of abstract slogans.
-- Slide 5 should use sections to emphasize scenario, action, and benefit without repeating slide 4.
-- Slide 6 should use sections with time, owner, and validation criteria. The whole deck should use at most one image slide, preferably on core capabilities.`
+- Translate that storyline into patterns: cover=title-center/title-split, summary=sections-grid, capabilities=feature-grid or pillar-list, customer value=stat-band, use cases=comparison or pillar-list, closing=timeline.
+- If the prompt is client-facing, sales-oriented, or mentions pricing, package, proposal, quotation, or plan, include one dedicated pricing or packaging slide before the closing slide and render it as stat-band or comparison.
+- Slide 4 should prefer dashboard/stat-band or quantified evidence instead of abstract slogans.
+- Slide 5 should use sections, feature-grid, or comparison to emphasize scenario, action, and benefit without repeating slide 4.
+- The final slide should use sections with time, owner, and validation criteria. The whole deck should use at most one image slide, preferably on core capabilities.`
 	case pptxArchetypeMarket:
 		return `- For this topic, a strong storyline is usually cover -> key takeaways -> market size -> regional opportunities -> competitive landscape -> entry recommendations, but adapt the exact slide count to the prompt.
+- Translate that storyline into patterns: summary=sections-grid, market size=chart-context, opportunities=pillar-list, competitive landscape=comparison or point-cards, closing=timeline.
 - Slide 3 must use a chart and include a source. Do not present market size as plain text judgment.
-- Slide 4 should use sections, and slide 5 should prefer points or card-style comparison so the two slides handle region choice and competition separately.
+- Slide 4 should use sections, and slide 5 should prefer comparison or point-cards so the two slides handle region choice and competition separately.
 - Slide 6 should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeOps:
 		return `- For this topic, a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions, but adapt the exact slide count to the prompt.
+- Translate that storyline into patterns: summary=sections-grid, core metrics=chart-context or stat-band, issue diagnosis=pillar-list, priorities=sections-grid, closing=timeline.
 - Slide 3 must use a chart and clearly state the data framing or comparison period.
-- Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
+- Slide 4 should use sections or pillar-list to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
 - Slides 5-6 must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeTraining:
 		return `- For this topic, a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions, but adapt the exact slide count to the prompt.
+- Translate that storyline into patterns: summary=sections-grid, setup/common commands=feature-grid or pillar-list, workflow=timeline, cautions=sections-grid.
 - Slides 3-6 should prefer sections organized by step, command, and result.
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
@@ -2458,7 +2646,7 @@ func isActionSlide(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution"} {
+	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution", "建议", "下一步", "推进", "计划", "发布", "培训", "路径", "行动", "注意事项"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -2471,7 +2659,7 @@ func pointToSection(point string, idx int) (string, string) {
 	if cleaned == "" {
 		return "", ""
 	}
-	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month"} {
+	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month", "30天内", "60天内", "90天内", "第1周", "第2周", "本周", "本月"} {
 		if strings.HasPrefix(cleaned, marker) {
 			return fitTextForLayout(marker, 10), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 24)
 		}
@@ -2581,7 +2769,7 @@ func shouldDowngradeChart(slide officegen.Slide) bool {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Chart.Title))
-	for _, keyword := range []string{"milestone", "cadence", "plan", "roadmap", "step", "workflow", "risk", "next step"} {
+	for _, keyword := range []string{"milestone", "cadence", "plan", "roadmap", "step", "workflow", "risk", "next step", "里程碑", "节奏", "计划", "路线图", "步骤", "流程", "风险", "下一步"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}

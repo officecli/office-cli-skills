@@ -20,6 +20,7 @@ type semanticPPTXDeck struct {
 type semanticPPTXSlide struct {
 	Role     string              `json:"role,omitempty"`
 	Layout   string              `json:"layout,omitempty"`
+	Variant  string              `json:"variant,omitempty"`
 	Headline string              `json:"headline"`
 	Takeaway string              `json:"takeaway,omitempty"`
 	Blocks   []semanticPPTXBlock `json:"blocks,omitempty"`
@@ -116,6 +117,7 @@ func convertSemanticSlide(deck semanticPPTXDeck, slide semanticPPTXSlide, idx in
 		Title:    strings.TrimSpace(slide.Headline),
 		Subtitle: strings.TrimSpace(slide.Takeaway),
 		Layout:   strings.ToLower(strings.TrimSpace(slide.Layout)),
+		Variant:  strings.ToLower(strings.TrimSpace(slide.Variant)),
 		Source:   strings.TrimSpace(slide.Source),
 		BgColor:  strings.TrimSpace(slide.BgColor),
 		BgColor2: strings.TrimSpace(slide.BgColor2),
@@ -162,6 +164,9 @@ func applySemanticBlock(slide *officegen.Slide, block semanticPPTXBlock) {
 	case "bullets", "actions", "next_steps":
 		slide.Points = append(slide.Points, block.Items...)
 	case "sections", "comparison", "timeline":
+		if slide.Variant == "" && (strings.EqualFold(strings.TrimSpace(block.Type), "comparison") || strings.EqualFold(strings.TrimSpace(block.Type), "timeline")) {
+			slide.Variant = strings.ToLower(strings.TrimSpace(block.Type))
+		}
 		slide.Sections = append(slide.Sections, block.Sections...)
 	case "metrics", "kpis":
 		slide.Metrics = append(slide.Metrics, block.Metrics...)

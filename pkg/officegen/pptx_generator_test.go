@@ -534,6 +534,67 @@ func TestPPTXContentPatternTimelineRendersNodesAndConnectors(t *testing.T) {
 	}
 }
 
+func TestPPTXContentPatternFeatureGridRendersFourCards(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "Core Capabilities",
+			Layout:  "content",
+			Variant: "feature-grid",
+			Sections: []SlideSection{
+				{Heading: "Unified Entry", Detail: "Bring messages, docs, and approvals into one workspace."},
+				{Heading: "Workflow Sync", Detail: "Connect forms, tasks, and notifications."},
+				{Heading: "Governance", Detail: "Control access with auditability."},
+				{Heading: "Knowledge", Detail: "Reuse templates and FAQs across teams."},
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Feature Grid Pattern", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
+	for _, needle := range []string{`name="FeatureGridCard1"`, `name="FeatureGridCard4"`, `name="FeatureGridBadge3"`} {
+		if !strings.Contains(slideXML, needle) {
+			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
+		}
+	}
+}
+
+func TestPPTXDashboardStatBandRendersMetricBand(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "Customer Value",
+			Layout:  "dashboard",
+			Variant: "stat-band",
+			Metrics: []MetricCard{
+				{Label: "Approval Cycle", Value: "-30%", Note: "8-week pilot"},
+				{Label: "On-Time Delivery", Value: "+15%", Note: "weekly tracking"},
+				{Label: "Knowledge Reuse", Value: "+25%", Note: "quarterly review"},
+			},
+			Points: []string{
+				"Signal: Start with one high-frequency pilot workflow.",
+				"Decision: Expand after cycle-time gains are stable.",
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Stat Band Pattern", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
+	for _, needle := range []string{`name="MetricBandCard1"`, `name="MetricBandValue2"`, `name="PointCard1"`} {
+		if !strings.Contains(slideXML, needle) {
+			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
+		}
+	}
+}
+
 func readFixtureFile(t *testing.T, relativePath string) string {
 	t.Helper()
 

@@ -51,5 +51,9 @@ test("resolveRequestedVersion rejects legacy latest tag override", () => {
 
 test("archiveName always resolves to a stable release asset name", () => {
   const install = loadInstallModule();
-  assert.equal(install.archiveName("0.2.13", "linux", "arm64"), "officecli_0.2.13_linux_arm64.tar.gz");
+  const expectedVersion = String(pkg.version).replace(/^v/, "");
+  assert.equal(
+    install.archiveName(expectedVersion, "linux", "arm64"),
+    `officecli_${expectedVersion}_linux_arm64.tar.gz`
+  );
 });

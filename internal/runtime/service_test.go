@@ -868,6 +868,52 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	}
 }
 
+func TestDetectPPTXArchetype_SupportsChineseKeywords(t *testing.T) {
+	if got := detectPPTXArchetype("企业协作平台介绍，面向潜在客户", ""); got != pptxArchetypeCompany {
+		t.Fatalf("company archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("市场分析与出海机会评估", ""); got != pptxArchetypeMarket {
+		t.Fatalf("market archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("季度经营分析和运营复盘", ""); got != pptxArchetypeOps {
+		t.Fatalf("ops archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("新员工培训上手指南", ""); got != pptxArchetypeTraining {
+		t.Fatalf("training archetype = %q", got)
+	}
+}
+
+func TestNormalizeSlideVariant_UsesFeatureGridAndStatBand(t *testing.T) {
+	featureGrid := normalizeSlideVariant(officegen.Slide{
+		Role:   string(pptxSlideRoleDetail),
+		Title:  "核心功能",
+		Layout: "content",
+		Sections: []officegen.SlideSection{
+			{Heading: "统一入口", Detail: "聚合消息、文档和审批"},
+			{Heading: "流程协同", Detail: "自动串联任务和通知"},
+			{Heading: "权限治理", Detail: "细粒度权限和审计"},
+			{Heading: "知识沉淀", Detail: "模板和FAQ持续复用"},
+		},
+	})
+	if featureGrid != "feature-grid" {
+		t.Fatalf("feature grid variant = %q", featureGrid)
+	}
+
+	statBand := normalizeSlideVariant(officegen.Slide{
+		Role:   string(pptxSlideRoleEvidence),
+		Title:  "客户价值",
+		Layout: "dashboard",
+		Metrics: []officegen.MetricCard{
+			{Label: "审批周期", Value: "-30%", Note: "8周试点"},
+			{Label: "按时完成率", Value: "+15%", Note: "周度跟踪"},
+			{Label: "知识复用率", Value: "+25%", Note: "季度评估"},
+		},
+	})
+	if statBand != "stat-band" {
+		t.Fatalf("stat band variant = %q", statBand)
+	}
+}
+
 func TestServiceGenerateDOCXEmitsProgressEvents(t *testing.T) {
 	collector := &runtimeProgressCollector{}
 	service := NewService(&fakeLLMClient{
