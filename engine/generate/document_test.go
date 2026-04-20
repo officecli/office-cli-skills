@@ -91,6 +91,43 @@ func TestBuildXLSXPrompt_AndBuildXLSXFromJSON(t *testing.T) {
 	}
 }
 
+func TestBuildXLSXArtifactFromJSON_AcceptsScalarCells(t *testing.T) {
+	fileBytes, fileName, previewHTML, previewJSON, err := BuildXLSXArtifactFromJSON(`{
+		"title":"Minecraft Metrics",
+		"subtitle":"Global demand snapshot",
+		"sheets":[
+			{
+				"name":"Sales",
+				"summary":[{"label":"Units Sold","value":300000000}],
+				"columns":[
+					{"label":"Market","type":"string"},
+					{"label":"Units Sold","type":"number"},
+					{"label":"Featured","type":"bool"}
+				],
+				"rows":[["Global",300000000,true],["Console",170000000,false]]
+			}
+		]
+	}`, "fallback", "analysis", true)
+	if err != nil {
+		t.Fatalf("BuildXLSXArtifactFromJSON: %v", err)
+	}
+	if fileName != "Minecraft_Metrics.xlsx" {
+		t.Fatalf("fileName = %q", fileName)
+	}
+	if !strings.Contains(string(previewHTML), "Units Sold") || !strings.Contains(string(previewJSON), `"type": "bool"`) {
+		t.Fatalf("preview missing scalar cell support:\nhtml=%s\njson=%s", string(previewHTML), string(previewJSON))
+	}
+	contentXMLs, err := ooxmledit.ExtractContentXML(fileBytes, ooxmledit.FileTypeXLSX)
+	if err != nil {
+		t.Fatalf("ExtractContentXML: %v", err)
+	}
+	if !strings.Contains(contentXMLs["xl/sharedStrings.xml"], "300000000") ||
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "<v>300000000</v>") ||
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], " t=\"b\"") {
+		t.Fatalf("sharedStrings = %q\nsheet1=%q", contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
+	}
+}
+
 func TestBuildReportPrompt_AndBuildReportFromJSON(t *testing.T) {
 	prompt := BuildWorkbookReportPrompt("Create a board-ready report", PromptTarget{Audience: "Board"}, "Sheet 1: Revenue", `{"title":"Draft"}`)
 	for _, needle := range []string{"Create a board-ready report", "audience=Board", "Sheet 1: Revenue", `"title":"Draft"`} {

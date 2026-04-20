@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -11,6 +12,66 @@ import (
 type DOCXTarget = PromptTarget
 type XLSXTarget = PromptTarget
 type ReportTarget = PromptTarget
+
+type jsonScalarString string
+
+type xlsxSummaryInput struct {
+	Label jsonScalarString `json:"label"`
+	Value jsonScalarString `json:"value"`
+}
+
+type xlsxSheetSpecInput struct {
+	Name       string                 `json:"name"`
+	Purpose    string                 `json:"purpose,omitempty"`
+	Columns    []officegen.XlsxColumn `json:"columns,omitempty"`
+	Rows       [][]jsonScalarString   `json:"rows,omitempty"`
+	Summary    []xlsxSummaryInput     `json:"summary,omitempty"`
+	Freeze     string                 `json:"freeze,omitempty"`
+	AutoFilter bool                   `json:"autoFilter,omitempty"`
+	ShowTotals bool                   `json:"showTotals,omitempty"`
+}
+
+type xlsxWorkbookSpecInput struct {
+	Title    string                   `json:"title"`
+	Subtitle string                   `json:"subtitle,omitempty"`
+	Theme    *officegen.DocumentTheme `json:"theme,omitempty"`
+	Sheets   []xlsxSheetSpecInput     `json:"sheets,omitempty"`
+}
+
+func (s *jsonScalarString) UnmarshalJSON(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+
+	text, err := stringifyJSONScalar(value)
+	if err != nil {
+		return err
+	}
+	*s = jsonScalarString(text)
+	return nil
+}
+
+func stringifyJSONScalar(value any) (string, error) {
+	switch v := value.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return v, nil
+	case json.Number:
+		return v.String(), nil
+	case bool:
+		if v {
+			return "true", nil
+		}
+		return "false", nil
+	default:
+		return "", fmt.Errorf("expected JSON scalar, got %T", value)
+	}
+}
 
 func BuildDOCXPrompt(description string, target DOCXTarget) string {
 	return fmt.Sprintf(`Generate a JSON structure for a high-quality Word document.
@@ -407,16 +468,18 @@ func parseXLSXSpec(content, fallbackDescription string) (officegen.XlsxWorkbookS
 
 	var spec officegen.XlsxWorkbookSpec
 	if hasXLSXSemanticSheets(raw) {
-		if err := json.Unmarshal([]byte(content), &spec); err != nil {
+		var input xlsxWorkbookSpecInput
+		if err := json.Unmarshal([]byte(content), &input); err != nil {
 			return officegen.XlsxWorkbookSpec{}, "", fmt.Errorf("parse xlsx spec: %w", err)
 		}
+		spec = workbookSpecFromInput(input)
 	} else {
 		var legacy struct {
 			Title  string `json:"title"`
 			Sheets []struct {
-				Name    string     `json:"name"`
-				Headers []string   `json:"headers"`
-				Rows    [][]string `json:"rows"`
+				Name    string               `json:"name"`
+				Headers []string             `json:"headers"`
+				Rows    [][]jsonScalarString `json:"rows"`
 			} `json:"sheets"`
 		}
 		if err := json.Unmarshal([]byte(content), &legacy); err != nil {
@@ -431,7 +494,7 @@ func parseXLSXSpec(content, fallbackDescription string) (officegen.XlsxWorkbookS
 			spec.Sheets = append(spec.Sheets, officegen.XlsxSheetSpec{
 				Name:       strings.TrimSpace(sheet.Name),
 				Columns:    columns,
-				Rows:       sheet.Rows,
+				Rows:       stringifyXLSXRows(sheet.Rows),
 				AutoFilter: true,
 			})
 		}
@@ -454,6 +517,51 @@ func hasXLSXSemanticSheets(raw map[string]json.RawMessage) bool {
 		}
 	}
 	return false
+}
+
+func workbookSpecFromInput(input xlsxWorkbookSpecInput) officegen.XlsxWorkbookSpec {
+	spec := officegen.XlsxWorkbookSpec{
+		Title:    input.Title,
+		Subtitle: input.Subtitle,
+		Theme:    input.Theme,
+		Sheets:   make([]officegen.XlsxSheetSpec, 0, len(input.Sheets)),
+	}
+	for _, sheet := range input.Sheets {
+		spec.Sheets = append(spec.Sheets, officegen.XlsxSheetSpec{
+			Name:       sheet.Name,
+			Purpose:    sheet.Purpose,
+			Columns:    append([]officegen.XlsxColumn(nil), sheet.Columns...),
+			Rows:       stringifyXLSXRows(sheet.Rows),
+			Summary:    stringifyXLSXSummary(sheet.Summary),
+			Freeze:     sheet.Freeze,
+			AutoFilter: sheet.AutoFilter,
+			ShowTotals: sheet.ShowTotals,
+		})
+	}
+	return spec
+}
+
+func stringifyXLSXRows(rows [][]jsonScalarString) [][]string {
+	out := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		cells := make([]string, 0, len(row))
+		for _, cell := range row {
+			cells = append(cells, string(cell))
+		}
+		out = append(out, cells)
+	}
+	return out
+}
+
+func stringifyXLSXSummary(items []xlsxSummaryInput) []officegen.XlsxSummaryItem {
+	out := make([]officegen.XlsxSummaryItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, officegen.XlsxSummaryItem{
+			Label: string(item.Label),
+			Value: string(item.Value),
+		})
+	}
+	return out
 }
 
 func BuildReportFromJSON(content, fallbackDescription string) ([]byte, string, error) {
