@@ -1,40 +1,62 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="16" y1="18" x2="118" y2="116" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0A1522"/>
-      <stop offset="1" stop-color="#081018"/>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(86 30) rotate(134) scale(110)">
+      <stop stop-color="#17333A"/>
+      <stop offset="0.45" stop-color="#0B1822"/>
+      <stop offset="1" stop-color="#060B11"/>
+    </radialGradient>
+    <linearGradient id="frame" x1="25" y1="27" x2="82" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.24" stop-color="#ECF8FF"/>
+      <stop offset="0.6" stop-color="#B8DFFF"/>
+      <stop offset="1" stop-color="#64B7FF"/>
     </linearGradient>
-    <linearGradient id="frame" x1="28" y1="30" x2="101" y2="99" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FAFDFF"/>
-      <stop offset="0.3" stop-color="#CBE5FF"/>
-      <stop offset="0.7" stop-color="#67BDFF"/>
-      <stop offset="1" stop-color="#4E8FFF"/>
+    <linearGradient id="frameEdge" x1="30" y1="88" x2="59" y2="99" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CCEEFF"/>
+      <stop offset="1" stop-color="#4B9DFF"/>
     </linearGradient>
-    <linearGradient id="doc" x1="71" y1="23" x2="112" y2="104" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#D9FFF9"/>
-      <stop offset="0.4" stop-color="#57F3DB"/>
-      <stop offset="1" stop-color="#17C8FF"/>
+    <linearGradient id="doc" x1="76" y1="21" x2="112" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E7FFF9"/>
+      <stop offset="0.32" stop-color="#90FCEB"/>
+      <stop offset="0.7" stop-color="#30E2CF"/>
+      <stop offset="1" stop-color="#179FFF"/>
+    </linearGradient>
+    <linearGradient id="docSide" x1="91" y1="52" x2="114" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#63F8E9"/>
+      <stop offset="1" stop-color="#1F84FF"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="40" y1="43" x2="80" y2="85" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E1822"/>
+      <stop offset="1" stop-color="#04090F"/>
     </linearGradient>
     <filter id="glow" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse">
       <feGaussianBlur stdDeviation="7"/>
     </filter>
+    <filter id="focus" x="12" y="12" width="108" height="108" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
   </defs>
 
   <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#bg)"/>
-  <rect x="6" y="6" width="116" height="116" rx="28" stroke="#132333" stroke-opacity="0.8"/>
+  <rect x="6" y="6" width="116" height="116" rx="28" stroke="#0E1B26" stroke-opacity="0.78"/>
 
-  <ellipse cx="91" cy="37" rx="20" ry="18" fill="#23F0D8" fill-opacity="0.24" filter="url(#glow)"/>
-  <ellipse cx="54" cy="92" rx="27" ry="18" fill="#3D98FF" fill-opacity="0.18" filter="url(#glow)"/>
+  <ellipse cx="88" cy="33" rx="20" ry="16" fill="#2AF1DE" fill-opacity="0.3" filter="url(#glow)"/>
+  <ellipse cx="44" cy="83" rx="24" ry="17" fill="#4AA4FF" fill-opacity="0.24" filter="url(#glow)"/>
 
-  <path d="M31 48L76 31C81 29 87 30 91 34L101 44" stroke="url(#frame)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M31 48V86H50" stroke="url(#frame)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M42 86H59" stroke="url(#frame)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M26 48L71 31C76 29 81.7 30 85.8 33.8L95 42L76 92H40V85H26V48Z" fill="url(#frame)"/>
+  <path d="M40 85H60L50 94.5H30.2L40 85Z" fill="url(#frameEdge)"/>
+  <path d="M77 21H86.2C89.3 21 92.3 22.2 94.5 24.4L106.6 36.5C108.8 38.7 110 41.7 110 44.8V94.4C110 98.7 106.5 102.2 102.2 102.2H78.8C74.5 102.2 71 98.7 71 94.4V27C71 23.7 73.7 21 77 21Z" fill="url(#doc)"/>
+  <path d="M89 24L106 40.7V92.4L89 102.2V24Z" fill="url(#docSide)" fill-opacity="0.4"/>
+  <path d="M87 21.8V35.6C87 38.4 89.3 40.7 92.1 40.7H106" stroke="#F5FFFD" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M78 22.4H86.6C89.7 22.4 92.7 23.6 94.9 25.8L105.9 36.8C108.1 39 109.4 42 109.4 45.1V93.5C109.4 97.4 106.2 100.6 102.3 100.6H79.4C75.5 100.6 72.4 97.4 72.4 93.5V27C72.4 24.5 74.5 22.4 77 22.4H78Z" stroke="#7AFFF2" stroke-opacity="0.5" stroke-width="1.2"/>
 
-  <path d="M76 24H89C92 24 94.8 25.2 96.9 27.3L108.7 39.1C110.8 41.2 112 44 112 47V98C112 102.4 108.4 106 104 106H79C74.6 106 71 102.4 71 98V29C71 26.2 73.2 24 76 24Z" fill="url(#doc)" fill-opacity="0.92" stroke="#76F8E5" stroke-opacity="0.8" stroke-width="1.5"/>
-  <path d="M90 24V38C90 40.8 92.2 43 95 43H108" stroke="#F3FFFD" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39.5 42H77.5C79.9 42 81.8 43.9 81.8 46.3V71.7C81.8 74.1 79.9 76 77.5 76H39.5C37.1 76 35.2 74.1 35.2 71.7V46.3C35.2 43.9 37.1 42 39.5 42Z" fill="url(#screen)"/>
+  <path d="M39.5 42H77.5C79.9 42 81.8 43.9 81.8 46.3V71.7C81.8 74.1 79.9 76 77.5 76H39.5C37.1 76 35.2 74.1 35.2 71.7V46.3C35.2 43.9 37.1 42 39.5 42Z" stroke="#12202E"/>
 
-  <rect x="39" y="43" width="41" height="34" rx="6" fill="#060D15" fill-opacity="0.96"/>
-  <rect x="39" y="43" width="41" height="34" rx="6" stroke="#12202E"/>
-  <path d="M49 53L58 60L49 67" stroke="white" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M66 64H75" stroke="white" stroke-width="4.8" stroke-linecap="round"/>
+  <g filter="url(#focus)">
+    <path d="M46 51L55 58.5L46 66" stroke="white" stroke-width="4.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M63 63H72" stroke="white" stroke-width="4.9" stroke-linecap="round"/>
+    <path d="M25.5 48L71.5 30.8C76.1 29.1 81.3 29.9 85.1 33.1L95.2 41.5" stroke="#F4FEFF" stroke-opacity="0.9" stroke-width="2.9" stroke-linecap="round"/>
+    <path d="M25.8 48V85H40.2" stroke="#E2F5FF" stroke-opacity="0.88" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

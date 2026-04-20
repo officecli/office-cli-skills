@@ -73,27 +73,27 @@ for (let y = 0; y < HEIGHT; y += 1) {
   }
 }
 
-radialGlow(982, 110, 250, { ...colors.tertiary, a: 38 })
-radialGlow(1030, 218, 174, { ...colors.primaryStrong, a: 32 })
-radialGlow(260, 524, 236, { ...colors.primaryStrong, a: 28 })
+radialGlow(958, 122, 250, { ...colors.tertiary, a: 42 })
+radialGlow(1014, 214, 176, { ...colors.primaryStrong, a: 34 })
+radialGlow(288, 508, 244, { ...colors.primaryStrong, a: 30 })
 
 strokeRoundedRect(60, 56, 1160, 528, 36, { ...colors.stroke, a: 255 }, colors.surface)
-fillRoundedRect(104, 92, 244, 40, 20, colors.surfaceLow)
-drawText('NEW BRAND SYSTEM', 128, 102, 3, colors.tertiary)
+fillRoundedRect(102, 92, 230, 40, 20, colors.surfaceLow)
+drawText('LOCAL-FIRST AI CLI', 126, 102, 3, colors.tertiary)
 
-drawOfficeCliMark(112, 150, 332)
+drawOfficeCliMark(106, 146, 338)
 
-drawText('OFFICECLI', 536, 148, 10, colors.white, 2)
-drawText('SKILLS', 536, 242, 10, colors.primary, 2)
-drawText('CLAUDE CODE  CODEX  AI AGENTS', 538, 348, 3, colors.primary)
-drawText('PPTX  DOCX  XLSX  REPORT', 538, 392, 4, colors.white)
-drawText('SHARE PREVIEW UPDATED WITH THE NEW LOGO', 538, 436, 2, colors.muted)
+drawText('OFFICECLI', 548, 156, 10, colors.white, 2)
+drawText('SKILLS', 548, 250, 10, colors.primary, 2)
+drawText('CLAUDE CODE  CODEX  AI AGENTS', 550, 348, 3, colors.primary)
+drawText('PPTX  DOCX  XLSX  REPORT', 550, 394, 4, colors.white)
+drawText('LOCAL OFFICE WORKFLOWS THROUGH OFFICECLI', 550, 438, 2, colors.muted)
 
-fillRoundedRect(536, 486, 424, 44, 22, colors.surfaceLow)
-drawText('GITHUB REPO  OFFICECLI/OFFICECLI-SKILLS', 564, 498, 2, colors.muted)
+fillRoundedRect(548, 486, 468, 44, 22, colors.surfaceLow)
+drawText('GITHUB REPO  OFFICECLI/OFFICECLI-SKILLS', 576, 498, 2, colors.muted)
 
-fillRoundedRect(972, 486, 176, 44, 22, colors.surfaceAlt)
-drawText('SOCIAL PREVIEW', 1002, 498, 2, colors.secondary)
+fillRoundedRect(1032, 486, 112, 44, 22, colors.surfaceAlt)
+drawText('SHARE', 1062, 498, 2, colors.secondary)
 
 const outputArg = process.argv[2]
 const outputPath = outputArg
@@ -217,24 +217,32 @@ function drawOfficeCliMark(x, y, size) {
   fillRoundedRect(x, y, size, size, 68, colors.surfaceLow)
   strokeRoundedRect(x, y, size, size, 68, { ...colors.stroke, a: 255 }, { ...colors.surfaceLow, a: 255 })
 
-  radialGlow(x + size * 0.73, y + size * 0.19, size * 0.18, { ...colors.tertiary, a: 54 })
-  radialGlow(x + size * 0.38, y + size * 0.73, size * 0.24, { ...colors.primaryStrong, a: 40 })
+  radialGlow(x + size * 0.75, y + size * 0.18, size * 0.18, { ...colors.tertiary, a: 62 })
+  radialGlow(x + size * 0.36, y + size * 0.74, size * 0.24, { ...colors.primaryStrong, a: 46 })
+  radialGlow(x + size * 0.55, y + size * 0.44, size * 0.18, { ...colors.primaryStrong, a: 18 })
 
-  const frame = { ...colors.primary, a: 244 }
-  drawLine(x + 66, y + 135, x + 190, y + 88, 20, frame)
-  drawLine(x + 190, y + 88, x + 238, y + 134, 20, frame)
-  drawLine(x + 66, y + 135, x + 66, y + 256, 20, frame)
-  drawLine(x + 66, y + 256, x + 136, y + 256, 20, frame)
+  const frame = { r: 242, g: 250, b: 255, a: 248 }
+  const frameBlue = { r: 121, g: 191, b: 255, a: 236 }
+  const doc = { r: 100, g: 245, b: 230, a: 222 }
+  const docSide = { r: 44, g: 143, b: 255, a: 144 }
 
-  fillRoundedRect(x + 188, y + 64, 94, 198, 22, { ...colors.tertiary, a: 214 })
-  strokeRoundedRect(x + 188, y + 64, 94, 198, 22, { ...colors.tertiary, a: 255 }, { r: 28, g: 162, b: 181, a: 118 })
-  drawLine(x + 236, y + 64, x + 236, y + 96, 8, colors.white)
-  drawLine(x + 236, y + 96, x + 264, y + 96, 8, colors.white)
+  drawLine(x + 72, y + 138, x + 190, y + 92, 22, frame)
+  drawLine(x + 190, y + 92, x + 230, y + 132, 22, frameBlue)
+  drawLine(x + 72, y + 138, x + 72, y + 258, 22, frame)
+  drawLine(x + 72, y + 258, x + 140, y + 258, 22, frameBlue)
+  drawLine(x + 88, y + 274, x + 150, y + 274, 18, frameBlue)
 
-  strokeRoundedRect(x + 92, y + 126, 92, 76, 12, { ...colors.stroke, a: 255 }, { r: 8, g: 15, b: 22, a: 255 })
-  drawLine(x + 118, y + 148, x + 140, y + 164, 10, colors.white)
-  drawLine(x + 140, y + 164, x + 118, y + 180, 10, colors.white)
-  drawLine(x + 154, y + 180, x + 178, y + 180, 10, colors.white)
+  fillRoundedRect(x + 190, y + 66, 92, 200, 24, doc)
+  fillRoundedRect(x + 224, y + 68, 60, 196, 24, docSide)
+  strokeRoundedRect(x + 190, y + 66, 92, 200, 24, { ...colors.tertiary, a: 255 }, { r: 40, g: 198, b: 205, a: 120 })
+  drawLine(x + 238, y + 68, x + 238, y + 98, 8, colors.white)
+  drawLine(x + 238, y + 98, x + 264, y + 98, 8, colors.white)
+
+  fillRoundedRect(x + 96, y + 126, 96, 78, 12, { r: 6, g: 13, b: 21, a: 255 })
+  strokeRoundedRect(x + 96, y + 126, 96, 78, 12, { ...colors.stroke, a: 255 }, { r: 8, g: 15, b: 22, a: 255 })
+  drawLine(x + 122, y + 148, x + 144, y + 164, 10, colors.white)
+  drawLine(x + 144, y + 164, x + 122, y + 180, 10, colors.white)
+  drawLine(x + 158, y + 180, x + 180, y + 180, 10, colors.white)
 }
 
 function encodePNG(width, height, rgba) {

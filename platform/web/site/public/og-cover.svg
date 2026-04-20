@@ -1,59 +1,100 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="85" y1="54" x2="1098" y2="586" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0A1522"/>
-      <stop offset="1" stop-color="#060D14"/>
+    <radialGradient id="page" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(902 130) rotate(138.3) scale(1014 724.53)">
+      <stop stop-color="#15292F"/>
+      <stop offset="0.45" stop-color="#0C1822"/>
+      <stop offset="1" stop-color="#050A10"/>
+    </radialGradient>
+    <linearGradient id="frame" x1="176" y1="144" x2="456" y2="436" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.18" stop-color="#ECF8FF"/>
+      <stop offset="0.56" stop-color="#BEDFFF"/>
+      <stop offset="1" stop-color="#5EB6FF"/>
     </linearGradient>
-    <linearGradient id="frame" x1="164" y1="130" x2="430" y2="390" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FAFDFF"/>
-      <stop offset="0.28" stop-color="#D8ECFF"/>
-      <stop offset="0.68" stop-color="#67BDFF"/>
-      <stop offset="1" stop-color="#4E8FFF"/>
+    <linearGradient id="frameEdge" x1="170" y1="428" x2="312" y2="474" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D0F0FF"/>
+      <stop offset="1" stop-color="#4C9DFF"/>
     </linearGradient>
-    <linearGradient id="doc" x1="366" y1="112" x2="548" y2="432" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#E0FFFA"/>
-      <stop offset="0.42" stop-color="#5AF2DC"/>
-      <stop offset="1" stop-color="#18C7FF"/>
+    <linearGradient id="doc" x1="362" y1="108" x2="552" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EBFFFA"/>
+      <stop offset="0.3" stop-color="#98FDEA"/>
+      <stop offset="0.66" stop-color="#35E4D1"/>
+      <stop offset="1" stop-color="#149BFF"/>
     </linearGradient>
-    <filter id="softGlow" x="0" y="0" width="1200" height="630" filterUnits="userSpaceOnUse">
+    <linearGradient id="docSide" x1="434" y1="214" x2="560" y2="468" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6AF9EC"/>
+      <stop offset="1" stop-color="#1B81FF"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="226" y1="176" x2="398" y2="334" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E1822"/>
+      <stop offset="1" stop-color="#04090F"/>
+    </linearGradient>
+    <filter id="glow" x="0" y="0" width="1200" height="630" filterUnits="userSpaceOnUse">
       <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <filter id="iconGlow" x="70" y="54" width="530" height="518" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="shadow" x="78" y="72" width="514" height="492" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#02111A" flood-opacity="0.5"/>
     </filter>
   </defs>
 
-  <rect width="1200" height="630" fill="#050A10"/>
-  <ellipse cx="370" cy="490" rx="180" ry="110" fill="#3D98FF" fill-opacity="0.12" filter="url(#softGlow)"/>
-  <ellipse cx="936" cy="132" rx="212" ry="124" fill="#23F0D8" fill-opacity="0.12" filter="url(#softGlow)"/>
-  <ellipse cx="1012" cy="236" rx="150" ry="100" fill="#4E8FFF" fill-opacity="0.12" filter="url(#softGlow)"/>
+  <rect width="1200" height="630" fill="url(#page)"/>
+  <ellipse cx="952" cy="132" rx="228" ry="132" fill="#2AF1DE" fill-opacity="0.14" filter="url(#glow)"/>
+  <ellipse cx="912" cy="236" rx="170" ry="116" fill="#4AA4FF" fill-opacity="0.14" filter="url(#glow)"/>
+  <ellipse cx="286" cy="452" rx="188" ry="116" fill="#4AA4FF" fill-opacity="0.15" filter="url(#glow)"/>
 
-  <rect x="72" y="58" width="1056" height="514" rx="34" fill="url(#bg)"/>
-  <rect x="72" y="58" width="1056" height="514" rx="34" stroke="#152739" stroke-opacity="0.8" stroke-width="2"/>
+  <rect x="70" y="58" width="1060" height="514" rx="34" fill="#09111A" fill-opacity="0.42" stroke="#132230" stroke-opacity="0.88" stroke-width="2"/>
 
-  <rect x="102" y="92" width="208" height="34" rx="17" fill="#10353A"/>
-  <text x="124" y="114" fill="#8CF8EC" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="0.2em">LOCAL-FIRST AI CLI</text>
+  <g filter="url(#shadow)">
+    <path d="M132 248L324 166C347 156 373 160.5 391 176.8L437 222L356 438H190V402H132V248Z" fill="url(#frame)"/>
+    <path d="M190 402H307L266 442H150L190 402Z" fill="url(#frameEdge)"/>
+    <path d="M349 108H392C405 108 417.5 113.1 426.7 122.3L474.7 170.3C483.9 179.5 489 192 489 205V435C489 451.6 475.6 465 459 465H363C346.4 465 333 451.6 333 435V124C333 115.2 340.2 108 349 108Z" fill="url(#doc)"/>
+    <path d="M398 122L476 198V429L398 465V122Z" fill="url(#docSide)" fill-opacity="0.42"/>
+    <path d="M389 112V171C389 181.5 397.5 190 408 190H476" stroke="#F5FFFD" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M356 174H402C412.5 174 421 182.5 421 193V308C421 318.5 412.5 327 402 327H210C199.5 327 191 318.5 191 308V193C191 182.5 199.5 174 210 174H356Z" fill="url(#screen)"/>
+    <path d="M356 174H402C412.5 174 421 182.5 421 193V308C421 318.5 412.5 327 402 327H210C199.5 327 191 318.5 191 308V193C191 182.5 199.5 174 210 174H356Z" stroke="#132333" stroke-width="3"/>
+  </g>
 
-  <rect x="126" y="146" width="428" height="300" rx="46" fill="#07111A" fill-opacity="0.92" stroke="#132435" stroke-opacity="0.78" stroke-width="2"/>
-  <ellipse cx="418" cy="174" rx="66" ry="50" fill="#23F0D8" fill-opacity="0.22" filter="url(#softGlow)"/>
-  <ellipse cx="244" cy="374" rx="86" ry="58" fill="#3D98FF" fill-opacity="0.18" filter="url(#softGlow)"/>
+  <g filter="url(#iconGlow)">
+    <path d="M132 248L324 166C347 156 373 160.5 391 176.8L437 222" stroke="#F8FEFF" stroke-opacity="0.94" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M132 248V402H190" stroke="#E4F6FF" stroke-opacity="0.92" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M190 402H307" stroke="#73C0FF" stroke-opacity="0.88" stroke-width="10" stroke-linecap="round"/>
+    <path d="M351 110H389C402 110 414.5 115 423.6 124.2L472.4 173C481.5 182.1 486.6 194.5 486.6 207.4V432.8" stroke="#73FFF1" stroke-opacity="0.48" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M248 214L286 248L248 282" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M336 264H381" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round"/>
+  </g>
 
-  <path d="M182 248L337 182C352 176 370 180 382 191L420 228" stroke="url(#frame)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M182 248V378H244" stroke="url(#frame)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M220 378H278" stroke="url(#frame)" stroke-width="28" stroke-linecap="round"/>
+  <g fill="#3A90A8" fill-opacity="0.42">
+    <circle cx="1042" cy="260" r="3"/>
+    <circle cx="1054" cy="260" r="3"/>
+    <circle cx="1066" cy="260" r="3"/>
+    <circle cx="1078" cy="260" r="3"/>
+    <circle cx="1030" cy="272" r="3"/>
+    <circle cx="1042" cy="272" r="3"/>
+    <circle cx="1054" cy="272" r="3"/>
+    <circle cx="1066" cy="272" r="3"/>
+    <circle cx="1078" cy="272" r="3"/>
+    <circle cx="1030" cy="284" r="3"/>
+    <circle cx="1042" cy="284" r="3"/>
+    <circle cx="1054" cy="284" r="3"/>
+    <circle cx="1066" cy="284" r="3"/>
+    <circle cx="1078" cy="284" r="3"/>
+    <circle cx="1030" cy="296" r="3"/>
+    <circle cx="1042" cy="296" r="3"/>
+    <circle cx="1054" cy="296" r="3"/>
+    <circle cx="1066" cy="296" r="3"/>
+    <circle cx="1078" cy="296" r="3"/>
+  </g>
 
-  <path d="M346 156H398C407 156 415.6 159.6 422 166L472 216C478.4 222.4 482 231 482 240V414C482 425 473 434 462 434H354C343 434 334 425 334 414V168C334 161.4 339.4 156 346 156Z" fill="url(#doc)" fill-opacity="0.94" stroke="#77F8E5" stroke-opacity="0.76" stroke-width="3"/>
-  <path d="M401 156V212C401 221.4 408.6 229 418 229H474" stroke="#F4FFFD" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="612" y="126" width="210" height="34" rx="17" fill="#12353C"/>
+  <text x="638" y="148" fill="#8CF8EC" font-size="16" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="0.2em">LOCAL-FIRST AI CLI</text>
 
-  <rect x="210" y="230" width="136" height="114" rx="16" fill="#060D15" fill-opacity="0.96"/>
-  <rect x="210" y="230" width="136" height="114" rx="16" stroke="#12202E" stroke-width="2"/>
-  <path d="M248 264L280 288L248 312" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M304 302H334" stroke="white" stroke-width="14" stroke-linecap="round"/>
+  <text x="612" y="238" fill="white" font-size="76" font-family="Space Grotesk, Inter, Arial, sans-serif" font-weight="700">OfficeCLI</text>
+  <text x="612" y="322" fill="#DDEEFF" font-size="44" font-family="Space Grotesk, Inter, Arial, sans-serif" font-weight="700">AI document workflows from the terminal</text>
+  <text x="612" y="378" fill="#8EA4B8" font-size="26" font-family="Inter, Arial, sans-serif">PPTX, DOCX, XLSX, report generation, billing-aware access, and platform surfaces.</text>
 
-  <text x="612" y="214" fill="white" font-size="74" font-family="Space Grotesk, Inter, Arial, sans-serif" font-weight="700">OfficeCLI</text>
-  <text x="612" y="272" fill="#B7D8FF" font-size="26" font-family="Inter, Arial, sans-serif" font-weight="600" letter-spacing="0.12em">BRAND SYSTEM</text>
-  <text x="612" y="336" fill="#F5FAFF" font-size="44" font-family="Space Grotesk, Inter, Arial, sans-serif" font-weight="700">Terminal-native document workflows</text>
-  <text x="612" y="386" fill="#8EA4B8" font-size="26" font-family="Inter, Arial, sans-serif">One glowing mark across browser tabs, product surfaces, and share previews.</text>
-
-  <rect x="612" y="430" width="384" height="72" rx="20" fill="#0C1520" stroke="#1A2D40" stroke-width="2"/>
-  <text x="646" y="474" fill="#87F7E8" font-size="24" font-family="JetBrains Mono, monospace">officecli new pptx --prompt-file</text>
-  <rect x="1018" y="430" width="64" height="72" rx="20" fill="#10202C"/>
-  <text x="1040" y="474" fill="#FFFFFF" font-size="24" font-family="JetBrains Mono, monospace">./</text>
+  <rect x="612" y="434" width="446" height="78" rx="22" fill="#0C1620" stroke="#173043" stroke-width="2"/>
+  <text x="648" y="481" fill="#89F8EA" font-size="24" font-family="JetBrains Mono, monospace">officecli new pptx --prompt-file ./brief.md</text>
 </svg>
