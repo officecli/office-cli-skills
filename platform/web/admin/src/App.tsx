@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import { AdminSidebar, AdminTopBar } from './components/chrome'
 import AccessDeniedPage from './pages/AccessDeniedPage'
@@ -15,6 +15,7 @@ import OrdersPage from './pages/OrdersPage'
 import QuotaSourcesPage from './pages/QuotaSourcesPage'
 import UsersPage from './pages/UsersPage'
 import UsageEventsPage from './pages/UsageEventsPage'
+import { applyDocumentSEO, getRouteSEO } from './seo'
 
 function LoadingScreen() {
   return <div className="info-eyebrow grid min-h-screen place-items-center bg-background text-sm text-outline">Loading admin session...</div>
@@ -61,6 +62,12 @@ function ProtectedShell() {
 }
 
 export default function App() {
+  const location = useLocation()
+
+  useEffect(() => {
+    applyDocumentSEO(document, getRouteSEO(location.pathname))
+  }, [location.pathname])
+
   return (
     <Routes>
       <Route path="/login" element={<NotFoundPage />} />

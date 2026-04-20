@@ -73,47 +73,27 @@ for (let y = 0; y < HEIGHT; y += 1) {
   }
 }
 
-radialGlow(1030, 120, 230, { ...colors.primaryStrong, a: 46 })
-radialGlow(1110, 220, 170, { ...colors.tertiary, a: 34 })
-radialGlow(260, 560, 240, { ...colors.secondary, a: 18 })
+radialGlow(982, 110, 250, { ...colors.tertiary, a: 38 })
+radialGlow(1030, 218, 174, { ...colors.primaryStrong, a: 32 })
+radialGlow(260, 524, 236, { ...colors.primaryStrong, a: 28 })
 
 strokeRoundedRect(60, 56, 1160, 528, 36, { ...colors.stroke, a: 255 }, colors.surface)
+fillRoundedRect(104, 92, 244, 40, 20, colors.surfaceLow)
+drawText('NEW BRAND SYSTEM', 128, 102, 3, colors.tertiary)
 
-fillRoundedRect(104, 106, 334, 42, 21, colors.tertiary)
-drawText('AI AGENT SKILLS', 126, 119, 3, colors.surfaceAlt)
+drawOfficeCliMark(112, 150, 332)
 
-fillRoundedRect(104, 166, 432, 110, 24, { ...colors.primary, a: 18 })
-drawText('OFFICECLI', 128, 188, 9, colors.white, 2)
-drawText('SKILLS', 128, 270, 9, colors.primary, 2)
+drawText('OFFICECLI', 536, 148, 10, colors.white, 2)
+drawText('SKILLS', 536, 242, 10, colors.primary, 2)
+drawText('CLAUDE CODE  CODEX  AI AGENTS', 538, 348, 3, colors.primary)
+drawText('PPTX  DOCX  XLSX  REPORT', 538, 392, 4, colors.white)
+drawText('SHARE PREVIEW UPDATED WITH THE NEW LOGO', 538, 436, 2, colors.muted)
 
-drawText('CLAUDE CODE  CODEX  AI AGENTS', 110, 374, 3, colors.primary)
-drawText('PPTX  DOCX  XLSX  REPORT', 110, 416, 4, colors.white)
-drawText('LOCAL OFFICE WORKFLOWS THROUGH OFFICECLI', 110, 468, 2, colors.muted)
+fillRoundedRect(536, 486, 424, 44, 22, colors.surfaceLow)
+drawText('GITHUB REPO  OFFICECLI/OFFICECLI-SKILLS', 564, 498, 2, colors.muted)
 
-fillRoundedRect(108, 514, 420, 36, 18, colors.surfaceLow)
-drawText('GITHUB REPO  OFFICECLI/OFFICECLI-SKILLS', 126, 524, 2, colors.muted)
-
-fillRoundedRect(706, 132, 436, 168, 28, colors.surfaceLow)
-drawText('$ /PLUGIN MARKETPLACE ADD', 748, 166, 3, colors.tertiary)
-drawText('OFFICECLI SKILLS REPO', 748, 206, 4, colors.white)
-drawText('$ /PLUGIN INSTALL OFFICECLI', 748, 254, 3, colors.primary)
-
-fillRoundedRect(706, 332, 206, 170, 24, colors.surfaceAlt)
-strokeRoundedRect(706, 332, 206, 170, 24, { ...colors.stroke, a: 255 })
-drawText('PPTX', 760, 368, 5, colors.tertiary)
-drawLine(742, 456, 878, 456, 6, colors.stroke)
-drawLine(742, 430, 824, 430, 6, colors.primaryStrong)
-drawLine(742, 404, 860, 404, 6, colors.primary)
-
-fillRoundedRect(934, 332, 208, 170, 24, colors.surfaceAlt)
-strokeRoundedRect(934, 332, 208, 170, 24, { ...colors.stroke, a: 255 })
-drawText('DOCX', 988, 368, 5, colors.primary)
-drawLine(970, 430, 1094, 430, 6, colors.primaryStrong)
-drawLine(970, 456, 1062, 456, 6, colors.tertiary)
-drawLine(970, 404, 1110, 404, 6, colors.stroke)
-
-fillRoundedRect(706, 520, 436, 28, 14, colors.surfaceAlt)
-drawText('XLSX  REPORT  LOCAL AI AGENT SKILLS', 748, 527, 2, colors.secondary)
+fillRoundedRect(972, 486, 176, 44, 22, colors.surfaceAlt)
+drawText('SOCIAL PREVIEW', 1002, 498, 2, colors.secondary)
 
 const outputArg = process.argv[2]
 const outputPath = outputArg
@@ -231,6 +211,30 @@ function drawText(text, x, y, scale, color, letterSpacing = 1) {
     }
     cursor += glyph[0].length * scale + letterSpacing * scale
   }
+}
+
+function drawOfficeCliMark(x, y, size) {
+  fillRoundedRect(x, y, size, size, 68, colors.surfaceLow)
+  strokeRoundedRect(x, y, size, size, 68, { ...colors.stroke, a: 255 }, { ...colors.surfaceLow, a: 255 })
+
+  radialGlow(x + size * 0.73, y + size * 0.19, size * 0.18, { ...colors.tertiary, a: 54 })
+  radialGlow(x + size * 0.38, y + size * 0.73, size * 0.24, { ...colors.primaryStrong, a: 40 })
+
+  const frame = { ...colors.primary, a: 244 }
+  drawLine(x + 66, y + 135, x + 190, y + 88, 20, frame)
+  drawLine(x + 190, y + 88, x + 238, y + 134, 20, frame)
+  drawLine(x + 66, y + 135, x + 66, y + 256, 20, frame)
+  drawLine(x + 66, y + 256, x + 136, y + 256, 20, frame)
+
+  fillRoundedRect(x + 188, y + 64, 94, 198, 22, { ...colors.tertiary, a: 214 })
+  strokeRoundedRect(x + 188, y + 64, 94, 198, 22, { ...colors.tertiary, a: 255 }, { r: 28, g: 162, b: 181, a: 118 })
+  drawLine(x + 236, y + 64, x + 236, y + 96, 8, colors.white)
+  drawLine(x + 236, y + 96, x + 264, y + 96, 8, colors.white)
+
+  strokeRoundedRect(x + 92, y + 126, 92, 76, 12, { ...colors.stroke, a: 255 }, { r: 8, g: 15, b: 22, a: 255 })
+  drawLine(x + 118, y + 148, x + 140, y + 164, 10, colors.white)
+  drawLine(x + 140, y + 164, x + 118, y + 180, 10, colors.white)
+  drawLine(x + 154, y + 180, x + 178, y + 180, 10, colors.white)
 }
 
 function encodePNG(width, height, rgba) {

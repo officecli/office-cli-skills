@@ -25,6 +25,7 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Page not found/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI Admin | Page Not Found')
     expect(screen.queryByText(/Authorized Google accounts only/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Continue with Google/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/luyang950@gmail.com/i)).not.toBeInTheDocument()
@@ -42,6 +43,7 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Access not granted/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI Admin | Access Denied')
     expect(screen.getByText(/blocked@example.com/i)).toBeInTheDocument()
   })
 
@@ -93,6 +95,7 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Recent usage events/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI Admin | Usage Events')
     expect(screen.getByRole('option', { name: 'reward' })).toBeInTheDocument()
   })
 
@@ -128,6 +131,7 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Reward grants, referrals, and Discord connections/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI Admin | Growth')
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/growth', expect.anything())
     })

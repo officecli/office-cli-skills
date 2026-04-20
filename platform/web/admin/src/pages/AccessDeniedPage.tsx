@@ -1,5 +1,6 @@
 import { ArrowLeft, MailWarning, RefreshCcw, ShieldBan } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
+import { OfficeCliBrand } from '../components/branding'
 
 export default function AccessDeniedPage() {
   const location = useLocation()
@@ -11,6 +12,13 @@ export default function AccessDeniedPage() {
         <section className="panel relative w-full overflow-hidden p-8 md:p-12">
           <div className="access-denied-glow absolute inset-0" />
           <div className="relative">
+            <OfficeCliBrand
+              className="mb-8"
+              markClassName="h-11 w-11"
+              title="OfficeCLI admin"
+              titleClassName="text-xl font-bold text-white"
+              subtitle="admin access / restricted"
+            />
             <span className="chip border-error/20 bg-error/10 text-error">Admin access denied</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an admin session because the account is not present in the admin allowlist.</p>

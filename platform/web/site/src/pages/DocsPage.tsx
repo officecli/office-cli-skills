@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import InstallTabs from '../components/InstallTabs'
 import Pricing from '../components/Pricing'
 import CodeBlock from '../components/CodeBlock'
+import { OfficeCliBrand } from '../components/branding'
 import {
   agentSkillHighlights,
   commandGroups,
@@ -112,6 +113,14 @@ export default function DocsPage() {
       {/* Content */}
       <div className="flex-1 min-w-0 max-w-4xl">
         <section className="mb-16">
+          <Link to="/" className="inline-flex">
+            <OfficeCliBrand
+              className="mb-8"
+              markClassName="h-12 w-12"
+              titleClassName="text-2xl font-bold tracking-tight text-white"
+              subtitle="product docs / local-first runtime"
+            />
+          </Link>
           <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Docs</span>
           <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">
             OfficeCLI documentation for AI document generation

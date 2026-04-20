@@ -30,6 +30,7 @@ describe('platform app shell', () => {
     renderApp('/')
 
     expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI App | Sign In')
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
     expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
@@ -99,6 +100,7 @@ describe('platform app shell', () => {
     renderApp('/')
 
     expect(await screen.findByRole('heading', { name: /Remaining Quota/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI App | Overview')
     expect(await screen.findByText(/^Reward Quota$/i)).toBeInTheDocument()
     expect(await screen.findByText(/^Referral Progress$/i)).toBeInTheDocument()
     expect(screen.getByText(/Invite code: invite-abc · 10 bonus generations per activated invite/i)).toBeInTheDocument()
@@ -127,6 +129,7 @@ describe('platform app shell', () => {
     renderApp('/usage')
 
     expect(await screen.findByRole('heading', { name: /Recent workflow usage/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI App | Usage')
     expect(await screen.findByText(/No usage events recorded/i)).toBeInTheDocument()
   })
 

@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
 import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
 import { navItems, platformAppURL } from '../siteData'
+import { OfficeCliBrand } from './branding'
 
 export default function Navbar() {
   const location = useLocation()
@@ -76,7 +77,12 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 w-full z-50 bg-[#131313]/80 backdrop-blur-xl border-b border-white/5">
       <div className="flex justify-between items-center px-8 py-4 max-w-[1440px] mx-auto font-headline tracking-tight gap-8">
-        <Link className="text-2xl font-bold tracking-tighter text-white" to="/#" onClick={(e) => handleAnchorClick(e as any, '/#')}>OfficeCLI</Link>
+        <Link className="shrink-0" to="/#" onClick={(e) => handleAnchorClick(e as any, '/#')}>
+          <OfficeCliBrand
+            markClassName="h-10 w-10"
+            titleClassName="text-2xl font-bold tracking-tighter text-white"
+          />
+        </Link>
         <div className="hidden md:flex gap-8 items-center">
           {navItems.map((item) => {
             const isAnchor = item.to.startsWith('/#')

@@ -7,6 +7,7 @@ import { AppSidebar, AppTopBar } from './components/chrome'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import LoginPage from './pages/LoginPage'
 import AccessDeniedPage from './pages/AccessDeniedPage'
+import { applyDocumentSEO, getRouteSEO } from './seo'
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage'))
 const QuotaPage = lazy(() => import('./pages/QuotaPage'))
@@ -65,6 +66,10 @@ export default function App() {
   useEffect(() => {
     trackPageView(location.pathname, location.search)
   }, [location.pathname, location.search])
+
+  useEffect(() => {
+    applyDocumentSEO(document, getRouteSEO(location.pathname))
+  }, [location.pathname])
 
   return (
     <Routes>

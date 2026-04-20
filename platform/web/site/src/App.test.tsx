@@ -89,6 +89,7 @@ describe('marketing site shell', () => {
       screen.getByRole('heading', { name: /OfficeCLI Skills for Claude Code, Codex, and AI Agents/i, level: 1 }),
     ).toBeInTheDocument()
     expect(document.title).toContain('OfficeCLI Skills for Claude Code, Codex, and AI Agents')
+    expect(document.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe('https://officecli.io/social-preview-officecli-skills.png')
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
       'https://officecli.io/claude-code-codex-office-skills',
     )
@@ -140,6 +141,7 @@ describe('site metadata and assets', () => {
     expect(html).toContain('name="robots" content="index,follow"')
     expect(html).toContain('property="og:url" content="https://officecli.io/"')
     expect(html).toContain('name="twitter:card"')
+    expect(html).toContain('rel="shortcut icon" href="/favicon.svg"')
     expect(html).toContain('application/ld+json')
   })
 

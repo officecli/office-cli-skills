@@ -1,5 +1,6 @@
-import { ShieldCheck, LockKeyhole, Radar, Siren, Workflow } from 'lucide-react'
+import { ShieldCheck, Radar, Siren, Workflow } from 'lucide-react'
 import { api } from '../api'
+import { OfficeCliBrand } from '../components/branding'
 
 const valuePoints = [
   { icon: Radar, title: 'Platform health at a glance', body: 'Track key inventory, blocked traffic, and free-machine pressure from one operator surface.' },
@@ -14,6 +15,12 @@ export default function LoginPage() {
         <section className="panel relative overflow-hidden p-8 md:p-12">
           <div className="login-hero-admin-glow absolute inset-0" />
           <div className="relative">
+            <OfficeCliBrand
+              className="mb-8"
+              markClassName="h-12 w-12"
+              titleClassName="text-xl font-bold text-white"
+              subtitle="admin plane / allowlist required"
+            />
             <span className="chip">Google sign-in / admin</span>
             <h1 className="mt-6 max-w-xl text-5xl font-bold leading-[0.92] text-white md:text-6xl">Authorized Google accounts only</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Enter the OfficeCLI admin plane to manage API key governance, tune free quotas, investigate blocked traffic, and keep platform controls under explicit operator access. The current production allowlist is intentionally narrowed to a single operator account: <span className="text-white">luyang950@gmail.com</span>.</p>
@@ -40,15 +47,12 @@ export default function LoginPage() {
 
         <aside className="panel flex flex-col justify-between p-8 md:p-10">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                <LockKeyhole size={18} />
-              </div>
-              <div>
-                <div className="font-headline text-xl font-bold text-white">OfficeCLI admin</div>
-                <div className="info-eyebrow text-outline">governance console / allowlist required</div>
-              </div>
-            </div>
+            <OfficeCliBrand
+              markClassName="h-11 w-11"
+              title="OfficeCLI admin"
+              titleClassName="text-xl font-bold text-white"
+              subtitle="governance console / allowlist required"
+            />
 
             <div className="mt-10 panel-muted p-6">
               <div className="info-eyebrow text-tertiary">Access contract</div>

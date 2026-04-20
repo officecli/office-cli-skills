@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
+import { OfficeCliBrand } from '../components/branding'
 
 export default function LoginPage() {
   const location = useLocation()
@@ -17,15 +18,11 @@ export default function LoginPage() {
         <section className="panel relative w-full overflow-hidden p-8 md:p-12">
           <div className="login-hero-app-glow absolute inset-0" />
           <div className="relative">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                <Sparkles size={18} />
-              </div>
-              <div>
-                <div className="font-headline text-xl font-bold text-white">OfficeCLI</div>
-                <div className="info-eyebrow text-outline">sign in required</div>
-              </div>
-            </div>
+            <OfficeCliBrand
+              markClassName="h-11 w-11"
+              titleClassName="text-xl font-bold text-white"
+              subtitle="sign in required"
+            />
 
             <span className="chip mt-8">Google sign-in required</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Continue to OfficeCLI</h1>

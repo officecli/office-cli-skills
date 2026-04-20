@@ -1,4 +1,5 @@
 import { ArrowLeft, FileSearch } from 'lucide-react'
+import { OfficeCliBrand } from '../components/branding'
 
 export default function NotFoundPage() {
   return (
@@ -7,6 +8,13 @@ export default function NotFoundPage() {
         <section className="panel relative w-full overflow-hidden p-8 md:p-12">
           <div className="access-denied-glow absolute inset-0" />
           <div className="relative">
+            <OfficeCliBrand
+              className="mb-8"
+              markClassName="h-11 w-11"
+              title="OfficeCLI admin"
+              titleClassName="text-xl font-bold text-white"
+              subtitle="governance console"
+            />
             <span className="chip">404</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Page not found</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">The page you requested could not be found.</p>

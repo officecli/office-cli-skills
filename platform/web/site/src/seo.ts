@@ -29,6 +29,7 @@ export const siteBaseURL = 'https://officecli.io'
 const siteName = 'OfficeCLI'
 const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
+const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
 
 const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows'
 const homeDescription =
@@ -87,7 +88,13 @@ function buildCanonical(pathname: string) {
   return new URL(pathname, siteBaseURL).toString()
 }
 
-function buildRouteSEO(pathname: string, title: string, description: string, jsonLd?: RouteSEO['jsonLd']): RouteSEO {
+function buildRouteSEO(
+  pathname: string,
+  title: string,
+  description: string,
+  jsonLd?: RouteSEO['jsonLd'],
+  image = defaultImage,
+): RouteSEO {
   const canonical = buildCanonical(pathname)
   return {
     title,
@@ -99,14 +106,14 @@ function buildRouteSEO(pathname: string, title: string, description: string, jso
       title,
       description,
       url: canonical,
-      image: defaultImage,
+      image,
       siteName,
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      image: defaultImage,
+      image,
     },
     jsonLd,
   }
@@ -159,6 +166,7 @@ export const routeSEO: Record<string, RouteSEO> = {
     agentSkillsTitle,
     agentSkillsDescription,
     agentSkillsJSONLD,
+    skillsImage,
   ),
   '/docs': buildRouteSEO(
     '/docs',
