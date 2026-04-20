@@ -521,12 +521,12 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
       "bgColor": "",
       "bgColor2": ""
     }`
-		imageRules = `- Use images sparingly. Prefer 0-1 image slide in the whole deck, and only when the page clearly benefits from a hero visual.
+		imageRules = `- Use images intentionally, not just decoratively. In a 6-8 slide deck, usually keep 2-4 image-supported slides when the topic includes product, scenario, workflow, interface, training, game, or customer experience storytelling.
 - On image slides, use visual.kind=image and visual.position must be one of right, left, background, center, top, bottom, or diagonal.
 - visual.prompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
 - Do not add images to chart or dashboard layouts.
-- Prefer images for title-cover hero visuals, product UI, usage scenarios, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, or action recommendation slides.
-- On image slides, keep only 1-2 short points so text remains secondary to the visual.`
+- Prefer images for title-cover hero visuals, product UI, feature walkthroughs, gameplay moments, usage scenarios, customer scenes, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, pricing table, or action recommendation slides.
+- On image slides, keep text subordinate to the visual but still substantive: usually 2-4 solid points or 2-3 short sections, not slogans.`
 	}
 	outlineRules := buildArchetypePromptRules(archetype)
 	return fmt.Sprintf(`Generate a JSON structure for a PPT presentation based on the following request.
@@ -589,8 +589,8 @@ Requirements:
 - For customer value, business review, market size, or competitive comparison, prefer evidence-based expression with chart or metrics blocks. If reliable numbers are unavailable, use 2-3 structured sections instead of long bullets.
 - If the topic is market analysis, industry research, or business review, the deck must include at least one chart or dashboard slide with source or data framing.
 - Action recommendations, rollout plans, release cadence, and training paths must use sections or metrics and show at least two of time, owner, or acceptance criteria.
-- Keep content slide points to 3-4 concise bullets and avoid repetitive filler. Avoid bullet-only slides unless image split or narrative fallback is truly necessary.
-- Use at most 3 sections, at most 4 dashboard metrics, and at most 5 chart categories.
+- Avoid under-filled slides. Most non-cover content slides should read as 3-5 solid bullets or 3-4 sections with one-sentence detail, not just 1-2 fragmentary phrases.
+- Use at most 4 sections, at most 4 dashboard metrics, and at most 5 chart categories.
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
 - When a chart fits, put it inside a chart block with type, categories, values, and title, plus 2-3 takeaway points in another block when needed.
 - When a dashboard fits, put it inside a metrics block with label, value, and note, plus 2-3 action or takeaway points in another block when needed.
@@ -705,7 +705,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	firstSlideWasExplicitCover := len(payload.Slides) > 0 && (payload.Slides[0].IsTitle || strings.EqualFold(strings.TrimSpace(payload.Slides[0].Layout), "title") || normalizePPTXRole(payload.Slides[0].Role) == pptxSlideRoleCover)
 
 	slides := make([]officegen.Slide, 0, len(payload.Slides))
-	imageBudget := 1
+	imageBudget := computePPTXImageBudget(payload.Slides, strings.TrimSpace(fallback+" "+payload.Title), enableImages)
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
@@ -804,6 +804,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 }
 
 func normalizePPTXSlide(slide officegen.Slide, signals pptxSlideSignals, idx int, deckTitle string, enableImages bool, imageBudget *int) (officegen.Slide, bool) {
+	explicitCover := slide.IsTitle || strings.EqualFold(strings.TrimSpace(slide.Layout), "title") || normalizePPTXRole(slide.Role) == pptxSlideRoleCover
 	slide.Role = string(signals.Role)
 	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 22)
 	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 30)
@@ -811,8 +812,8 @@ func normalizePPTXSlide(slide officegen.Slide, signals pptxSlideSignals, idx int
 	slide.Content = strings.TrimSpace(slide.Content)
 	slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
 
-	slide.Points = normalizePoints(slide.Points, 4, 32)
-	slide.Sections = normalizeSections(slide.Sections, 3)
+	slide.Points = normalizePoints(slide.Points, 5, 48)
+	slide.Sections = normalizeSections(slide.Sections, 4)
 	slide.Metrics = normalizeMetrics(slide.Metrics, 4)
 	slide.Chart = normalizeChart(slide.Chart)
 	slide = applyRoleDrivenSlideNormalization(slide, signals)
@@ -823,15 +824,24 @@ func normalizePPTXSlide(slide officegen.Slide, signals pptxSlideSignals, idx int
 	slide.Variant = normalizeSlideVariant(slide)
 
 	imageKept := false
+	imagePrompt := strings.TrimSpace(slide.ImagePrompt)
+	requestedImage := slide.HasImage || imagePrompt != ""
 	if enableImages &&
-		slide.HasImage &&
-		strings.TrimSpace(slide.ImagePrompt) != "" &&
 		allowImageForSlide(slide) &&
 		imageBudget != nil &&
 		*imageBudget > 0 {
+		if imagePrompt == "" && shouldAutoAddImagePrompt(slide, explicitCover) {
+			imagePrompt = buildFallbackImagePrompt(slide, deckTitle)
+		}
+		if !requestedImage && imagePrompt == "" {
+			slide.HasImage = false
+			slide.ImagePrompt = ""
+			slide.ImagePos = ""
+			return slide, false
+		}
 		slide.HasImage = true
-		slide.ImagePrompt = fitTextForLayout(strings.TrimSpace(slide.ImagePrompt), 120)
-		slide.ImagePos = normalizeImagePosition(slide.ImagePos)
+		slide.ImagePrompt = trimRunes(imagePrompt, 180)
+		slide.ImagePos = normalizeImagePosition(firstNonEmpty(slide.ImagePos, defaultImagePositionForSlide(slide)))
 		*imageBudget--
 		imageKept = true
 	} else {
@@ -946,12 +956,12 @@ func normalizeSummaryRoleSlide(slide officegen.Slide) officegen.Slide {
 		slide.Metrics = nil
 	}
 	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 3)
+		slide.Points = splitContentToPoints(slide.Content, 4)
 	}
 	if len(slide.Sections) == 0 && len(slide.Points) > 0 {
-		if sections := pointsToSummarySections(slide.Points, 3); len(sections) > 0 {
+		if sections := pointsToSummarySections(slide.Points, 4); len(sections) > 0 {
 			slide.Sections = sections
-			if len(slide.Points) <= 3 {
+			if len(slide.Points) <= 4 {
 				slide.Points = nil
 			}
 		}
@@ -985,7 +995,7 @@ func normalizeEvidenceRoleSlide(slide officegen.Slide, signals pptxSlideSignals)
 	if slide.Chart == nil && len(slide.Metrics) == 0 {
 		slide.Layout = "content"
 		if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-			slide.Points = splitContentToPoints(slide.Content, 3)
+			slide.Points = splitContentToPoints(slide.Content, 4)
 			slide.Content = ""
 		}
 	}
@@ -1006,7 +1016,7 @@ func normalizeActionRoleSlide(slide officegen.Slide) officegen.Slide {
 		slide.Metrics = nil
 	}
 	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 3)
+		slide.Points = splitContentToPoints(slide.Content, 4)
 	}
 	slide = normalizeActionSlide(slide)
 	slide.Layout = "content"
@@ -1032,7 +1042,7 @@ func normalizeDetailRoleSlide(slide officegen.Slide) officegen.Slide {
 		slide = downgradeChartSlide(slide)
 	}
 	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 4)
+		slide.Points = splitContentToPoints(slide.Content, 5)
 		if len(slide.Points) > 0 {
 			slide.Content = ""
 		}
@@ -1100,8 +1110,8 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 func normalizeSections(sections []officegen.SlideSection, limit int) []officegen.SlideSection {
 	out := make([]officegen.SlideSection, 0, len(sections))
 	for _, section := range sections {
-		heading := fitTextForLayout(cleanSentence(section.Heading), 12)
-		detail := fitTextForLayout(cleanSentence(section.Detail), 30)
+		heading := fitTextForLayout(cleanSentence(section.Heading), 16)
+		detail := fitTextForLayout(cleanSentence(section.Detail), 56)
 		if heading == "" && detail == "" {
 			continue
 		}
@@ -1442,7 +1452,7 @@ func pointsToSummarySections(points []string, limit int) []officegen.SlideSectio
 			heading = fmt.Sprintf("Takeaway %d", idx+1)
 		}
 		if detail == "" {
-			detail = fitTextForLayout(cleanSentence(point), 24)
+			detail = fitTextForLayout(cleanSentence(point), 42)
 		}
 		sections = append(sections, officegen.SlideSection{
 			Heading: heading,
@@ -1833,18 +1843,18 @@ func minInt(a, b int) int {
 
 func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
 	switch {
-	case len(slide.Points) > 4:
+	case len(slide.Points) > 5:
+		return splitSlidePoints(slide, 5)
+	case slide.HasImage && len(slide.Points) > 4:
 		return splitSlidePoints(slide, 4)
-	case slide.HasImage && len(slide.Points) > 3:
-		return splitSlidePoints(slide, 3)
 	case shouldUseTimelineVariant(slide):
 		return []officegen.Slide{slide}
 	case shouldUseFeatureGridVariant(slide):
 		return []officegen.Slide{slide}
 	case shouldUsePillarListVariant(slide):
 		return []officegen.Slide{slide}
-	case len(slide.Sections) > 3:
-		return splitSlideSections(slide, 3)
+	case len(slide.Sections) > 4:
+		return splitSlideSections(slide, 4)
 	case len(slide.Metrics) > 4:
 		return splitSlideMetrics(slide, 4)
 	default:
@@ -2030,7 +2040,7 @@ func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {
 func splitContentToPoints(content string, limit int) []string {
 	fields := strings.FieldsFunc(content, func(r rune) bool {
 		switch r {
-		case '\n', '\r', ';', '.':
+		case '\n', '\r', ';', '.', '!', '?', '；', '。', '！', '？':
 			return true
 		default:
 			return false
@@ -2039,7 +2049,7 @@ func splitContentToPoints(content string, limit int) []string {
 	if len(fields) == 0 && strings.TrimSpace(content) != "" {
 		fields = []string{content}
 	}
-	return normalizePoints(fields, limit, 30)
+	return normalizePoints(fields, limit, 48)
 }
 
 func deriveSlideSubtitle(slide officegen.Slide) string {
@@ -2087,7 +2097,7 @@ func deriveChartPoints(chart *officegen.ChartData, limit int) []string {
 	if len(chart.Values) > 1 && minIdx != maxIdx {
 		points = append(points, fmt.Sprintf("%s is the lowest at %s", chart.Categories[minIdx], formatChartValue(chart.Values[minIdx])))
 	}
-	return normalizePoints(points, limit, 30)
+	return normalizePoints(points, limit, 40)
 }
 
 func deriveMetricPoints(metrics []officegen.MetricCard, limit int) []string {
@@ -2102,7 +2112,7 @@ func deriveMetricPoints(metrics []officegen.MetricCard, limit int) []string {
 		}
 		points = append(points, item)
 	}
-	return normalizePoints(points, limit, 30)
+	return normalizePoints(points, limit, 40)
 }
 
 func normalizeImagePosition(pos string) string {
@@ -2114,6 +2124,128 @@ func normalizeImagePosition(pos string) string {
 	}
 }
 
+func computePPTXImageBudget(slides []officegen.Slide, deckTitle string, enableImages bool) int {
+	if !enableImages || len(slides) == 0 {
+		return 0
+	}
+
+	budget := 1
+	switch {
+	case len(slides) >= 8:
+		budget = 4
+	case len(slides) >= 6:
+		budget = 3
+	case len(slides) >= 4:
+		budget = 2
+	}
+
+	switch detectPPTXArchetype(deckTitle, "") {
+	case pptxArchetypeCompany, pptxArchetypeTraining:
+		if budget < 4 {
+			budget++
+		}
+	case pptxArchetypeMarket, pptxArchetypeOps:
+		if budget > 2 {
+			budget--
+		}
+	}
+
+	eligible := 0
+	for idx, slide := range slides {
+		role := inferPPTXSlideRole(slide, idx)
+		if role == pptxSlideRoleCover || role == pptxSlideRoleDetail {
+			eligible++
+		}
+	}
+	if eligible < budget {
+		budget = eligible
+	}
+	if budget < 0 {
+		return 0
+	}
+	return budget
+}
+
+func defaultImagePositionForSlide(slide officegen.Slide) string {
+	if slideRoleName(slide, 0) == pptxSlideRoleCover {
+		return "background"
+	}
+	if len(slide.Sections) >= 4 || len(slide.Points) >= 4 {
+		return "top"
+	}
+	return "right"
+}
+
+func shouldAutoAddImagePrompt(slide officegen.Slide, _ bool) bool {
+	role := slideRoleName(slide, 0)
+	if role == pptxSlideRoleCover {
+		return false
+	}
+	if role != pptxSlideRoleDetail {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildFallbackImagePrompt(slide officegen.Slide, deckTitle string) string {
+	subject := firstNonEmpty(slide.Title, deckTitle, "Presentation topic")
+	fragments := make([]string, 0, 4)
+	if subtitle := strings.TrimSpace(slide.Subtitle); subtitle != "" {
+		fragments = append(fragments, cleanSentence(subtitle))
+	}
+	for _, section := range slide.Sections {
+		if len(fragments) >= 3 {
+			break
+		}
+		fragment := firstNonEmpty(section.Heading, section.Detail)
+		if fragment == "" {
+			continue
+		}
+		if strings.TrimSpace(section.Detail) != "" && strings.TrimSpace(section.Heading) != "" {
+			fragment = strings.TrimSpace(section.Heading) + ": " + strings.TrimSpace(section.Detail)
+		}
+		fragments = append(fragments, cleanSentence(fragment))
+	}
+	for _, point := range slide.Points {
+		if len(fragments) >= 3 {
+			break
+		}
+		if cleaned := cleanSentence(point); cleaned != "" {
+			fragments = append(fragments, cleaned)
+		}
+	}
+	if len(fragments) == 0 && strings.TrimSpace(slide.Content) != "" {
+		fragments = append(fragments, cleanSentence(strings.TrimSpace(slide.Content)))
+	}
+
+	scene := strings.Join(fragments, "; ")
+	styleHint := "clean professional presentation visual, no text overlay"
+	if slideRoleName(slide, 0) == pptxSlideRoleCover {
+		styleHint = "hero visual for a presentation cover, cinematic composition, clean professional lighting, no text overlay"
+	} else if looksLikeGameSlide(slide) {
+		styleHint = "vivid gameplay-style scene, immersive environment, polished composition, no text overlay"
+	} else {
+		styleHint = "editorial product or real-world usage scene, polished composition, professional lighting, no text overlay"
+	}
+	return trimRunes(strings.TrimSpace(strings.Join([]string{subject, scene, styleHint}, ". ")), 180)
+}
+
+func looksLikeGameSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, keyword := range []string{"game", "gameplay", "world", "character", "sandbox", "minecraft", "游戏", "玩法", "世界", "角色", "沙盒", "minecraft"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 func allowImageForSlide(slide officegen.Slide) bool {
 	role := slideRoleName(slide, 0)
 	if role == pptxSlideRoleSummary || role == pptxSlideRoleEvidence || role == pptxSlideRoleAction {
@@ -2122,19 +2254,23 @@ func allowImageForSlide(slide officegen.Slide) bool {
 	if role == pptxSlideRoleCover {
 		return true
 	}
-	if len(slide.Sections) > 0 || len(slide.Metrics) > 0 || slide.Chart != nil {
+	if len(slide.Metrics) > 0 || slide.Chart != nil || slideLayoutName(slide) == "chart" || slideLayoutName(slide) == "dashboard" {
 		return false
 	}
-	if len(slide.Points) > 3 {
+	if len(slide.Points) > 4 || len(slide.Sections) > 4 {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence", "市场", "行业", "竞争", "复盘", "价值", "建议", "下一步", "推进", "区域", "机会", "风险", "运营", "数据", "节奏"} {
+	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "pricing", "package", "quote", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence", "市场", "行业", "竞争", "复盘", "价值", "价格", "报价", "套餐", "建议", "下一步", "推进", "区域", "机会", "风险", "运营", "数据", "节奏"} {
 		if strings.Contains(text, keyword) {
 			return false
 		}
 	}
-	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow", "experience", "demo", "产品", "界面", "场景", "培训", "流程", "体验", "演示"} {
+	if (slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "") &&
+		!isPlaceholderSlideTitle(slide.Title) {
+		return true
+	}
+	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -2180,7 +2316,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 			slide.Points = normalizePoints([]string{
 				"Validate ROI first with approval, task, and knowledge metrics.",
 				"Decide whether to expand after an eight-week pilot.",
-			}, 2, 28)
+			}, 2, 42)
 		}
 		return slide
 	}
@@ -2196,7 +2332,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 			slide.Points = normalizePoints([]string{
 				"Demand is most mature in North America, with Europe and developed APAC forming the second tier.",
 				"Validate the English-speaking market first, then test expansion efficiency in the next region.",
-			}, 2, 28)
+			}, 2, 42)
 		}
 		if slide.Source == "" {
 			slide.Source = "Compiled from public sources"
@@ -2661,7 +2797,7 @@ func pointToSection(point string, idx int) (string, string) {
 	}
 	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month", "30天内", "60天内", "90天内", "第1周", "第2周", "本周", "本月"} {
 		if strings.HasPrefix(cleaned, marker) {
-			return fitTextForLayout(marker, 10), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 24)
+			return fitTextForLayout(marker, 12), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 42)
 		}
 	}
 	for _, sep := range []string{"：", ":"} {
@@ -2669,13 +2805,13 @@ func pointToSection(point string, idx int) (string, string) {
 		if len(parts) != 2 {
 			continue
 		}
-		label := fitTextForLayout(strings.TrimSpace(parts[0]), 10)
-		body := fitTextForLayout(strings.TrimSpace(parts[1]), 24)
+		label := fitTextForLayout(strings.TrimSpace(parts[0]), 12)
+		body := fitTextForLayout(strings.TrimSpace(parts[1]), 42)
 		if label != "" && body != "" {
 			return label, body
 		}
 	}
-	return fmt.Sprintf("Step %d", idx+1), fitTextForLayout(cleaned, 24)
+	return fmt.Sprintf("Step %d", idx+1), fitTextForLayout(cleaned, 42)
 }
 
 func fitTextForLayout(value string, maxRunes int) string {

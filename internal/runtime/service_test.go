@@ -372,7 +372,8 @@ func TestBuildPPTXPrompt_ImagesEnabledIncludesImageGuidance(t *testing.T) {
 		`"kind": "image"`,
 		`"prompt": "A concrete visual prompt that can be sent directly to an image model"`,
 		`"position": "right"`,
-		"Use images sparingly. Prefer 0-1 image slide",
+		"Use images intentionally, not just decoratively",
+		"usually keep 2-4 image-supported slides",
 		"Do not add images to chart or dashboard layouts",
 	} {
 		if !strings.Contains(prompt, needle) {
@@ -401,7 +402,8 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		"Keep the deck to 5-8 slides, usually 6-7.",
 		"slide 2 should read as an executive summary or key takeaways page",
 		"takeaway must be a takeaway sentence",
-		"Use at most 3 sections, at most 4 dashboard metrics",
+		"Most non-cover content slides should read as 3-5 solid bullets or 3-4 sections",
+		"Use at most 4 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
 		"The closing slide must include 2-3 next-step actions",
 	} {
@@ -465,6 +467,52 @@ func TestNormalizeActionSlide_ConvertsPointsToSections(t *testing.T) {
 	}
 	if len(slide.Points) != 0 {
 		t.Fatalf("points should be cleared after section normalization: %#v", slide.Points)
+	}
+}
+
+func TestNormalizePPTXSlide_PreservesRicherBodyCopy(t *testing.T) {
+	slide := officegen.Slide{
+		Title:  "Core Capabilities",
+		Layout: "content",
+		Sections: []officegen.SlideSection{
+			{Heading: "Unified Workspace", Detail: "Bring messages, documents, approvals, and follow-up tasks into one shared operating surface for cross-functional teams."},
+			{Heading: "Workflow Automation", Detail: "Connect forms, task routing, reminders, and escalation logic so business processes keep moving without manual chasing."},
+			{Heading: "Governance", Detail: "Apply role-based permissions, operation logs, and audit-ready history so enterprise buyers can adopt the platform safely."},
+			{Heading: "Knowledge Reuse", Detail: "Turn recurring project assets into templates and reusable playbooks that reduce ramp time for new teams."},
+		},
+	}
+
+	normalized, _ := normalizePPTXSlide(slide, analyzePPTXSlide(slide, 2), 2, "Enterprise Collaboration Platform", false, nil)
+	if len(normalized.Sections) != 4 {
+		t.Fatalf("sections = %#v, want 4 richer sections", normalized.Sections)
+	}
+	if got := len([]rune(normalized.Sections[0].Detail)); got < 40 {
+		t.Fatalf("section detail too short after normalization: %q", normalized.Sections[0].Detail)
+	}
+}
+
+func TestNormalizePPTXSlide_AutoAddsImagePromptForIllustrativeSlides(t *testing.T) {
+	imageBudget := 1
+	slide := officegen.Slide{
+		Title:    "Workflow Demo",
+		Layout:   "content",
+		Subtitle: "Show how sales, delivery, and finance collaborate in one operating flow",
+		Points: []string{
+			"Start from an incoming customer request and route it into a shared project workspace.",
+			"Coordinate approvals, delivery checkpoints, and customer updates without tool switching.",
+			"Close the loop with reusable templates and visible owner accountability.",
+		},
+	}
+
+	normalized, kept := normalizePPTXSlide(slide, analyzePPTXSlide(slide, 2), 2, "Enterprise Collaboration Platform", true, &imageBudget)
+	if !kept || !normalized.HasImage {
+		t.Fatalf("expected illustrative slide to keep an auto-generated image: %#v", normalized)
+	}
+	if strings.TrimSpace(normalized.ImagePrompt) == "" {
+		t.Fatalf("expected non-empty image prompt: %#v", normalized)
+	}
+	if normalized.ImagePos == "" {
+		t.Fatalf("expected normalized image position: %#v", normalized)
 	}
 }
 
@@ -772,6 +820,36 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	}
 	if len(warnings) == 0 {
 		t.Fatalf("warnings = %#v, want normalization warnings", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_KeepsMultipleImagesForIllustrativeDeck(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Enterprise Collaboration Platform Overview",
+		"slides":[
+			{"title":"Enterprise Collaboration Platform Overview","layout":"title","subtitle":"Professional customer-facing overview","isTitle":true,"hasImage":true,"imagePrompt":"A premium enterprise collaboration hero visual, modern office team, elegant product ambience","imagePos":"background"},
+			{"title":"Key Takeaways","role":"summary","layout":"content","sections":[{"heading":"Unified Work","detail":"Bring messages, documents, approvals, and follow-up into one flow"},{"heading":"Visible ROI","detail":"Anchor the story in cycle time, on-time work, and reuse metrics"},{"heading":"Safe Rollout","detail":"Move from pilot to scale with governance and adoption checkpoints"}]},
+			{"title":"Core Product Capabilities","role":"detail","layout":"content","sections":[{"heading":"Shared Workspace","detail":"Coordinate teams in one execution surface"},{"heading":"Automation","detail":"Trigger workflows and reminders automatically"},{"heading":"Governance","detail":"Control access and audit trails at enterprise depth"}],"hasImage":true,"imagePrompt":"A polished SaaS product interface showing collaboration, approvals, and workflow orchestration","imagePos":"right"},
+			{"title":"Customer Workflow Scenarios","role":"detail","layout":"content","points":["Sales and delivery align on customer requirements in one workspace","Finance and management approve pricing and contracts without switching tools","Project teams reuse templates and operational playbooks across departments"],"hasImage":true,"imagePrompt":"A realistic cross-functional customer workflow scene with multiple teams collaborating around a digital workspace","imagePos":"top"},
+			{"title":"Rollout Path","role":"action","layout":"content","sections":[{"heading":"2-Week Discovery","detail":"Confirm pilot scope and owner team"},{"heading":"8-Week Pilot","detail":"Launch high-frequency scenarios and train admins"},{"heading":"Review Gate","detail":"Decide scale-up from adoption and cycle-time proof"}]}
+		]
+	}`
+
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Enterprise Collaboration Platform Overview", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if llm.imageCalls != 3 {
+		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
+	}
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 3 {
+		t.Fatalf("image count = %d, want 3", got)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
 	}
 }
 
