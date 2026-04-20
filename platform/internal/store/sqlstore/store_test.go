@@ -184,3 +184,108 @@ func TestAddCreditBalanceToAPIKeyEnablesHostedEntitlement(t *testing.T) {
 	require.NotNil(t, updated.DefaultRuntimeMode)
 	require.Equal(t, "hosted", *updated.DefaultRuntimeMode)
 }
+
+func TestFindAPIKeyByHashTreatsDisabledOwnerAsDisabledKey(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:find_api_key_by_hash_treats_disabled_owner_as_disabled_key?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}))
+
+	store := NewWithDB(db)
+	user := &model.User{
+		GoogleSub:  "google-sub-1",
+		Email:      "demo@example.com",
+		Name:       "Demo User",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusDisabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	quotaTotal := 10
+	key := &model.APIKey{
+		OwnerUserID: &user.ID,
+		KeyHash:     "hash-owner-disabled",
+		KeyPrefix:   "cop_live_disabled",
+		Status:      model.APIKeyStatusActive,
+		PlanName:    "Starter",
+		QuotaTotal:  &quotaTotal,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	saved, err := store.FindAPIKeyByHash(context.Background(), key.KeyHash)
+	require.NoError(t, err)
+	require.NotNil(t, saved)
+	require.Equal(t, model.APIKeyStatusDisabled, saved.Status)
+}
+
+func TestConsumePaidQuotaByHashRejectsDisabledOwner(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:consume_paid_quota_by_hash_rejects_disabled_owner?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}))
+
+	store := NewWithDB(db)
+	user := &model.User{
+		GoogleSub:  "google-sub-1",
+		Email:      "demo@example.com",
+		Name:       "Demo User",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusDisabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	quotaTotal := 10
+	key := &model.APIKey{
+		OwnerUserID: &user.ID,
+		KeyHash:     "hash-owner-disabled",
+		KeyPrefix:   "cop_live_disabled",
+		Status:      model.APIKeyStatusActive,
+		PlanName:    "Starter",
+		QuotaTotal:  &quotaTotal,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	_, err = store.ConsumePaidQuotaByHash(context.Background(), key.KeyHash)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "api key is disabled")
+
+	var saved model.APIKey
+	require.NoError(t, db.First(&saved, key.ID).Error)
+	require.Equal(t, 0, saved.QuotaUsed)
+}
+
+func TestReserveCreditsByHashRejectsDisabledOwner(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:reserve_credits_by_hash_rejects_disabled_owner?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}))
+
+	store := NewWithDB(db)
+	user := &model.User{
+		GoogleSub:  "google-sub-1",
+		Email:      "demo@example.com",
+		Name:       "Demo User",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusDisabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	defaultRuntimeMode := "hosted"
+	key := &model.APIKey{
+		OwnerUserID:        &user.ID,
+		KeyHash:            "hash-hosted-disabled",
+		KeyPrefix:          "cop_live_hosted",
+		Status:             model.APIKeyStatusActive,
+		PlanName:           "Starter",
+		AllowedModes:       "hybrid",
+		HostedEnabled:      true,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+		CreditBalance:      20,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	_, err = store.ReserveCreditsByHash(context.Background(), key.KeyHash, 5)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "api key is disabled")
+
+	var saved model.APIKey
+	require.NoError(t, db.First(&saved, key.ID).Error)
+	require.Equal(t, 0, saved.CreditReserved)
+}

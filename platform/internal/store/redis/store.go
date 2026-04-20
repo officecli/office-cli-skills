@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
@@ -86,4 +88,63 @@ func (s *Store) LoadNamespacedSession(ctx context.Context, namespace, sessionID 
 
 func (s *Store) DeleteNamespacedSession(ctx context.Context, namespace, sessionID string) error {
 	return s.client.Del(ctx, fmt.Sprintf("session:%s:%s", namespace, sessionID)).Err()
+}
+
+func (s *Store) AddUserNamespacedSession(ctx context.Context, namespace string, userID uint64, sessionID string, ttl time.Duration) error {
+	if userID == 0 || namespace == "" || sessionID == "" {
+		return nil
+	}
+	key := namespacedUserSessionIndexKey(namespace, userID)
+	pipe := s.client.TxPipeline()
+	pipe.SAdd(ctx, key, sessionID)
+	if ttl > 0 {
+		pipe.Expire(ctx, key, ttl)
+	}
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *Store) RemoveUserNamespacedSession(ctx context.Context, namespace string, userID uint64, sessionID string) error {
+	if userID == 0 || namespace == "" || sessionID == "" {
+		return nil
+	}
+	key := namespacedUserSessionIndexKey(namespace, userID)
+	pipe := s.client.TxPipeline()
+	pipe.SRem(ctx, key, sessionID)
+	pipe.SCard(ctx, key)
+	cmds, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return err
+	}
+	if len(cmds) > 1 {
+		if cardCmd, ok := cmds[1].(*redis.IntCmd); ok && cardCmd.Val() == 0 {
+			return s.client.Del(ctx, key).Err()
+		}
+	}
+	return nil
+}
+
+func (s *Store) DeleteUserNamespacedSessions(ctx context.Context, namespace string, userID uint64) error {
+	if userID == 0 || namespace == "" {
+		return nil
+	}
+	indexKey := namespacedUserSessionIndexKey(namespace, userID)
+	sessionIDs, err := s.client.SMembers(ctx, indexKey).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+	keys := make([]string, 0, len(sessionIDs)+1)
+	for _, sessionID := range sessionIDs {
+		sessionID = strings.TrimSpace(sessionID)
+		if sessionID == "" {
+			continue
+		}
+		keys = append(keys, fmt.Sprintf("session:%s:%s", namespace, sessionID))
+	}
+	keys = append(keys, indexKey)
+	return s.client.Del(ctx, keys...).Err()
+}
+
+func namespacedUserSessionIndexKey(namespace string, userID uint64) string {
+	return "session_index:" + namespace + ":user:" + strconv.FormatUint(userID, 10)
 }

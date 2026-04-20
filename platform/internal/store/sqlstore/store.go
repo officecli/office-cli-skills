@@ -130,7 +130,7 @@ func (s *Store) FindAPIKeyByHash(ctx context.Context, hash string) (*model.APIKe
 		}
 		return nil, err
 	}
-	return withRemaining(key), nil
+	return s.withEffectiveAPIKeyStatus(ctx, key)
 }
 
 func (s *Store) FindAPIKeyByID(ctx context.Context, id uint64) (*model.APIKey, error) {
@@ -312,6 +312,19 @@ func (s *Store) ConsumePaidQuotaByHash(ctx context.Context, hash string) (*model
 		tx.Rollback()
 		return nil, err
 	}
+	if key.Status != model.APIKeyStatusActive {
+		tx.Rollback()
+		return nil, fmt.Errorf("api key is disabled")
+	}
+	disabled, err := ownerUserDisabledTx(tx, key.OwnerUserID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if disabled {
+		tx.Rollback()
+		return nil, fmt.Errorf("api key is disabled")
+	}
 	if key.QuotaTotal != nil && key.PaidQuotaRemaining() <= 0 {
 		tx.Rollback()
 		return nil, fmt.Errorf("paid quota exhausted")
@@ -397,6 +410,19 @@ func (s *Store) ReserveCreditsByHash(ctx context.Context, hash string, credits i
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("key_hash = ?", hash).First(&key).Error; err != nil {
 		tx.Rollback()
 		return nil, err
+	}
+	if key.Status != model.APIKeyStatusActive {
+		tx.Rollback()
+		return nil, fmt.Errorf("api key is disabled")
+	}
+	disabled, err := ownerUserDisabledTx(tx, key.OwnerUserID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if disabled {
+		tx.Rollback()
+		return nil, fmt.Errorf("api key is disabled")
 	}
 	if key.AvailableCredits() < credits {
 		tx.Rollback()
@@ -878,6 +904,13 @@ func (s *Store) UpdateUser(ctx context.Context, id uint64, values map[string]any
 	return s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(values).Error
 }
 
+func (s *Store) DisableAPIKeysByOwnerUserID(ctx context.Context, userID uint64) error {
+	return s.db.WithContext(ctx).
+		Model(&model.APIKey{}).
+		Where("owner_user_id = ? AND status <> ?", userID, model.APIKeyStatusDisabled).
+		Update("status", model.APIKeyStatusDisabled).Error
+}
+
 func (s *Store) GetOrCreateStripeCustomer(ctx context.Context, userID uint64, customerID string) (*model.StripeCustomer, error) {
 	var existing model.StripeCustomer
 	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&existing).Error
@@ -1246,6 +1279,38 @@ func withRemaining(key model.APIKey) *model.APIKey {
 		key.QuotaRemaining = &remaining
 	}
 	return &key
+}
+
+func (s *Store) withEffectiveAPIKeyStatus(ctx context.Context, key model.APIKey) (*model.APIKey, error) {
+	if key.OwnerUserID == nil {
+		return withRemaining(key), nil
+	}
+	disabled, err := ownerUserDisabledWithDB(s.db.WithContext(ctx), *key.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if disabled {
+		key.Status = model.APIKeyStatusDisabled
+	}
+	return withRemaining(key), nil
+}
+
+func ownerUserDisabledTx(tx *gorm.DB, ownerUserID *uint64) (bool, error) {
+	if ownerUserID == nil || *ownerUserID == 0 {
+		return false, nil
+	}
+	return ownerUserDisabledWithDB(tx, *ownerUserID)
+}
+
+func ownerUserDisabledWithDB(db *gorm.DB, userID uint64) (bool, error) {
+	var user model.User
+	if err := db.Select("status").First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return true, nil
+		}
+		return false, err
+	}
+	return user.Status == model.UserStatusDisabled, nil
 }
 
 func JSONString(v any) string {

@@ -35,6 +35,9 @@ type SessionStore interface {
 	SaveNamespacedSession(ctx context.Context, namespace, sessionID string, payload any, ttl time.Duration) error
 	LoadNamespacedSession(ctx context.Context, namespace, sessionID string, dest any) (bool, error)
 	DeleteNamespacedSession(ctx context.Context, namespace, sessionID string) error
+	AddUserNamespacedSession(ctx context.Context, namespace string, userID uint64, sessionID string, ttl time.Duration) error
+	RemoveUserNamespacedSession(ctx context.Context, namespace string, userID uint64, sessionID string) error
+	DeleteUserNamespacedSessions(ctx context.Context, namespace string, userID uint64) error
 }
 
 type ReferralRegistrar interface {
@@ -175,8 +178,13 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 	if err := s.sessions.SaveNamespacedSession(ctx, "app", sessionID, session, s.sessionTTL); err != nil {
 		return nil, "", "", err
 	}
+	if err := s.sessions.AddUserNamespacedSession(ctx, "app", user.ID, sessionID, s.sessionTTL); err != nil {
+		_ = s.sessions.DeleteNamespacedSession(ctx, "app", sessionID)
+		return nil, "", "", err
+	}
 	rawCookie, err := s.codec.Encode(sessionID)
 	if err != nil {
+		_ = s.removeAppSession(ctx, session)
 		return nil, "", "", err
 	}
 	returnTo := normalizeReturnTo(payload["return_to"])
@@ -190,8 +198,22 @@ func (s *Service) ResolveSession(raw string) (*SessionPayload, error) {
 	}
 	var payload SessionPayload
 	ok, err := s.sessions.LoadNamespacedSession(context.Background(), "app", sessionID, &payload)
-	if err != nil || !ok {
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("app session not found")
+	}
+	if s.users == nil {
+		return &payload, nil
+	}
+	user, err := s.users.GetUserByID(context.Background(), payload.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.Status == model.UserStatusDisabled {
+		_ = s.removeAppSession(context.Background(), payload)
+		return nil, fmt.Errorf("app session user is disabled")
 	}
 	return &payload, nil
 }
@@ -201,6 +223,14 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 	if err != nil {
 		return err
 	}
+	var payload SessionPayload
+	ok, loadErr := s.sessions.LoadNamespacedSession(ctx, "app", sessionID, &payload)
+	if loadErr != nil {
+		return loadErr
+	}
+	if ok {
+		return s.removeAppSession(ctx, payload)
+	}
 	return s.sessions.DeleteNamespacedSession(ctx, "app", sessionID)
 }
 
@@ -209,7 +239,28 @@ func (s *Service) Me(ctx context.Context, raw string) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.users.GetUserByID(ctx, payload.UserID)
+	if payload == nil {
+		return nil, fmt.Errorf("app session not found")
+	}
+	if s.users == nil {
+		return nil, fmt.Errorf("user store is unavailable")
+	}
+	user, err := s.users.GetUserByID(ctx, payload.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.Status == model.UserStatusDisabled {
+		_ = s.removeAppSession(ctx, *payload)
+		return nil, fmt.Errorf("app session user is disabled")
+	}
+	return user, nil
+}
+
+func (s *Service) RevokeUserSessions(ctx context.Context, userID uint64) error {
+	if userID == 0 {
+		return nil
+	}
+	return s.sessions.DeleteUserNamespacedSessions(ctx, "app", userID)
 }
 
 func MarshalAudit(v any) string {
@@ -236,4 +287,11 @@ func (s *Service) writeAuditLog(ctx context.Context, action, targetID string, pa
 		return
 	}
 	_ = logger.CreateAuditLog(ctx, action, "google_account", targetID, MarshalAudit(payload))
+}
+
+func (s *Service) removeAppSession(ctx context.Context, payload SessionPayload) error {
+	if err := s.sessions.DeleteNamespacedSession(ctx, "app", payload.SessionID); err != nil {
+		return err
+	}
+	return s.sessions.RemoveUserNamespacedSession(ctx, "app", payload.UserID, payload.SessionID)
 }

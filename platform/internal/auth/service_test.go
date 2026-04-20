@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -58,14 +59,21 @@ func (f *fakeAuthUserStore) CreateAuditLog(_ context.Context, action, targetType
 }
 
 type fakeSessionStore struct {
-	payloads map[string]any
+	payloads     map[string]any
+	userSessions map[string]map[string]struct{}
 }
 
 func newFakeSessionStore() *fakeSessionStore {
-	return &fakeSessionStore{payloads: map[string]any{}}
+	return &fakeSessionStore{
+		payloads:     map[string]any{},
+		userSessions: map[string]map[string]struct{}{},
+	}
 }
 
 func sessionKey(namespace, sessionID string) string { return namespace + ":" + sessionID }
+func userSessionKey(namespace string, userID uint64) string {
+	return namespace + ":" + strconv.FormatUint(userID, 10)
+}
 
 func (f *fakeSessionStore) SaveNamespacedSession(_ context.Context, namespace, sessionID string, payload any, _ time.Duration) error {
 	f.payloads[sessionKey(namespace, sessionID)] = payload
@@ -90,6 +98,33 @@ func (f *fakeSessionStore) LoadNamespacedSession(_ context.Context, namespace, s
 
 func (f *fakeSessionStore) DeleteNamespacedSession(_ context.Context, namespace, sessionID string) error {
 	delete(f.payloads, sessionKey(namespace, sessionID))
+	return nil
+}
+
+func (f *fakeSessionStore) AddUserNamespacedSession(_ context.Context, namespace string, userID uint64, sessionID string, _ time.Duration) error {
+	key := userSessionKey(namespace, userID)
+	if f.userSessions[key] == nil {
+		f.userSessions[key] = map[string]struct{}{}
+	}
+	f.userSessions[key][sessionID] = struct{}{}
+	return nil
+}
+
+func (f *fakeSessionStore) RemoveUserNamespacedSession(_ context.Context, namespace string, userID uint64, sessionID string) error {
+	key := userSessionKey(namespace, userID)
+	delete(f.userSessions[key], sessionID)
+	if len(f.userSessions[key]) == 0 {
+		delete(f.userSessions, key)
+	}
+	return nil
+}
+
+func (f *fakeSessionStore) DeleteUserNamespacedSessions(_ context.Context, namespace string, userID uint64) error {
+	key := userSessionKey(namespace, userID)
+	for sessionID := range f.userSessions[key] {
+		delete(f.payloads, sessionKey(namespace, sessionID))
+	}
+	delete(f.userSessions, key)
 	return nil
 }
 
@@ -327,4 +362,72 @@ func TestHandleCallbackRejectsDisabledUser(t *testing.T) {
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, "demo@example.com", denied.Email)
 	require.Equal(t, "user_disabled", denied.Reason)
+}
+
+func TestHandleCallbackIndexesAppSessionByUser(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/app",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042", Status: model.UserStatusActive}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "demo@example.com", Name: "Demo"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"demo@example.com"},
+	)
+
+	_, rawCookie, _, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+
+	sessionID, err := fakeCookieCodec{}.Decode(rawCookie)
+	require.NoError(t, err)
+	_, ok := sessions.userSessions[userSessionKey("app", 42)][sessionID]
+	require.True(t, ok)
+}
+
+func TestResolveSessionRejectsDisabledUserAndDeletesSession(t *testing.T) {
+	sessions := newFakeSessionStore()
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "app", "session-1", SessionPayload{
+		SessionID: "session-1",
+		UserID:    42,
+		CreatedAt: time.Now().UTC(),
+	}, time.Hour))
+	require.NoError(t, sessions.AddUserNamespacedSession(context.Background(), "app", 42, "session-1", time.Hour))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, Status: model.UserStatusDisabled}}
+	svc := NewService(fakeOAuthProvider{}, users, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil, nil)
+
+	payload, err := svc.ResolveSession("cookie:session-1")
+	require.Error(t, err)
+	require.Nil(t, payload)
+	_, exists := sessions.payloads[sessionKey("app", "session-1")]
+	require.False(t, exists)
+	_, indexed := sessions.userSessions[userSessionKey("app", 42)]
+	require.False(t, indexed)
+}
+
+func TestRevokeUserSessionsDeletesAllIndexedSessions(t *testing.T) {
+	sessions := newFakeSessionStore()
+	for _, sessionID := range []string{"session-1", "session-2"} {
+		require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "app", sessionID, SessionPayload{
+			SessionID: sessionID,
+			UserID:    42,
+			CreatedAt: time.Now().UTC(),
+		}, time.Hour))
+		require.NoError(t, sessions.AddUserNamespacedSession(context.Background(), "app", 42, sessionID, time.Hour))
+	}
+
+	svc := NewService(fakeOAuthProvider{}, &fakeAuthUserStore{user: &model.User{ID: 42, Status: model.UserStatusActive}}, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil, nil)
+
+	require.NoError(t, svc.RevokeUserSessions(context.Background(), 42))
+	require.Empty(t, sessions.payloads)
+	_, indexed := sessions.userSessions[userSessionKey("app", 42)]
+	require.False(t, indexed)
 }

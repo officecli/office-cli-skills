@@ -81,3 +81,89 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	require.NoError(t, db.First(&updated, quota.ID).Error)
 	require.Equal(t, 5, updated.DailyLimit)
 }
+
+func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:update_user_disables_owned_api_keys?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+
+	user := &model.User{
+		GoogleSub:  "user-sub",
+		Email:      "demo@example.com",
+		Name:       "Demo",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusActive,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	otherUserID := uint64(999)
+	activeQuota := 10
+	keys := []model.APIKey{
+		{OwnerUserID: &user.ID, KeyHash: "hash-1", KeyPrefix: "cop_live_1", Status: model.APIKeyStatusActive, PlanName: "Starter", QuotaTotal: &activeQuota},
+		{OwnerUserID: &user.ID, KeyHash: "hash-2", KeyPrefix: "cop_live_2", Status: model.APIKeyStatusDisabled, PlanName: "Starter", QuotaTotal: &activeQuota},
+		{OwnerUserID: &otherUserID, KeyHash: "hash-3", KeyPrefix: "cop_live_3", Status: model.APIKeyStatusActive, PlanName: "Starter", QuotaTotal: &activeQuota},
+	}
+	for i := range keys {
+		require.NoError(t, db.Create(&keys[i]).Error)
+	}
+
+	status := string(model.UserStatusDisabled)
+	require.NoError(t, svc.UpdateUser(context.Background(), user.ID, UpdateUserRequest{Status: &status}))
+
+	savedUser, err := store.GetUserByID(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusDisabled, savedUser.Status)
+
+	var owned []model.APIKey
+	require.NoError(t, db.Where("owner_user_id = ?", user.ID).Order("id asc").Find(&owned).Error)
+	require.Len(t, owned, 2)
+	require.Equal(t, model.APIKeyStatusDisabled, owned[0].Status)
+	require.Equal(t, model.APIKeyStatusDisabled, owned[1].Status)
+
+	var other model.APIKey
+	require.NoError(t, db.Where("key_hash = ?", "hash-3").First(&other).Error)
+	require.Equal(t, model.APIKeyStatusActive, other.Status)
+}
+
+func TestUpdateUserReEnableDoesNotRestoreDisabledAPIKeys(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:update_user_reenable_does_not_restore_disabled_api_keys?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+
+	user := &model.User{
+		GoogleSub:  "user-sub",
+		Email:      "demo@example.com",
+		Name:       "Demo",
+		InviteCode: "invite-000001",
+		Status:     model.UserStatusDisabled,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	quota := 10
+	key := &model.APIKey{
+		OwnerUserID: &user.ID,
+		KeyHash:     "hash-1",
+		KeyPrefix:   "cop_live_1",
+		Status:      model.APIKeyStatusDisabled,
+		PlanName:    "Starter",
+		QuotaTotal:  &quota,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	status := string(model.UserStatusActive)
+	require.NoError(t, svc.UpdateUser(context.Background(), user.ID, UpdateUserRequest{Status: &status}))
+
+	savedUser, err := store.GetUserByID(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.UserStatusActive, savedUser.Status)
+
+	savedKey, err := store.FindAPIKeyByID(context.Background(), key.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.APIKeyStatusDisabled, savedKey.Status)
+}

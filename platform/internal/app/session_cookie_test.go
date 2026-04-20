@@ -180,6 +180,32 @@ func TestRegisterAuthRoutesLogoutClearsCookieWithSameSiteLax(t *testing.T) {
 	}
 }
 
+func TestRegisterAuthRoutesMeRejectsDisabledSessionUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	authSvc := auth.NewService(
+		nil,
+		routeAuthUserStore{user: &model.User{ID: 42, Status: model.UserStatusDisabled}},
+		overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}},
+		"cop_app_session",
+		time.Hour,
+		overviewCookieCodec{},
+		nil,
+		nil,
+	)
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour, AppSessionCookieDomain: ".officecli.io"}, authSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRegisterAuthRoutesLoginPassesInviteCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

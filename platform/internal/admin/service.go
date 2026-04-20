@@ -349,14 +349,24 @@ func (s *Service) ListUsers(ctx context.Context) ([]model.User, error) {
 
 func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserRequest) error {
 	updates := map[string]any{}
+	disableUser := false
 	if req.Status != nil {
 		updates["status"] = *req.Status
+		disableUser = model.UserStatus(strings.TrimSpace(*req.Status)) == model.UserStatusDisabled
 	}
 	if len(updates) == 0 {
 		return nil
 	}
 	if err := s.store.UpdateUser(ctx, id, updates); err != nil {
 		return err
+	}
+	if disableUser {
+		if err := s.store.DisableAPIKeysByOwnerUserID(ctx, id); err != nil {
+			return err
+		}
+		if s.redis != nil {
+			_ = s.redis.DeleteUserNamespacedSessions(ctx, "app", id)
+		}
 	}
 	return s.store.CreateAuditLog(ctx, "user.update", "user", fmt.Sprintf("%d", id), sqlstore.JSONString(updates))
 }

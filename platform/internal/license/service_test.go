@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -42,6 +43,9 @@ func (f *fakeAPIKeyStore) ConsumePaidByHash(_ context.Context, _ string) (*model
 	defer f.mu.Unlock()
 	if f.key == nil {
 		return nil, nil
+	}
+	if f.key.Status != model.APIKeyStatusActive {
+		return nil, errors.New("api key is disabled")
 	}
 	if f.key.QuotaTotal != nil && f.key.PaidQuotaRemaining() <= 0 {
 		return nil, ErrPaidQuotaExhausted
@@ -536,6 +540,32 @@ func TestConsumePaidRequiresAPIKey(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "api_key is required")
+	require.Equal(t, 1, apiStore.key.QuotaUsed)
+}
+
+func TestConsumePaidRejectsKeyDisabledAfterCheck(t *testing.T) {
+	quotaTotal := 3
+	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
+	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-paid", "generate")
+	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
+	token.RequestID = "req-disabled-after-check"
+	resignTestCommitToken(t, svc, token)
+
+	apiStore.mu.Lock()
+	apiStore.key.Status = model.APIKeyStatusDisabled
+	apiStore.mu.Unlock()
+
+	_, err := svc.Consume(context.Background(), ConsumeRequest{
+		FingerprintHash: "fp-paid",
+		RequestID:       "req-disabled-after-check",
+		UsageType:       "generate",
+		AccessMode:      model.AccessModePaid,
+		APIKey:          "demo",
+		CommitToken:     token,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "disabled")
 	require.Equal(t, 1, apiStore.key.QuotaUsed)
 }
 

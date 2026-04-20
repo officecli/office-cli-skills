@@ -136,6 +136,26 @@ func TestAuthorizeAcceptsPaidQuotaKey(t *testing.T) {
 	require.NotNil(t, key)
 }
 
+func TestAuthorizeRejectsDisabledKey(t *testing.T) {
+	quotaTotal := 100
+	svc := NewService(&fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:            1,
+			Status:        model.APIKeyStatusDisabled,
+			PlanName:      "Growth",
+			KeyPrefix:     "cop_paid",
+			AllowedModes:  "external_only",
+			HostedEnabled: false,
+			QuotaTotal:    &quotaTotal,
+		},
+	}, &fakeObjectStore{}, &fakeFileMetaStore{}, &fakePreviewShareStore{}, Config{HashSalt: "salt"})
+
+	key, err := svc.authorize(context.Background(), "Bearer demo")
+	require.Error(t, err)
+	require.Nil(t, key)
+	require.Contains(t, err.Error(), "disabled")
+}
+
 func TestPublishCreatesLocalPreviewShare(t *testing.T) {
 	quotaTotal := 100
 	apiKeys := &fakeAPIKeyStore{

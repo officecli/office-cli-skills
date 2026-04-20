@@ -84,6 +84,30 @@ func (b overviewRouteBilling) Pricing() []model.PricingPack {
 	return b.pricing
 }
 
+type routeAuthUserStore struct {
+	user *model.User
+}
+
+func (s routeAuthUserStore) SaveGoogleUser(_ context.Context, googleSub, email, name string, avatarURL *string) (*model.User, error) {
+	if s.user == nil {
+		return nil, nil
+	}
+	copied := *s.user
+	copied.GoogleSub = googleSub
+	copied.Email = email
+	copied.Name = name
+	copied.AvatarURL = avatarURL
+	return &copied, nil
+}
+
+func (s routeAuthUserStore) GetUserByID(_ context.Context, id uint64) (*model.User, error) {
+	if s.user == nil || s.user.ID != id {
+		return nil, nil
+	}
+	copied := *s.user
+	return &copied, nil
+}
+
 type overviewSessionStore struct {
 	payload auth.SessionPayload
 }
@@ -105,6 +129,18 @@ func (s overviewSessionStore) LoadNamespacedSession(_ context.Context, namespace
 }
 
 func (s overviewSessionStore) DeleteNamespacedSession(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (s overviewSessionStore) AddUserNamespacedSession(_ context.Context, _ string, _ uint64, _ string, _ time.Duration) error {
+	return nil
+}
+
+func (s overviewSessionStore) RemoveUserNamespacedSession(_ context.Context, _ string, _ uint64, _ string) error {
+	return nil
+}
+
+func (s overviewSessionStore) DeleteUserNamespacedSessions(_ context.Context, _ string, _ uint64) error {
 	return nil
 }
 
@@ -234,6 +270,37 @@ func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testi
 	}
 	if len(body.Data.PaidExternalQuota.Keys) != 2 || len(body.Data.RewardQuota.Grants) != 1 {
 		t.Fatalf("summary detail = %+v", body.Data)
+	}
+}
+
+func TestRegisterAppRoutesRejectsDisabledSessionUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	store := &overviewRouteStore{}
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
+	authSvc := auth.NewService(
+		nil,
+		routeAuthUserStore{user: &model.User{ID: 42, Status: model.UserStatusDisabled}},
+		overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}},
+		"cop_app_session",
+		time.Hour,
+		overviewCookieCodec{},
+		nil,
+		nil,
+	)
+
+	router := gin.New()
+	api := router.Group("/api")
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/app/overview", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
 
