@@ -98,7 +98,7 @@ func LoadConfig() (Config, error) {
 		AppSessionCookieDomain:       defaultAppSessionCookieDomain(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
 		AppSessionTTL:                mustEnvDuration("APP_SESSION_TTL", 24*time.Hour),
 		LicenseProofSeed:             mustEnvDefault("LICENSE_PROOF_SEED", "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"),
-		LicenseProofTTL:              mustEnvDuration("LICENSE_PROOF_TTL", 2*time.Minute),
+		LicenseProofTTL:              mustEnvDuration("LICENSE_PROOF_TTL", 15*time.Minute),
 		GoogleClientID:               os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),

@@ -146,6 +146,96 @@ func (fakeAppLLMClient) GenerateImage(_ context.Context, _ engine.ImageGeneratio
 	return nil, nil
 }
 
+type sequencedAppLLMClient struct {
+	mu                  sync.Mutex
+	structuredResponses []string
+	jsonResponses       []string
+}
+
+func (f *sequencedAppLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (f *sequencedAppLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.jsonResponses) == 0 {
+		return "", fmt.Errorf("unexpected CompleteJSON call")
+	}
+	response := f.jsonResponses[0]
+	f.jsonResponses = f.jsonResponses[1:]
+	return response, nil
+}
+
+func (f *sequencedAppLLMClient) CompleteStructured(_ context.Context, _ engine.StructuredCompletionRequest) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.structuredResponses) == 0 {
+		return "", fmt.Errorf("unexpected CompleteStructured call")
+	}
+	response := f.structuredResponses[0]
+	f.structuredResponses = f.structuredResponses[1:]
+	return response, nil
+}
+
+func (f *sequencedAppLLMClient) GenerateImage(_ context.Context, _ engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	return nil, nil
+}
+
+type recordingPrompter struct {
+	events    *[]string
+	optionIDs []string
+	answers   []string
+}
+
+func (p *recordingPrompter) Ask(_ string, _ []string, _ bool) (string, string, error) {
+	if p.events != nil {
+		*p.events = append(*p.events, "prompt")
+	}
+	optionID := "1"
+	if len(p.optionIDs) > 0 {
+		optionID = p.optionIDs[0]
+		p.optionIDs = p.optionIDs[1:]
+	}
+	answer := ""
+	if len(p.answers) > 0 {
+		answer = p.answers[0]
+		p.answers = p.answers[1:]
+	}
+	return optionID, answer, nil
+}
+
+type orderedLicenseManager struct {
+	events      *[]string
+	checkResult *LicenseCheckResult
+	checkErr    error
+}
+
+func (m *orderedLicenseManager) Check(_ context.Context, _ LicenseCheckRequest) (*LicenseCheckResult, error) {
+	if m.events != nil {
+		*m.events = append(*m.events, "check")
+	}
+	if m.checkErr != nil {
+		return nil, m.checkErr
+	}
+	if m.checkResult != nil {
+		return m.checkResult, nil
+	}
+	return &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}, nil
+}
+
+func (m *orderedLicenseManager) Consume(_ context.Context, _ UsageCommitToken) (*UsageConsumeResult, error) {
+	if m.events != nil {
+		*m.events = append(*m.events, "consume")
+	}
+	return &UsageConsumeResult{}, nil
+}
+
+type noopProgressController struct{}
+
+func (noopProgressController) Emit(context.Context, engine.ProgressEvent) {}
+func (noopProgressController) Pause(string)                               {}
+
 func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
 }
@@ -1995,6 +2085,100 @@ func TestCheckLicenseOfflineWithPaidKeyRequiresOnlineValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Paid access requires online validation") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExecuteGenerateJob_BestExternalDefersAccessCheckUntilAfterFollowUp(t *testing.T) {
+	events := []string{}
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return &orderedLicenseManager{
+			events:   &events,
+			checkErr: fmt.Errorf("quota exhausted"),
+		}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return &sequencedAppLLMClient{
+			structuredResponses: []string{
+				`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"client","label":"Client or partner","description":"Emphasize value and persuasion.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize process and execution."}]}]}`,
+				`{"plan_markdown":"# Execution Plan\n\n## Summary\n- Lead with client value.\n\n## Framework Blueprint\n- Keep the deck concise and persuasive.","execution_prompt":"Generate a concise, persuasive client deck that leads with value and keeps the storyline tight."}`,
+			},
+			jsonResponses: []string{
+				`{"presentationType":"Product introduction deck","targetAudience":"Client or partner","presentationPurpose":"Introduce the product and persuade the audience","pageCount":6,"contentStyle":"Concise and persuasive","visualEffect":"Professional and clean","contentGuideline":"Keep each slide focused on one buyer-relevant point","slideOutline":[{"slideIndex":1,"purpose":"Cover","suggestedLayout":"title","contentFormat":"paragraph","maxItems":1,"contentRequirements":"State the product and audience value","visualSuggestion":"hero"}]}`,
+			},
+		}, nil
+	}
+
+	_, err := app.executeGenerateJob(t.Context(), Config{
+		LLM: LLMConfig{
+			BaseURL: "https://api.example.com/v1",
+			APIKey:  "llm-key",
+			Model:   "gpt-4.1",
+		},
+		License: LicenseConfig{
+			BaseURL: "https://license.example.com/api",
+			APIKey:  "paid-key",
+			Enabled: true,
+		},
+		Publish: disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "minecraft 游戏介绍",
+		Prompt:       "介绍 minecraft 这款游戏",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "best",
+		OutputDir:    t.TempDir(),
+	}, true, noopProgressController{}, &recordingPrompter{
+		events:    &events,
+		optionIDs: []string{"1"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "quota exhausted") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Join(events, ",") != "prompt,check" {
+		t.Fatalf("events = %v", events)
+	}
+}
+
+func TestExecuteGenerateJob_BestHostedChecksAccessBeforeFollowUp(t *testing.T) {
+	events := []string{}
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return &orderedLicenseManager{
+			events:   &events,
+			checkErr: fmt.Errorf("hosted credits exhausted"),
+		}, nil
+	}
+
+	_, err := app.executeGenerateJob(t.Context(), Config{
+		License: LicenseConfig{
+			BaseURL: "https://platform.officecli.io",
+			APIKey:  "paid-key",
+			Enabled: true,
+		},
+		Publish: disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "minecraft 游戏介绍",
+		Prompt:       "介绍 minecraft 这款游戏",
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "best",
+		OutputDir:    t.TempDir(),
+	}, true, noopProgressController{}, &recordingPrompter{
+		events:    &events,
+		optionIDs: []string{"1"},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "hosted credits exhausted") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Join(events, ",") != "check" {
+		t.Fatalf("events = %v", events)
 	}
 }
 

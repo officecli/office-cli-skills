@@ -24,16 +24,28 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
-	emitProgress(ctx, progress, progressStepLicense, "running", "Checking access status")
-	licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
-	if err != nil {
-		emitProgress(ctx, progress, progressStepLicense, "failed", "Access check failed")
-		return GenerateResult{}, err
+	runAccessCheck := func() error {
+		emitProgress(ctx, progress, progressStepLicense, "running", "Checking access status")
+		licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
+		if err != nil {
+			emitProgress(ctx, progress, progressStepLicense, "failed", "Access check failed")
+			return err
+		}
+		emitProgress(ctx, progress, progressStepLicense, "completed", "Access check completed")
+		job.LicenseCheck = licenseCheck
+		return nil
 	}
-	emitProgress(ctx, progress, progressStepLicense, "completed", "Access check completed")
-	job.LicenseCheck = licenseCheck
+	deferAccessCheck := job.RuntimeMode != RuntimeModeHosted && job.Mode == generateengine.ModeBest
+	if !deferAccessCheck {
+		if err := runAccessCheck(); err != nil {
+			return GenerateResult{}, err
+		}
+	}
 
-	var llmClient GeneratorLLMClient
+	var (
+		llmClient GeneratorLLMClient
+		err       error
+	)
 	if job.RuntimeMode == RuntimeModeHosted {
 		llmClient, err = newHostedLLMClient(cfg.License, job)
 		if err != nil {
@@ -55,6 +67,11 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 		job, err = a.completeBestModeWithPrompter(ctx, llmClient, prompter, job, progress)
 		if err != nil {
+			return GenerateResult{}, err
+		}
+	}
+	if deferAccessCheck {
+		if err := runAccessCheck(); err != nil {
 			return GenerateResult{}, err
 		}
 	}

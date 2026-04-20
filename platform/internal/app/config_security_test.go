@@ -33,6 +33,19 @@ func TestLoadConfigDefaultsToDevelopment(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDefaultsLicenseProofTTLToFifteenMinutes(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("LICENSE_PROOF_TTL", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.LicenseProofTTL != 15*time.Minute {
+		t.Fatalf("LicenseProofTTL = %v", cfg.LicenseProofTTL)
+	}
+}
+
 func TestLoadConfigProductionRejectsDefaultAdminPassword(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	setRequiredProductionEnv(t)
