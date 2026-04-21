@@ -74,9 +74,9 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 
 	switch params.DocumentType {
 	case engine.DocumentTypeDOCX:
-		return s.generateDOCX(ctx, envelope.Prompt, params.Topic, target, meta, params.LocalPreview)
+		return s.generateDOCX(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypeXLSX:
-		return s.generateXLSX(ctx, envelope.Prompt, params.Topic, target, meta, params.LocalPreview)
+		return s.generateXLSX(ctx, envelope.Prompt, params.Topic, target, meta)
 	case engine.DocumentTypeReport:
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
@@ -86,7 +86,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	}
 }
 
-func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, localPreview bool) (*GeneratedArtifact, error) {
+func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting DOCX content from the LLM")
 	response, err := s.llm.CompleteJSON(ctx, []engine.LLMMessage{{Role: "user", Content: generateengine.BuildDOCXPrompt(prompt, target)}})
 	if err != nil {
@@ -95,7 +95,7 @@ func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target
 	}
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received DOCX structure output")
 	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling the DOCX file")
-	fileBytes, fileName, previewHTML, previewJSON, err := generateengine.BuildDOCXArtifactFromJSON(response, fallbackDescription(topic, prompt), target.Style, localPreview)
+	fileBytes, fileName, err := generateengine.BuildDOCXFromJSON(response, fallbackDescription(topic, prompt))
 	if err != nil {
 		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "DOCX assembly failed")
 		return nil, fmt.Errorf("document assembly failed: %w", err)
@@ -106,12 +106,10 @@ func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target
 		DocumentType: string(engine.DocumentTypeDOCX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-		PreviewHTML:  previewHTML,
-		PreviewJSON:  previewJSON,
 	}, nil
 }
 
-func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, localPreview bool) (*GeneratedArtifact, error) {
+func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting XLSX content from the LLM")
 	response, err := s.llm.CompleteJSON(ctx, []engine.LLMMessage{{Role: "user", Content: generateengine.BuildXLSXPrompt(prompt, target)}})
 	if err != nil {
@@ -120,7 +118,7 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 	}
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received XLSX structure output")
 	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling the XLSX file")
-	fileBytes, fileName, previewHTML, previewJSON, err := generateengine.BuildXLSXArtifactFromJSON(response, fallbackDescription(topic, prompt), target.Style, localPreview)
+	fileBytes, fileName, err := generateengine.BuildXLSXFromJSON(response, fallbackDescription(topic, prompt))
 	if err != nil {
 		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "XLSX assembly failed")
 		return nil, fmt.Errorf("document assembly failed: %w", err)
@@ -131,8 +129,6 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 		DocumentType: string(engine.DocumentTypeXLSX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-		PreviewHTML:  previewHTML,
-		PreviewJSON:  previewJSON,
 	}, nil
 }
 
@@ -291,29 +287,11 @@ const (
 	pptxArchetypeTraining pptxArchetype = "training"
 )
 
-type pptxSlideRole string
-
-const (
-	pptxSlideRoleCover    pptxSlideRole = "cover"
-	pptxSlideRoleSummary  pptxSlideRole = "summary"
-	pptxSlideRoleEvidence pptxSlideRole = "evidence"
-	pptxSlideRoleDetail   pptxSlideRole = "detail"
-	pptxSlideRoleAction   pptxSlideRole = "action"
-)
-
-type pptxSlideSignals struct {
-	Role         pptxSlideRole
-	WantsChart   bool
-	WantsMetrics bool
-	WantsImage   bool
-}
-
 const pptxStructuredSchema = `{
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "title": { "type": "string" },
-    "subtitle": { "type": "string" },
     "stylePreset": { "type": "string" },
     "theme": {
       "anyOf": [
@@ -321,30 +299,26 @@ const pptxStructuredSchema = `{
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "preset": { "type": "string" },
             "primaryColor": { "type": "string" },
             "accentColor": { "type": "string" },
-            "accentSoft": { "type": "string" },
-            "backgroundColor": { "type": "string" },
-            "surfaceColor": { "type": "string" },
-            "borderColor": { "type": "string" },
+            "highlightColor": { "type": "string" },
+            "backgroundType": { "type": "string" },
+            "bgColor1": { "type": "string" },
+            "bgColor2": { "type": "string" },
             "textColor": { "type": "string" },
-            "mutedColor": { "type": "string" },
-            "titleColor": { "type": "string" },
+            "titleTextColor": { "type": "string" },
             "fontFamily": { "type": "string" },
             "eaFontFamily": { "type": "string" }
           },
           "required": [
-            "preset",
             "primaryColor",
             "accentColor",
-            "accentSoft",
-            "backgroundColor",
-            "surfaceColor",
-            "borderColor",
+            "highlightColor",
+            "backgroundType",
+            "bgColor1",
+            "bgColor2",
             "textColor",
-            "mutedColor",
-            "titleColor",
+            "titleTextColor",
             "fontFamily",
             "eaFontFamily"
           ]
@@ -359,174 +333,154 @@ const pptxStructuredSchema = `{
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "role": { "type": "string" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "isTitle": { "type": "boolean" },
           "layout": { "type": "string" },
           "variant": { "type": "string" },
-          "headline": { "type": "string" },
-          "takeaway": { "type": "string" },
-          "blocks": {
+          "narrativeRole": { "type": "string" },
+          "sectionIndex": { "type": "integer" },
+          "sectionTitle": { "type": "string" },
+          "subtitle": { "type": "string" },
+          "points": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "sections": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "type": { "type": "string" },
-                "text": { "type": "string" },
-                "items": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "sections": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "heading": { "type": "string" },
-                      "detail": { "type": "string" }
-                    },
-                    "required": ["heading", "detail"]
-                  }
-                },
-                "metrics": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "label": { "type": "string" },
-                      "value": { "type": "string" },
-                      "note": { "type": "string" }
-                    },
-                    "required": ["label", "value", "note"]
-                  }
-                },
-                "chart": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "title": { "type": "string" },
-                        "type": { "type": "string" },
-                        "categories": {
-                          "type": "array",
-                          "items": { "type": "string" }
-                        },
-                        "values": {
-                          "type": "array",
-                          "items": { "type": "number" }
-                        }
-                      },
-                      "required": ["title", "type", "categories", "values"]
-                    },
-                    { "type": "null" }
-                  ]
-                }
+                "heading": { "type": "string" },
+                "detail": { "type": "string" }
               },
-              "required": ["type", "text", "items", "sections", "metrics", "chart"]
+              "required": ["heading", "detail"]
             }
           },
-          "visual": {
+          "chart": {
             "anyOf": [
               {
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "kind": { "type": "string" },
-                  "prompt": { "type": "string" },
-                  "position": {
-                    "type": "string",
-                    "enum": ["", "right", "left", "background", "center", "top", "bottom", "diagonal"]
+                  "title": { "type": "string" },
+                  "type": { "type": "string" },
+                  "categories": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": { "type": "number" }
                   }
                 },
-                "required": ["kind", "prompt", "position"]
+                "required": ["title", "type", "categories", "values"]
               },
               { "type": "null" }
             ]
           },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string" },
+                "value": { "type": "string" },
+                "note": { "type": "string" }
+              },
+              "required": ["label", "value", "note"]
+            }
+          },
           "source": { "type": "string" },
           "bgColor": { "type": "string" },
-          "bgColor2": { "type": "string" }
+          "bgColor2": { "type": "string" },
+          "hasImage": { "type": "boolean" },
+          "imagePrompt": { "type": "string" },
+          "imagePos": {
+            "type": "string",
+            "enum": ["", "right", "left", "background", "center", "top", "bottom", "diagonal"]
+          },
+          "visuals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string" },
+                "prompt": { "type": "string" },
+                "caption": { "type": "string" }
+              },
+              "required": ["label", "prompt", "caption"]
+            }
+          }
         },
         "required": [
-          "role",
+          "title",
+          "content",
+          "isTitle",
           "layout",
-          "headline",
-          "takeaway",
-          "blocks",
-          "visual",
+          "variant",
+          "narrativeRole",
+          "sectionIndex",
+          "sectionTitle",
+          "subtitle",
+          "points",
+          "sections",
+          "chart",
+          "metrics",
           "source",
           "bgColor",
-          "bgColor2"
+          "bgColor2",
+          "hasImage",
+          "imagePrompt",
+          "imagePos",
+          "visuals"
         ]
       }
     }
   },
-  "required": ["title", "subtitle", "stylePreset", "theme", "slides"]
+  "required": ["title", "stylePreset", "theme", "slides"]
 }`
 
 func BuildPPTXPrompt(description string, target generateengine.PromptTarget, enableImages bool) string {
 	archetype := detectPPTXArchetype(description, "")
 	presetHint := suggestStylePreset(target.Style, archetype)
 	slideExample := `    {
-      "role": "summary",
+      "title": "Section Title",
       "layout": "content",
-      "variant": "sections-grid",
-      "headline": "Key Takeaways",
-      "takeaway": "Lead with the conclusion",
-      "blocks": [
-        {
-          "type": "sections",
-          "text": "",
-          "items": [],
-          "sections": [
-            {"heading": "Signal", "detail": "What changed most"},
-            {"heading": "Impact", "detail": "Why it matters now"},
-            {"heading": "Decision", "detail": "What should happen next"}
-          ],
-          "metrics": [],
-          "chart": null
-        }
-      ],
-      "visual": null,
-      "source": "",
-      "bgColor": "",
-      "bgColor2": ""
+      "variant": "bullets",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "One-sentence takeaway",
+      "points": ["Point 1", "Point 2", "Point 3"],
+      "source": "Optional data source"
     }`
-	imageRules := "- Set visual to null when the slide does not need an image."
+	imageRules := "- Do not output the image fields hasImage, imagePrompt, or imagePos."
 	if enableImages {
 		slideExample = `    {
-      "role": "detail",
-      "layout": "content",
-      "variant": "image-right",
-      "headline": "Section Title",
-      "takeaway": "One-sentence takeaway",
-      "blocks": [
-        {
-          "type": "bullets",
-          "text": "",
-          "items": ["Point 1", "Point 2", "Point 3"],
-          "sections": [],
-          "metrics": [],
-          "chart": null
-        }
+      "title": "Section Title",
+      "layout": "gallery",
+      "variant": "gallery",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "One-sentence takeaway",
+      "points": ["Point 1", "Point 2"],
+      "visuals": [
+        {"label": "Hero visual", "prompt": "A concrete visual prompt that can be sent directly to an image model", "caption": "Short caption"}
       ],
-      "visual": {
-        "kind": "image",
-        "prompt": "A concrete visual prompt that can be sent directly to an image model",
-        "position": "right"
-      },
-      "source": "",
-      "bgColor": "",
-      "bgColor2": ""
+      "source": "Optional data source"
     }`
-		imageRules = `- Use images intentionally, not just decoratively. In a 6-8 slide deck, usually keep 2-4 image-supported slides when the topic includes product, scenario, workflow, interface, training, game, or customer experience storytelling.
-- On image slides, use visual.kind=image and visual.position must be one of right, left, background, center, top, bottom, or diagonal.
-- visual.prompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
-- Do not add images to chart or dashboard layouts.
-- Prefer images for title-cover hero visuals, product UI, feature walkthroughs, gameplay moments, usage scenarios, customer scenes, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, pricing table, or action recommendation slides.
-- On image slides, keep text subordinate to the visual but still substantive: usually 2-4 solid points or 2-3 short sections, not slogans.`
+		imageRules = `- Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide in the whole deck.
+- On hero-image slides, only output hasImage, imagePrompt, and imagePos. imagePos must be one of right, left, background, center, top, bottom, or diagonal.
+- imagePrompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
+- On gallery slides, use visuals with 2-4 concrete prompts and short captions. Do not also set hasImage on the same slide.
+- Do not add images to chart, dashboard, toc, or closing layouts.
+- Prefer images for title-cover hero visuals, product UI, usage scenarios, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, or action recommendation slides.
+- On image slides, keep only 1-2 short points so text remains secondary to the visual.`
 	}
 	outlineRules := buildArchetypePromptRules(archetype)
 	return fmt.Sprintf(`Generate a JSON structure for a PPT presentation based on the following request.
@@ -534,66 +488,52 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 Request: %s
 %s
 
-Build the deck in a layout-first way. Decide the deck sequence first, then assign one proven slide pattern to each page before writing content.
-
 Return JSON only. Do not add any extra commentary:
 {
   "title": "Presentation Title",
-  "subtitle": "Overall deck framing",
   "stylePreset": "%s",
   "theme": {
-    "preset": "analysis",
-    "primaryColor": "1D4ED8",
-    "accentColor": "0F766E",
-    "accentSoft": "D1FAE5",
-    "backgroundColor": "F8FAFC",
-    "surfaceColor": "FFFFFF",
-    "borderColor": "DCE4F2",
-    "textColor": "0F172A",
-    "mutedColor": "64748B",
-    "titleColor": "020617",
-    "fontFamily": "Aptos",
-    "eaFontFamily": "Microsoft YaHei"
+    "primaryColor": "1A73E8",
+    "accentColor": "E8710A",
+    "backgroundType": "gradient",
+    "bgColor1": "F0F4FF",
+    "bgColor2": "FFFFFF",
+    "fontFamily": "Noto Sans CJK SC",
+    "eaFontFamily": "Noto Sans CJK SC"
   },
   "slides": [
     {
-      "role": "cover",
+      "title": "Cover Title",
       "layout": "title",
       "variant": "title-center",
-      "headline": "Cover Title",
-      "takeaway": "Subtitle",
-      "blocks": [],
-      "visual": null,
-      "source": "",
-      "bgColor": "",
-      "bgColor2": ""
+      "subtitle": "Subtitle",
+      "isTitle": true
     },
 %s
   ]
 }
 
 Requirements:
-	- Keep the deck to 5-8 slides, usually 6-7.
+	- Keep the deck to 6-10 slides, usually 7-9.
 	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
-	- Use role to make the storyline explicit: cover, summary, evidence, detail, or action.
-	- Use variant to declare the visual pattern. Valid variants are title-center, title-split, sections-grid, feature-grid, pillar-list, point-cards, stat-band, chart-context, comparison, timeline, image-right, bullets, or prose.
-	- Use blocks to separate message types. Valid block types are narrative, bullets, sections, metrics, and chart.
-	- For business decks, slide 2 should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
-	- Prefer a storyline such as cover -> summary -> supporting evidence/capabilities -> detail -> action, but adapt the exact page count and page roles to the prompt instead of forcing a rigid template.
-	- Each slide should express only one core idea. Keep headlines concise. takeaway must be a takeaway sentence for the slide.
-- Use a slide pattern library instead of repeating the same structure. Never use the same variant on two consecutive slides.
-- Prefer conclusion-first business pacing: summary pages use sections-grid or stat-band; capability/scenario pages use feature-grid, pillar-list, or comparison; quantified evidence pages use chart-context or stat-band; closing pages use timeline or sections-grid.
+	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline such as cover -> toc -> chapter -> summary -> supporting evidence/capabilities -> chapter -> action/closing.
+	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
+	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
+	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
-- For comparisons, steps, regions, roles, or training paths, prefer sections blocks with short heading and concise detail.
-- For customer value, business review, market size, or competitive comparison, prefer evidence-based expression with chart or metrics blocks. If reliable numbers are unavailable, use 2-3 structured sections instead of long bullets.
+- toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
+- comparison, timeline, and closing should rely on sections rather than long bullets.
+- For comparisons, steps, regions, roles, or training paths, prefer sections with short heading and concise detail.
+- For customer value, business review, market size, or competitive comparison, prefer evidence-based expression with chart or dashboard. If reliable numbers are unavailable, use 2-3 structured sections instead of long bullets.
 - If the topic is market analysis, industry research, or business review, the deck must include at least one chart or dashboard slide with source or data framing.
 - Action recommendations, rollout plans, release cadence, and training paths must use sections or metrics and show at least two of time, owner, or acceptance criteria.
-- Avoid under-filled slides. Most non-cover content slides should read as 3-5 solid bullets or 3-4 sections with one-sentence detail, not just 1-2 fragmentary phrases.
-- Use at most 4 sections, at most 4 dashboard metrics, and at most 5 chart categories.
+- Keep content slide points to 3-4 concise bullets and avoid repetitive filler.
+- Use at most 3 sections, at most 4 dashboard metrics, and at most 5 chart categories.
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
-- When a chart fits, put it inside a chart block with type, categories, values, and title, plus 2-3 takeaway points in another block when needed.
-- When a dashboard fits, put it inside a metrics block with label, value, and note, plus 2-3 action or takeaway points in another block when needed.
+- When a chart fits, chart may include type, categories, values, and title, plus 2-3 takeaway points.
+- When a dashboard fits, metrics may include label, value, and note, plus 2-3 action or takeaway points.
 - The closing slide must include 2-3 next-step actions with time, owner, or validation criteria.
 - Wording should fit the audience and style. Prefer quantified, conclusion-first language and avoid vague slogans.
 	%s
@@ -602,28 +542,36 @@ Requirements:
 
 func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Parsing the PPTX structure and preparing assets")
-	payload, err := parsePPTXPayload(content, fallback, requestedStyle, enableImages)
-	if err != nil {
+	content = generateengine.RepairUnescapedQuotes(generateengine.ExtractJSON(content))
+
+	var payload pptxPayload
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure parsing failed")
-		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: %w", err)
+		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: parse llm response: %w", err)
 	}
 	if len(payload.Slides) == 0 {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure is empty")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: slides cannot be empty")
 	}
-	warnings := normalizePPTXPayload(payload, fallback, requestedStyle, enableImages)
+	warnings := normalizePPTXPayload(&payload, fallback, requestedStyle, enableImages)
 	if !enableImages {
 		for idx := range payload.Slides {
 			payload.Slides[idx].HasImage = false
 			payload.Slides[idx].ImagePrompt = ""
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			payload.Slides[idx].Visuals = nil
 		}
 	}
 	imageTotal := 0
 	for idx := range payload.Slides {
 		if payload.Slides[idx].HasImage && strings.TrimSpace(payload.Slides[idx].ImagePrompt) != "" {
 			imageTotal++
+		}
+		for visualIdx := range payload.Slides[idx].Visuals {
+			if strings.TrimSpace(payload.Slides[idx].Visuals[visualIdx].Prompt) != "" {
+				imageTotal++
+			}
 		}
 	}
 	imageIndex := 0
@@ -643,6 +591,31 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			if len(warnings) == 0 {
+				warnings = append(warnings, engine.GenerateIssue{
+					Code:    "WARN_PPT_IMAGE_DEGRADED",
+					Message: "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`.",
+					Field:   "slides",
+				})
+			}
+		}
+		for visualIdx := range payload.Slides[idx].Visuals {
+			if llm == nil || strings.TrimSpace(payload.Slides[idx].Visuals[visualIdx].Prompt) == "" {
+				continue
+			}
+			imageIndex++
+			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
+			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
+				Prompt:            payload.Slides[idx].Visuals[visualIdx].Prompt,
+				TargetAspectRatio: 16.0 / 9.0,
+			})
+			if err == nil && image != nil {
+				payload.Slides[idx].Visuals[visualIdx].ImageData = image.Data
+				payload.Slides[idx].Visuals[visualIdx].ImageMIME = image.MIME
+				continue
+			}
+			payload.Slides[idx].Visuals[visualIdx].ImageData = nil
+			payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
 			if len(warnings) == 0 {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
@@ -696,16 +669,17 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		return nil
 	}
 
-	const maxSlides = 8
+	const maxSlides = 10
 	warnings := make([]engine.GenerateIssue, 0, 3)
 	payload.Title = trimRunes(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"), 30)
 	archetype := detectPPTXArchetype(fallback, payload.Title)
 	payload.StylePreset = suggestStylePreset(firstNonEmpty(strings.TrimSpace(payload.StylePreset), strings.TrimSpace(requestedStyle)), archetype)
 	payload.Theme = officegen.MergeThemeWithPreset(payload.Theme, payload.StylePreset)
-	firstSlideWasExplicitCover := len(payload.Slides) > 0 && (payload.Slides[0].IsTitle || strings.EqualFold(strings.TrimSpace(payload.Slides[0].Layout), "title") || normalizePPTXRole(payload.Slides[0].Role) == pptxSlideRoleCover)
 
 	slides := make([]officegen.Slide, 0, len(payload.Slides))
-	imageBudget := computePPTXImageBudget(payload.Slides, strings.TrimSpace(fallback+" "+payload.Title), enableImages)
+	imageBudget := 1
+	galleryBudget := 1
+	visualBudget := 4
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
@@ -713,9 +687,11 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 			slidesTrimmed = true
 			break
 		}
-		signals := analyzePPTXSlide(slide, idx)
-		normalized, imageKept := normalizePPTXSlide(slide, signals, idx, payload.Title, enableImages, &imageBudget)
+		normalized, imageKept, visualsKept := normalizePPTXSlide(slide, idx, payload.Title, enableImages, &imageBudget, &galleryBudget, &visualBudget)
 		if slide.HasImage && !imageKept {
+			imagesAdjusted = true
+		}
+		if len(slide.Visuals) > 0 && visualsKept == 0 {
 			imagesAdjusted = true
 		}
 		if isEmptyNormalizedSlide(normalized) {
@@ -731,18 +707,22 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	if len(slides) == 0 {
 		slides = append(slides, officegen.Slide{
-			Role:     string(pptxSlideRoleCover),
-			Title:    payload.Title,
-			Layout:   "title",
-			IsTitle:  true,
-			Subtitle: fitTextForLayout(strings.TrimSpace(fallback), 28),
+			Title:         payload.Title,
+			Layout:        "title",
+			IsTitle:       true,
+			NarrativeRole: "cover",
+			Subtitle:      fitTextForLayout(strings.TrimSpace(fallback), 28),
 		})
 	}
 
 	slides[0].Layout = "title"
-	slides[0].Role = string(pptxSlideRoleCover)
 	slides[0].Variant = normalizeSlideVariant(slides[0])
 	slides[0].IsTitle = true
+	slides[0].NarrativeRole = "cover"
+	slides[0].HasImage = false
+	slides[0].ImagePrompt = ""
+	slides[0].ImagePos = ""
+	slides[0].Visuals = nil
 	if strings.TrimSpace(slides[0].Title) == "" {
 		slides[0].Title = payload.Title
 	}
@@ -754,20 +734,9 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	slides[0].Metrics = nil
 	slides[0].Chart = nil
 	slides[0].Content = ""
-	if !enableImages || !firstSlideWasExplicitCover || !allowImageForSlide(slides[0]) || strings.TrimSpace(slides[0].ImagePrompt) == "" {
-		slides[0].HasImage = false
-		slides[0].ImagePrompt = ""
-		slides[0].ImagePos = ""
-	} else {
-		slides[0].HasImage = true
-		slides[0].ImagePos = normalizeImagePosition(slides[0].ImagePos)
-	}
 
 	for idx := 1; idx < len(slides); idx++ {
 		slides[idx].IsTitle = false
-		if slideRoleName(slides[idx], idx) == pptxSlideRoleCover {
-			slides[idx].Role = string(pptxSlideRoleDetail)
-		}
 		if slideLayoutName(slides[idx]) == "title" {
 			slides[idx].Layout = "content"
 		}
@@ -778,7 +747,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
 	slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
-	slides = rebalanceAdjacentLayouts(slides)
+	slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
 	if len(slides) > maxSlides {
 		slidesTrimmed = true
 		slides = slides[:maxSlides]
@@ -790,7 +759,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		warnings = append(warnings, engine.GenerateIssue{
 			Code:    "WARN_PPT_SLIDES_TRIMMED",
 			Field:   "slides",
-			Message: "The generated deck exceeded quality limits and was automatically trimmed to 8 slides or fewer.",
+			Message: "The generated deck exceeded quality limits and was automatically trimmed to 10 slides or fewer.",
 		})
 	}
 	if imagesAdjusted {
@@ -803,256 +772,48 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	return warnings
 }
 
-func normalizePPTXSlide(slide officegen.Slide, signals pptxSlideSignals, idx int, deckTitle string, enableImages bool, imageBudget *int) (officegen.Slide, bool) {
-	explicitCover := slide.IsTitle || strings.EqualFold(strings.TrimSpace(slide.Layout), "title") || normalizePPTXRole(slide.Role) == pptxSlideRoleCover
-	slide.Role = string(signals.Role)
+func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enableImages bool, imageBudget, galleryBudget, visualBudget *int) (officegen.Slide, bool, int) {
 	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 22)
 	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 30)
+	slide.SectionTitle = fitTextForLayout(strings.TrimSpace(slide.SectionTitle), 20)
 	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
-	slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
+	slide.NarrativeRole = normalizeNarrativeRole(slide.NarrativeRole)
+	slide.Visuals = normalizeSlideVisuals(slide.Visuals, 4)
 
-	slide.Points = normalizePoints(slide.Points, 5, 48)
-	slide.Sections = normalizeSections(slide.Sections, 4)
-	slide.Metrics = normalizeMetrics(slide.Metrics, 4)
-	slide.Chart = normalizeChart(slide.Chart)
-	slide = applyRoleDrivenSlideNormalization(slide, signals)
-	slide = finalizeSlideLayout(slide)
-	if slide.Subtitle == "" {
-		slide.Subtitle = deriveSlideSubtitle(slide)
-	}
-	slide.Variant = normalizeSlideVariant(slide)
-
-	imageKept := false
-	imagePrompt := strings.TrimSpace(slide.ImagePrompt)
-	requestedImage := slide.HasImage || imagePrompt != ""
-	if enableImages &&
-		allowImageForSlide(slide) &&
-		imageBudget != nil &&
-		*imageBudget > 0 {
-		if imagePrompt == "" && shouldAutoAddImagePrompt(slide, explicitCover) {
-			imagePrompt = buildFallbackImagePrompt(slide, deckTitle)
-		}
-		if !requestedImage && imagePrompt == "" {
-			slide.HasImage = false
-			slide.ImagePrompt = ""
-			slide.ImagePos = ""
-			return slide, false
-		}
-		slide.HasImage = true
-		slide.ImagePrompt = trimRunes(imagePrompt, 180)
-		slide.ImagePos = normalizeImagePosition(firstNonEmpty(slide.ImagePos, defaultImagePositionForSlide(slide)))
-		*imageBudget--
-		imageKept = true
-	} else {
-		slide.HasImage = false
-		slide.ImagePrompt = ""
-		slide.ImagePos = ""
-	}
-
-	return slide, imageKept
-}
-
-func analyzePPTXSlide(slide officegen.Slide, idx int) pptxSlideSignals {
-	role := inferPPTXSlideRole(slide, idx)
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
-	return pptxSlideSignals{
-		Role:         role,
-		WantsChart:   slide.Chart != nil || strings.Contains(text, "market size") || strings.Contains(text, "trend") || strings.Contains(text, "benchmark") || strings.Contains(text, "市场规模") || strings.Contains(text, "趋势") || strings.Contains(text, "对比"),
-		WantsMetrics: len(slide.Metrics) > 0 || strings.Contains(text, "kpi") || strings.Contains(text, "metric") || strings.Contains(text, "value") || strings.Contains(text, "指标") || strings.Contains(text, "价值") || strings.Contains(text, "roi"),
-		WantsImage:   slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "",
-	}
-}
-
-func normalizePPTXRole(value string) pptxSlideRole {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case string(pptxSlideRoleCover):
-		return pptxSlideRoleCover
-	case string(pptxSlideRoleSummary):
-		return pptxSlideRoleSummary
-	case string(pptxSlideRoleEvidence):
-		return pptxSlideRoleEvidence
-	case string(pptxSlideRoleAction):
-		return pptxSlideRoleAction
-	case string(pptxSlideRoleDetail):
-		return pptxSlideRoleDetail
-	default:
-		return ""
-	}
-}
-
-func slideRoleName(slide officegen.Slide, idx int) pptxSlideRole {
-	if role := normalizePPTXRole(slide.Role); role != "" {
-		return role
-	}
-	return inferPPTXSlideRole(slide, idx)
-}
-
-func inferPPTXSlideRole(slide officegen.Slide, idx int) pptxSlideRole {
-	if role := normalizePPTXRole(slide.Role); role != "" {
-		return role
-	}
-	if idx == 0 || slide.IsTitle || strings.EqualFold(strings.TrimSpace(slide.Layout), "title") {
-		return pptxSlideRoleCover
-	}
-	if slide.Chart != nil || len(slide.Metrics) > 0 {
-		return pptxSlideRoleEvidence
-	}
-	if isActionSlide(slide) || looksLikeClosingSlide(slide) {
-		return pptxSlideRoleAction
-	}
-	if looksLikeOverviewSlide(slide) || (idx == 1 && (isPlaceholderSlideTitle(slide.Title) || len(slide.Sections) >= 3)) {
-		return pptxSlideRoleSummary
-	}
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
-	for _, keyword := range []string{"market", "revenue", "growth", "pipeline", "benchmark", "analysis", "evidence", "result", "review", "performance", "value", "市场", "收入", "增长", "分析", "证据", "结果", "复盘", "业绩", "指标", "价值"} {
-		if strings.Contains(text, keyword) {
-			return pptxSlideRoleEvidence
-		}
-	}
-	return pptxSlideRoleDetail
-}
-
-func applyRoleDrivenSlideNormalization(slide officegen.Slide, signals pptxSlideSignals) officegen.Slide {
-	switch signals.Role {
-	case pptxSlideRoleCover:
-		return normalizeCoverSlide(slide)
-	case pptxSlideRoleSummary:
-		return normalizeSummaryRoleSlide(slide)
-	case pptxSlideRoleEvidence:
-		return normalizeEvidenceRoleSlide(slide, signals)
-	case pptxSlideRoleAction:
-		return normalizeActionRoleSlide(slide)
-	default:
-		return normalizeDetailRoleSlide(slide)
-	}
-}
-
-func normalizeCoverSlide(slide officegen.Slide) officegen.Slide {
-	subtitleFallback := fitTextForLayout(firstNonEmpty(slide.Subtitle, slide.Content, slide.Source), 28)
-	slide.Role = string(pptxSlideRoleCover)
-	slide.Layout = "title"
-	slide.IsTitle = true
-	slide.Content = ""
-	slide.Points = nil
-	slide.Sections = nil
-	slide.Metrics = nil
-	slide.Chart = nil
-	if slide.Subtitle == "" {
-		slide.Subtitle = subtitleFallback
-	}
-	return slide
-}
-
-func normalizeSummaryRoleSlide(slide officegen.Slide) officegen.Slide {
-	slide.Role = string(pptxSlideRoleSummary)
-	slide.Layout = "content"
-	if slide.Chart != nil {
-		slide.Points = append(slide.Points, deriveChartPoints(slide.Chart, 3)...)
-		slide.Chart = nil
-	}
-	if len(slide.Metrics) > 0 {
-		slide.Points = append(slide.Points, deriveMetricPoints(slide.Metrics, 3)...)
-		slide.Metrics = nil
-	}
-	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 4)
-	}
-	if len(slide.Sections) == 0 && len(slide.Points) > 0 {
-		if sections := pointsToSummarySections(slide.Points, 4); len(sections) > 0 {
-			slide.Sections = sections
-			if len(slide.Points) <= 4 {
-				slide.Points = nil
-			}
-		}
-	}
-	slide.Content = ""
-	slide.Source = ""
-	slide.HasImage = false
-	slide.ImagePrompt = ""
-	slide.ImagePos = ""
-	return slide
-}
-
-func normalizeEvidenceRoleSlide(slide officegen.Slide, signals pptxSlideSignals) officegen.Slide {
-	slide.Role = string(pptxSlideRoleEvidence)
-	slide = normalizeEvidenceSlide(slide)
-	if slide.Chart == nil && slide.Layout == "chart" && signals.WantsChart {
-		slide = normalizeEvidenceSlide(slide)
-	}
-	if slide.Chart != nil {
-		slide.Layout = "chart"
-		if len(slide.Points) == 0 {
-			slide.Points = deriveChartPoints(slide.Chart, 2)
-		}
-	}
-	if len(slide.Metrics) > 0 {
-		slide.Layout = "dashboard"
-		if len(slide.Points) == 0 {
-			slide.Points = deriveMetricPoints(slide.Metrics, 2)
-		}
-	}
-	if slide.Chart == nil && len(slide.Metrics) == 0 {
-		slide.Layout = "content"
-		if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-			slide.Points = splitContentToPoints(slide.Content, 4)
-			slide.Content = ""
-		}
-	}
-	slide.HasImage = false
-	slide.ImagePrompt = ""
-	slide.ImagePos = ""
-	return slide
-}
-
-func normalizeActionRoleSlide(slide officegen.Slide) officegen.Slide {
-	slide.Role = string(pptxSlideRoleAction)
-	if slide.Chart != nil {
-		slide.Points = append(slide.Points, deriveChartPoints(slide.Chart, 2)...)
-		slide.Chart = nil
-	}
-	if len(slide.Metrics) > 0 {
-		slide.Points = append(slide.Points, deriveMetricPoints(slide.Metrics, 3)...)
-		slide.Metrics = nil
-	}
-	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 4)
-	}
-	slide = normalizeActionSlide(slide)
-	slide.Layout = "content"
-	slide.Content = ""
-	slide.Source = ""
-	slide.HasImage = false
-	slide.ImagePrompt = ""
-	slide.ImagePos = ""
-	return slide
-}
-
-func normalizeDetailRoleSlide(slide officegen.Slide) officegen.Slide {
-	slide.Role = string(pptxSlideRoleDetail)
 	switch {
+	case slideLayoutName(slide) != "":
+		slide.Layout = slideLayoutName(slide)
 	case slide.Chart != nil:
 		slide.Layout = "chart"
 	case len(slide.Metrics) > 0:
 		slide.Layout = "dashboard"
-	case slide.Layout == "":
+	case strings.TrimSpace(slide.Layout) == "":
 		slide.Layout = "content"
+	default:
+		slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
+	}
+	slide = upgradeSlideLayout(slide)
+	slide.Variant = normalizeSlideVariant(slide)
+
+	slide.Points = normalizePoints(slide.Points, 4, 32)
+	slide.Sections = normalizeSections(slide.Sections, 3)
+	slide.Metrics = normalizeMetrics(slide.Metrics, 4)
+	slide.Chart = normalizeChart(slide.Chart)
+	slide = normalizeEvidenceSlide(slide)
+	slide = normalizeActionSlide(slide)
+	if len(slide.Sections) > 0 {
+		// Section slides already contain grouped copy; keeping a source footer here can trigger false bullet-overload lint results.
+		slide.Source = ""
 	}
 	if shouldDowngradeChart(slide) {
 		slide = downgradeChartSlide(slide)
 	}
 	if len(slide.Points) == 0 && len(slide.Sections) == 0 && slide.Content != "" {
-		slide.Points = splitContentToPoints(slide.Content, 5)
+		slide.Points = splitContentToPoints(slide.Content, 4)
 		if len(slide.Points) > 0 {
 			slide.Content = ""
 		}
-	}
-	return slide
-}
-
-func finalizeSlideLayout(slide officegen.Slide) officegen.Slide {
-	if slide.Chart != nil && shouldDowngradeChart(slide) {
-		slide = downgradeChartSlide(slide)
 	}
 	if slide.Layout == "chart" && slide.Chart == nil {
 		slide.Layout = "content"
@@ -1066,12 +827,55 @@ func finalizeSlideLayout(slide officegen.Slide) officegen.Slide {
 	if slide.Layout == "chart" && len(slide.Points) == 0 {
 		slide.Points = deriveChartPoints(slide.Chart, 2)
 	}
-	role := slideRoleName(slide, 0)
-	if len(slide.Sections) > 0 && (role == pptxSlideRoleSummary || role == pptxSlideRoleAction) {
-		// Grouped summary/action slides already carry their own structure and do not need a footer source.
-		slide.Source = ""
+	if slide.Subtitle == "" {
+		slide.Subtitle = deriveSlideSubtitle(slide)
 	}
-	return slide
+
+	imageKept := false
+	visualsKept := 0
+	if enableImages &&
+		slide.Layout == "content" &&
+		idx > 0 &&
+		slide.HasImage &&
+		strings.TrimSpace(slide.ImagePrompt) != "" &&
+		allowImageForSlide(slide) &&
+		imageBudget != nil &&
+		*imageBudget > 0 {
+		slide.HasImage = true
+		slide.ImagePrompt = fitTextForLayout(strings.TrimSpace(slide.ImagePrompt), 120)
+		slide.ImagePos = normalizeImagePosition(slide.ImagePos)
+		*imageBudget--
+		imageKept = true
+	} else {
+		slide.HasImage = false
+		slide.ImagePrompt = ""
+		slide.ImagePos = ""
+	}
+
+	if enableImages &&
+		slide.Layout == "gallery" &&
+		len(slide.Visuals) > 0 &&
+		galleryBudget != nil &&
+		visualBudget != nil &&
+		*galleryBudget > 0 &&
+		*visualBudget > 0 {
+		allowed := len(slide.Visuals)
+		if allowed > *visualBudget {
+			allowed = *visualBudget
+		}
+		slide.Visuals = slide.Visuals[:allowed]
+		*galleryBudget--
+		*visualBudget -= allowed
+		visualsKept = allowed
+	} else if slide.Layout == "gallery" {
+		slide.Visuals = nil
+		if len(slide.Sections) > 0 || len(slide.Points) > 0 {
+			slide.Layout = "content"
+			slide.Variant = normalizeSlideVariant(slide)
+		}
+	}
+
+	return slide, imageKept, visualsKept
 }
 
 func isEmptyNormalizedSlide(slide officegen.Slide) bool {
@@ -1081,10 +885,75 @@ func isEmptyNormalizedSlide(slide officegen.Slide) bool {
 	if strings.TrimSpace(slide.Subtitle) != "" || strings.TrimSpace(slide.Content) != "" {
 		return false
 	}
-	if len(slide.Points) > 0 || len(slide.Sections) > 0 || len(slide.Metrics) > 0 || slide.Chart != nil {
+	if len(slide.Points) > 0 || len(slide.Sections) > 0 || len(slide.Metrics) > 0 || len(slide.Visuals) > 0 || slide.Chart != nil {
 		return false
 	}
 	return true
+}
+
+func normalizeNarrativeRole(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "cover", "toc", "chapter", "summary", "evidence", "analysis", "action", "closing":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeSlideVisuals(visuals []officegen.SlideVisual, limit int) []officegen.SlideVisual {
+	out := make([]officegen.SlideVisual, 0, len(visuals))
+	for _, visual := range visuals {
+		label := fitTextForLayout(cleanSentence(visual.Label), 16)
+		prompt := fitTextForLayout(strings.TrimSpace(visual.Prompt), 120)
+		caption := fitTextForLayout(cleanSentence(visual.Caption), 24)
+		if prompt == "" {
+			continue
+		}
+		out = append(out, officegen.SlideVisual{
+			Label:   label,
+			Prompt:  prompt,
+			Caption: caption,
+		})
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func upgradeSlideLayout(slide officegen.Slide) officegen.Slide {
+	switch slide.NarrativeRole {
+	case "toc":
+		slide.Layout = "toc"
+	case "chapter":
+		slide.Layout = "chapter"
+	case "closing":
+		slide.Layout = "closing"
+	}
+	if slide.Layout != "content" {
+		return slide
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.SectionTitle))
+	switch {
+	case len(slide.Visuals) > 0:
+		slide.Layout = "gallery"
+	case isActionSlide(slide):
+		slide.Layout = "closing"
+	case len(slide.Sections) >= 2 && containsAny(text, []string{"timeline", "roadmap", "path", "milestone", "cadence", "journey", "history", "phases"}):
+		slide.Layout = "timeline"
+	case len(slide.Sections) >= 2 && containsAny(text, []string{"compare", "comparison", "versus", "landscape", "difference", "options", "competition"}):
+		slide.Layout = "comparison"
+	}
+	return slide
+}
+
+func containsAny(text string, items []string) bool {
+	for _, item := range items {
+		if strings.Contains(text, item) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizePoints(points []string, limit, maxRunes int) []string {
@@ -1110,8 +979,8 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 func normalizeSections(sections []officegen.SlideSection, limit int) []officegen.SlideSection {
 	out := make([]officegen.SlideSection, 0, len(sections))
 	for _, section := range sections {
-		heading := fitTextForLayout(cleanSentence(section.Heading), 16)
-		detail := fitTextForLayout(cleanSentence(section.Detail), 56)
+		heading := fitTextForLayout(cleanSentence(section.Heading), 12)
+		detail := fitTextForLayout(cleanSentence(section.Detail), 30)
 		if heading == "" && detail == "" {
 			continue
 		}
@@ -1193,10 +1062,7 @@ func rebalanceNarrativeSlides(slides []officegen.Slide, deckTitle string, archet
 		return slides
 	}
 	slides = ensureMinimumNarrativeSlides(slides, deckTitle, archetype)
-	if idx := findSlideByRole(slides, pptxSlideRoleSummary, 1); idx > 1 {
-		slides = moveSlide(slides, idx, 1)
-	}
-	if len(slides) > 1 && slideRoleName(slides[1], 1) != pptxSlideRoleSummary && shouldInsertOverviewSlide(slides[1]) && len(slides) < maxSlides {
+	if len(slides) > 1 && shouldInsertOverviewSlide(slides[1]) && len(slides) < maxSlides {
 		slides = insertSlide(slides, 1, defaultSummarySlide(archetype, deckTitle))
 	}
 	if len(slides) > 1 {
@@ -1205,32 +1071,6 @@ func rebalanceNarrativeSlides(slides []officegen.Slide, deckTitle string, archet
 	slides = ensureEvidenceCoverage(slides, deckTitle, archetype, maxSlides)
 	slides = ensureClosingActionSlide(slides, deckTitle, archetype, maxSlides)
 	return slides
-}
-
-func moveSlide(slides []officegen.Slide, from, to int) []officegen.Slide {
-	if from < 0 || from >= len(slides) || to < 0 || to >= len(slides) || from == to {
-		return slides
-	}
-	slide := slides[from]
-	if from < to {
-		copy(slides[from:], slides[from+1:to+1])
-	} else {
-		copy(slides[to+1:], slides[to:from])
-	}
-	slides[to] = slide
-	return slides
-}
-
-func findSlideByRole(slides []officegen.Slide, role pptxSlideRole, start int) int {
-	if start < 0 {
-		start = 0
-	}
-	for idx := start; idx < len(slides); idx++ {
-		if slideRoleName(slides[idx], idx) == role {
-			return idx
-		}
-	}
-	return -1
 }
 
 func insertSlide(slides []officegen.Slide, idx int, slide officegen.Slide) []officegen.Slide {
@@ -1266,7 +1106,6 @@ func defaultSummarySlide(archetype pptxArchetype, deckTitle string) officegen.Sl
 	switch archetype {
 	case pptxArchetypeCompany:
 		slide := officegen.Slide{
-			Role:     string(pptxSlideRoleSummary),
 			Title:    "Key Takeaways",
 			Layout:   "content",
 			Subtitle: "Lead with the outcome, then explain the capabilities behind it",
@@ -1280,7 +1119,6 @@ func defaultSummarySlide(archetype pptxArchetype, deckTitle string) officegen.Sl
 		return slide
 	case pptxArchetypeGeneral:
 		slide := officegen.Slide{
-			Role:     string(pptxSlideRoleSummary),
 			Title:    "Executive Summary",
 			Layout:   "content",
 			Subtitle: "Lead with the decision, then support it slide by slide",
@@ -1306,7 +1144,6 @@ func defaultSupportingSlide(archetype pptxArchetype, deckTitle string) officegen
 		return slide
 	}
 	slide := officegen.Slide{
-		Role:     string(pptxSlideRoleEvidence),
 		Title:    "What Matters Most",
 		Layout:   "content",
 		Subtitle: "Support the headline with the few facts that change the decision",
@@ -1327,7 +1164,6 @@ func defaultActionSlide(archetype pptxArchetype, deckTitle string) officegen.Sli
 		return slide
 	}
 	slide := officegen.Slide{
-		Role:     string(pptxSlideRoleAction),
 		Title:    "Next Steps",
 		Layout:   "content",
 		Subtitle: "Close with a small set of actions, owners, and validation points",
@@ -1345,7 +1181,6 @@ func enforceOverviewSlide(slide officegen.Slide, archetype pptxArchetype) office
 	if slideLayoutName(slide) == "chart" || slideLayoutName(slide) == "dashboard" {
 		return defaultSummarySlide(archetype, slide.Title)
 	}
-	slide.Role = string(pptxSlideRoleSummary)
 	if len(slide.Sections) == 0 && len(slide.Points) >= 3 {
 		if sections := pointsToSummarySections(slide.Points, 3); len(sections) > 0 {
 			slide.Sections = sections
@@ -1370,22 +1205,9 @@ func ensureEvidenceCoverage(slides []officegen.Slide, deckTitle string, archetyp
 	if archetype != pptxArchetypeMarket && archetype != pptxArchetypeOps {
 		return slides
 	}
-	if evidenceIdx := findSlideByRole(slides, pptxSlideRoleEvidence, 1); evidenceIdx >= 0 {
-		targetIdx := 2
-		if targetIdx >= len(slides) {
-			targetIdx = len(slides) - 1
-		}
-		if evidenceIdx != targetIdx && targetIdx > 0 {
-			return moveSlide(slides, evidenceIdx, targetIdx)
-		}
-		return slides
-	}
 	for idx := 1; idx < len(slides); idx++ {
-		if slideLayoutName(slides[idx]) == "chart" || slideLayoutName(slides[idx]) == "dashboard" {
-			slides[idx].Role = string(pptxSlideRoleEvidence)
-			if idx != 2 && len(slides) > 2 {
-				return moveSlide(slides, idx, 2)
-			}
+		switch slideLayoutName(slides[idx]) {
+		case "chart", "dashboard":
 			return slides
 		}
 	}
@@ -1411,12 +1233,8 @@ func ensureClosingActionSlide(slides []officegen.Slide, deckTitle string, archet
 		return slides
 	}
 	lastIdx := len(slides) - 1
-	if actionIdx := findSlideByRole(slides, pptxSlideRoleAction, 1); actionIdx >= 0 && actionIdx != lastIdx {
-		slides = moveSlide(slides, actionIdx, lastIdx)
-	}
 	last := slides[lastIdx]
 	if isActionSlide(last) || looksLikeClosingSlide(last) {
-		last.Role = string(pptxSlideRoleAction)
 		if isPlaceholderSlideTitle(last.Title) {
 			last.Title = actionTitleForArchetype(archetype)
 		}
@@ -1441,6 +1259,146 @@ func ensureClosingActionSlide(slides []officegen.Slide, deckTitle string, archet
 	return slides
 }
 
+func applyNarrativeScaffold(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
+	if len(slides) < 3 {
+		return slides
+	}
+	sectionTitles := sectionTitlesForArchetype(archetype)
+	if slideLayoutName(slides[1]) != "toc" && len(slides) < maxSlides {
+		slides = insertSlide(slides, 1, buildTOCSlide(slides[1:], sectionTitles[0]))
+	}
+
+	bodyStart := 1
+	if len(slides) > 1 && slideLayoutName(slides[1]) == "toc" {
+		bodyStart = 2
+	}
+	if bodyStart < len(slides)-1 && slideLayoutName(slides[bodyStart]) != "chapter" && len(slides) < maxSlides {
+		slides = insertSlide(slides, bodyStart, buildChapterSlide(1, sectionTitles[0]))
+	}
+	if len(slides) > bodyStart+2 && len(slides) < maxSlides {
+		lastIdx := len(slides) - 1
+		if slideLayoutName(slides[lastIdx]) != "closing" && slideLayoutName(slides[lastIdx-1]) != "chapter" {
+			slides = insertSlide(slides, lastIdx, buildChapterSlide(2, sectionTitles[1]))
+		}
+	}
+
+	lastIdx := len(slides) - 1
+	slides[lastIdx].Layout = "closing"
+	slides[lastIdx].NarrativeRole = "closing"
+	slides[lastIdx].SectionIndex = len(sectionTitles)
+	slides[lastIdx].SectionTitle = sectionTitles[len(sectionTitles)-1]
+	slides[lastIdx].Variant = normalizeSlideVariant(slides[lastIdx])
+	if len(slides[lastIdx].Sections) == 0 && len(slides[lastIdx].Points) > 0 {
+		slides[lastIdx] = normalizeActionSlide(slides[lastIdx])
+	}
+
+	currentSection := 1
+	currentTitle := sectionTitles[0]
+	for idx := 1; idx < len(slides); idx++ {
+		switch slideLayoutName(slides[idx]) {
+		case "toc":
+			slides[idx].NarrativeRole = "toc"
+			slides[idx].SectionIndex = 0
+			slides[idx].SectionTitle = "Agenda"
+		case "chapter":
+			currentSection = maxInt(slides[idx].SectionIndex, currentSection)
+			currentTitle = firstNonEmpty(slides[idx].SectionTitle, sectionTitleAt(sectionTitles, currentSection-1))
+			slides[idx].NarrativeRole = "chapter"
+			slides[idx].SectionIndex = currentSection
+			slides[idx].SectionTitle = currentTitle
+		case "closing":
+			slides[idx].NarrativeRole = "closing"
+			slides[idx].SectionIndex = len(sectionTitles)
+			slides[idx].SectionTitle = sectionTitles[len(sectionTitles)-1]
+		default:
+			if slides[idx].NarrativeRole == "" {
+				if idx <= bodyStart+1 {
+					slides[idx].NarrativeRole = "summary"
+				} else {
+					slides[idx].NarrativeRole = "analysis"
+				}
+			}
+			slides[idx].SectionIndex = currentSection
+			slides[idx].SectionTitle = currentTitle
+		}
+		if strings.TrimSpace(slides[idx].Variant) == "" {
+			slides[idx].Variant = normalizeSlideVariant(slides[idx])
+		}
+	}
+
+	if len(slides) > 1 && slideLayoutName(slides[1]) == "toc" {
+		slides[1] = buildTOCSlide(slides[2:], sectionTitles[0])
+	}
+	return slides
+}
+
+func buildTOCSlide(body []officegen.Slide, title string) officegen.Slide {
+	sections := make([]officegen.SlideSection, 0, len(body))
+	for _, slide := range body {
+		switch slideLayoutName(slide) {
+		case "title", "toc":
+			continue
+		}
+		label := strings.TrimSpace(slide.Title)
+		if label == "" {
+			continue
+		}
+		sections = append(sections, officegen.SlideSection{
+			Heading: fmt.Sprintf("%02d", len(sections)+1),
+			Detail:  label,
+		})
+		if len(sections) >= 6 {
+			break
+		}
+	}
+	return officegen.Slide{
+		Title:         "Contents",
+		Layout:        "toc",
+		Variant:       "toc",
+		NarrativeRole: "toc",
+		SectionTitle:  title,
+		Subtitle:      "Review the structure before diving into the content.",
+		Sections:      sections,
+	}
+}
+
+func buildChapterSlide(idx int, title string) officegen.Slide {
+	return officegen.Slide{
+		Title:         title,
+		Layout:        "chapter",
+		Variant:       "chapter",
+		NarrativeRole: "chapter",
+		SectionIndex:  idx,
+		SectionTitle:  title,
+		Subtitle:      "Use this section to shift the story before the next cluster of slides.",
+	}
+}
+
+func sectionTitlesForArchetype(archetype pptxArchetype) []string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return []string{"Context and Value", "Scenarios and Rollout"}
+	case pptxArchetypeMarket:
+		return []string{"Market Read", "Decision and Entry"}
+	case pptxArchetypeOps:
+		return []string{"Business Readout", "Priorities and Actions"}
+	case pptxArchetypeTraining:
+		return []string{"Setup and Commands", "Practice and Guardrails"}
+	default:
+		return []string{"Core Storyline", "Decision and Next Steps"}
+	}
+}
+
+func sectionTitleAt(items []string, idx int) string {
+	if idx >= 0 && idx < len(items) {
+		return items[idx]
+	}
+	if len(items) > 0 {
+		return items[len(items)-1]
+	}
+	return ""
+}
+
 func pointsToSummarySections(points []string, limit int) []officegen.SlideSection {
 	sections := make([]officegen.SlideSection, 0, len(points))
 	for idx, point := range points {
@@ -1452,7 +1410,7 @@ func pointsToSummarySections(points []string, limit int) []officegen.SlideSectio
 			heading = fmt.Sprintf("Takeaway %d", idx+1)
 		}
 		if detail == "" {
-			detail = fitTextForLayout(cleanSentence(point), 42)
+			detail = fitTextForLayout(cleanSentence(point), 24)
 		}
 		sections = append(sections, officegen.SlideSection{
 			Heading: heading,
@@ -1526,11 +1484,8 @@ func actionSubtitleForArchetype(archetype pptxArchetype) string {
 }
 
 func looksLikeOverviewSlide(slide officegen.Slide) bool {
-	if slideRoleName(slide, 0) == pptxSlideRoleSummary {
-		return true
-	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"summary", "takeaway", "overview", "learning goal", "headline", "key point", "总结", "要点", "概览", "学习目标", "核心结论", "关键点"} {
+	for _, keyword := range []string{"summary", "takeaway", "overview", "learning goal", "headline", "key point"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1539,11 +1494,8 @@ func looksLikeOverviewSlide(slide officegen.Slide) bool {
 }
 
 func looksLikeClosingSlide(slide officegen.Slide) bool {
-	if slideRoleName(slide, 0) == pptxSlideRoleAction {
-		return true
-	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action", "下一步", "行动", "决策", "建议", "推进", "实施计划", "落地路径"} {
+	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1566,13 +1518,6 @@ func isReplaceableNarrativeSlide(slide officegen.Slide) bool {
 }
 
 func shouldInsertOverviewSlide(slide officegen.Slide) bool {
-	role := slideRoleName(slide, 0)
-	if role == pptxSlideRoleSummary {
-		return false
-	}
-	if role == pptxSlideRoleEvidence || role == pptxSlideRoleAction {
-		return true
-	}
 	switch slideLayoutName(slide) {
 	case "chart", "dashboard":
 		return true
@@ -1581,7 +1526,7 @@ func shouldInsertOverviewSlide(slide officegen.Slide) bool {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"product", "scenario", "workflow", "interface", "demo", "experience", "产品", "场景", "流程", "界面", "演示", "体验"} {
+	for _, keyword := range []string{"product", "scenario", "workflow", "interface", "demo", "experience"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1614,247 +1559,58 @@ func isPlaceholderSlideTitle(value string) bool {
 }
 
 func normalizeSlideVariant(slide officegen.Slide) string {
-	return chooseSlideVariant(slide, "")
-}
-
-func shouldUseTimelineVariant(slide officegen.Slide) bool {
-	if len(slide.Sections) < 3 || len(slide.Sections) > 4 {
-		return false
-	}
-	if slideRoleName(slide, 0) == pptxSlideRoleAction {
-		return true
-	}
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"timeline", "roadmap", "rollout", "plan", "phase", "milestone", "step", "时间线", "路线图", "推进", "计划", "阶段", "里程碑", "步骤"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldUseComparisonVariant(slide officegen.Slide) bool {
-	if len(slide.Sections) != 2 && len(slide.Points) != 2 {
-		return false
-	}
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Role))
-	for _, keyword := range []string{"compare", "comparison", "before", "after", "with", "without", "versus", "vs", "对比", "比较", "前后", "之前", "之后", "有无", "方案a", "方案b"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldUseFeatureGridVariant(slide officegen.Slide) bool {
-	if len(slide.Sections) == 4 {
-		return true
-	}
-	return len(slide.Points) == 4 && !slide.HasImage
-}
-
-func shouldUsePillarListVariant(slide officegen.Slide) bool {
-	if len(slide.Sections) < 3 {
-		return false
-	}
-	if shouldUseTimelineVariant(slide) {
-		return false
-	}
-	return len(slide.Sections) <= 4
-}
-
-func slideVariantCandidates(slide officegen.Slide) []string {
-	layout := slideLayoutName(slide)
-	role := slideRoleName(slide, 0)
-	explicit := strings.ToLower(strings.TrimSpace(slide.Variant))
-	candidates := make([]string, 0, 8)
-	add := func(values ...string) {
-		for _, value := range values {
-			value = strings.ToLower(strings.TrimSpace(value))
-			if value == "" {
-				continue
-			}
-			for _, existing := range candidates {
-				if existing == value {
-					goto next
-				}
-			}
-			candidates = append(candidates, value)
-		next:
-		}
-	}
-
-	switch layout {
+	switch strings.TrimSpace(slide.Layout) {
 	case "title":
-		add(explicit)
-		if slide.HasImage {
-			add("title-split", "title-center")
-		} else {
-			add("title-center", "title-split")
+		if strings.TrimSpace(slide.Variant) == "title-split" {
+			return "title-split"
 		}
+		return "title-center"
+	case "toc":
+		return "toc"
+	case "chapter":
+		return "chapter"
+	case "gallery":
+		return "gallery"
+	case "comparison":
+		return "comparison"
+	case "timeline":
+		return "timeline"
+	case "closing":
+		return "closing"
 	case "chart":
-		add(explicit, "chart-context", "chart-focus")
+		return "chart-focus"
 	case "dashboard":
-		add(explicit)
-		if len(slide.Metrics) >= 2 {
-			add("stat-band", "kpi-band")
-		} else {
-			add("kpi-band", "stat-band")
-		}
+		return "kpi-band"
 	default:
-		add(explicit)
-		if shouldUseTimelineVariant(slide) {
-			add("timeline")
+		switch strings.TrimSpace(slide.Variant) {
+		case "sections-grid", "comparison", "timeline", "image-right", "gallery", "closing", "bullets":
+			return strings.TrimSpace(slide.Variant)
 		}
-		if shouldUseComparisonVariant(slide) {
-			add("comparison")
+		if slide.HasImage {
+			return "image-right"
 		}
-		if shouldUseFeatureGridVariant(slide) {
-			add("feature-grid")
-		}
-		if role == pptxSlideRoleSummary || role == pptxSlideRoleAction {
-			add("sections-grid")
-		}
-		if shouldUsePillarListVariant(slide) {
-			add("pillar-list")
+		if len(slide.Visuals) > 0 {
+			return "gallery"
 		}
 		if len(slide.Sections) > 0 {
-			add("sections-grid")
+			return "sections-grid"
 		}
-		if slide.HasImage {
-			add("image-right")
-		}
-		if len(slide.Points) > 0 {
-			add("point-cards", "bullets")
-		}
-		if strings.TrimSpace(slide.Content) != "" {
-			add("prose")
-		}
-		add("bullets")
+		return "bullets"
 	}
-
-	filtered := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		switch candidate {
-		case "title-center", "title-split":
-			if layout == "title" {
-				filtered = append(filtered, candidate)
-			}
-		case "chart-context", "chart-focus":
-			if layout == "chart" {
-				filtered = append(filtered, candidate)
-			}
-		case "stat-band", "kpi-band":
-			if layout == "dashboard" {
-				filtered = append(filtered, candidate)
-			}
-		case "timeline":
-			if shouldUseTimelineVariant(slide) {
-				filtered = append(filtered, candidate)
-			}
-		case "comparison":
-			if shouldUseComparisonVariant(slide) {
-				filtered = append(filtered, candidate)
-			}
-		case "feature-grid":
-			if shouldUseFeatureGridVariant(slide) {
-				filtered = append(filtered, candidate)
-			}
-		case "pillar-list":
-			if shouldUsePillarListVariant(slide) {
-				filtered = append(filtered, candidate)
-			}
-		case "sections-grid":
-			if len(slide.Sections) > 0 {
-				filtered = append(filtered, candidate)
-			}
-		case "image-right":
-			if slide.HasImage {
-				filtered = append(filtered, candidate)
-			}
-		case "point-cards", "bullets":
-			if len(slide.Points) > 0 {
-				filtered = append(filtered, candidate)
-			}
-		case "prose":
-			if strings.TrimSpace(slide.Content) != "" {
-				filtered = append(filtered, candidate)
-			}
-		}
-	}
-
-	if len(filtered) == 0 {
-		switch layout {
-		case "title":
-			return []string{"title-center"}
-		case "chart":
-			return []string{"chart-context"}
-		case "dashboard":
-			return []string{"stat-band"}
-		default:
-			return []string{"bullets"}
-		}
-	}
-	return filtered
-}
-
-func slidePatternSignature(slide officegen.Slide, variant string) string {
-	return slideLayoutName(slide) + ":" + strings.TrimSpace(variant)
-}
-
-func chooseSlideVariant(slide officegen.Slide, prevSignature string) string {
-	candidates := slideVariantCandidates(slide)
-	if prevSignature == "" {
-		return candidates[0]
-	}
-	for _, candidate := range candidates {
-		if slidePatternSignature(slide, candidate) != prevSignature {
-			return candidate
-		}
-	}
-	return candidates[0]
-}
-
-func diversifySlideForPattern(slide officegen.Slide) officegen.Slide {
-	if slideLayoutName(slide) != "content" {
-		return slide
-	}
-	if len(slide.Sections) == 0 && len(slide.Points) >= 3 {
-		sections := pointsToSummarySections(slide.Points, minInt(len(slide.Points), 4))
-		if len(sections) >= 3 {
-			slide.Sections = sections
-			if len(slide.Points) <= 4 {
-				slide.Points = nil
-			}
-		}
-	}
-	if len(slide.Sections) == 0 && len(slide.Metrics) >= 2 {
-		slide.Layout = "dashboard"
-	}
-	return slide
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
+	switch slideLayoutName(slide) {
+	case "toc", "chapter", "gallery", "comparison", "timeline", "closing":
+		return []officegen.Slide{slide}
+	}
 	switch {
-	case len(slide.Points) > 5:
-		return splitSlidePoints(slide, 5)
-	case slide.HasImage && len(slide.Points) > 4:
+	case len(slide.Points) > 4:
 		return splitSlidePoints(slide, 4)
-	case shouldUseTimelineVariant(slide):
-		return []officegen.Slide{slide}
-	case shouldUseFeatureGridVariant(slide):
-		return []officegen.Slide{slide}
-	case shouldUsePillarListVariant(slide):
-		return []officegen.Slide{slide}
-	case len(slide.Sections) > 4:
-		return splitSlideSections(slide, 4)
+	case slide.HasImage && len(slide.Points) > 3:
+		return splitSlidePoints(slide, 3)
+	case len(slide.Sections) > 3:
+		return splitSlideSections(slide, 3)
 	case len(slide.Metrics) > 4:
 		return splitSlideMetrics(slide, 4)
 	default:
@@ -1925,50 +1681,22 @@ func splitSlideMetrics(slide officegen.Slide, chunk int) []officegen.Slide {
 	return out
 }
 
-func rebalanceAdjacentLayouts(slides []officegen.Slide) []officegen.Slide {
-	prevSignature := ""
-	for idx := range slides {
-		role := slideRoleName(slides[idx], idx)
-		if (role == pptxSlideRoleSummary || role == pptxSlideRoleAction) && len(slides[idx].Sections) == 0 && len(slides[idx].Points) > 0 {
-			if sections := pointsToSummarySections(slides[idx].Points, 3); len(sections) > 0 {
-				slides[idx].Sections = sections
-				if len(slides[idx].Points) <= 3 {
-					slides[idx].Points = nil
-				}
-			}
-		}
-		slides[idx].Variant = chooseSlideVariant(slides[idx], prevSignature)
-		if idx > 0 && slidePatternSignature(slides[idx], slides[idx].Variant) == prevSignature {
-			slides[idx] = diversifySlideForPattern(slides[idx])
-			slides[idx].Variant = chooseSlideVariant(slides[idx], prevSignature)
-		}
-		prevSignature = slidePatternSignature(slides[idx], slides[idx].Variant)
-	}
-	return slides
-}
-
 func softlyApplyArchetypeDefaults(slides []officegen.Slide, archetype pptxArchetype, deckTitle string) []officegen.Slide {
 	if len(slides) == 0 {
 		return slides
 	}
 	if archetype == pptxArchetypeGeneral {
-		for idx := range slides {
-			if strings.TrimSpace(slides[idx].Role) == "" {
-				slides[idx].Role = string(slideRoleName(slides[idx], idx))
-			}
-		}
 		return slides
 	}
-	for idx := 1; idx < len(slides); idx++ {
+	defaults := make([]officegen.Slide, 0, 6)
+	for i := 0; i < 6; i++ {
+		defaults = append(defaults, defaultArchetypeSlide(archetype, i, deckTitle))
+	}
+	for idx := 1; idx < len(slides) && idx < len(defaults); idx++ {
 		if isWeakArchetypeSlide(slides[idx]) {
-			role := slideRoleName(slides[idx], idx)
-			defaultSlide := defaultSlideForRole(archetype, role, idx, deckTitle)
+			defaultSlide := defaults[idx]
 			defaultSlide.Variant = normalizeSlideVariant(defaultSlide)
 			slides[idx] = defaultSlide
-			continue
-		}
-		if strings.TrimSpace(slides[idx].Role) == "" {
-			slides[idx].Role = string(slideRoleName(slides[idx], idx))
 		}
 	}
 	for idx := range slides {
@@ -1977,21 +1705,6 @@ func softlyApplyArchetypeDefaults(slides []officegen.Slide, archetype pptxArchet
 		}
 	}
 	return slides
-}
-
-func defaultSlideForRole(archetype pptxArchetype, role pptxSlideRole, idx int, deckTitle string) officegen.Slide {
-	switch role {
-	case pptxSlideRoleSummary:
-		return defaultSummarySlide(archetype, deckTitle)
-	case pptxSlideRoleEvidence:
-		return defaultSupportingSlide(archetype, deckTitle)
-	case pptxSlideRoleAction:
-		return defaultActionSlide(archetype, deckTitle)
-	case pptxSlideRoleCover:
-		return defaultArchetypeSlide(archetype, 0, deckTitle)
-	default:
-		return defaultArchetypeSlide(archetype, idx, deckTitle)
-	}
 }
 
 func isWeakArchetypeSlide(slide officegen.Slide) bool {
@@ -2040,7 +1753,7 @@ func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {
 func splitContentToPoints(content string, limit int) []string {
 	fields := strings.FieldsFunc(content, func(r rune) bool {
 		switch r {
-		case '\n', '\r', ';', '.', '!', '?', '；', '。', '！', '？':
+		case '\n', '\r', ';', '.':
 			return true
 		default:
 			return false
@@ -2049,11 +1762,23 @@ func splitContentToPoints(content string, limit int) []string {
 	if len(fields) == 0 && strings.TrimSpace(content) != "" {
 		fields = []string{content}
 	}
-	return normalizePoints(fields, limit, 48)
+	return normalizePoints(fields, limit, 30)
 }
 
 func deriveSlideSubtitle(slide officegen.Slide) string {
 	switch slide.Layout {
+	case "toc":
+		return "先看结构，再进入每个章节。"
+	case "chapter":
+		return "建立上下文后，再进入核心内容。"
+	case "gallery":
+		return "用更高的视觉密度承载同一主题。"
+	case "comparison":
+		return "把关键差异并排展示。"
+	case "timeline":
+		return "把阶段、时间和动作放到一条线上。"
+	case "closing":
+		return "用少量动作收束整套叙事。"
 	case "chart":
 		if len(slide.Points) > 0 {
 			return fitTextForLayout(slide.Points[0], 24)
@@ -2097,7 +1822,7 @@ func deriveChartPoints(chart *officegen.ChartData, limit int) []string {
 	if len(chart.Values) > 1 && minIdx != maxIdx {
 		points = append(points, fmt.Sprintf("%s is the lowest at %s", chart.Categories[minIdx], formatChartValue(chart.Values[minIdx])))
 	}
-	return normalizePoints(points, limit, 40)
+	return normalizePoints(points, limit, 30)
 }
 
 func deriveMetricPoints(metrics []officegen.MetricCard, limit int) []string {
@@ -2112,7 +1837,7 @@ func deriveMetricPoints(metrics []officegen.MetricCard, limit int) []string {
 		}
 		points = append(points, item)
 	}
-	return normalizePoints(points, limit, 40)
+	return normalizePoints(points, limit, 30)
 }
 
 func normalizeImagePosition(pos string) string {
@@ -2124,153 +1849,27 @@ func normalizeImagePosition(pos string) string {
 	}
 }
 
-func computePPTXImageBudget(slides []officegen.Slide, deckTitle string, enableImages bool) int {
-	if !enableImages || len(slides) == 0 {
-		return 0
-	}
-
-	budget := 1
-	switch {
-	case len(slides) >= 8:
-		budget = 4
-	case len(slides) >= 6:
-		budget = 3
-	case len(slides) >= 4:
-		budget = 2
-	}
-
-	switch detectPPTXArchetype(deckTitle, "") {
-	case pptxArchetypeCompany, pptxArchetypeTraining:
-		if budget < 4 {
-			budget++
-		}
-	case pptxArchetypeMarket, pptxArchetypeOps:
-		if budget > 2 {
-			budget--
-		}
-	}
-
-	eligible := 0
-	for idx, slide := range slides {
-		role := inferPPTXSlideRole(slide, idx)
-		if role == pptxSlideRoleCover || role == pptxSlideRoleDetail {
-			eligible++
-		}
-	}
-	if eligible < budget {
-		budget = eligible
-	}
-	if budget < 0 {
-		return 0
-	}
-	return budget
-}
-
-func defaultImagePositionForSlide(slide officegen.Slide) string {
-	if slideRoleName(slide, 0) == pptxSlideRoleCover {
-		return "background"
-	}
-	if len(slide.Sections) >= 4 || len(slide.Points) >= 4 {
-		return "top"
-	}
-	return "right"
-}
-
-func shouldAutoAddImagePrompt(slide officegen.Slide, _ bool) bool {
-	role := slideRoleName(slide, 0)
-	if role == pptxSlideRoleCover {
-		return false
-	}
-	if role != pptxSlideRoleDetail {
-		return false
-	}
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func buildFallbackImagePrompt(slide officegen.Slide, deckTitle string) string {
-	subject := firstNonEmpty(slide.Title, deckTitle, "Presentation topic")
-	fragments := make([]string, 0, 4)
-	if subtitle := strings.TrimSpace(slide.Subtitle); subtitle != "" {
-		fragments = append(fragments, cleanSentence(subtitle))
-	}
-	for _, section := range slide.Sections {
-		if len(fragments) >= 3 {
-			break
-		}
-		fragment := firstNonEmpty(section.Heading, section.Detail)
-		if fragment == "" {
-			continue
-		}
-		if strings.TrimSpace(section.Detail) != "" && strings.TrimSpace(section.Heading) != "" {
-			fragment = strings.TrimSpace(section.Heading) + ": " + strings.TrimSpace(section.Detail)
-		}
-		fragments = append(fragments, cleanSentence(fragment))
-	}
-	for _, point := range slide.Points {
-		if len(fragments) >= 3 {
-			break
-		}
-		if cleaned := cleanSentence(point); cleaned != "" {
-			fragments = append(fragments, cleaned)
-		}
-	}
-	if len(fragments) == 0 && strings.TrimSpace(slide.Content) != "" {
-		fragments = append(fragments, cleanSentence(strings.TrimSpace(slide.Content)))
-	}
-
-	scene := strings.Join(fragments, "; ")
-	styleHint := "clean professional presentation visual, no text overlay"
-	if slideRoleName(slide, 0) == pptxSlideRoleCover {
-		styleHint = "hero visual for a presentation cover, cinematic composition, clean professional lighting, no text overlay"
-	} else if looksLikeGameSlide(slide) {
-		styleHint = "vivid gameplay-style scene, immersive environment, polished composition, no text overlay"
-	} else {
-		styleHint = "editorial product or real-world usage scene, polished composition, professional lighting, no text overlay"
-	}
-	return trimRunes(strings.TrimSpace(strings.Join([]string{subject, scene, styleHint}, ". ")), 180)
-}
-
-func looksLikeGameSlide(slide officegen.Slide) bool {
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
-	for _, keyword := range []string{"game", "gameplay", "world", "character", "sandbox", "minecraft", "游戏", "玩法", "世界", "角色", "沙盒", "minecraft"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
 func allowImageForSlide(slide officegen.Slide) bool {
-	role := slideRoleName(slide, 0)
-	if role == pptxSlideRoleSummary || role == pptxSlideRoleEvidence || role == pptxSlideRoleAction {
+	switch slideLayoutName(slide) {
+	case "toc", "closing", "chapter", "gallery", "comparison", "timeline", "chart", "dashboard":
 		return false
 	}
-	if role == pptxSlideRoleCover {
-		return true
-	}
-	if len(slide.Metrics) > 0 || slide.Chart != nil || slideLayoutName(slide) == "chart" || slideLayoutName(slide) == "dashboard" {
+	if len(slide.Visuals) > 0 {
 		return false
 	}
-	if len(slide.Points) > 4 || len(slide.Sections) > 4 {
+	if len(slide.Sections) > 0 || len(slide.Metrics) > 0 || slide.Chart != nil {
+		return false
+	}
+	if len(slide.Points) > 3 {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "pricing", "package", "quote", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence", "市场", "行业", "竞争", "复盘", "价值", "价格", "报价", "套餐", "建议", "下一步", "推进", "区域", "机会", "风险", "运营", "数据", "节奏"} {
+	for _, keyword := range []string{"market", "industry", "competition", "review", "value", "recommendation", "next step", "rollout", "region", "opportunity", "risk", "operations", "data", "cadence"} {
 		if strings.Contains(text, keyword) {
 			return false
 		}
 	}
-	if (slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "") &&
-		!isPlaceholderSlideTitle(slide.Title) {
-		return true
-	}
-	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
+	for _, keyword := range []string{"product", "interface", "scenario", "training", "workflow", "experience", "demo"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -2305,7 +1904,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 		return slide
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	if strings.Contains(text, "value") || strings.Contains(text, "价值") || strings.Contains(text, "roi") || strings.Contains(text, "收益") {
+	if strings.Contains(text, "value") {
 		slide.Layout = "dashboard"
 		slide.Metrics = normalizeMetrics([]officegen.MetricCard{
 			{Label: "Approval Cycle Time", Value: "-30%", Note: "Pilot target"},
@@ -2316,11 +1915,11 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 			slide.Points = normalizePoints([]string{
 				"Validate ROI first with approval, task, and knowledge metrics.",
 				"Decide whether to expand after an eight-week pilot.",
-			}, 2, 42)
+			}, 2, 28)
 		}
 		return slide
 	}
-	if strings.Contains(text, "market size") || strings.Contains(text, "market space") || strings.Contains(text, "市场规模") || strings.Contains(text, "市场空间") {
+	if strings.Contains(text, "market size") || strings.Contains(text, "market space") {
 		slide.Layout = "chart"
 		slide.Chart = normalizeChart(&officegen.ChartData{
 			Type:       "bar",
@@ -2332,7 +1931,7 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 			slide.Points = normalizePoints([]string{
 				"Demand is most mature in North America, with Europe and developed APAC forming the second tier.",
 				"Validate the English-speaking market first, then test expansion efficiency in the next region.",
-			}, 2, 42)
+			}, 2, 28)
 		}
 		if slide.Source == "" {
 			slide.Source = "Compiled from public sources"
@@ -2344,22 +1943,13 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 func detectPPTXArchetype(description, title string) pptxArchetype {
 	text := strings.ToLower(strings.TrimSpace(description + " " + title))
 	switch {
-	case strings.Contains(text, "enterprise collaboration platform"),
-		strings.Contains(text, "协作平台"),
-		strings.Contains(text, "企业协作"),
-		strings.Contains(text, "办公协作"),
-		strings.Contains(text, "saas 产品介绍"),
-		strings.Contains(text, "产品介绍"),
-		strings.Contains(text, "客户方案"):
+	case strings.Contains(text, "enterprise collaboration platform"):
 		return pptxArchetypeCompany
-	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion") ||
-		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海") || strings.Contains(text, "行业研究"):
+	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion"):
 		return pptxArchetypeMarket
-	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review") ||
-		strings.Contains(text, "业务复盘") || strings.Contains(text, "经营分析") || strings.Contains(text, "季度复盘") || strings.Contains(text, "运营复盘") || strings.Contains(text, "数据报告"):
+	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review"):
 		return pptxArchetypeOps
-	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
-		strings.Contains(text, "培训") || strings.Contains(text, "上手指南") || strings.Contains(text, "新员工") || strings.Contains(text, "教程"):
+	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide"):
 		return pptxArchetypeTraining
 	default:
 		return pptxArchetypeGeneral
@@ -2369,28 +1959,23 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 func buildArchetypePromptRules(archetype pptxArchetype) string {
 	switch archetype {
 	case pptxArchetypeCompany:
-		return `- For this topic, a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path, but adapt the exact slide count to the prompt.
-- Translate that storyline into patterns: cover=title-center/title-split, summary=sections-grid, capabilities=feature-grid or pillar-list, customer value=stat-band, use cases=comparison or pillar-list, closing=timeline.
-- If the prompt is client-facing, sales-oriented, or mentions pricing, package, proposal, quotation, or plan, include one dedicated pricing or packaging slide before the closing slide and render it as stat-band or comparison.
-- Slide 4 should prefer dashboard/stat-band or quantified evidence instead of abstract slogans.
-- Slide 5 should use sections, feature-grid, or comparison to emphasize scenario, action, and benefit without repeating slide 4.
-- The final slide should use sections with time, owner, and validation criteria. The whole deck should use at most one image slide, preferably on core capabilities.`
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> key takeaways -> core capabilities -> customer value -> use cases -> chapter -> rollout path, but adapt the exact slide count to the prompt.
+- Use the first chapter to frame context/value and the second chapter to transition into rollout.
+- Customer value should prefer quantified evidence instead of abstract slogans.
+- Use cases and rollout path should use sections with action, owner, timing, or validation criteria.`
 	case pptxArchetypeMarket:
-		return `- For this topic, a strong storyline is usually cover -> key takeaways -> market size -> regional opportunities -> competitive landscape -> entry recommendations, but adapt the exact slide count to the prompt.
-- Translate that storyline into patterns: summary=sections-grid, market size=chart-context, opportunities=pillar-list, competitive landscape=comparison or point-cards, closing=timeline.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> key takeaways -> market size -> regional opportunities -> competitive landscape -> chapter -> entry recommendations, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and include a source. Do not present market size as plain text judgment.
-- Slide 4 should use sections, and slide 5 should prefer comparison or point-cards so the two slides handle region choice and competition separately.
-- Slide 6 should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
+- Regional opportunities and competition should be handled on separate slides.
+- Entry recommendations should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeOps:
-		return `- For this topic, a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions, but adapt the exact slide count to the prompt.
-- Translate that storyline into patterns: summary=sections-grid, core metrics=chart-context or stat-band, issue diagnosis=pillar-list, priorities=sections-grid, closing=timeline.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> chapter -> execution actions, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and clearly state the data framing or comparison period.
-- Slide 4 should use sections or pillar-list to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
-- Slides 5-6 must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
+- Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
+- The final action cluster must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeTraining:
-		return `- For this topic, a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions, but adapt the exact slide count to the prompt.
-- Translate that storyline into patterns: summary=sections-grid, setup/common commands=feature-grid or pillar-list, workflow=timeline, cautions=sections-grid.
-- Slides 3-6 should prefer sections organized by step, command, and result.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions, but adapt the exact slide count to the prompt.
+- Setup/command slides should prefer sections organized by step, command, and result.
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
 	default:
@@ -2430,54 +2015,54 @@ func defaultArchetypeSlide(archetype pptxArchetype, idx int, deckTitle string) o
 	switch archetype {
 	case pptxArchetypeCompany:
 		defaults := []officegen.Slide{
-			{Role: string(pptxSlideRoleCover), Title: firstNonEmpty(deckTitle, "Enterprise Collaboration Platform Overview"), Layout: "title", IsTitle: true, Subtitle: "Build operational efficiency on a unified collaboration foundation"},
-			{Role: string(pptxSlideRoleSummary), Title: "Solution Overview", Layout: "content", Subtitle: "Unify entry points and workflows first, then expand governance capability", Points: []string{"One platform covers messaging, documents, workflows, and knowledge collaboration.", "Start with high-frequency scenarios and show visible gains within three months.", "Balance efficiency and compliance through clear permissions and audit boundaries."}},
-			{Role: string(pptxSlideRoleDetail), Title: "Core Capabilities", Layout: "content", Subtitle: "The platform creates leverage by connecting information, workflow, and organization", Sections: []officegen.SlideSection{{Heading: "Unified Entry", Detail: "Handle messages, documents, and approvals in one place"}, {Heading: "Workflow Sync", Detail: "Link forms, tasks, and notifications to shorten cycle time"}, {Heading: "Security", Detail: "Use permissions and audit trails for controlled governance"}}},
-			{Role: string(pptxSlideRoleEvidence), Title: "Customer Value", Layout: "dashboard", Subtitle: "Value shows up in efficiency, transparency, and management control", Metrics: []officegen.MetricCard{{Label: "Approval Cycle", Value: "-30%", Note: "Pilot target"}, {Label: "On-Time Tasks", Value: "+15%", Note: "Weekly tracking"}, {Label: "Knowledge Reuse", Value: "+25%", Note: "Quarterly review"}}, Points: []string{"Validate ROI first with approval, task, and knowledge metrics.", "Decide whether to scale after an eight-week pilot."}},
-			{Role: string(pptxSlideRoleDetail), Title: "Use Cases", Layout: "content", Subtitle: "High-frequency cross-functional scenarios create the fastest proof points", Sections: []officegen.SlideSection{{Heading: "Project Sync", Detail: "Track milestones, risks, and tasks in one workflow"}, {Heading: "Sales Support", Detail: "Connect leads, proposals, pricing, and approvals online"}, {Heading: "HQ Support", Detail: "Push announcements and training with closed-loop feedback"}}},
-			{Role: string(pptxSlideRoleAction), Title: "Rollout Path", Layout: "content", Subtitle: "Move from pilot to rollout in stages to reduce risk and prove impact", Sections: []officegen.SlideSection{{Heading: "2-Week Discovery", Detail: "Business owners and IT define the pilot scope"}, {Heading: "8-Week Pilot", Detail: "Launch three high-frequency scenarios and train admins"}, {Heading: "Monthly Review", Detail: "Use adoption, cycle time, and satisfaction to decide expansion"}}},
+			{Title: firstNonEmpty(deckTitle, "Enterprise Collaboration Platform Overview"), Layout: "title", IsTitle: true, Subtitle: "Build operational efficiency on a unified collaboration foundation"},
+			{Title: "Solution Overview", Layout: "content", Subtitle: "Unify entry points and workflows first, then expand governance capability", Points: []string{"One platform covers messaging, documents, workflows, and knowledge collaboration.", "Start with high-frequency scenarios and show visible gains within three months.", "Balance efficiency and compliance through clear permissions and audit boundaries."}},
+			{Title: "Core Capabilities", Layout: "content", Subtitle: "The platform creates leverage by connecting information, workflow, and organization", Sections: []officegen.SlideSection{{Heading: "Unified Entry", Detail: "Handle messages, documents, and approvals in one place"}, {Heading: "Workflow Sync", Detail: "Link forms, tasks, and notifications to shorten cycle time"}, {Heading: "Security", Detail: "Use permissions and audit trails for controlled governance"}}},
+			{Title: "Customer Value", Layout: "dashboard", Subtitle: "Value shows up in efficiency, transparency, and management control", Metrics: []officegen.MetricCard{{Label: "Approval Cycle", Value: "-30%", Note: "Pilot target"}, {Label: "On-Time Tasks", Value: "+15%", Note: "Weekly tracking"}, {Label: "Knowledge Reuse", Value: "+25%", Note: "Quarterly review"}}, Points: []string{"Validate ROI first with approval, task, and knowledge metrics.", "Decide whether to scale after an eight-week pilot."}},
+			{Title: "Use Cases", Layout: "content", Subtitle: "High-frequency cross-functional scenarios create the fastest proof points", Sections: []officegen.SlideSection{{Heading: "Project Sync", Detail: "Track milestones, risks, and tasks in one workflow"}, {Heading: "Sales Support", Detail: "Connect leads, proposals, pricing, and approvals online"}, {Heading: "HQ Support", Detail: "Push announcements and training with closed-loop feedback"}}},
+			{Title: "Rollout Path", Layout: "content", Subtitle: "Move from pilot to rollout in stages to reduce risk and prove impact", Sections: []officegen.SlideSection{{Heading: "2-Week Discovery", Detail: "Business owners and IT define the pilot scope"}, {Heading: "8-Week Pilot", Detail: "Launch three high-frequency scenarios and train admins"}, {Heading: "Monthly Review", Detail: "Use adoption, cycle time, and satisfaction to decide expansion"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
 		}
 	case pptxArchetypeMarket:
 		defaults := []officegen.Slide{
-			{Role: string(pptxSlideRoleCover), Title: firstNonEmpty(deckTitle, "AI Office Global Market Analysis and Entry Recommendations"), Layout: "title", IsTitle: true, Subtitle: "Market size, regional opportunities, competition, and entry choices for leadership"},
-			{Role: string(pptxSlideRoleSummary), Title: "Key Takeaways", Layout: "content", Subtitle: "Win the English-speaking market first, then expand into Europe and developed APAC", Points: []string{"North America is the top priority market, followed by the UK, Australia, and New Zealand.", "The battle is decided by distribution entry points and compliance, not just model quality.", "The 90-day objective is paid validation rather than broad regional rollout."}},
-			{Role: string(pptxSlideRoleEvidence), Title: "Market Size", Layout: "chart", Subtitle: "North America leads in scale, with Europe and developed APAC forming the second tier", Chart: &officegen.ChartData{Type: "bar", Title: "Regional Demand Index", Categories: []string{"North America", "Europe", "APAC"}, Values: []float64{100, 72, 58}}, Points: []string{"North America shows the most mature demand, while Europe and developed APAC form the second tier.", "Validate the English-speaking market first, then test expansion efficiency in the next region."}, Source: "Compiled from public sources"},
-			{Role: string(pptxSlideRoleDetail), Title: "Regional Opportunities", Layout: "content", Subtitle: "Region choice should be sequenced by monetization, compliance, and replication efficiency", Sections: []officegen.SlideSection{{Heading: "North America", Detail: "Strong budgets and faster decisions support premium entry"}, {Heading: "Europe", Detail: "Stable demand, but compliance must come first"}, {Heading: "Developed APAC", Detail: "English-speaking markets make the North America playbook easier to replicate"}}},
-			{Role: string(pptxSlideRoleEvidence), Title: "Competitive Landscape", Layout: "content", Subtitle: "Entrenched incumbents own the entry point, so differentiation must come from workflow focus", Sections: []officegen.SlideSection{{Heading: "Microsoft", Detail: "Uses the Office entry point to win enterprise buyers and IT procurement"}, {Heading: "Google", Detail: "Owns default distribution in cloud collaboration and SMB markets"}, {Heading: "Independent Tools", Detail: "Break through via vertical use cases and faster iteration"}}},
-			{Role: string(pptxSlideRoleAction), Title: "Entry Recommendations", Layout: "content", Subtitle: "Validate the market within 90 days and secure the first flagship customer", Sections: []officegen.SlideSection{{Heading: "6-Week MVP", Detail: "Product lead launches the English version and completes 10 trials"}, {Heading: "8-Week Trial Sales", Detail: "Global growth lead activates channels and closes the first paid customer"}, {Heading: "90-Day Review", Detail: "Leadership decides whether to expand based on retention and payback"}}},
+			{Title: firstNonEmpty(deckTitle, "AI Office Global Market Analysis and Entry Recommendations"), Layout: "title", IsTitle: true, Subtitle: "Market size, regional opportunities, competition, and entry choices for leadership"},
+			{Title: "Key Takeaways", Layout: "content", Subtitle: "Win the English-speaking market first, then expand into Europe and developed APAC", Points: []string{"North America is the top priority market, followed by the UK, Australia, and New Zealand.", "The battle is decided by distribution entry points and compliance, not just model quality.", "The 90-day objective is paid validation rather than broad regional rollout."}},
+			{Title: "Market Size", Layout: "chart", Subtitle: "North America leads in scale, with Europe and developed APAC forming the second tier", Chart: &officegen.ChartData{Type: "bar", Title: "Regional Demand Index", Categories: []string{"North America", "Europe", "APAC"}, Values: []float64{100, 72, 58}}, Points: []string{"North America shows the most mature demand, while Europe and developed APAC form the second tier.", "Validate the English-speaking market first, then test expansion efficiency in the next region."}, Source: "Compiled from public sources"},
+			{Title: "Regional Opportunities", Layout: "content", Subtitle: "Region choice should be sequenced by monetization, compliance, and replication efficiency", Sections: []officegen.SlideSection{{Heading: "North America", Detail: "Strong budgets and faster decisions support premium entry"}, {Heading: "Europe", Detail: "Stable demand, but compliance must come first"}, {Heading: "Developed APAC", Detail: "English-speaking markets make the North America playbook easier to replicate"}}},
+			{Title: "Competitive Landscape", Layout: "content", Subtitle: "Entrenched incumbents own the entry point, so differentiation must come from workflow focus", Sections: []officegen.SlideSection{{Heading: "Microsoft", Detail: "Uses the Office entry point to win enterprise buyers and IT procurement"}, {Heading: "Google", Detail: "Owns default distribution in cloud collaboration and SMB markets"}, {Heading: "Independent Tools", Detail: "Break through via vertical use cases and faster iteration"}}},
+			{Title: "Entry Recommendations", Layout: "content", Subtitle: "Validate the market within 90 days and secure the first flagship customer", Sections: []officegen.SlideSection{{Heading: "6-Week MVP", Detail: "Product lead launches the English version and completes 10 trials"}, {Heading: "8-Week Trial Sales", Detail: "Global growth lead activates channels and closes the first paid customer"}, {Heading: "90-Day Review", Detail: "Leadership decides whether to expand based on retention and payback"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
 		}
 	case pptxArchetypeOps:
 		defaults := []officegen.Slide{
-			{Role: string(pptxSlideRoleCover), Title: firstNonEmpty(deckTitle, "SaaS Quarterly Business Review"), Layout: "title", IsTitle: true, Subtitle: "Review growth, customer efficiency, and next-quarter actions in one loop"},
-			{Role: string(pptxSlideRoleSummary), Title: "Business Takeaways", Layout: "content", Subtitle: "New acquisition drives growth, but renewals, delivery, and collections are slowing quality improvement", Points: []string{"ARR index reached 128, with growth led mainly by new acquisition.", "Renewal at 84 and collections at 76 trail target materially.", "Next quarter should focus on renewal recovery, delivery efficiency, and cash collection."}},
-			{Role: string(pptxSlideRoleEvidence), Title: "Core Metrics", Layout: "chart", Subtitle: "New acquisition still lifts growth, but renewals and collections are dragging quality", Chart: &officegen.ChartData{Type: "bar", Title: "Quarterly Operating Metrics", Categories: []string{"New ARR", "Renewal Rate", "Collection Rate"}, Values: []float64{128, 84, 76}}, Points: []string{"New ARR at 128 shows this quarter is still acquisition-led.", "Renewal and collection performance are below target and need repair."}, Source: "Method: relative index with last quarter = 100; renewal and collection normalized against quarterly targets"},
-			{Role: string(pptxSlideRoleDetail), Title: "Issue Diagnosis", Layout: "content", Subtitle: "Delivery, collections, and conversion all create drag on operating quality", Sections: []officegen.SlideSection{{Heading: "P1 Delivery", Detail: "Custom work is 42% of mix, extending project cycles by about 10 days"}, {Heading: "P2 Collections", Detail: "Top 10 customers carry longer payment terms and slower cash conversion"}, {Heading: "P3 Conversion", Detail: "Mid-funnel win rate is 7 points below target"}}},
-			{Role: string(pptxSlideRoleDetail), Title: "Next-Quarter Priorities", Layout: "content", Subtitle: "Each priority is tied to an owner and result metric, not just direction", Sections: []officegen.SlideSection{{Heading: "Renewal Recovery", Detail: "Customer success lead restores renewal rate to above 90"}, {Heading: "Delivery Efficiency", Detail: "Delivery lead reduces custom work share below 30"}, {Heading: "Collections Push", Detail: "Sales operations lead raises collection rate to 90"}}},
-			{Role: string(pptxSlideRoleAction), Title: "Execution Actions", Layout: "content", Subtitle: "Advance monthly with clear owners, milestones, and validation metrics", Sections: []officegen.SlideSection{{Heading: "April Sales Lead", Detail: "Finish funnel review and lift win rate by 3 points"}, {Heading: "May Delivery Lead", Detail: "Launch the standard package and reduce rework below 10"}, {Heading: "June Ops Lead", Detail: "Review performance against renewal 90 and collection 90"}}},
+			{Title: firstNonEmpty(deckTitle, "SaaS Quarterly Business Review"), Layout: "title", IsTitle: true, Subtitle: "Review growth, customer efficiency, and next-quarter actions in one loop"},
+			{Title: "Business Takeaways", Layout: "content", Subtitle: "New acquisition drives growth, but renewals, delivery, and collections are slowing quality improvement", Points: []string{"ARR index reached 128, with growth led mainly by new acquisition.", "Renewal at 84 and collections at 76 trail target materially.", "Next quarter should focus on renewal recovery, delivery efficiency, and cash collection."}},
+			{Title: "Core Metrics", Layout: "chart", Subtitle: "New acquisition still lifts growth, but renewals and collections are dragging quality", Chart: &officegen.ChartData{Type: "bar", Title: "Quarterly Operating Metrics", Categories: []string{"New ARR", "Renewal Rate", "Collection Rate"}, Values: []float64{128, 84, 76}}, Points: []string{"New ARR at 128 shows this quarter is still acquisition-led.", "Renewal and collection performance are below target and need repair."}, Source: "Method: relative index with last quarter = 100; renewal and collection normalized against quarterly targets"},
+			{Title: "Issue Diagnosis", Layout: "content", Subtitle: "Delivery, collections, and conversion all create drag on operating quality", Sections: []officegen.SlideSection{{Heading: "P1 Delivery", Detail: "Custom work is 42% of mix, extending project cycles by about 10 days"}, {Heading: "P2 Collections", Detail: "Top 10 customers carry longer payment terms and slower cash conversion"}, {Heading: "P3 Conversion", Detail: "Mid-funnel win rate is 7 points below target"}}},
+			{Title: "Next-Quarter Priorities", Layout: "content", Subtitle: "Each priority is tied to an owner and result metric, not just direction", Sections: []officegen.SlideSection{{Heading: "Renewal Recovery", Detail: "Customer success lead restores renewal rate to above 90"}, {Heading: "Delivery Efficiency", Detail: "Delivery lead reduces custom work share below 30"}, {Heading: "Collections Push", Detail: "Sales operations lead raises collection rate to 90"}}},
+			{Title: "Execution Actions", Layout: "content", Subtitle: "Advance monthly with clear owners, milestones, and validation metrics", Sections: []officegen.SlideSection{{Heading: "April Sales Lead", Detail: "Finish funnel review and lift win rate by 3 points"}, {Heading: "May Delivery Lead", Detail: "Launch the standard package and reduce rework below 10"}, {Heading: "June Ops Lead", Detail: "Review performance against renewal 90 and collection 90"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
 		}
 	case pptxArchetypeTraining:
 		defaults := []officegen.Slide{
-			{Role: string(pptxSlideRoleCover), Title: firstNonEmpty(deckTitle, "OfficeCLI New Hire Onboarding"), Layout: "title", IsTitle: true, Subtitle: "Get new teammates productive quickly through setup, commands, and example flows"},
-			{Role: string(pptxSlideRoleSummary), Title: "Learning Goals", Layout: "content", Subtitle: "Build core understanding first, then complete the first independent command run", Points: []string{"Understand what OfficeCLI does, what it takes in, and what it outputs.", "Finish setup and run one local generation command successfully.", "Know the configuration boundaries and cautions before production use."}},
-			{Role: string(pptxSlideRoleDetail), Title: "Installation and Setup", Layout: "content", Subtitle: "Prepare in three steps: environment check, installation, and login validation", Sections: []officegen.SlideSection{{Heading: "Environment Check", Detail: "Confirm Go, config files, and local dependencies are available"}, {Heading: "Install Command", Detail: "Run the build or download command to create the executable"}, {Heading: "Login Check", Detail: "Run a status command after setup to verify connectivity"}}},
-			{Role: string(pptxSlideRoleDetail), Title: "Common Commands", Layout: "content", Subtitle: "Memorize the three most common command groups first, then expand usage", Sections: []officegen.SlideSection{{Heading: "Status Check", Detail: "Run config status to verify configuration and dependencies"}, {Heading: "Generate PPT", Detail: "Run new pptx to generate a local PPT file"}, {Heading: "Quality Review", Detail: "Run review pptx for structural and visual review"}}},
-			{Role: string(pptxSlideRoleDetail), Title: "Example Workflow", Layout: "content", Subtitle: "A full practice run should cover generation, checking, and revision", Sections: []officegen.SlideSection{{Heading: "Step 1 Scope", Detail: "Define topic, audience, and style before generating output"}, {Heading: "Step 2 Generate", Detail: "Run new pptx and confirm the file was written successfully"}, {Heading: "Step 3 Review", Detail: "Run review pptx and iterate based on the findings"}}},
-			{Role: string(pptxSlideRoleAction), Title: "Cautions", Layout: "content", Subtitle: "Validate quality locally before moving into the formal collaboration flow", Sections: []officegen.SlideSection{{Heading: "Validate Locally", Detail: "Keep publishing off by default until output quality is confirmed"}, {Heading: "Complete Config", Detail: "Missing models, image settings, or dependencies will degrade results"}, {Heading: "Keep Commands Intact", Detail: "Preserve full commands, paths, and parameters without truncation"}}},
+			{Title: firstNonEmpty(deckTitle, "OfficeCLI New Hire Onboarding"), Layout: "title", IsTitle: true, Subtitle: "Get new teammates productive quickly through setup, commands, and example flows"},
+			{Title: "Learning Goals", Layout: "content", Subtitle: "Build core understanding first, then complete the first independent command run", Points: []string{"Understand what OfficeCLI does, what it takes in, and what it outputs.", "Finish setup and run one local generation command successfully.", "Know the configuration boundaries and cautions before production use."}},
+			{Title: "Installation and Setup", Layout: "content", Subtitle: "Prepare in three steps: environment check, installation, and login validation", Sections: []officegen.SlideSection{{Heading: "Environment Check", Detail: "Confirm Go, config files, and local dependencies are available"}, {Heading: "Install Command", Detail: "Run the build or download command to create the executable"}, {Heading: "Login Check", Detail: "Run a status command after setup to verify connectivity"}}},
+			{Title: "Common Commands", Layout: "content", Subtitle: "Memorize the three most common command groups first, then expand usage", Sections: []officegen.SlideSection{{Heading: "Status Check", Detail: "Run config status to verify configuration and dependencies"}, {Heading: "Generate PPT", Detail: "Run new pptx to generate a local PPT file"}, {Heading: "Quality Review", Detail: "Run review pptx for structural and visual review"}}},
+			{Title: "Example Workflow", Layout: "content", Subtitle: "A full practice run should cover generation, checking, and revision", Sections: []officegen.SlideSection{{Heading: "Step 1 Scope", Detail: "Define topic, audience, and style before generating output"}, {Heading: "Step 2 Generate", Detail: "Run new pptx and confirm the file was written successfully"}, {Heading: "Step 3 Review", Detail: "Run review pptx and iterate based on the findings"}}},
+			{Title: "Cautions", Layout: "content", Subtitle: "Validate quality locally before moving into the formal collaboration flow", Sections: []officegen.SlideSection{{Heading: "Validate Locally", Detail: "Keep publishing off by default until output quality is confirmed"}, {Heading: "Complete Config", Detail: "Missing models, image settings, or dependencies will degrade results"}, {Heading: "Keep Commands Intact", Detail: "Preserve full commands, paths, and parameters without truncation"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
 		}
 	}
-	return officegen.Slide{Role: string(pptxSlideRoleDetail), Title: fmt.Sprintf("Part %d", idx+1), Layout: "content", Subtitle: "Develop one clear takeaway per slide"}
+	return officegen.Slide{Title: fmt.Sprintf("Part %d", idx+1), Layout: "content", Subtitle: "Develop one clear takeaway per slide"}
 }
 
 func enforceCompanySkeleton(slides []officegen.Slide) {
@@ -2778,11 +2363,8 @@ func enforceTrainingSkeleton(slides []officegen.Slide) {
 }
 
 func isActionSlide(slide officegen.Slide) bool {
-	if slideRoleName(slide, 0) == pptxSlideRoleAction {
-		return true
-	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution", "建议", "下一步", "推进", "计划", "发布", "培训", "路径", "行动", "注意事项"} {
+	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -2795,9 +2377,9 @@ func pointToSection(point string, idx int) (string, string) {
 	if cleaned == "" {
 		return "", ""
 	}
-	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month", "30天内", "60天内", "90天内", "第1周", "第2周", "本周", "本月"} {
+	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month"} {
 		if strings.HasPrefix(cleaned, marker) {
-			return fitTextForLayout(marker, 12), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 42)
+			return fitTextForLayout(marker, 10), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 24)
 		}
 	}
 	for _, sep := range []string{"：", ":"} {
@@ -2805,13 +2387,13 @@ func pointToSection(point string, idx int) (string, string) {
 		if len(parts) != 2 {
 			continue
 		}
-		label := fitTextForLayout(strings.TrimSpace(parts[0]), 12)
-		body := fitTextForLayout(strings.TrimSpace(parts[1]), 42)
+		label := fitTextForLayout(strings.TrimSpace(parts[0]), 10)
+		body := fitTextForLayout(strings.TrimSpace(parts[1]), 24)
 		if label != "" && body != "" {
 			return label, body
 		}
 	}
-	return fmt.Sprintf("Step %d", idx+1), fitTextForLayout(cleaned, 42)
+	return fmt.Sprintf("Step %d", idx+1), fitTextForLayout(cleaned, 24)
 }
 
 func fitTextForLayout(value string, maxRunes int) string {
@@ -2839,11 +2421,15 @@ func fitTextForLayout(value string, maxRunes int) string {
 
 func slideLayoutName(slide officegen.Slide) string {
 	layout := strings.ToLower(strings.TrimSpace(slide.Layout))
-	if layout != "" {
+	switch layout {
+	case "title", "content", "chart", "dashboard", "toc", "chapter", "gallery", "comparison", "timeline", "closing":
 		return layout
 	}
 	if slide.IsTitle {
 		return "title"
+	}
+	if len(slide.Visuals) > 0 {
+		return "gallery"
 	}
 	if len(slide.Metrics) > 0 {
 		return "dashboard"
@@ -2905,7 +2491,7 @@ func shouldDowngradeChart(slide officegen.Slide) bool {
 		return false
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Chart.Title))
-	for _, keyword := range []string{"milestone", "cadence", "plan", "roadmap", "step", "workflow", "risk", "next step", "里程碑", "节奏", "计划", "路线图", "步骤", "流程", "风险", "下一步"} {
+	for _, keyword := range []string{"milestone", "cadence", "plan", "roadmap", "step", "workflow", "risk", "next step"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}

@@ -158,6 +158,9 @@ func BuildLocalPreviewHTML(title, preset string, theme *SlideTheme, slides []Sli
 		if strings.TrimSpace(slide.Subtitle) != "" {
 			body.WriteString(fmt.Sprintf("<p class=\"subtitle\">%s</p>", html.EscapeString(slide.Subtitle)))
 		}
+		if strings.TrimSpace(slide.NarrativeRole) != "" || strings.TrimSpace(slide.SectionTitle) != "" {
+			body.WriteString(fmt.Sprintf("<p class=\"meta\">role=%s / section=%s</p>", html.EscapeString(strings.TrimSpace(slide.NarrativeRole)), html.EscapeString(strings.TrimSpace(slide.SectionTitle))))
+		}
 		if len(slide.Points) > 0 {
 			body.WriteString("<ul>")
 			for _, point := range slide.Points {
@@ -179,6 +182,17 @@ func BuildLocalPreviewHTML(title, preset string, theme *SlideTheme, slides []Sli
 			body.WriteString("<div class=\"metrics\">")
 			for _, metric := range slide.Metrics {
 				body.WriteString(fmt.Sprintf("<div class=\"metric\"><strong>%s</strong><span>%s</span><em>%s</em></div>", html.EscapeString(metric.Value), html.EscapeString(metric.Label), html.EscapeString(metric.Note)))
+			}
+			body.WriteString("</div>")
+		}
+		if len(slide.Visuals) > 0 {
+			body.WriteString("<div class=\"sections\">")
+			for _, visual := range slide.Visuals {
+				text := strings.TrimSpace(visual.Caption)
+				if text == "" {
+					text = strings.TrimSpace(visual.Prompt)
+				}
+				body.WriteString(fmt.Sprintf("<div class=\"section\"><strong>%s</strong><span>%s</span></div>", html.EscapeString(visual.Label), html.EscapeString(text)))
 			}
 			body.WriteString("</div>")
 		}

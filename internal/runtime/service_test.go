@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -121,21 +122,42 @@ func countZipEntries(archive []byte, prefix, suffix string) int {
 	return count
 }
 
+func archiveContainsEntryWithSubstring(t *testing.T, archive []byte, prefix, suffix, needle string) bool {
+	t.Helper()
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, file := range reader.File {
+		if prefix != "" && !strings.HasPrefix(file.Name, prefix) {
+			continue
+		}
+		if suffix != "" && !strings.HasSuffix(file.Name, suffix) {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry %s: %v", file.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read zip entry %s: %v", file.Name, err)
+		}
+		if strings.Contains(string(data), needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *runtimeProgressCollector) Emit(_ context.Context, event engine.ProgressEvent) {
 	c.events = append(c.events, event)
 }
 
 func TestServiceGenerateDOCXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
-		jsonResponse: `{
-			"title":"Enterprise Collaboration Platform Overview",
-			"subtitle":"Board-level platform brief",
-			"blocks":[
-				{"type":"heading","level":1,"text":"Product Overview"},
-				{"type":"paragraph","text":"This collaboration platform is designed for enterprise teams."},
-				{"type":"callout","title":"Why it matters","text":"It centralizes workflows across departments."}
-			]
-		}`,
+		jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`,
 	}, nil)
 
 	doc, err := service.Generate(context.Background(), GenerateParams{
@@ -143,44 +165,23 @@ func TestServiceGenerateDOCXWithFakeLLM(t *testing.T) {
 		Prompt:       "Introduce this enterprise collaboration platform",
 		Topic:        "Enterprise Collaboration Platform Overview",
 		Mode:         "fast",
-		LocalPreview: true,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
-	}
-	if len(doc.PreviewHTML) == 0 || len(doc.PreviewJSON) == 0 {
-		t.Fatalf("expected docx preview sidecars")
 	}
 
 	contentXMLs, err := ooxmledit.ExtractContentXML(doc.Bytes, ooxmledit.FileTypeDOCX)
 	if err != nil {
 		t.Fatalf("ExtractContentXML: %v", err)
 	}
-	if !strings.Contains(contentXMLs["word/document.xml"], "Enterprise Collaboration Platform") ||
-		!strings.Contains(contentXMLs["word/document.xml"], "Why it matters") {
+	if !strings.Contains(contentXMLs["word/document.xml"], "Enterprise Collaboration Platform") {
 		t.Fatalf("document xml = %q", contentXMLs["word/document.xml"])
 	}
 }
 
 func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
-		jsonResponse: `{
-			"title":"Sales Workbook",
-			"subtitle":"Regional pipeline summary",
-			"sheets":[
-				{
-					"name":"Pipeline",
-					"purpose":"Track commercial performance by region",
-					"summary":[{"label":"Top Region","value":"West"}],
-					"columns":[
-						{"label":"Region","type":"string"},
-						{"label":"Amount","type":"currency"}
-					],
-					"rows":[["East","100"],["West","120"]],
-					"showTotals":true
-				}
-			]
-		}`,
+		jsonResponse: `{"title":"Sales Workbook","sheets":[{"name":"Pipeline","headers":["Region","Amount"],"rows":[["East","100"],["West","120"]]}]}`,
 	}, nil)
 
 	doc, err := service.Generate(context.Background(), GenerateParams{
@@ -188,16 +189,12 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 		Prompt:       "Create a regional sales workbook",
 		Topic:        "Sales Workbook",
 		Mode:         "fast",
-		LocalPreview: true,
 	})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if doc.DocumentName != "Sales_Workbook.xlsx" {
 		t.Fatalf("document name = %q", doc.DocumentName)
-	}
-	if len(doc.PreviewHTML) == 0 || len(doc.PreviewJSON) == 0 {
-		t.Fatalf("expected xlsx preview sidecars")
 	}
 
 	contentXMLs, err := ooxmledit.ExtractContentXML(doc.Bytes, ooxmledit.FileTypeXLSX)
@@ -206,8 +203,8 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["xl/workbook.xml"], "Pipeline") ||
 		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
-		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "<f>SUBTOTAL") {
-		t.Fatalf("workbook xml = %q\nshared strings = %q\nsheet1 = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
+		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "120") {
+		t.Fatalf("workbook xml = %q\nshared strings = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"])
 	}
 }
 
@@ -215,12 +212,10 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
 		jsonResponse: `{
 			"title":"Enterprise Collaboration Platform Overview",
-			"subtitle":"Product context and business status",
-			"stylePreset":"executive-dark",
-			"theme":{"preset":"executive","primaryColor":"0F172A","accentColor":"F97316","accentSoft":"FFEDD5","backgroundColor":"F8FAFC","surfaceColor":"FFFFFF","borderColor":"CBD5E1","textColor":"1E293B","mutedColor":"64748B","titleColor":"020617","fontFamily":"Aptos","eaFontFamily":"Microsoft YaHei"},
+			"theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},
 			"slides":[
-				{"role":"cover","layout":"title","headline":"Enterprise Collaboration Platform Overview","takeaway":"Product context and business status","blocks":[],"visual":null,"source":"","bgColor":"","bgColor2":""},
-				{"role":"detail","layout":"content","headline":"Product Capabilities","takeaway":"Show how the platform improves team execution","blocks":[{"type":"bullets","text":"","items":["Multi-user collaboration","Real-time editing","Enterprise administration"],"sections":[],"metrics":[],"chart":null}],"visual":null,"source":"","bgColor":"","bgColor2":""}
+				{"title":"Enterprise Collaboration Platform Overview","layout":"title","subtitle":"Product context and business status","isTitle":true},
+				{"title":"Product Capabilities","layout":"content","points":["Multi-user collaboration","Real-time editing","Enterprise administration"]}
 			]
 		}`,
 	}, nil)
@@ -241,50 +236,6 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Enterprise Collabo") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
-	}
-}
-
-func TestBuildPPTXFromJSON_AcceptsSemanticDeckSpec(t *testing.T) {
-	content := `{
-		"title":"Semantic Deck Test",
-		"subtitle":"A deck-level framing sentence",
-		"stylePreset":"tech-contrast",
-		"theme":{"preset":"analysis","primaryColor":"1D4ED8","accentColor":"0F766E","accentSoft":"D1FAE5","backgroundColor":"F8FAFC","surfaceColor":"FFFFFF","borderColor":"DCE4F2","textColor":"0F172A","mutedColor":"64748B","titleColor":"020617","fontFamily":"Aptos","eaFontFamily":"Microsoft YaHei"},
-		"slides":[
-			{"role":"cover","layout":"title","headline":"Semantic Deck Test","takeaway":"Start with the framing","blocks":[],"visual":null,"source":"","bgColor":"","bgColor2":""},
-			{"role":"summary","layout":"content","headline":"Key Takeaways","takeaway":"Lead with the conclusion","blocks":[{"type":"sections","text":"","items":[],"sections":[{"heading":"Signal","detail":"Demand is consolidating around enterprise workflows"},{"heading":"Impact","detail":"The platform story must emphasize control and rollout"},{"heading":"Decision","detail":"Move with a pilot-first expansion motion"}],"metrics":[],"chart":null}],"visual":null,"source":"","bgColor":"","bgColor2":""}
-		]
-	}`
-
-	fileBytes, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "Semantic Deck Test", "", false, false)
-	if err != nil {
-		t.Fatalf("BuildPPTXFromJSON: %v", err)
-	}
-	slide2 := readZipEntry(t, fileBytes, "ppt/slides/slide2.xml")
-	if !strings.Contains(slide2, "Key Takeaways") || !strings.Contains(slide2, "Demand is consolidating") {
-		t.Fatalf("semantic slide missing expected content:\n%s", slide2)
-	}
-}
-
-func TestBuildPPTXFromJSON_AcceptsLegacySlideSpec(t *testing.T) {
-	content := `{
-		"title":"Legacy Deck Test",
-		"theme":{"primaryColor":"1A73E8","accentColor":"E8710A","backgroundType":"gradient","bgColor1":"F0F4FF","bgColor2":"FFFFFF"},
-		"slides":[
-			{"title":"Legacy Deck Test","layout":"title","variant":"title-center","subtitle":"Start with the framing","isTitle":true},
-			{"title":"Core Capabilities","layout":"content","variant":"bullets","subtitle":"Explain the operating model","points":["Workflow orchestration","Departmental collaboration","Governance and auditability"],"hasImage":false,"imagePrompt":"","imagePos":"","source":"Internal product brief"}
-		]
-	}`
-
-	fileBytes, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "Legacy Deck Test", "", false, false)
-	if err != nil {
-		t.Fatalf("BuildPPTXFromJSON: %v", err)
-	}
-	slide2 := readZipEntry(t, fileBytes, "ppt/slides/slide2.xml")
-	for _, needle := range []string{"Explain the operating model", "Workflow orchestration", "Departmental collaborati", "Governance and auditabil", "Internal product brief"} {
-		if !strings.Contains(slide2, needle) {
-			t.Fatalf("legacy slide missing %q:\n%s", needle, slide2)
-		}
 	}
 }
 
@@ -369,12 +320,11 @@ func TestServiceGenerateReportWithFakeLLM(t *testing.T) {
 func TestBuildPPTXPrompt_ImagesEnabledIncludesImageGuidance(t *testing.T) {
 	prompt := BuildPPTXPrompt("Introduce product capabilities", generateengine.PromptTarget{}, true)
 	for _, needle := range []string{
-		`"kind": "image"`,
+		`"visuals": [`,
 		`"prompt": "A concrete visual prompt that can be sent directly to an image model"`,
-		`"position": "right"`,
-		"Use images intentionally, not just decoratively",
-		"usually keep 2-4 image-supported slides",
-		"Do not add images to chart or dashboard layouts",
+		"Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide",
+		"Do not add images to chart, dashboard, toc, or closing layouts",
+		"On gallery slides, use visuals with 2-4 concrete prompts",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -384,10 +334,10 @@ func TestBuildPPTXPrompt_ImagesEnabledIncludesImageGuidance(t *testing.T) {
 
 func TestBuildPPTXPrompt_ImagesDisabledForbidsImageFields(t *testing.T) {
 	prompt := BuildPPTXPrompt("Introduce product capabilities", generateengine.PromptTarget{}, false)
-	if strings.Contains(prompt, `"kind": "image"`) {
+	if strings.Contains(prompt, `"hasImage": true`) {
 		t.Fatalf("prompt should not include image schema when disabled:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "Set visual to null when the slide does not need an image.") {
+	if !strings.Contains(prompt, "Do not output the image fields hasImage, imagePrompt, or imagePos.") {
 		t.Fatalf("prompt should forbid image fields when disabled:\n%s", prompt)
 	}
 }
@@ -399,11 +349,10 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		Audience: "Prospective enterprise customers",
 	}, true)
 	for _, needle := range []string{
-		"Keep the deck to 5-8 slides, usually 6-7.",
-		"slide 2 should read as an executive summary or key takeaways page",
-		"takeaway must be a takeaway sentence",
-		"Most non-cover content slides should read as 3-5 solid bullets or 3-4 sections",
-		"Use at most 4 sections, at most 4 dashboard metrics",
+		"Keep the deck to 6-10 slides, usually 7-9.",
+		"slide 2 should usually be a toc page",
+		"subtitle must be a takeaway sentence",
+		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
 		"The closing slide must include 2-3 next-step actions",
 	} {
@@ -415,7 +364,7 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 
 func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 	companyPrompt := BuildPPTXPrompt("enterprise collaboration platform", generateengine.PromptTarget{}, true)
-	if !strings.Contains(companyPrompt, "a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path") {
+	if !strings.Contains(companyPrompt, "a strong storyline is usually cover -> toc -> chapter -> key takeaways -> core capabilities -> customer value -> use cases -> chapter -> rollout path") {
 		t.Fatalf("company prompt missing archetype outline:\n%s", companyPrompt)
 	}
 	marketPrompt := BuildPPTXPrompt("market opportunity analysis", generateengine.PromptTarget{}, false)
@@ -423,11 +372,11 @@ func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 		t.Fatalf("market prompt missing archetype outline:\n%s", marketPrompt)
 	}
 	opsPrompt := BuildPPTXPrompt("business review", generateengine.PromptTarget{}, false)
-	if !strings.Contains(opsPrompt, "a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions") {
+	if !strings.Contains(opsPrompt, "a strong storyline is usually cover -> toc -> chapter -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> chapter -> execution actions") {
 		t.Fatalf("ops prompt missing archetype outline:\n%s", opsPrompt)
 	}
 	trainingPrompt := BuildPPTXPrompt("new hire onboarding training", generateengine.PromptTarget{}, false)
-	if !strings.Contains(trainingPrompt, "a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions") {
+	if !strings.Contains(trainingPrompt, "a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions") {
 		t.Fatalf("training prompt missing archetype outline:\n%s", trainingPrompt)
 	}
 }
@@ -470,101 +419,6 @@ func TestNormalizeActionSlide_ConvertsPointsToSections(t *testing.T) {
 	}
 }
 
-func TestNormalizePPTXSlide_PreservesRicherBodyCopy(t *testing.T) {
-	slide := officegen.Slide{
-		Title:  "Core Capabilities",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "Unified Workspace", Detail: "Bring messages, documents, approvals, and follow-up tasks into one shared operating surface for cross-functional teams."},
-			{Heading: "Workflow Automation", Detail: "Connect forms, task routing, reminders, and escalation logic so business processes keep moving without manual chasing."},
-			{Heading: "Governance", Detail: "Apply role-based permissions, operation logs, and audit-ready history so enterprise buyers can adopt the platform safely."},
-			{Heading: "Knowledge Reuse", Detail: "Turn recurring project assets into templates and reusable playbooks that reduce ramp time for new teams."},
-		},
-	}
-
-	normalized, _ := normalizePPTXSlide(slide, analyzePPTXSlide(slide, 2), 2, "Enterprise Collaboration Platform", false, nil)
-	if len(normalized.Sections) != 4 {
-		t.Fatalf("sections = %#v, want 4 richer sections", normalized.Sections)
-	}
-	if got := len([]rune(normalized.Sections[0].Detail)); got < 40 {
-		t.Fatalf("section detail too short after normalization: %q", normalized.Sections[0].Detail)
-	}
-}
-
-func TestNormalizePPTXSlide_AutoAddsImagePromptForIllustrativeSlides(t *testing.T) {
-	imageBudget := 1
-	slide := officegen.Slide{
-		Title:    "Workflow Demo",
-		Layout:   "content",
-		Subtitle: "Show how sales, delivery, and finance collaborate in one operating flow",
-		Points: []string{
-			"Start from an incoming customer request and route it into a shared project workspace.",
-			"Coordinate approvals, delivery checkpoints, and customer updates without tool switching.",
-			"Close the loop with reusable templates and visible owner accountability.",
-		},
-	}
-
-	normalized, kept := normalizePPTXSlide(slide, analyzePPTXSlide(slide, 2), 2, "Enterprise Collaboration Platform", true, &imageBudget)
-	if !kept || !normalized.HasImage {
-		t.Fatalf("expected illustrative slide to keep an auto-generated image: %#v", normalized)
-	}
-	if strings.TrimSpace(normalized.ImagePrompt) == "" {
-		t.Fatalf("expected non-empty image prompt: %#v", normalized)
-	}
-	if normalized.ImagePos == "" {
-		t.Fatalf("expected normalized image position: %#v", normalized)
-	}
-}
-
-func TestNormalizeSlideVariant_PrefersComparisonAndTimeline(t *testing.T) {
-	comparison := normalizeSlideVariant(officegen.Slide{
-		Role:   string(pptxSlideRoleDetail),
-		Title:  "Before vs After",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "Before", Detail: "Manual handoffs slow response time."},
-			{Heading: "After", Detail: "One workflow keeps owners and status visible."},
-		},
-	})
-	if comparison != "comparison" {
-		t.Fatalf("comparison variant = %q", comparison)
-	}
-
-	timeline := normalizeSlideVariant(officegen.Slide{
-		Role:   string(pptxSlideRoleAction),
-		Title:  "Rollout Path",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "Week 1", Detail: "Lock the pilot scope."},
-			{Heading: "Week 2", Detail: "Train the first owner set."},
-			{Heading: "Week 4", Detail: "Review adoption and expand."},
-			{Heading: "Week 8", Detail: "Decide broader rollout."},
-		},
-	})
-	if timeline != "timeline" {
-		t.Fatalf("timeline variant = %q", timeline)
-	}
-}
-
-func TestExpandSlideForDensity_PreservesTimelineCandidate(t *testing.T) {
-	slide := officegen.Slide{
-		Role:   string(pptxSlideRoleAction),
-		Title:  "Execution Actions",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "Week 1", Detail: "Confirm scope."},
-			{Heading: "Week 2", Detail: "Train admins."},
-			{Heading: "Week 4", Detail: "Launch pilot."},
-			{Heading: "Week 8", Detail: "Review and expand."},
-		},
-	}
-
-	got := expandSlideForDensity(slide)
-	if len(got) != 1 {
-		t.Fatalf("timeline candidate should stay on one slide: %#v", got)
-	}
-}
-
 func TestNormalizeEvidenceSlide_PromotesValueAndMarketSlides(t *testing.T) {
 	valueSlide := normalizeEvidenceSlide(officegen.Slide{Title: "customer value"})
 	if valueSlide.Layout != "dashboard" || len(valueSlide.Metrics) == 0 {
@@ -589,17 +443,17 @@ func TestNormalizePPTXPayload_EnforcesCompanySkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "enterprise collaboration platform", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if len(payload.Slides) < 7 {
+		t.Fatalf("slide count = %d, want scaffolded deck", len(payload.Slides))
 	}
-	if payload.Slides[1].Title != "Key Takeaways" || len(payload.Slides[1].Sections) != 3 {
-		t.Fatalf("company summary slide = %#v", payload.Slides[1])
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("company toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Title != "Core Capabilities" || len(payload.Slides[2].Sections) != 3 {
-		t.Fatalf("company capability slide = %#v", payload.Slides[2])
+	if payload.Slides[2].Layout != "chapter" {
+		t.Fatalf("company first chapter slide = %#v", payload.Slides[2])
 	}
-	if payload.Slides[3].Title != "Rollout Path" || len(payload.Slides[3].Sections) == 0 {
-		t.Fatalf("company closing slide = %#v", payload.Slides[3])
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) == 0 {
+		t.Fatalf("company closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -613,14 +467,21 @@ func TestNormalizePPTXPayload_EnforcesMarketSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "market opportunity analysis", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("market toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Layout != "chart" || payload.Slides[2].Chart == nil {
-		t.Fatalf("market chart slide = %#v", payload.Slides[2])
+	foundChart := false
+	for _, slide := range payload.Slides {
+		if slide.Layout == "chart" && slide.Chart != nil {
+			foundChart = true
+			break
+		}
 	}
-	if payload.Slides[3].Title != "Entry Recommendations" || len(payload.Slides[3].Sections) == 0 {
-		t.Fatalf("market closing slide = %#v", payload.Slides[3])
+	if !foundChart {
+		t.Fatalf("market deck should retain an evidence chart: %#v", payload.Slides)
+	}
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) == 0 {
+		t.Fatalf("market closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -634,14 +495,21 @@ func TestNormalizePPTXPayload_EnforcesOpsSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "business review", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("ops toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Layout != "chart" || payload.Slides[2].Chart == nil {
-		t.Fatalf("ops chart slide = %#v", payload.Slides[2])
+	foundChart := false
+	for _, slide := range payload.Slides {
+		if slide.Layout == "chart" && slide.Chart != nil {
+			foundChart = true
+			break
+		}
 	}
-	if payload.Slides[3].Title != "Execution Actions" || len(payload.Slides[3].Sections) != 3 {
-		t.Fatalf("ops closing slide = %#v", payload.Slides[3])
+	if !foundChart {
+		t.Fatalf("ops deck should retain an evidence chart: %#v", payload.Slides)
+	}
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+		t.Fatalf("ops closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -655,14 +523,11 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "new hire onboarding training", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("training toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Title != "Installation and Setup" || len(payload.Slides[2].Sections) != 3 {
-		t.Fatalf("training setup slide = %#v", payload.Slides[2])
-	}
-	if payload.Slides[3].Title != "Cautions" || len(payload.Slides[3].Sections) != 3 {
-		t.Fatalf("training closing slide = %#v", payload.Slides[3])
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+		t.Fatalf("training closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -693,9 +558,8 @@ func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	if llm.imageCalls != 1 {
 		t.Fatalf("imageCalls = %d, want 1", llm.imageCalls)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if !strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels missing image relationship: %s", rels)
+	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels missing image relationship")
 	}
 	if len(doc.Warnings) != 0 {
 		t.Fatalf("warnings = %#v, want none", doc.Warnings)
@@ -729,9 +593,8 @@ func TestServiceGeneratePPTX_SkipsImagesWhenDisabled(t *testing.T) {
 	if llm.imageCalls != 0 {
 		t.Fatalf("imageCalls = %d, want 0", llm.imageCalls)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels should not include image relationship when disabled: %s", rels)
+	if archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels should not include image relationship when disabled")
 	}
 }
 
@@ -771,9 +634,38 @@ func TestServiceGeneratePPTX_DegradesGracefullyWhenImageGenerationFails(t *testi
 	if got := doc.Warnings[0].Message; !strings.Contains(got, "officecli config set-generation") {
 		t.Fatalf("warning should include config guidance: %q", got)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels should not include image relationship after degradation: %s", rels)
+	if archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels should not include image relationship after degradation")
+	}
+}
+
+func TestBuildPPTXFromJSON_GeneratesGalleryVisuals(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Visual Gallery Demo",
+		"slides":[
+			{"title":"Visual Gallery Demo","layout":"title","variant":"title-center","subtitle":"Open with the topic"},
+			{"title":"Product Scenes","layout":"gallery","variant":"gallery","narrativeRole":"analysis","sectionIndex":1,"sectionTitle":"Core Storyline","subtitle":"Use visuals to show the product context","visuals":[
+				{"label":"Workspace","prompt":"A modern collaboration workspace with documents and comments","caption":"Workspace view"},
+				{"label":"Meeting","prompt":"A product review meeting around a large display with dashboard UI","caption":"Review scene"}
+			]}
+		]
+	}`
+
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Visual Gallery Demo", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if llm.imageCalls < 2 {
+		t.Fatalf("imageCalls = %d, want at least 2", llm.imageCalls)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
+	}
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got < 2 {
+		t.Fatalf("image count = %d, want at least 2", got)
 	}
 }
 
@@ -800,8 +692,8 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 8 {
-		t.Fatalf("slide count = %d, want 8", got)
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 10 {
+		t.Fatalf("slide count = %d, want 10", got)
 	}
 	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 0 {
 		t.Fatalf("image count = %d, want 0 after image rebalancing", got)
@@ -810,46 +702,18 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if strings.Contains(slide1, "●") {
 		t.Fatalf("title slide should not render bullet content: %s", slide1)
 	}
-	slide4 := readZipEntry(t, fileBytes, "ppt/slides/slide4.xml")
-	if !strings.Contains(slide4, "It should be split into multip") {
-		t.Fatalf("content slide should be normalized into readable points: %s", slide4)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "It should be split into multip") {
+		t.Fatalf("content slide should be normalized into readable points")
 	}
-	slide6Rels := readZipEntry(t, fileBytes, filepath.ToSlash("ppt/slides/_rels/slide6.xml.rels"))
-	if strings.Contains(slide6Rels, "image") {
-		t.Fatalf("chart slide should not keep image rels: %s", slide6Rels)
+	for idx := 1; idx <= countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); idx++ {
+		rels := readZipEntry(t, fileBytes, filepath.ToSlash(fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx)))
+		slideXML := readZipEntry(t, fileBytes, fmt.Sprintf("ppt/slides/slide%d.xml", idx))
+		if strings.Contains(slideXML, "ChartPanel") && strings.Contains(rels, "image") {
+			t.Fatalf("chart slide should not keep image rels: %s", rels)
+		}
 	}
 	if len(warnings) == 0 {
 		t.Fatalf("warnings = %#v, want normalization warnings", warnings)
-	}
-}
-
-func TestBuildPPTXFromJSON_KeepsMultipleImagesForIllustrativeDeck(t *testing.T) {
-	llm := &fakeLLMClient{
-		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
-	}
-	content := `{
-		"title":"Enterprise Collaboration Platform Overview",
-		"slides":[
-			{"title":"Enterprise Collaboration Platform Overview","layout":"title","subtitle":"Professional customer-facing overview","isTitle":true,"hasImage":true,"imagePrompt":"A premium enterprise collaboration hero visual, modern office team, elegant product ambience","imagePos":"background"},
-			{"title":"Key Takeaways","role":"summary","layout":"content","sections":[{"heading":"Unified Work","detail":"Bring messages, documents, approvals, and follow-up into one flow"},{"heading":"Visible ROI","detail":"Anchor the story in cycle time, on-time work, and reuse metrics"},{"heading":"Safe Rollout","detail":"Move from pilot to scale with governance and adoption checkpoints"}]},
-			{"title":"Core Product Capabilities","role":"detail","layout":"content","sections":[{"heading":"Shared Workspace","detail":"Coordinate teams in one execution surface"},{"heading":"Automation","detail":"Trigger workflows and reminders automatically"},{"heading":"Governance","detail":"Control access and audit trails at enterprise depth"}],"hasImage":true,"imagePrompt":"A polished SaaS product interface showing collaboration, approvals, and workflow orchestration","imagePos":"right"},
-			{"title":"Customer Workflow Scenarios","role":"detail","layout":"content","points":["Sales and delivery align on customer requirements in one workspace","Finance and management approve pricing and contracts without switching tools","Project teams reuse templates and operational playbooks across departments"],"hasImage":true,"imagePrompt":"A realistic cross-functional customer workflow scene with multiple teams collaborating around a digital workspace","imagePos":"top"},
-			{"title":"Rollout Path","role":"action","layout":"content","sections":[{"heading":"2-Week Discovery","detail":"Confirm pilot scope and owner team"},{"heading":"8-Week Pilot","detail":"Launch high-frequency scenarios and train admins"},{"heading":"Review Gate","detail":"Decide scale-up from adoption and cycle-time proof"}]}
-		]
-	}`
-
-	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Enterprise Collaboration Platform Overview", "", true, false)
-	if err != nil {
-		t.Fatalf("BuildPPTXFromJSON: %v", err)
-	}
-	if llm.imageCalls != 3 {
-		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
-	}
-	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 3 {
-		t.Fatalf("image count = %d, want 3", got)
-	}
-	if len(warnings) != 0 {
-		t.Fatalf("warnings = %#v, want none", warnings)
 	}
 }
 
@@ -866,20 +730,17 @@ func TestBuildPPTXFromJSON_DowngradesTimelineChartsToSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	slide2 := readZipEntry(t, fileBytes, "ppt/slides/slide2.xml")
-	if !strings.Contains(slide2, "Executive Summary") {
-		t.Fatalf("slide2 should be promoted to an overview slide:\n%s", slide2)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Executive Summary") {
+		t.Fatalf("deck should contain an overview slide")
 	}
-	slide3 := readZipEntry(t, fileBytes, "ppt/slides/slide3.xml")
-	slide4 := readZipEntry(t, fileBytes, "ppt/slides/slide4.xml")
-	combined := slide3 + slide4
-	for _, needle := range []string{"Cadence and Milest", "General Av"} {
-		if !strings.Contains(combined, needle) {
-			t.Fatalf("downgraded timeline slides missing %q:\nslide3=%s\nslide4=%s", needle, slide3, slide4)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Cadence and Milest") {
+		t.Fatalf("deck should contain the downgraded timeline title")
+	}
+	for idx := 1; idx <= countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); idx++ {
+		slideXML := readZipEntry(t, fileBytes, fmt.Sprintf("ppt/slides/slide%d.xml", idx))
+		if strings.Contains(slideXML, "Cadence and Milest") && strings.Contains(slideXML, `r:id="rId1"`) {
+			t.Fatalf("timeline slide should be downgraded from chart rels:\n%s", slideXML)
 		}
-	}
-	if strings.Contains(slide3, `r:id="rId1"`) {
-		t.Fatalf("timeline slide should be downgraded from chart rels:\n%s", slide3)
 	}
 }
 
@@ -940,55 +801,8 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	if len(llm.lastStructuredReq.Messages) != 3 {
 		t.Fatalf("repair messages = %d, want 3", len(llm.lastStructuredReq.Messages))
 	}
-	slide3 := readZipEntry(t, doc.Bytes, "ppt/slides/slide3.xml")
-	if !strings.Contains(slide3, "Higher collaboration efficiency") {
-		t.Fatalf("slide3 = %s", slide3)
-	}
-}
-
-func TestDetectPPTXArchetype_SupportsChineseKeywords(t *testing.T) {
-	if got := detectPPTXArchetype("企业协作平台介绍，面向潜在客户", ""); got != pptxArchetypeCompany {
-		t.Fatalf("company archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("市场分析与出海机会评估", ""); got != pptxArchetypeMarket {
-		t.Fatalf("market archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("季度经营分析和运营复盘", ""); got != pptxArchetypeOps {
-		t.Fatalf("ops archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("新员工培训上手指南", ""); got != pptxArchetypeTraining {
-		t.Fatalf("training archetype = %q", got)
-	}
-}
-
-func TestNormalizeSlideVariant_UsesFeatureGridAndStatBand(t *testing.T) {
-	featureGrid := normalizeSlideVariant(officegen.Slide{
-		Role:   string(pptxSlideRoleDetail),
-		Title:  "核心功能",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "统一入口", Detail: "聚合消息、文档和审批"},
-			{Heading: "流程协同", Detail: "自动串联任务和通知"},
-			{Heading: "权限治理", Detail: "细粒度权限和审计"},
-			{Heading: "知识沉淀", Detail: "模板和FAQ持续复用"},
-		},
-	})
-	if featureGrid != "feature-grid" {
-		t.Fatalf("feature grid variant = %q", featureGrid)
-	}
-
-	statBand := normalizeSlideVariant(officegen.Slide{
-		Role:   string(pptxSlideRoleEvidence),
-		Title:  "客户价值",
-		Layout: "dashboard",
-		Metrics: []officegen.MetricCard{
-			{Label: "审批周期", Value: "-30%", Note: "8周试点"},
-			{Label: "按时完成率", Value: "+15%", Note: "周度跟踪"},
-			{Label: "知识复用率", Value: "+25%", Note: "季度评估"},
-		},
-	})
-	if statBand != "stat-band" {
-		t.Fatalf("stat band variant = %q", statBand)
+	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/slide", ".xml", "Higher collaboration efficiency") {
+		t.Fatalf("deck should contain repaired slide content")
 	}
 }
 
