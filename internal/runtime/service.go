@@ -338,6 +338,9 @@ const pptxStructuredSchema = `{
           "isTitle": { "type": "boolean" },
           "layout": { "type": "string" },
           "variant": { "type": "string" },
+          "narrativeRole": { "type": "string" },
+          "sectionIndex": { "type": "integer" },
+          "sectionTitle": { "type": "string" },
           "subtitle": { "type": "string" },
           "points": {
             "type": "array",
@@ -398,6 +401,19 @@ const pptxStructuredSchema = `{
           "imagePos": {
             "type": "string",
             "enum": ["", "right", "left", "background", "center", "top", "bottom", "diagonal"]
+          },
+          "visuals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string" },
+                "prompt": { "type": "string" },
+                "caption": { "type": "string" }
+              },
+              "required": ["label", "prompt", "caption"]
+            }
           }
         },
         "required": [
@@ -406,6 +422,9 @@ const pptxStructuredSchema = `{
           "isTitle",
           "layout",
           "variant",
+          "narrativeRole",
+          "sectionIndex",
+          "sectionTitle",
           "subtitle",
           "points",
           "sections",
@@ -416,7 +435,8 @@ const pptxStructuredSchema = `{
           "bgColor2",
           "hasImage",
           "imagePrompt",
-          "imagePos"
+          "imagePos",
+          "visuals"
         ]
       }
     }
@@ -431,6 +451,9 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
       "title": "Section Title",
       "layout": "content",
       "variant": "bullets",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
       "subtitle": "One-sentence takeaway",
       "points": ["Point 1", "Point 2", "Point 3"],
       "source": "Optional data source"
@@ -439,19 +462,23 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 	if enableImages {
 		slideExample = `    {
       "title": "Section Title",
-      "layout": "content",
-      "variant": "image-right",
+      "layout": "gallery",
+      "variant": "gallery",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
       "subtitle": "One-sentence takeaway",
-      "points": ["Point 1", "Point 2", "Point 3"],
-      "hasImage": true,
-      "imagePrompt": "A concrete visual prompt that can be sent directly to an image model",
-      "imagePos": "right",
+      "points": ["Point 1", "Point 2"],
+      "visuals": [
+        {"label": "Hero visual", "prompt": "A concrete visual prompt that can be sent directly to an image model", "caption": "Short caption"}
+      ],
       "source": "Optional data source"
     }`
-		imageRules = `- Use images sparingly. Prefer 0-1 image slide in the whole deck, and only when the page clearly benefits from a hero visual.
-- On image slides, only output hasImage, imagePrompt, and imagePos. imagePos must be one of right, left, background, center, top, bottom, or diagonal.
+		imageRules = `- Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide in the whole deck.
+- On hero-image slides, only output hasImage, imagePrompt, and imagePos. imagePos must be one of right, left, background, center, top, bottom, or diagonal.
 - imagePrompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
-- Do not add images to chart or dashboard layouts.
+- On gallery slides, use visuals with 2-4 concrete prompts and short captions. Do not also set hasImage on the same slide.
+- Do not add images to chart, dashboard, toc, or closing layouts.
 - Prefer images for title-cover hero visuals, product UI, usage scenarios, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, or action recommendation slides.
 - On image slides, keep only 1-2 short points so text remains secondary to the visual.`
 	}
@@ -487,14 +514,17 @@ Return JSON only. Do not add any extra commentary:
 }
 
 Requirements:
-	- Keep the deck to 5-8 slides, usually 6-7.
+	- Keep the deck to 6-10 slides, usually 7-9.
 	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
-	- For business decks, slide 2 should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
-	- Prefer a storyline such as cover -> summary -> supporting evidence/capabilities -> detail -> action, but adapt the exact page count and page roles to the prompt instead of forcing a rigid template.
-	- Every slide must include variant. title can only use title-center or title-split. For content prefer bullets, sections-grid, comparison, timeline, or image-right. Use chart-focus for chart and kpi-band for dashboard.
+	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline such as cover -> toc -> chapter -> summary -> supporting evidence/capabilities -> chapter -> action/closing.
+	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
+	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
 	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
+- toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
+- comparison, timeline, and closing should rely on sections rather than long bullets.
 - For comparisons, steps, regions, roles, or training paths, prefer sections with short heading and concise detail.
 - For customer value, business review, market size, or competitive comparison, prefer evidence-based expression with chart or dashboard. If reliable numbers are unavailable, use 2-3 structured sections instead of long bullets.
 - If the topic is market analysis, industry research, or business review, the deck must include at least one chart or dashboard slide with source or data framing.
@@ -530,12 +560,18 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			payload.Slides[idx].ImagePrompt = ""
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			payload.Slides[idx].Visuals = nil
 		}
 	}
 	imageTotal := 0
 	for idx := range payload.Slides {
 		if payload.Slides[idx].HasImage && strings.TrimSpace(payload.Slides[idx].ImagePrompt) != "" {
 			imageTotal++
+		}
+		for visualIdx := range payload.Slides[idx].Visuals {
+			if strings.TrimSpace(payload.Slides[idx].Visuals[visualIdx].Prompt) != "" {
+				imageTotal++
+			}
 		}
 	}
 	imageIndex := 0
@@ -555,6 +591,31 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			if len(warnings) == 0 {
+				warnings = append(warnings, engine.GenerateIssue{
+					Code:    "WARN_PPT_IMAGE_DEGRADED",
+					Message: "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`.",
+					Field:   "slides",
+				})
+			}
+		}
+		for visualIdx := range payload.Slides[idx].Visuals {
+			if llm == nil || strings.TrimSpace(payload.Slides[idx].Visuals[visualIdx].Prompt) == "" {
+				continue
+			}
+			imageIndex++
+			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
+			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
+				Prompt:            payload.Slides[idx].Visuals[visualIdx].Prompt,
+				TargetAspectRatio: 16.0 / 9.0,
+			})
+			if err == nil && image != nil {
+				payload.Slides[idx].Visuals[visualIdx].ImageData = image.Data
+				payload.Slides[idx].Visuals[visualIdx].ImageMIME = image.MIME
+				continue
+			}
+			payload.Slides[idx].Visuals[visualIdx].ImageData = nil
+			payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
 			if len(warnings) == 0 {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
@@ -608,7 +669,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		return nil
 	}
 
-	const maxSlides = 8
+	const maxSlides = 10
 	warnings := make([]engine.GenerateIssue, 0, 3)
 	payload.Title = trimRunes(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"), 30)
 	archetype := detectPPTXArchetype(fallback, payload.Title)
@@ -617,6 +678,8 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	slides := make([]officegen.Slide, 0, len(payload.Slides))
 	imageBudget := 1
+	galleryBudget := 1
+	visualBudget := 4
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
@@ -624,8 +687,11 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 			slidesTrimmed = true
 			break
 		}
-		normalized, imageKept := normalizePPTXSlide(slide, idx, payload.Title, enableImages, &imageBudget)
+		normalized, imageKept, visualsKept := normalizePPTXSlide(slide, idx, payload.Title, enableImages, &imageBudget, &galleryBudget, &visualBudget)
 		if slide.HasImage && !imageKept {
+			imagesAdjusted = true
+		}
+		if len(slide.Visuals) > 0 && visualsKept == 0 {
 			imagesAdjusted = true
 		}
 		if isEmptyNormalizedSlide(normalized) {
@@ -641,19 +707,22 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	if len(slides) == 0 {
 		slides = append(slides, officegen.Slide{
-			Title:    payload.Title,
-			Layout:   "title",
-			IsTitle:  true,
-			Subtitle: fitTextForLayout(strings.TrimSpace(fallback), 28),
+			Title:         payload.Title,
+			Layout:        "title",
+			IsTitle:       true,
+			NarrativeRole: "cover",
+			Subtitle:      fitTextForLayout(strings.TrimSpace(fallback), 28),
 		})
 	}
 
 	slides[0].Layout = "title"
 	slides[0].Variant = normalizeSlideVariant(slides[0])
 	slides[0].IsTitle = true
+	slides[0].NarrativeRole = "cover"
 	slides[0].HasImage = false
 	slides[0].ImagePrompt = ""
 	slides[0].ImagePos = ""
+	slides[0].Visuals = nil
 	if strings.TrimSpace(slides[0].Title) == "" {
 		slides[0].Title = payload.Title
 	}
@@ -678,6 +747,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
 	slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
+	slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
 	if len(slides) > maxSlides {
 		slidesTrimmed = true
 		slides = slides[:maxSlides]
@@ -689,7 +759,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		warnings = append(warnings, engine.GenerateIssue{
 			Code:    "WARN_PPT_SLIDES_TRIMMED",
 			Field:   "slides",
-			Message: "The generated deck exceeded quality limits and was automatically trimmed to 8 slides or fewer.",
+			Message: "The generated deck exceeded quality limits and was automatically trimmed to 10 slides or fewer.",
 		})
 	}
 	if imagesAdjusted {
@@ -702,13 +772,18 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	return warnings
 }
 
-func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enableImages bool, imageBudget *int) (officegen.Slide, bool) {
+func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enableImages bool, imageBudget, galleryBudget, visualBudget *int) (officegen.Slide, bool, int) {
 	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 22)
 	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 30)
+	slide.SectionTitle = fitTextForLayout(strings.TrimSpace(slide.SectionTitle), 20)
 	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
+	slide.NarrativeRole = normalizeNarrativeRole(slide.NarrativeRole)
+	slide.Visuals = normalizeSlideVisuals(slide.Visuals, 4)
 
 	switch {
+	case slideLayoutName(slide) != "":
+		slide.Layout = slideLayoutName(slide)
 	case slide.Chart != nil:
 		slide.Layout = "chart"
 	case len(slide.Metrics) > 0:
@@ -718,6 +793,7 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 	default:
 		slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
 	}
+	slide = upgradeSlideLayout(slide)
 	slide.Variant = normalizeSlideVariant(slide)
 
 	slide.Points = normalizePoints(slide.Points, 4, 32)
@@ -756,6 +832,7 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 	}
 
 	imageKept := false
+	visualsKept := 0
 	if enableImages &&
 		slide.Layout == "content" &&
 		idx > 0 &&
@@ -775,7 +852,30 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 		slide.ImagePos = ""
 	}
 
-	return slide, imageKept
+	if enableImages &&
+		slide.Layout == "gallery" &&
+		len(slide.Visuals) > 0 &&
+		galleryBudget != nil &&
+		visualBudget != nil &&
+		*galleryBudget > 0 &&
+		*visualBudget > 0 {
+		allowed := len(slide.Visuals)
+		if allowed > *visualBudget {
+			allowed = *visualBudget
+		}
+		slide.Visuals = slide.Visuals[:allowed]
+		*galleryBudget--
+		*visualBudget -= allowed
+		visualsKept = allowed
+	} else if slide.Layout == "gallery" {
+		slide.Visuals = nil
+		if len(slide.Sections) > 0 || len(slide.Points) > 0 {
+			slide.Layout = "content"
+			slide.Variant = normalizeSlideVariant(slide)
+		}
+	}
+
+	return slide, imageKept, visualsKept
 }
 
 func isEmptyNormalizedSlide(slide officegen.Slide) bool {
@@ -785,10 +885,75 @@ func isEmptyNormalizedSlide(slide officegen.Slide) bool {
 	if strings.TrimSpace(slide.Subtitle) != "" || strings.TrimSpace(slide.Content) != "" {
 		return false
 	}
-	if len(slide.Points) > 0 || len(slide.Sections) > 0 || len(slide.Metrics) > 0 || slide.Chart != nil {
+	if len(slide.Points) > 0 || len(slide.Sections) > 0 || len(slide.Metrics) > 0 || len(slide.Visuals) > 0 || slide.Chart != nil {
 		return false
 	}
 	return true
+}
+
+func normalizeNarrativeRole(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "cover", "toc", "chapter", "summary", "evidence", "analysis", "action", "closing":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeSlideVisuals(visuals []officegen.SlideVisual, limit int) []officegen.SlideVisual {
+	out := make([]officegen.SlideVisual, 0, len(visuals))
+	for _, visual := range visuals {
+		label := fitTextForLayout(cleanSentence(visual.Label), 16)
+		prompt := fitTextForLayout(strings.TrimSpace(visual.Prompt), 120)
+		caption := fitTextForLayout(cleanSentence(visual.Caption), 24)
+		if prompt == "" {
+			continue
+		}
+		out = append(out, officegen.SlideVisual{
+			Label:   label,
+			Prompt:  prompt,
+			Caption: caption,
+		})
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func upgradeSlideLayout(slide officegen.Slide) officegen.Slide {
+	switch slide.NarrativeRole {
+	case "toc":
+		slide.Layout = "toc"
+	case "chapter":
+		slide.Layout = "chapter"
+	case "closing":
+		slide.Layout = "closing"
+	}
+	if slide.Layout != "content" {
+		return slide
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.SectionTitle))
+	switch {
+	case len(slide.Visuals) > 0:
+		slide.Layout = "gallery"
+	case isActionSlide(slide):
+		slide.Layout = "closing"
+	case len(slide.Sections) >= 2 && containsAny(text, []string{"timeline", "roadmap", "path", "milestone", "cadence", "journey", "history", "phases"}):
+		slide.Layout = "timeline"
+	case len(slide.Sections) >= 2 && containsAny(text, []string{"compare", "comparison", "versus", "landscape", "difference", "options", "competition"}):
+		slide.Layout = "comparison"
+	}
+	return slide
+}
+
+func containsAny(text string, items []string) bool {
+	for _, item := range items {
+		if strings.Contains(text, item) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizePoints(points []string, limit, maxRunes int) []string {
@@ -1094,6 +1259,146 @@ func ensureClosingActionSlide(slides []officegen.Slide, deckTitle string, archet
 	return slides
 }
 
+func applyNarrativeScaffold(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
+	if len(slides) < 3 {
+		return slides
+	}
+	sectionTitles := sectionTitlesForArchetype(archetype)
+	if slideLayoutName(slides[1]) != "toc" && len(slides) < maxSlides {
+		slides = insertSlide(slides, 1, buildTOCSlide(slides[1:], sectionTitles[0]))
+	}
+
+	bodyStart := 1
+	if len(slides) > 1 && slideLayoutName(slides[1]) == "toc" {
+		bodyStart = 2
+	}
+	if bodyStart < len(slides)-1 && slideLayoutName(slides[bodyStart]) != "chapter" && len(slides) < maxSlides {
+		slides = insertSlide(slides, bodyStart, buildChapterSlide(1, sectionTitles[0]))
+	}
+	if len(slides) > bodyStart+2 && len(slides) < maxSlides {
+		lastIdx := len(slides) - 1
+		if slideLayoutName(slides[lastIdx]) != "closing" && slideLayoutName(slides[lastIdx-1]) != "chapter" {
+			slides = insertSlide(slides, lastIdx, buildChapterSlide(2, sectionTitles[1]))
+		}
+	}
+
+	lastIdx := len(slides) - 1
+	slides[lastIdx].Layout = "closing"
+	slides[lastIdx].NarrativeRole = "closing"
+	slides[lastIdx].SectionIndex = len(sectionTitles)
+	slides[lastIdx].SectionTitle = sectionTitles[len(sectionTitles)-1]
+	slides[lastIdx].Variant = normalizeSlideVariant(slides[lastIdx])
+	if len(slides[lastIdx].Sections) == 0 && len(slides[lastIdx].Points) > 0 {
+		slides[lastIdx] = normalizeActionSlide(slides[lastIdx])
+	}
+
+	currentSection := 1
+	currentTitle := sectionTitles[0]
+	for idx := 1; idx < len(slides); idx++ {
+		switch slideLayoutName(slides[idx]) {
+		case "toc":
+			slides[idx].NarrativeRole = "toc"
+			slides[idx].SectionIndex = 0
+			slides[idx].SectionTitle = "Agenda"
+		case "chapter":
+			currentSection = maxInt(slides[idx].SectionIndex, currentSection)
+			currentTitle = firstNonEmpty(slides[idx].SectionTitle, sectionTitleAt(sectionTitles, currentSection-1))
+			slides[idx].NarrativeRole = "chapter"
+			slides[idx].SectionIndex = currentSection
+			slides[idx].SectionTitle = currentTitle
+		case "closing":
+			slides[idx].NarrativeRole = "closing"
+			slides[idx].SectionIndex = len(sectionTitles)
+			slides[idx].SectionTitle = sectionTitles[len(sectionTitles)-1]
+		default:
+			if slides[idx].NarrativeRole == "" {
+				if idx <= bodyStart+1 {
+					slides[idx].NarrativeRole = "summary"
+				} else {
+					slides[idx].NarrativeRole = "analysis"
+				}
+			}
+			slides[idx].SectionIndex = currentSection
+			slides[idx].SectionTitle = currentTitle
+		}
+		if strings.TrimSpace(slides[idx].Variant) == "" {
+			slides[idx].Variant = normalizeSlideVariant(slides[idx])
+		}
+	}
+
+	if len(slides) > 1 && slideLayoutName(slides[1]) == "toc" {
+		slides[1] = buildTOCSlide(slides[2:], sectionTitles[0])
+	}
+	return slides
+}
+
+func buildTOCSlide(body []officegen.Slide, title string) officegen.Slide {
+	sections := make([]officegen.SlideSection, 0, len(body))
+	for _, slide := range body {
+		switch slideLayoutName(slide) {
+		case "title", "toc":
+			continue
+		}
+		label := strings.TrimSpace(slide.Title)
+		if label == "" {
+			continue
+		}
+		sections = append(sections, officegen.SlideSection{
+			Heading: fmt.Sprintf("%02d", len(sections)+1),
+			Detail:  label,
+		})
+		if len(sections) >= 6 {
+			break
+		}
+	}
+	return officegen.Slide{
+		Title:         "Contents",
+		Layout:        "toc",
+		Variant:       "toc",
+		NarrativeRole: "toc",
+		SectionTitle:  title,
+		Subtitle:      "Review the structure before diving into the content.",
+		Sections:      sections,
+	}
+}
+
+func buildChapterSlide(idx int, title string) officegen.Slide {
+	return officegen.Slide{
+		Title:         title,
+		Layout:        "chapter",
+		Variant:       "chapter",
+		NarrativeRole: "chapter",
+		SectionIndex:  idx,
+		SectionTitle:  title,
+		Subtitle:      "Use this section to shift the story before the next cluster of slides.",
+	}
+}
+
+func sectionTitlesForArchetype(archetype pptxArchetype) []string {
+	switch archetype {
+	case pptxArchetypeCompany:
+		return []string{"Context and Value", "Scenarios and Rollout"}
+	case pptxArchetypeMarket:
+		return []string{"Market Read", "Decision and Entry"}
+	case pptxArchetypeOps:
+		return []string{"Business Readout", "Priorities and Actions"}
+	case pptxArchetypeTraining:
+		return []string{"Setup and Commands", "Practice and Guardrails"}
+	default:
+		return []string{"Core Storyline", "Decision and Next Steps"}
+	}
+}
+
+func sectionTitleAt(items []string, idx int) string {
+	if idx >= 0 && idx < len(items) {
+		return items[idx]
+	}
+	if len(items) > 0 {
+		return items[len(items)-1]
+	}
+	return ""
+}
+
 func pointsToSummarySections(points []string, limit int) []officegen.SlideSection {
 	sections := make([]officegen.SlideSection, 0, len(points))
 	for idx, point := range points {
@@ -1260,17 +1565,32 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 			return "title-split"
 		}
 		return "title-center"
+	case "toc":
+		return "toc"
+	case "chapter":
+		return "chapter"
+	case "gallery":
+		return "gallery"
+	case "comparison":
+		return "comparison"
+	case "timeline":
+		return "timeline"
+	case "closing":
+		return "closing"
 	case "chart":
 		return "chart-focus"
 	case "dashboard":
 		return "kpi-band"
 	default:
 		switch strings.TrimSpace(slide.Variant) {
-		case "sections-grid", "comparison", "timeline", "image-right", "bullets":
+		case "sections-grid", "comparison", "timeline", "image-right", "gallery", "closing", "bullets":
 			return strings.TrimSpace(slide.Variant)
 		}
 		if slide.HasImage {
 			return "image-right"
+		}
+		if len(slide.Visuals) > 0 {
+			return "gallery"
 		}
 		if len(slide.Sections) > 0 {
 			return "sections-grid"
@@ -1280,6 +1600,10 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 }
 
 func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
+	switch slideLayoutName(slide) {
+	case "toc", "chapter", "gallery", "comparison", "timeline", "closing":
+		return []officegen.Slide{slide}
+	}
 	switch {
 	case len(slide.Points) > 4:
 		return splitSlidePoints(slide, 4)
@@ -1443,6 +1767,18 @@ func splitContentToPoints(content string, limit int) []string {
 
 func deriveSlideSubtitle(slide officegen.Slide) string {
 	switch slide.Layout {
+	case "toc":
+		return "先看结构，再进入每个章节。"
+	case "chapter":
+		return "建立上下文后，再进入核心内容。"
+	case "gallery":
+		return "用更高的视觉密度承载同一主题。"
+	case "comparison":
+		return "把关键差异并排展示。"
+	case "timeline":
+		return "把阶段、时间和动作放到一条线上。"
+	case "closing":
+		return "用少量动作收束整套叙事。"
 	case "chart":
 		if len(slide.Points) > 0 {
 			return fitTextForLayout(slide.Points[0], 24)
@@ -1506,7 +1842,7 @@ func deriveMetricPoints(metrics []officegen.MetricCard, limit int) []string {
 
 func normalizeImagePosition(pos string) string {
 	switch strings.ToLower(strings.TrimSpace(pos)) {
-	case "left", "right", "top", "bottom":
+	case "left", "right", "top", "bottom", "background", "center", "diagonal":
 		return strings.ToLower(strings.TrimSpace(pos))
 	default:
 		return "right"
@@ -1514,6 +1850,13 @@ func normalizeImagePosition(pos string) string {
 }
 
 func allowImageForSlide(slide officegen.Slide) bool {
+	switch slideLayoutName(slide) {
+	case "toc", "closing", "chapter", "gallery", "comparison", "timeline", "chart", "dashboard":
+		return false
+	}
+	if len(slide.Visuals) > 0 {
+		return false
+	}
 	if len(slide.Sections) > 0 || len(slide.Metrics) > 0 || slide.Chart != nil {
 		return false
 	}
@@ -1616,23 +1959,23 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 func buildArchetypePromptRules(archetype pptxArchetype) string {
 	switch archetype {
 	case pptxArchetypeCompany:
-		return `- For this topic, a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path, but adapt the exact slide count to the prompt.
-- Slide 4 should prefer dashboard or quantified evidence instead of abstract slogans.
-- Slide 5 should use sections to emphasize scenario, action, and benefit without repeating slide 4.
-- Slide 6 should use sections with time, owner, and validation criteria. The whole deck should use at most one image slide, preferably on core capabilities.`
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> key takeaways -> core capabilities -> customer value -> use cases -> chapter -> rollout path, but adapt the exact slide count to the prompt.
+- Use the first chapter to frame context/value and the second chapter to transition into rollout.
+- Customer value should prefer quantified evidence instead of abstract slogans.
+- Use cases and rollout path should use sections with action, owner, timing, or validation criteria.`
 	case pptxArchetypeMarket:
-		return `- For this topic, a strong storyline is usually cover -> key takeaways -> market size -> regional opportunities -> competitive landscape -> entry recommendations, but adapt the exact slide count to the prompt.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> key takeaways -> market size -> regional opportunities -> competitive landscape -> chapter -> entry recommendations, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and include a source. Do not present market size as plain text judgment.
-- Slide 4 should use sections, and slide 5 should prefer points or card-style comparison so the two slides handle region choice and competition separately.
-- Slide 6 should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
+- Regional opportunities and competition should be handled on separate slides.
+- Entry recommendations should use sections with time, owner, and validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeOps:
-		return `- For this topic, a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions, but adapt the exact slide count to the prompt.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> chapter -> execution actions, but adapt the exact slide count to the prompt.
 - Slide 3 must use a chart and clearly state the data framing or comparison period.
 - Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
-- Slides 5-6 must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
+- The final action cluster must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeTraining:
-		return `- For this topic, a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions, but adapt the exact slide count to the prompt.
-- Slides 3-6 should prefer sections organized by step, command, and result.
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions, but adapt the exact slide count to the prompt.
+- Setup/command slides should prefer sections organized by step, command, and result.
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
 	default:
@@ -2078,11 +2421,15 @@ func fitTextForLayout(value string, maxRunes int) string {
 
 func slideLayoutName(slide officegen.Slide) string {
 	layout := strings.ToLower(strings.TrimSpace(slide.Layout))
-	if layout != "" {
+	switch layout {
+	case "title", "content", "chart", "dashboard", "toc", "chapter", "gallery", "comparison", "timeline", "closing":
 		return layout
 	}
 	if slide.IsTitle {
 		return "title"
+	}
+	if len(slide.Visuals) > 0 {
+		return "gallery"
 	}
 	if len(slide.Metrics) > 0 {
 		return "dashboard"

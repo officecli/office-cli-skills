@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -119,6 +120,35 @@ func countZipEntries(archive []byte, prefix, suffix string) int {
 		count++
 	}
 	return count
+}
+
+func archiveContainsEntryWithSubstring(t *testing.T, archive []byte, prefix, suffix, needle string) bool {
+	t.Helper()
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, file := range reader.File {
+		if prefix != "" && !strings.HasPrefix(file.Name, prefix) {
+			continue
+		}
+		if suffix != "" && !strings.HasSuffix(file.Name, suffix) {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open zip entry %s: %v", file.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read zip entry %s: %v", file.Name, err)
+		}
+		if strings.Contains(string(data), needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *runtimeProgressCollector) Emit(_ context.Context, event engine.ProgressEvent) {
@@ -290,11 +320,11 @@ func TestServiceGenerateReportWithFakeLLM(t *testing.T) {
 func TestBuildPPTXPrompt_ImagesEnabledIncludesImageGuidance(t *testing.T) {
 	prompt := BuildPPTXPrompt("Introduce product capabilities", generateengine.PromptTarget{}, true)
 	for _, needle := range []string{
-		`"hasImage": true`,
-		`"imagePrompt": "A concrete visual prompt that can be sent directly to an image model"`,
-		`"imagePos": "right"`,
-		"Use images sparingly. Prefer 0-1 image slide",
-		"Do not add images to chart or dashboard layouts",
+		`"visuals": [`,
+		`"prompt": "A concrete visual prompt that can be sent directly to an image model"`,
+		"Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide",
+		"Do not add images to chart, dashboard, toc, or closing layouts",
+		"On gallery slides, use visuals with 2-4 concrete prompts",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -319,8 +349,8 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		Audience: "Prospective enterprise customers",
 	}, true)
 	for _, needle := range []string{
-		"Keep the deck to 5-8 slides, usually 6-7.",
-		"slide 2 should read as an executive summary or key takeaways page",
+		"Keep the deck to 6-10 slides, usually 7-9.",
+		"slide 2 should usually be a toc page",
 		"subtitle must be a takeaway sentence",
 		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
@@ -334,7 +364,7 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 
 func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 	companyPrompt := BuildPPTXPrompt("enterprise collaboration platform", generateengine.PromptTarget{}, true)
-	if !strings.Contains(companyPrompt, "a strong storyline is usually cover -> solution overview -> core capabilities -> customer value -> use cases -> rollout path") {
+	if !strings.Contains(companyPrompt, "a strong storyline is usually cover -> toc -> chapter -> key takeaways -> core capabilities -> customer value -> use cases -> chapter -> rollout path") {
 		t.Fatalf("company prompt missing archetype outline:\n%s", companyPrompt)
 	}
 	marketPrompt := BuildPPTXPrompt("market opportunity analysis", generateengine.PromptTarget{}, false)
@@ -342,11 +372,11 @@ func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 		t.Fatalf("market prompt missing archetype outline:\n%s", marketPrompt)
 	}
 	opsPrompt := BuildPPTXPrompt("business review", generateengine.PromptTarget{}, false)
-	if !strings.Contains(opsPrompt, "a strong storyline is usually cover -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> execution actions") {
+	if !strings.Contains(opsPrompt, "a strong storyline is usually cover -> toc -> chapter -> business takeaways -> core metrics -> issue diagnosis -> next-quarter priorities -> chapter -> execution actions") {
 		t.Fatalf("ops prompt missing archetype outline:\n%s", opsPrompt)
 	}
 	trainingPrompt := BuildPPTXPrompt("new hire onboarding training", generateengine.PromptTarget{}, false)
-	if !strings.Contains(trainingPrompt, "a strong storyline is usually cover -> learning goals -> installation and setup -> common commands -> example workflow -> cautions") {
+	if !strings.Contains(trainingPrompt, "a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions") {
 		t.Fatalf("training prompt missing archetype outline:\n%s", trainingPrompt)
 	}
 }
@@ -413,20 +443,17 @@ func TestNormalizePPTXPayload_EnforcesCompanySkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "enterprise collaboration platform", "", true)
-	if len(payload.Slides) != 5 {
-		t.Fatalf("slide count = %d, want 5", len(payload.Slides))
+	if len(payload.Slides) < 7 {
+		t.Fatalf("slide count = %d, want scaffolded deck", len(payload.Slides))
 	}
-	if payload.Slides[1].Title != "Key Takeaways" || len(payload.Slides[1].Sections) != 3 {
-		t.Fatalf("company summary slide = %#v", payload.Slides[1])
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("company toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Title != "Solution Overview" || len(payload.Slides[2].Points) != 3 {
-		t.Fatalf("company overview slide = %#v", payload.Slides[2])
+	if payload.Slides[2].Layout != "chapter" {
+		t.Fatalf("company first chapter slide = %#v", payload.Slides[2])
 	}
-	if payload.Slides[3].Title != "Core Capabilities" || len(payload.Slides[3].Sections) != 3 {
-		t.Fatalf("company capability slide = %#v", payload.Slides[3])
-	}
-	if payload.Slides[4].Title != "Rollout Path" || len(payload.Slides[4].Sections) == 0 {
-		t.Fatalf("company closing slide = %#v", payload.Slides[4])
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) == 0 {
+		t.Fatalf("company closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -440,14 +467,21 @@ func TestNormalizePPTXPayload_EnforcesMarketSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "market opportunity analysis", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("market toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Layout != "chart" || payload.Slides[2].Chart == nil {
-		t.Fatalf("market chart slide = %#v", payload.Slides[2])
+	foundChart := false
+	for _, slide := range payload.Slides {
+		if slide.Layout == "chart" && slide.Chart != nil {
+			foundChart = true
+			break
+		}
 	}
-	if payload.Slides[3].Title != "Entry Recommendations" || len(payload.Slides[3].Sections) == 0 {
-		t.Fatalf("market closing slide = %#v", payload.Slides[3])
+	if !foundChart {
+		t.Fatalf("market deck should retain an evidence chart: %#v", payload.Slides)
+	}
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) == 0 {
+		t.Fatalf("market closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -461,14 +495,21 @@ func TestNormalizePPTXPayload_EnforcesOpsSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "business review", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("ops toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Layout != "chart" || payload.Slides[2].Chart == nil {
-		t.Fatalf("ops chart slide = %#v", payload.Slides[2])
+	foundChart := false
+	for _, slide := range payload.Slides {
+		if slide.Layout == "chart" && slide.Chart != nil {
+			foundChart = true
+			break
+		}
 	}
-	if payload.Slides[3].Title != "Execution Actions" || len(payload.Slides[3].Sections) != 3 {
-		t.Fatalf("ops closing slide = %#v", payload.Slides[3])
+	if !foundChart {
+		t.Fatalf("ops deck should retain an evidence chart: %#v", payload.Slides)
+	}
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+		t.Fatalf("ops closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -482,14 +523,11 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 		},
 	}
 	normalizePPTXPayload(payload, "new hire onboarding training", "", true)
-	if len(payload.Slides) != 4 {
-		t.Fatalf("slide count = %d, want 4", len(payload.Slides))
+	if payload.Slides[1].Layout != "toc" {
+		t.Fatalf("training toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[2].Title != "Installation and Setup" || len(payload.Slides[2].Sections) != 3 {
-		t.Fatalf("training setup slide = %#v", payload.Slides[2])
-	}
-	if payload.Slides[3].Title != "Cautions" || len(payload.Slides[3].Sections) != 3 {
-		t.Fatalf("training closing slide = %#v", payload.Slides[3])
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+		t.Fatalf("training closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -520,9 +558,8 @@ func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	if llm.imageCalls != 1 {
 		t.Fatalf("imageCalls = %d, want 1", llm.imageCalls)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if !strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels missing image relationship: %s", rels)
+	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels missing image relationship")
 	}
 	if len(doc.Warnings) != 0 {
 		t.Fatalf("warnings = %#v, want none", doc.Warnings)
@@ -556,9 +593,8 @@ func TestServiceGeneratePPTX_SkipsImagesWhenDisabled(t *testing.T) {
 	if llm.imageCalls != 0 {
 		t.Fatalf("imageCalls = %d, want 0", llm.imageCalls)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels should not include image relationship when disabled: %s", rels)
+	if archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels should not include image relationship when disabled")
 	}
 }
 
@@ -598,9 +634,38 @@ func TestServiceGeneratePPTX_DegradesGracefullyWhenImageGenerationFails(t *testi
 	if got := doc.Warnings[0].Message; !strings.Contains(got, "officecli config set-generation") {
 		t.Fatalf("warning should include config guidance: %q", got)
 	}
-	rels := readZipEntry(t, doc.Bytes, "ppt/slides/_rels/slide3.xml.rels")
-	if strings.Contains(rels, `relationships/image`) {
-		t.Fatalf("slide rels should not include image relationship after degradation: %s", rels)
+	if archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
+		t.Fatalf("deck rels should not include image relationship after degradation")
+	}
+}
+
+func TestBuildPPTXFromJSON_GeneratesGalleryVisuals(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Visual Gallery Demo",
+		"slides":[
+			{"title":"Visual Gallery Demo","layout":"title","variant":"title-center","subtitle":"Open with the topic"},
+			{"title":"Product Scenes","layout":"gallery","variant":"gallery","narrativeRole":"analysis","sectionIndex":1,"sectionTitle":"Core Storyline","subtitle":"Use visuals to show the product context","visuals":[
+				{"label":"Workspace","prompt":"A modern collaboration workspace with documents and comments","caption":"Workspace view"},
+				{"label":"Meeting","prompt":"A product review meeting around a large display with dashboard UI","caption":"Review scene"}
+			]}
+		]
+	}`
+
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Visual Gallery Demo", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if llm.imageCalls < 2 {
+		t.Fatalf("imageCalls = %d, want at least 2", llm.imageCalls)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
+	}
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got < 2 {
+		t.Fatalf("image count = %d, want at least 2", got)
 	}
 }
 
@@ -627,8 +692,8 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 8 {
-		t.Fatalf("slide count = %d, want 8", got)
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 10 {
+		t.Fatalf("slide count = %d, want 10", got)
 	}
 	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 0 {
 		t.Fatalf("image count = %d, want 0 after image rebalancing", got)
@@ -637,13 +702,15 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if strings.Contains(slide1, "●") {
 		t.Fatalf("title slide should not render bullet content: %s", slide1)
 	}
-	slide4 := readZipEntry(t, fileBytes, "ppt/slides/slide4.xml")
-	if !strings.Contains(slide4, "It should be split into multip") {
-		t.Fatalf("content slide should be normalized into readable points: %s", slide4)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "It should be split into multip") {
+		t.Fatalf("content slide should be normalized into readable points")
 	}
-	slide6Rels := readZipEntry(t, fileBytes, filepath.ToSlash("ppt/slides/_rels/slide6.xml.rels"))
-	if strings.Contains(slide6Rels, "image") {
-		t.Fatalf("chart slide should not keep image rels: %s", slide6Rels)
+	for idx := 1; idx <= countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); idx++ {
+		rels := readZipEntry(t, fileBytes, filepath.ToSlash(fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", idx)))
+		slideXML := readZipEntry(t, fileBytes, fmt.Sprintf("ppt/slides/slide%d.xml", idx))
+		if strings.Contains(slideXML, "ChartPanel") && strings.Contains(rels, "image") {
+			t.Fatalf("chart slide should not keep image rels: %s", rels)
+		}
 	}
 	if len(warnings) == 0 {
 		t.Fatalf("warnings = %#v, want normalization warnings", warnings)
@@ -663,18 +730,17 @@ func TestBuildPPTXFromJSON_DowngradesTimelineChartsToSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	slide2 := readZipEntry(t, fileBytes, "ppt/slides/slide2.xml")
-	if !strings.Contains(slide2, "Executive Summary") {
-		t.Fatalf("slide2 should be promoted to an overview slide:\n%s", slide2)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Executive Summary") {
+		t.Fatalf("deck should contain an overview slide")
 	}
-	slide3 := readZipEntry(t, fileBytes, "ppt/slides/slide3.xml")
-	for _, needle := range []string{"Cadence and Milest", "General Av"} {
-		if !strings.Contains(slide3, needle) {
-			t.Fatalf("slide3 missing %q:\n%s", needle, slide3)
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Cadence and Milest") {
+		t.Fatalf("deck should contain the downgraded timeline title")
+	}
+	for idx := 1; idx <= countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); idx++ {
+		slideXML := readZipEntry(t, fileBytes, fmt.Sprintf("ppt/slides/slide%d.xml", idx))
+		if strings.Contains(slideXML, "Cadence and Milest") && strings.Contains(slideXML, `r:id="rId1"`) {
+			t.Fatalf("timeline slide should be downgraded from chart rels:\n%s", slideXML)
 		}
-	}
-	if strings.Contains(slide3, `r:id="rId1"`) {
-		t.Fatalf("timeline slide should be downgraded from chart rels:\n%s", slide3)
 	}
 }
 
@@ -735,9 +801,8 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	if len(llm.lastStructuredReq.Messages) != 3 {
 		t.Fatalf("repair messages = %d, want 3", len(llm.lastStructuredReq.Messages))
 	}
-	slide3 := readZipEntry(t, doc.Bytes, "ppt/slides/slide3.xml")
-	if !strings.Contains(slide3, "Higher collaboration efficiency") {
-		t.Fatalf("slide3 = %s", slide3)
+	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/slide", ".xml", "Higher collaboration efficiency") {
+		t.Fatalf("deck should contain repaired slide content")
 	}
 }
 

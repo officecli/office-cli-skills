@@ -48,26 +48,39 @@ type SlideSection struct {
 	Detail  string `json:"detail"`  // Secondary detail.
 }
 
+// SlideVisual represents a supporting image asset on a slide.
+type SlideVisual struct {
+	Label     string `json:"label,omitempty"`   // Short visual label.
+	Prompt    string `json:"prompt,omitempty"`  // Concrete image prompt.
+	Caption   string `json:"caption,omitempty"` // Optional caption text.
+	ImageData []byte `json:"-"`                 // Resolved image bytes.
+	ImageMIME string `json:"-"`                 // Resolved image MIME type.
+}
+
 // Slide represents a single slide.
 type Slide struct {
-	Title       string         `json:"title"`              // Slide title.
-	Content     string         `json:"content"`            // Slide body content.
-	IsTitle     bool           `json:"isTitle"`            // Whether this is a title slide.
-	Layout      string         `json:"layout,omitempty"`   // "title" | "content" | "chart" | "dashboard"
-	Variant     string         `json:"variant,omitempty"`  // Optional visual variant.
-	Subtitle    string         `json:"subtitle,omitempty"` // Subtitle for title layout.
-	Points      []string       `json:"points,omitempty"`   // Simple bullet points.
-	Sections    []SlideSection `json:"sections,omitempty"` // Structured heading-detail sections.
-	Chart       *ChartData     `json:"chart,omitempty"`    // Chart data.
-	Metrics     []MetricCard   `json:"metrics,omitempty"`  // Dashboard metric cards.
-	Source      string         `json:"source,omitempty"`   // Data source footnote.
-	BgColor     string         `json:"bgColor,omitempty"`  // Per-slide background color override.
-	BgColor2    string         `json:"bgColor2,omitempty"` // Optional second gradient color.
-	HasImage    bool           `json:"hasImage,omitempty"` // Whether the slide uses an image.
-	ImagePrompt string         `json:"imagePrompt,omitempty"`
-	ImagePos    string         `json:"imagePos,omitempty"` // "right" | "left" | "background" | "center" | "top" | "bottom" | "diagonal"
-	ImageData   []byte         `json:"-"`
-	ImageMIME   string         `json:"-"`
+	Title         string         `json:"title"`                   // Slide title.
+	Content       string         `json:"content"`                 // Slide body content.
+	IsTitle       bool           `json:"isTitle"`                 // Whether this is a title slide.
+	Layout        string         `json:"layout,omitempty"`        // "title" | "content" | "chart" | "dashboard" | "toc" | "chapter" | "gallery" | "comparison" | "timeline" | "closing"
+	Variant       string         `json:"variant,omitempty"`       // Optional visual variant.
+	NarrativeRole string         `json:"narrativeRole,omitempty"` // cover | toc | chapter | summary | evidence | analysis | action | closing
+	SectionIndex  int            `json:"sectionIndex,omitempty"`  // Chapter/section sequence.
+	SectionTitle  string         `json:"sectionTitle,omitempty"`  // Chapter label or grouping title.
+	Subtitle      string         `json:"subtitle,omitempty"`      // Subtitle for title layout.
+	Points        []string       `json:"points,omitempty"`        // Simple bullet points.
+	Sections      []SlideSection `json:"sections,omitempty"`      // Structured heading-detail sections.
+	Chart         *ChartData     `json:"chart,omitempty"`         // Chart data.
+	Metrics       []MetricCard   `json:"metrics,omitempty"`       // Dashboard metric cards.
+	Source        string         `json:"source,omitempty"`        // Data source footnote.
+	BgColor       string         `json:"bgColor,omitempty"`       // Per-slide background color override.
+	BgColor2      string         `json:"bgColor2,omitempty"`      // Optional second gradient color.
+	HasImage      bool           `json:"hasImage,omitempty"`      // Whether the slide uses a primary image.
+	ImagePrompt   string         `json:"imagePrompt,omitempty"`
+	ImagePos      string         `json:"imagePos,omitempty"` // "right" | "left" | "background" | "center" | "top" | "bottom" | "diagonal"
+	Visuals       []SlideVisual  `json:"visuals,omitempty"`  // Supporting gallery visuals.
+	ImageData     []byte         `json:"-"`
+	ImageMIME     string         `json:"-"`
 }
 
 // PPTXOptions configures PPTX generation.
@@ -129,9 +142,18 @@ func getTheme(theme *SlideTheme) *SlideTheme {
 	return theme
 }
 
+func normalizedLayoutName(layout string) string {
+	switch strings.ToLower(strings.TrimSpace(layout)) {
+	case "title", "content", "chart", "dashboard", "toc", "chapter", "gallery", "comparison", "timeline", "closing":
+		return strings.ToLower(strings.TrimSpace(layout))
+	default:
+		return strings.ToLower(strings.TrimSpace(layout))
+	}
+}
+
 func resolvedLayout(slide Slide) string {
-	if slide.Layout != "" {
-		return slide.Layout
+	if layout := normalizedLayoutName(slide.Layout); layout != "" {
+		return layout
 	}
 	if slide.IsTitle {
 		return "title"
@@ -193,7 +215,52 @@ func requestedImagePos(slide Slide) string {
 }
 
 func hasEmbeddedImage(slide Slide) bool {
-	return resolvedImagePos(slide) != ""
+	return resolvedImagePos(slide) != "" || len(embeddedVisuals(slide)) > 0
+}
+
+func embeddedVisuals(slide Slide) []SlideVisual {
+	if len(slide.Visuals) == 0 {
+		return nil
+	}
+	out := make([]SlideVisual, 0, len(slide.Visuals))
+	for _, visual := range slide.Visuals {
+		if len(visual.ImageData) == 0 {
+			continue
+		}
+		out = append(out, visual)
+	}
+	return out
+}
+
+type slideRenderAssets struct {
+	PrimaryImageRel string
+	VisualRelIDs    []string
+}
+
+type slideImageAsset struct {
+	RelID string
+	Ext   string
+	Data  []byte
+}
+
+func collectSlideImageAssets(slide Slide) []slideImageAsset {
+	assets := make([]slideImageAsset, 0, 1+len(slide.Visuals))
+	if relID := "rId2"; resolvedImagePos(slide) != "" {
+		assets = append(assets, slideImageAsset{
+			RelID: relID,
+			Ext:   imageExtensionFromMIME(slide.ImageMIME),
+			Data:  slide.ImageData,
+		})
+	}
+	baseRelID := 2 + len(assets)
+	for idx, visual := range embeddedVisuals(slide) {
+		assets = append(assets, slideImageAsset{
+			RelID: fmt.Sprintf("rId%d", baseRelID+idx),
+			Ext:   imageExtensionFromMIME(visual.ImageMIME),
+			Data:  visual.ImageData,
+		})
+	}
+	return assets
 }
 
 type imageFrame struct {
@@ -271,12 +338,11 @@ func (g *PPTXGenerator) Generate(slides []Slide, opts PPTXOptions) ([]byte, erro
 	chartCount := 0
 	imageCount := 0
 	for _, s := range slides {
-		if s.Chart != nil && (s.Layout == "chart" || s.Layout == "dashboard") {
+		layout := resolvedLayout(s)
+		if s.Chart != nil && (layout == "chart" || layout == "dashboard") {
 			chartCount++
 		}
-		if hasEmbeddedImage(s) {
-			imageCount++
-		}
+		imageCount += len(collectSlideImageAssets(s))
 	}
 
 	buf := new(bytes.Buffer)
@@ -356,8 +422,26 @@ func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideThe
 		slidePath := fmt.Sprintf("ppt/slides/slide%d.xml", slideNum)
 		relsPath := fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", slideNum)
 
-		hasChart := slide.Chart != nil && (slide.Layout == "chart" || slide.Layout == "dashboard")
-		hasImage := !hasChart && hasEmbeddedImage(slide)
+		layout := resolvedLayout(slide)
+		hasChart := slide.Chart != nil && (layout == "chart" || layout == "dashboard")
+		imageAssets := collectSlideImageAssets(slide)
+		renderAssets := slideRenderAssets{}
+		if len(imageAssets) > 0 && resolvedImagePos(slide) != "" {
+			renderAssets.PrimaryImageRel = imageAssets[0].RelID
+		}
+		if len(imageAssets) > 0 && renderAssets.PrimaryImageRel != "" {
+			visualIDs := make([]string, 0, len(imageAssets)-1)
+			for _, asset := range imageAssets[1:] {
+				visualIDs = append(visualIDs, asset.RelID)
+			}
+			renderAssets.VisualRelIDs = visualIDs
+		} else if len(imageAssets) > 0 {
+			visualIDs := make([]string, 0, len(imageAssets))
+			for _, asset := range imageAssets {
+				visualIDs = append(visualIDs, asset.RelID)
+			}
+			renderAssets.VisualRelIDs = visualIDs
+		}
 
 		if hasChart {
 			chartIndex++
@@ -380,16 +464,23 @@ func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideThe
 
 			// Slide rels with chart reference
 			result[relsPath] = g.createSlideRelsWithChart(chartIndex)
-		} else if hasImage {
-			imageIndex++
-			imageExt := imageExtensionFromMIME(slide.ImageMIME)
-			result[relsPath] = g.createSlideRelsWithImage(imageIndex, imageExt)
-			binaries[fmt.Sprintf("ppt/media/image%d.%s", imageIndex, imageExt)] = slide.ImageData
+		} else if len(imageAssets) > 0 {
+			rels := make([]slideImageAsset, 0, len(imageAssets))
+			for _, asset := range imageAssets {
+				imageIndex++
+				rels = append(rels, slideImageAsset{
+					RelID: asset.RelID,
+					Ext:   asset.Ext,
+					Data:  asset.Data,
+				})
+				binaries[fmt.Sprintf("ppt/media/image%d.%s", imageIndex, asset.Ext)] = asset.Data
+			}
+			result[relsPath] = g.createSlideRelsWithImages(imageIndex-len(rels)+1, rels)
 		} else {
 			result[relsPath] = slideRels
 		}
 
-		result[slidePath] = g.createSlideXMLEnhanced(slide, theme, stylePreset, hasChart, chartIndex, slideNum, len(slides))
+		result[slidePath] = g.createSlideXMLEnhanced(slide, theme, stylePreset, hasChart, chartIndex, slideNum, len(slides), renderAssets)
 	}
 
 	return result, binaries, nil
@@ -753,12 +844,24 @@ func generateBackgroundXMLWithColors(bgType, bgColor1, bgColor2 string) string {
 }
 
 // createSlideXMLEnhanced builds richer slide XML based on the selected layout.
-func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, hasChart bool, chartIndex, slideNum, totalSlides int, assets slideRenderAssets) string {
 	layout := resolvedLayout(slide)
 
 	switch layout {
 	case "title":
-		return g.createTitleSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		return g.createTitleSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
+	case "toc":
+		return g.createTOCSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+	case "chapter":
+		return g.createChapterSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
+	case "gallery":
+		return g.createGallerySlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
+	case "comparison":
+		return g.createComparisonSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+	case "timeline":
+		return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+	case "closing":
+		return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	case "chart":
 		if hasChart {
 			return g.createChartSlideXML(slide, theme, stylePreset, chartIndex, slideNum, totalSlides)
@@ -770,7 +873,18 @@ func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, s
 		}
 		return g.createDashboardAsShapesSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	default:
-		return g.createContentSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		switch strings.TrimSpace(slide.Variant) {
+		case "comparison":
+			return g.createComparisonSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		case "timeline":
+			return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		case "gallery":
+			return g.createGallerySlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
+		case "closing":
+			return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		default:
+			return g.createContentSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
+		}
 	}
 }
 
@@ -1023,7 +1137,7 @@ func createFramedPanelXML(shapeID int, name, fillColor string, fillAlpha int, li
 }
 
 // createTitleSlideXML builds XML for the title slide.
-func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int, assets slideRenderAssets) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1054,13 +1168,13 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 	if imagePos == "background" {
 		titleColor = "FFFFFF"
 		subtitleColor = "FFFFFF"
-		imageXML = createImagePictureXML(90, "BackgroundImage", "rId2", 0, 0, 12192000, 6858000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "BackgroundImage", assets.PrimaryImageRel, 0, 0, 12192000, 6858000, slide.ImageData)
 		overlayXML = createSolidOverlayXML(91, "ImageOverlay", "000000", 35000, 0, 0, 12192000, 6858000)
 	} else if imagePos == "center" {
 		titleY = 750000
 		subtitleY = 5450000
 		decorY = 4700000
-		imageXML = createImagePictureXML(90, "CenterImage", "rId2", 2460000, 1550000, 7272000, 3200000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "CenterImage", assets.PrimaryImageRel, 2460000, 1550000, 7272000, 3200000, slide.ImageData)
 	} else {
 		titlePanelXML = createFramedPanelXML(92, "TitlePanel", stylePreset.BackgroundOverlay, panelAlpha, theme.AccentColor, panelLineAlpha, titleX-250000, titleY-450000, titleCX+500000, 2500000)
 	}
@@ -1401,7 +1515,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
 }
 
 // createContentSlideXML builds XML for a content slide, including bullet support.
-func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int) string {
+func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, stylePreset PPTXStylePreset, slideNum, totalSlides int, assets slideRenderAssets) string {
 	bgXML := generateSlideBackgroundXML(slide, theme)
 	bgColor := getEffectiveBgColor(slide, theme)
 	titleColor := getSafeTextColorForBg(getSlideTitleColor(slide, theme), bgColor)
@@ -1421,30 +1535,30 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 	}
 	if imagePos == "right" {
 		contentX, contentY, contentCX, contentCY = 700000, 1500000, 5400000, 4800000
-		imageXML = createImagePictureXML(90, "RightImage", "rId2", 6400000, 1450000, 4800000, 4300000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "RightImage", assets.PrimaryImageRel, 6400000, 1450000, 4800000, 4300000, slide.ImageData)
 	} else if imagePos == "left" {
 		contentX, contentY, contentCX, contentCY = 6100000, 1500000, 5000000, 4800000
-		imageXML = createImagePictureXML(90, "LeftImage", "rId2", 700000, 1450000, 4800000, 4300000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "LeftImage", assets.PrimaryImageRel, 700000, 1450000, 4800000, 4300000, slide.ImageData)
 	} else if imagePos == "center" {
 		contentX, contentY, contentCX, contentCY = 1700000, 5250000, 8800000, 900000
 		titleY, titleCY = 300000, 600000
 		subtitleY = 950000
-		imageXML = createImagePictureXML(90, "CenterImage", "rId2", 2460000, 1500000, 7272000, 3000000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "CenterImage", assets.PrimaryImageRel, 2460000, 1500000, 7272000, 3000000, slide.ImageData)
 	} else if imagePos == "top" {
 		contentX, contentY, contentCX, contentCY = 900000, 3600000, 10300000, 2600000
 		titleY, titleCY = 250000, 600000
 		subtitleY = 980000
-		imageXML = createImagePictureXML(90, "TopImage", "rId2", 1460000, 1200000, 9272000, 2000000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "TopImage", assets.PrimaryImageRel, 1460000, 1200000, 9272000, 2000000, slide.ImageData)
 	} else if imagePos == "bottom" {
 		contentX, contentY, contentCX, contentCY = 900000, 1500000, 10300000, 2500000
 		titleY, titleCY = 250000, 600000
 		subtitleY = 980000
-		imageXML = createImagePictureXML(90, "BottomImage", "rId2", 1460000, 4300000, 9272000, 1800000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "BottomImage", assets.PrimaryImageRel, 1460000, 4300000, 9272000, 1800000, slide.ImageData)
 	} else if imagePos == "diagonal" {
 		contentX, contentY, contentCX, contentCY = 900000, 1650000, 6000000, 4200000
 		titleY, titleCY = 250000, 600000
 		subtitleY = 980000
-		imageXML = createImagePictureXML(90, "DiagonalImage", "rId2", 6900000, 1200000, 4000000, 2600000, slide.ImageData)
+		imageXML = createImagePictureXML(90, "DiagonalImage", assets.PrimaryImageRel, 6900000, 1200000, 4000000, 2600000, slide.ImageData)
 	}
 
 	// Accent block on the left side of the title.
@@ -2370,8 +2484,19 @@ func (g *PPTXGenerator) createSlideRelsWithChart(chartIndex int) string {
 }
 
 func (g *PPTXGenerator) createSlideRelsWithImage(imageIndex int, imageExt string) string {
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image%d.%s"/></Relationships>`, imageIndex, imageExt)
+	return g.createSlideRelsWithImages(imageIndex, []slideImageAsset{{RelID: "rId2", Ext: imageExt}})
+}
+
+func (g *PPTXGenerator) createSlideRelsWithImages(startIndex int, assets []slideImageAsset) string {
+	var sb strings.Builder
+	sb.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`)
+	sb.WriteString(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`)
+	sb.WriteString(`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`)
+	for idx, asset := range assets {
+		sb.WriteString(fmt.Sprintf(`<Relationship Id="%s" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image%d.%s"/>`, asset.RelID, startIndex+idx, asset.Ext))
+	}
+	sb.WriteString(`</Relationships>`)
+	return sb.String()
 }
 
 // createChartRelsXML builds rels for the chart itself.

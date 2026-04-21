@@ -159,6 +159,43 @@ func TestPPTXWithEmbeddedJPEGAssets(t *testing.T) {
 	}
 }
 
+func TestPPTXGalleryEmbedsMultipleImages(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "Visual Gallery",
+			Layout:  "gallery",
+			Variant: "gallery",
+			Visuals: []SlideVisual{
+				{Label: "Hero", Caption: "Primary scene", ImageData: samplePNG, ImageMIME: "image/png"},
+				{Label: "Detail", Caption: "Supporting scene", ImageData: samplePNG, ImageMIME: "image/png"},
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Gallery Test", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	files := openZipFiles(t, data)
+	for _, path := range []string{"ppt/media/image1.png", "ppt/media/image2.png"} {
+		if _, ok := files[path]; !ok {
+			t.Fatalf("missing gallery asset %s", path)
+		}
+	}
+	rels := files["ppt/slides/_rels/slide1.xml.rels"]
+	for _, needle := range []string{`Id="rId2"`, `Target="../media/image1.png"`, `Id="rId3"`, `Target="../media/image2.png"`} {
+		if !strings.Contains(rels, needle) {
+			t.Fatalf("gallery rels missing %q: %s", needle, rels)
+		}
+	}
+	slideXML := files["ppt/slides/slide1.xml"]
+	if count := strings.Count(slideXML, "<p:pic>"); count != 2 {
+		t.Fatalf("picture count = %d, want 2: %s", count, slideXML)
+	}
+}
+
 func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 	cases := []struct {
 		name      string
