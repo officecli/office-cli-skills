@@ -65,6 +65,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
+	outReader := bufio.NewReader(outR)
 	app := NewApp(outW, bytes.NewBuffer(nil), inR)
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
@@ -81,7 +82,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	}()
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize"})
-	initMsg := readRPC(t, outR)
+	initMsg := readRPC(t, outReader)
 	if initMsg["result"] == nil {
 		t.Fatalf("initialize result missing: %#v", initMsg)
 	}
@@ -110,7 +111,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
-	sessionMsg := readRPC(t, outR)
+	sessionMsg := readRPC(t, outReader)
 	sessionResult := sessionMsg["result"].(map[string]any)
 	sessionID := sessionResult["id"].(string)
 
@@ -143,7 +144,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 			t.Fatal("timed out waiting for bridge events")
 		default:
 		}
-		msg := readRPC(t, outR)
+		msg := readRPC(t, outReader)
 		if result, ok := msg["result"].(map[string]any); ok {
 			if id, ok := result["task_id"].(string); ok {
 				taskID = id
@@ -168,7 +169,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 4, "method": "task/status", "params": map[string]any{"task_id": taskID}})
-	statusMsg := readRPC(t, outR)
+	statusMsg := readRPC(t, outReader)
 	status := statusMsg["result"].(map[string]any)
 	if status["status"] != "completed" {
 		t.Fatalf("unexpected task status: %#v", status)
@@ -247,6 +248,7 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
+	outReader := bufio.NewReader(outR)
 	app := NewApp(outW, bytes.NewBuffer(nil), inR)
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
@@ -293,7 +295,7 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 			t.Fatal("timed out waiting for invoke response")
 		default:
 		}
-		msg := readRPC(t, outR)
+		msg := readRPC(t, outReader)
 		if result, ok := msg["result"].(map[string]any); ok {
 			if id, ok := result["task_id"].(string); ok {
 				taskID = id
@@ -308,7 +310,7 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 			t.Fatal("timed out waiting for cancel response")
 		default:
 		}
-		msg := readRPC(t, outR)
+		msg := readRPC(t, outReader)
 		if result, ok := msg["result"].(map[string]any); ok {
 			if cancelled, ok := result["cancelled"].(bool); ok && cancelled {
 				break
@@ -323,7 +325,7 @@ func TestAgentBridgeCancelTask(t *testing.T) {
 			t.Fatal("timed out waiting for cancel event")
 		default:
 		}
-		msg := readRPC(t, outR)
+		msg := readRPC(t, outReader)
 		if msg["method"] != "event" {
 			continue
 		}
@@ -509,9 +511,8 @@ func writeRPC(t *testing.T, w io.Writer, payload map[string]any) {
 	}
 }
 
-func readRPC(t *testing.T, r io.Reader) map[string]any {
+func readRPC(t *testing.T, reader *bufio.Reader) map[string]any {
 	t.Helper()
-	reader := bufio.NewReader(r)
 	contentLength := 0
 	for {
 		line, err := reader.ReadString('\n')
@@ -545,6 +546,23 @@ func readRPC(t *testing.T, r io.Reader) map[string]any {
 	return msg
 }
 
+func TestReadRPCConsumesBackToBackMessagesFromSharedReader(t *testing.T) {
+	var stream bytes.Buffer
+	writeRPC(t, &stream, map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{"task_id": "task-1"}})
+	writeRPC(t, &stream, map[string]any{"jsonrpc": "2.0", "method": "event", "params": map[string]any{"type": bridgeEventTaskCompleted}})
+
+	reader := bufio.NewReader(&stream)
+	first := readRPC(t, reader)
+	second := readRPC(t, reader)
+
+	if first["id"].(float64) != 1 {
+		t.Fatalf("unexpected first message: %#v", first)
+	}
+	if second["method"] != "event" {
+		t.Fatalf("unexpected second message: %#v", second)
+	}
+}
+
 func TestAgentBridgeReviewTask(t *testing.T) {
 	tmpDir := t.TempDir()
 	deckPath := filepath.Join(tmpDir, "deck.pptx")
@@ -553,6 +571,7 @@ func TestAgentBridgeReviewTask(t *testing.T) {
 	}
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
+	outReader := bufio.NewReader(outR)
 	app := NewApp(outW, bytes.NewBuffer(nil), inR)
 	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
 		return &stubReviewer{result: &ReviewResult{
@@ -595,7 +614,7 @@ func TestAgentBridgeReviewTask(t *testing.T) {
 			t.Fatal("timed out waiting for review events")
 		default:
 		}
-		msg := readRPC(t, outR)
+		msg := readRPC(t, outReader)
 		if result, ok := msg["result"].(map[string]any); ok {
 			if id, ok := result["task_id"].(string); ok {
 				taskID = id
@@ -615,7 +634,7 @@ func TestAgentBridgeReviewTask(t *testing.T) {
 	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "task/status", "params": map[string]any{"task_id": taskID}})
-	statusMsg := readRPC(t, outR)
+	statusMsg := readRPC(t, outReader)
 	status := statusMsg["result"].(map[string]any)
 	if status["tool"] != "office.review" || status["status"] != "completed" {
 		t.Fatalf("unexpected task status: %#v", status)
