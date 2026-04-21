@@ -203,8 +203,8 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["xl/workbook.xml"], "Pipeline") ||
 		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
-		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "120") {
-		t.Fatalf("workbook xml = %q\nshared strings = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"])
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "120") {
+		t.Fatalf("workbook xml = %q\nshared strings = %q\nsheet1 = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
 	}
 }
 

@@ -199,7 +199,10 @@ func BuildLocalPreviewHTML(title, preset string, theme *SlideTheme, slides []Sli
 		if strings.TrimSpace(slide.Source) != "" {
 			body.WriteString(fmt.Sprintf("<p class=\"source\">%s</p>", html.EscapeString(slide.Source)))
 		}
-		role := strings.TrimSpace(slide.Role)
+		role := strings.TrimSpace(slide.NarrativeRole)
+		if role == "" {
+			role = strings.TrimSpace(slide.Role)
+		}
 		if role == "" {
 			role = "detail"
 		}

@@ -752,6 +752,10 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		slidesTrimmed = true
 		slides = slides[:maxSlides]
 	}
+	for idx := range slides {
+		slides[idx].NarrativeRole = firstNonEmpty(normalizeNarrativeRole(slides[idx].NarrativeRole), normalizeNarrativeRole(slides[idx].Role))
+		slides[idx].Role = slides[idx].NarrativeRole
+	}
 
 	payload.Slides = slides
 
@@ -778,7 +782,8 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 	slide.SectionTitle = fitTextForLayout(strings.TrimSpace(slide.SectionTitle), 20)
 	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
-	slide.NarrativeRole = normalizeNarrativeRole(slide.NarrativeRole)
+	slide.NarrativeRole = firstNonEmpty(normalizeNarrativeRole(slide.NarrativeRole), normalizeNarrativeRole(slide.Role))
+	slide.Role = slide.NarrativeRole
 	slide.Visuals = normalizeSlideVisuals(slide.Visuals, 4)
 
 	switch {

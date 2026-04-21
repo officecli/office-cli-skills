@@ -64,6 +64,7 @@ type Slide struct {
 	IsTitle       bool           `json:"isTitle"`                 // Whether this is a title slide.
 	Layout        string         `json:"layout,omitempty"`        // "title" | "content" | "chart" | "dashboard" | "toc" | "chapter" | "gallery" | "comparison" | "timeline" | "closing"
 	Variant       string         `json:"variant,omitempty"`       // Optional visual variant.
+	Role          string         `json:"role,omitempty"`          // Backward-compatible narrative role alias.
 	NarrativeRole string         `json:"narrativeRole,omitempty"` // cover | toc | chapter | summary | evidence | analysis | action | closing
 	SectionIndex  int            `json:"sectionIndex,omitempty"`  // Chapter/section sequence.
 	SectionTitle  string         `json:"sectionTitle,omitempty"`  // Chapter label or grouping title.
@@ -1391,9 +1392,12 @@ func createPointCardsXML(points []string, x, y, cx, cy int, accentColor, textCol
 	return sb.String()
 }
 
-func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int, namePrefix string) string {
 	if len(sections) == 0 {
 		return ""
+	}
+	if strings.TrimSpace(namePrefix) == "" {
+		namePrefix = "Section"
 	}
 	cols := 1
 	switch {
@@ -1434,7 +1438,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
 		sb.WriteString(fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="SectionCard%d"/>
+                    <p:cNvPr id="%d" name="%sCard%d"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -1452,7 +1456,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
             </p:sp>
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="SectionHeader%d"/>
+                    <p:cNvPr id="%d" name="%sBadge%d"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -1483,7 +1487,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
             </p:sp>
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="SectionBody%d"/>
+                    <p:cNvPr id="%d" name="%sBody%d"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -1509,7 +1513,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>`, cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, headerID, idx+1, cardX+220000, cardY-120000, 1500000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading), textID, idx+1, cardX, cardY+220000, cardW, cardH-260000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+            </p:sp>`, cardID, escapeXML(namePrefix), idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, headerID, escapeXML(namePrefix), idx+1, cardX+220000, cardY-120000, 1500000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading), textID, escapeXML(namePrefix), idx+1, cardX, cardY+220000, cardW, cardH-260000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
 	}
 	return sb.String()
 }
@@ -1591,7 +1595,11 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 	// Build the main content area.
 	contentXML := ""
 	if len(slide.Sections) > 0 {
-		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		prefix := "Section"
+		if slide.Variant == "feature-grid" {
+			prefix = "FeatureGrid"
+		}
+		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, prefix)
 	} else if len(slide.Points) > 0 {
 		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
 			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
@@ -2158,6 +2166,12 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 	if metricFillAlpha <= 0 {
 		metricFillAlpha = 96000
 	}
+	metricCardName := "MetricBg"
+	metricValueName := "MetricText"
+	if strings.TrimSpace(slide.Variant) == "stat-band" {
+		metricCardName = "MetricBandCard"
+		metricValueName = "MetricBandValue"
+	}
 
 	// Accent block on the left side of the title.
 	titleDecoXML := fmt.Sprintf(`
@@ -2209,7 +2223,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 			metricsXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="MetricBg%d"/>
+                    <p:cNvPr id="%d" name="%s%d"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -2222,7 +2236,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:solidFill><a:srgbClr val="%s"><a:alpha val="%d"/></a:srgbClr></a:solidFill>
                     <a:ln w="9525"><a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill></a:ln>
                 </p:spPr>
-            </p:sp>`, shapeID, i, cardX, cardY, cardWidth, cardHeight, metricFill, metricFillAlpha, accentColor)
+            </p:sp>`, shapeID, metricCardName, i+1, cardX, cardY, cardWidth, cardHeight, metricFill, metricFillAlpha, accentColor)
 
 			// Card text content.
 			noteXML := ""
@@ -2244,7 +2258,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 			metricsXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="MetricText%d"/>
+                    <p:cNvPr id="%d" name="%s%d"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -2281,7 +2295,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                         </a:r>
                     </a:p>%s
                 </p:txBody>
-            </p:sp>`, shapeID+1, i, cardX, cardY, cardWidth, cardHeight,
+            </p:sp>`, shapeID+1, metricValueName, i+1, cardX, cardY, cardWidth, cardHeight,
 				textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Label),
 				primaryColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Value),
 				noteXML)
@@ -2378,9 +2392,12 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
             </p:graphicFrame>`, lowerY)
 	} else if len(slide.Points) > 0 {
 		// Points only, full width.
-		pointsParagraphs := ""
-		for _, point := range slide.Points {
-			pointsParagraphs += fmt.Sprintf(`
+		if strings.TrimSpace(slide.Variant) == "stat-band" {
+			lowerContentXML = createPointCardsXML(slide.Points, 700000, lowerY, 10800000, 2200000, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		} else {
+			pointsParagraphs := ""
+			for _, point := range slide.Points {
+				pointsParagraphs += fmt.Sprintf(`
                     <a:p>
                         <a:pPr marL="342900" indent="-342900" algn="l">
                             <a:buFont typeface="Arial"/>
@@ -2395,8 +2412,8 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                             <a:t>%s</a:t>
                         </a:r>
                     </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
-		}
-		lowerContentXML += fmt.Sprintf(`
+			}
+			lowerContentXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
                     <p:cNvPr id="41" name="Points"/>
@@ -2415,6 +2432,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:lstStyle/>%s
                 </p:txBody>
             </p:sp>`, lowerY, pointsParagraphs)
+		}
 	}
 
 	footerXML := generateFooterXML(slide.Source, slideNum, totalSlides, 60, theme, stylePreset)

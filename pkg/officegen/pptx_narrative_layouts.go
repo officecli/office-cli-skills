@@ -239,12 +239,17 @@ func (g *PPTXGenerator) createComparisonSlideXML(slide Slide, theme *SlideTheme,
 
 	var columns strings.Builder
 	frames := []struct{ x, w int }{{x: 900000, w: 4900000}, {x: 6200000, w: 4900000}, {x: 3550000, w: 4900000}}
+	columns.WriteString(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="39" name="ComparisonDivider"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="6020000" y="1800000"/><a:ext cx="0" cy="2800000"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="12700"><a:solidFill><a:srgbClr val="` + accentColor + `"><a:alpha val="22000"/></a:srgbClr></a:solidFill></a:ln></p:spPr>
+            </p:sp>`)
 	for idx, item := range items {
 		if idx >= len(frames) {
 			break
 		}
 		frame := frames[idx]
-		columns.WriteString(createFramedPanelXML(40+idx*3, fmt.Sprintf("ComparePanel%d", idx+1), stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, frame.x, 1700000, frame.w, 3000000))
+		columns.WriteString(createFramedPanelXML(40+idx*3, fmt.Sprintf("ComparisonCard%d", idx+1), stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, frame.x, 1700000, frame.w, 3000000))
 		columns.WriteString(fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr><p:cNvPr id="%d" name="CompareHeader%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
@@ -309,7 +314,7 @@ func (g *PPTXGenerator) createTimelineSlideXML(slide Slide, theme *SlideTheme, s
 		}
 		timeline.WriteString(fmt.Sprintf(`
             <p:sp>
-                <p:nvSpPr><p:cNvPr id="%d" name="TimelineDot%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:nvSpPr><p:cNvPr id="%d" name="TimelineNode%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
                 <p:spPr><a:xfrm><a:off x="%d" y="3140000"/><a:ext cx="320000" cy="320000"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
             </p:sp>
             <p:sp>
@@ -318,13 +323,21 @@ func (g *PPTXGenerator) createTimelineSlideXML(slide Slide, theme *SlideTheme, s
                 <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1500" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
             </p:sp>
             <p:sp>
-                <p:nvSpPr><p:cNvPr id="%d" name="TimelineDetail%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:nvSpPr><p:cNvPr id="%d" name="TimelineCard%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
                 <p:spPr><a:xfrm><a:off x="%d" y="3620000"/><a:ext cx="1800000" cy="860000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
                 <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1300"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
             </p:sp>`,
 			21+idx*3, idx+1, x-160000, accentColor,
 			22+idx*3, idx+1, x-900000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Heading),
 			23+idx*3, idx+1, x-900000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Detail)))
+		if idx < len(items)-1 {
+			nextX := 1300000 + (idx+1)*(9600000/(len(items)-1))
+			timeline.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="TimelineConnector%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="3290000"/><a:ext cx="%d" cy="0"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="9525"><a:solidFill><a:srgbClr val="%s"><a:alpha val="32000"/></a:srgbClr></a:solidFill></a:ln></p:spPr>
+            </p:sp>`, 30+idx, idx+1, x+160000, nextX-x-320000, accentColor))
+		}
 	}
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
