@@ -57,3 +57,29 @@ func TestBuildDynamicFallbackQuestions_UsesScenarioSpecificQuestions(t *testing.
 		t.Fatalf("question = %q, want pitch-specific audience", pitchQuestions[0].Question)
 	}
 }
+
+func TestBuildQuestionContext_PPTXExplainerFollowsUserLanguage(t *testing.T) {
+	context := buildQuestionContext(engine.PrepareExecutionPlanRequest{
+		UserPrompt:     "介绍 minecraft 这款游戏",
+		GenerationMode: "best",
+	}, "pptx")
+	if !strings.Contains(context, "Write all question text in Simplified Chinese.") {
+		t.Fatalf("context = %q, want Simplified Chinese requirement", context)
+	}
+	if !strings.Contains(context, "audience familiarity") {
+		t.Fatalf("context = %q, want explainer-oriented goal", context)
+	}
+}
+
+func TestBuildDynamicFallbackQuestions_PPTXExplainerChineseQuestions(t *testing.T) {
+	questions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "介绍 minecraft 这款游戏"}, "pptx")
+	if len(questions) != 3 {
+		t.Fatalf("question count = %d, want 3", len(questions))
+	}
+	if !strings.Contains(questions[0].Question, "主要是讲给谁看的") {
+		t.Fatalf("question = %q, want Chinese explainer audience question", questions[0].Question)
+	}
+	if !strings.Contains(questions[1].Question, "应该先突出什么") {
+		t.Fatalf("question = %q, want Chinese explainer focus question", questions[1].Question)
+	}
+}

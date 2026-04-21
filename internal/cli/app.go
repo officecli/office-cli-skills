@@ -1225,6 +1225,17 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 	if session != nil && strings.TrimSpace(session.ExecutionPrompt) != "" {
 		job.Prompt = session.ExecutionPrompt
 	}
+	if session != nil && session.QuestionSource != "" && session.QuestionSource != "llm_dynamic" {
+		message := strings.TrimSpace(session.QuestionFallbackReason)
+		if message == "" {
+			message = "Dynamic follow-up question generation fell back to a simpler template, so the clarification flow may be less tailored than expected."
+		}
+		job.Warnings = append(job.Warnings, engine.GenerateIssue{
+			Code:    "WARN_PLAN_QUESTIONS_FALLBACK",
+			Field:   "plan.questions",
+			Message: message,
+		})
+	}
 	return job, nil
 }
 

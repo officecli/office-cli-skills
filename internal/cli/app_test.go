@@ -150,15 +150,21 @@ type sequencedAppLLMClient struct {
 	mu                  sync.Mutex
 	structuredResponses []string
 	jsonResponses       []string
+	structuredCalls     int
+	jsonCalls           int
+	lastStructuredReq   engine.StructuredCompletionRequest
+	lastJSONMsgs        []engine.LLMMessage
 }
 
 func (f *sequencedAppLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (string, error) {
 	return "", nil
 }
 
-func (f *sequencedAppLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
+func (f *sequencedAppLLMClient) CompleteJSON(_ context.Context, msgs []engine.LLMMessage) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.jsonCalls++
+	f.lastJSONMsgs = append([]engine.LLMMessage(nil), msgs...)
 	if len(f.jsonResponses) == 0 {
 		return "", fmt.Errorf("unexpected CompleteJSON call")
 	}
@@ -167,9 +173,11 @@ func (f *sequencedAppLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMe
 	return response, nil
 }
 
-func (f *sequencedAppLLMClient) CompleteStructured(_ context.Context, _ engine.StructuredCompletionRequest) (string, error) {
+func (f *sequencedAppLLMClient) CompleteStructured(_ context.Context, req engine.StructuredCompletionRequest) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.structuredCalls++
+	f.lastStructuredReq = req
 	if len(f.structuredResponses) == 0 {
 		return "", fmt.Errorf("unexpected CompleteStructured call")
 	}
@@ -2140,6 +2148,71 @@ func TestExecuteGenerateJob_BestExternalDefersAccessCheckUntilAfterFollowUp(t *t
 	}
 	if strings.Join(events, ",") != "prompt,check" {
 		t.Fatalf("events = %v", events)
+	}
+}
+
+func TestExecuteGenerateJob_FastEnrichesShortPPTPrompt(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	llm := &sequencedAppLLMClient{
+		structuredResponses: []string{
+			`{"prompt":"请生成一份面向第一次接触 Minecraft 的观众的英文介绍型 PPT，先解释 Minecraft 是什么，再介绍核心玩法、为什么它有高自由度和高可玩性，并在结尾给出新手如何开始的建议。控制在 6 页左右，每页标题尽量短，避免卡片和说明文字过密。","assumptions":["面向新手观众","以入门介绍为主"]}`,
+		},
+		jsonResponses: []string{
+			`{
+				"title":"Minecraft Introduction",
+				"subtitle":"What it is, why it stands out, and how to begin",
+				"stylePreset":"tech-contrast",
+				"theme":{"preset":"analysis","primaryColor":"1D4ED8","accentColor":"0F766E","accentSoft":"D1FAE5","backgroundColor":"F8FAFC","surfaceColor":"FFFFFF","borderColor":"DCE4F2","textColor":"0F172A","mutedColor":"64748B","titleColor":"020617","fontFamily":"Aptos","eaFontFamily":"Microsoft YaHei"},
+				"slides":[
+					{"role":"cover","layout":"title","headline":"Minecraft Introduction","takeaway":"A beginner-friendly guide","blocks":[],"visual":null,"source":"","bgColor":"","bgColor2":""},
+					{"role":"summary","layout":"content","headline":"What It Is","takeaway":"Minecraft is a sandbox game built around exploration, building, and survival","blocks":[{"type":"sections","text":"","items":[],"sections":[{"heading":"Sandbox","detail":"Players shape their own goals in an open world"},{"heading":"Build","detail":"Blocks become houses, tools, and large creations"},{"heading":"Survive","detail":"Resources, crafting, and danger create a simple but engaging loop"}],"metrics":[],"chart":null}],"visual":null,"source":"","bgColor":"","bgColor2":""}
+				]
+			}`,
+		},
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return llm, nil
+	}
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		LLM: LLMConfig{
+			BaseURL: "https://api.example.com/v1",
+			APIKey:  "llm-key",
+			Model:   "gpt-4.1",
+		},
+		License: LicenseConfig{
+			BaseURL: "https://license.example.com/api",
+			APIKey:  "paid-key",
+			Enabled: true,
+		},
+		Publish: disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "minecraft 游戏介绍",
+		Prompt:       "介绍 minecraft 这款游戏",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "fast",
+		Language:     "en-US",
+		OutputDir:    t.TempDir(),
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if llm.structuredCalls != 1 {
+		t.Fatalf("structuredCalls = %d, want 1", llm.structuredCalls)
+	}
+	if llm.jsonCalls != 1 {
+		t.Fatalf("jsonCalls = %d, want 1", llm.jsonCalls)
+	}
+	if llm.lastStructuredReq.Schema.Name != "ppt_prompt_enrichment" {
+		t.Fatalf("schema name = %q", llm.lastStructuredReq.Schema.Name)
+	}
+	warnings := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(warnings, "automatically expanded") {
+		t.Fatalf("warnings = %q, want prompt enrichment warning", warnings)
 	}
 }
 

@@ -280,11 +280,12 @@ type pptxPayload struct {
 type pptxArchetype string
 
 const (
-	pptxArchetypeGeneral  pptxArchetype = "general"
-	pptxArchetypeCompany  pptxArchetype = "company"
-	pptxArchetypeMarket   pptxArchetype = "market"
-	pptxArchetypeOps      pptxArchetype = "ops"
-	pptxArchetypeTraining pptxArchetype = "training"
+	pptxArchetypeGeneral   pptxArchetype = "general"
+	pptxArchetypeCompany   pptxArchetype = "company"
+	pptxArchetypeMarket    pptxArchetype = "market"
+	pptxArchetypeOps       pptxArchetype = "ops"
+	pptxArchetypeTraining  pptxArchetype = "training"
+	pptxArchetypeExplainer pptxArchetype = "explainer"
 )
 
 const pptxStructuredSchema = `{
@@ -517,11 +518,12 @@ Requirements:
 	- Keep the deck to 6-10 slides, usually 7-9.
 	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
-	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline such as cover -> toc -> chapter -> summary -> supporting evidence/capabilities -> chapter -> action/closing.
-	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
-	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
-	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
-	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
+		- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline such as cover -> toc -> chapter -> summary -> supporting evidence/capabilities -> chapter -> action/closing.
+		- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+		- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
+		- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
+		- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
+		- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
 - toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
 - comparison, timeline, and closing should rely on sections rather than long bullets.
@@ -534,8 +536,8 @@ Requirements:
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
 - When a chart fits, chart may include type, categories, values, and title, plus 2-3 takeaway points.
 - When a dashboard fits, metrics may include label, value, and note, plus 2-3 action or takeaway points.
-- The closing slide must include 2-3 next-step actions with time, owner, or validation criteria.
-- Wording should fit the audience and style. Prefer quantified, conclusion-first language and avoid vague slogans.
+- The closing slide must match the topic. Business decks should include 2-3 next-step actions with time, owner, or validation criteria. Explainer decks should instead close with 2-3 onboarding tips, audience-fit notes, starter ideas, or concise takeaways.
+- Wording should fit the audience and style. Prefer quantified, conclusion-first language for business topics, and plain, vivid, example-led language for explainer topics. Avoid vague slogans.
 	%s
 	%s`, description, generateengine.FormatDocumentPromptTarget(target), presetHint, slideExample, imageRules, outlineRules)
 }
@@ -1057,6 +1059,8 @@ func suggestStylePreset(style string, archetype pptxArchetype) string {
 		return officegen.StylePresetEditorialLight
 	case pptxArchetypeTraining:
 		return officegen.StylePresetTrainingManual
+	case pptxArchetypeExplainer:
+		return officegen.StylePresetTechContrast
 	default:
 		return officegen.StylePresetTechContrast
 	}
@@ -1438,6 +1442,8 @@ func summaryTitleForArchetype(archetype pptxArchetype) string {
 		return "Business Takeaways"
 	case pptxArchetypeTraining:
 		return "Learning Goals"
+	case pptxArchetypeExplainer:
+		return "What It Is"
 	default:
 		return "Executive Summary"
 	}
@@ -1453,6 +1459,8 @@ func summarySubtitleForArchetype(archetype pptxArchetype) string {
 		return "Start with the operating conclusion, then show what is driving it"
 	case pptxArchetypeTraining:
 		return "Clarify what the audience should learn before stepping into detail"
+	case pptxArchetypeExplainer:
+		return "Start with the core idea, then show why the topic is worth exploring"
 	default:
 		return "Lead with the decision, then support it slide by slide"
 	}
@@ -1468,6 +1476,8 @@ func actionTitleForArchetype(archetype pptxArchetype) string {
 		return "Execution Actions"
 	case pptxArchetypeTraining:
 		return "Next Practice Steps"
+	case pptxArchetypeExplainer:
+		return "How to Start"
 	default:
 		return "Next Steps"
 	}
@@ -1483,6 +1493,8 @@ func actionSubtitleForArchetype(archetype pptxArchetype) string {
 		return "Close with repair actions, owner, and the metric to track"
 	case pptxArchetypeTraining:
 		return "Close with the next commands, practice loop, and caution points"
+	case pptxArchetypeExplainer:
+		return "Close with beginner tips, who it suits, and what to try first"
 	default:
 		return "Close with a small set of actions, owners, and validation points"
 	}
@@ -1500,7 +1512,7 @@ func looksLikeOverviewSlide(slide officegen.Slide) bool {
 
 func looksLikeClosingSlide(slide officegen.Slide) bool {
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action"} {
+	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action", "how to start", "key takeaway", "who it's for", "下一步", "行动", "决策", "建议", "推进", "实施计划", "落地路径", "如何开始", "适合谁", "核心结论"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1853,7 +1865,138 @@ func normalizeImagePosition(pos string) string {
 		return "right"
 	}
 }
+func computePPTXImageBudget(slides []officegen.Slide, deckTitle string, enableImages bool) int {
+	if !enableImages || len(slides) == 0 {
+		return 0
+	}
 
+	budget := 1
+	switch {
+	case len(slides) >= 8:
+		budget = 4
+	case len(slides) >= 6:
+		budget = 3
+	case len(slides) >= 4:
+		budget = 2
+	}
+
+	switch detectPPTXArchetype(deckTitle, "") {
+	case pptxArchetypeCompany, pptxArchetypeTraining, pptxArchetypeExplainer:
+		if budget < 4 {
+			budget++
+		}
+	case pptxArchetypeMarket, pptxArchetypeOps:
+		if budget > 2 {
+			budget--
+		}
+	}
+
+	eligible := 0
+	for idx, slide := range slides {
+		role := normalizedSlideNarrativeRole(slide)
+		if role == "" {
+			if idx == 0 {
+				role = "cover"
+			} else {
+				role = "analysis"
+			}
+		}
+		if role == "cover" || role == "analysis" {
+			eligible++
+		}
+	}
+	if eligible < budget {
+		budget = eligible
+	}
+	if budget < 0 {
+		return 0
+	}
+	return budget
+}
+
+func normalizedSlideNarrativeRole(slide officegen.Slide) string {
+	return firstNonEmpty(normalizeNarrativeRole(slide.NarrativeRole), normalizeNarrativeRole(slide.Role))
+}
+
+func defaultImagePositionForSlide(slide officegen.Slide) string {
+	if normalizedSlideNarrativeRole(slide) == "cover" {
+		return "background"
+	}
+	if len(slide.Sections) >= 4 || len(slide.Points) >= 4 {
+		return "top"
+	}
+	return "right"
+}
+
+func shouldAutoAddImagePrompt(slide officegen.Slide, _ bool) bool {
+	role := normalizedSlideNarrativeRole(slide)
+	if role == "cover" {
+		return false
+	}
+	if role != "analysis" {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildFallbackImagePrompt(slide officegen.Slide, deckTitle string) string {
+	subject := firstNonEmpty(slide.Title, deckTitle, "Presentation topic")
+	fragments := make([]string, 0, 4)
+	if subtitle := strings.TrimSpace(slide.Subtitle); subtitle != "" {
+		fragments = append(fragments, cleanSentence(subtitle))
+	}
+	for _, section := range slide.Sections {
+		if len(fragments) >= 3 {
+			break
+		}
+		fragment := firstNonEmpty(section.Heading, section.Detail)
+		if fragment == "" {
+			continue
+		}
+		if strings.TrimSpace(section.Detail) != "" && strings.TrimSpace(section.Heading) != "" {
+			fragment = strings.TrimSpace(section.Heading) + ": " + strings.TrimSpace(section.Detail)
+		}
+		fragments = append(fragments, cleanSentence(fragment))
+	}
+	for _, point := range slide.Points {
+		if len(fragments) >= 3 {
+			break
+		}
+		if cleaned := cleanSentence(point); cleaned != "" {
+			fragments = append(fragments, cleaned)
+		}
+	}
+	if len(fragments) == 0 && strings.TrimSpace(slide.Content) != "" {
+		fragments = append(fragments, cleanSentence(strings.TrimSpace(slide.Content)))
+	}
+
+	scene := strings.Join(fragments, "; ")
+	styleHint := "clean professional presentation visual, no text overlay"
+	if normalizedSlideNarrativeRole(slide) == "cover" {
+		styleHint = "hero visual for a presentation cover, cinematic composition, clean professional lighting, no text overlay"
+	} else if looksLikeGameSlide(slide) {
+		styleHint = "vivid gameplay-style scene, immersive environment, polished composition, no text overlay"
+	} else {
+		styleHint = "editorial product or real-world usage scene, polished composition, professional lighting, no text overlay"
+	}
+	return trimRunes(strings.TrimSpace(strings.Join([]string{subject, scene, styleHint}, ". ")), 180)
+}
+
+func looksLikeGameSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, keyword := range []string{"game", "gameplay", "world", "character", "sandbox", "minecraft", "游戏", "玩法", "世界", "角色", "沙盒", "minecraft"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
 func allowImageForSlide(slide officegen.Slide) bool {
 	switch slideLayoutName(slide) {
 	case "toc", "closing", "chapter", "gallery", "comparison", "timeline", "chart", "dashboard":
@@ -1948,14 +2091,27 @@ func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
 func detectPPTXArchetype(description, title string) pptxArchetype {
 	text := strings.ToLower(strings.TrimSpace(description + " " + title))
 	switch {
-	case strings.Contains(text, "enterprise collaboration platform"):
+	case strings.Contains(text, "enterprise collaboration platform"),
+		strings.Contains(text, "协作平台"),
+		strings.Contains(text, "企业协作"),
+		strings.Contains(text, "办公协作"),
+		strings.Contains(text, "saas 产品介绍"),
+		strings.Contains(text, "产品介绍"),
+		strings.Contains(text, "客户方案"):
 		return pptxArchetypeCompany
-	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion"):
+	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion") ||
+		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海") || strings.Contains(text, "行业研究"):
 		return pptxArchetypeMarket
-	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review"):
+	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review") ||
+		strings.Contains(text, "业务复盘") || strings.Contains(text, "经营分析") || strings.Contains(text, "季度复盘") || strings.Contains(text, "运营复盘") || strings.Contains(text, "数据报告"):
 		return pptxArchetypeOps
-	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide"):
+	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
+		strings.Contains(text, "培训") || strings.Contains(text, "上手指南") || strings.Contains(text, "新员工") || strings.Contains(text, "教程"):
 		return pptxArchetypeTraining
+	case strings.Contains(text, "minecraft") || strings.Contains(text, "game") || strings.Contains(text, "video game") || strings.Contains(text, "玩法") ||
+		strings.Contains(text, "游戏") || strings.Contains(text, "科普") || strings.Contains(text, "what is") || strings.Contains(text, "how it works") ||
+		strings.Contains(text, "history of") || strings.Contains(text, "introduction to"):
+		return pptxArchetypeExplainer
 	default:
 		return pptxArchetypeGeneral
 	}
@@ -1983,6 +2139,12 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - Setup/command slides should prefer sections organized by step, command, and result.
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
+	case pptxArchetypeExplainer:
+		return `- For this topic, a strong storyline is usually cover -> what it is -> core mechanics or main parts -> why it stands out -> examples or who it suits -> how to start, but adapt the exact slide count to the prompt.
+- Translate that storyline into patterns: explanation slides=sections-grid or pillar-list, mechanics/features=feature-grid, examples=point-cards or image-right, closing=sections-grid.
+- Slide 2 should quickly define the topic instead of sounding like an executive summary.
+- Closing should use beginner tips, who-it-suits guidance, or key takeaways. Do not use rollout plans, owners, milestones, or decision language.
+- Keep card headings especially short and readable, and prefer splitting dense content into an extra slide over shrinking text aggressively.`
 	default:
 		return ""
 	}
@@ -2005,6 +2167,8 @@ func enforceArchetypeSkeleton(slides []officegen.Slide, archetype pptxArchetype,
 		enforceOpsSkeleton(slides)
 	case pptxArchetypeTraining:
 		enforceTrainingSkeleton(slides)
+	case pptxArchetypeExplainer:
+		enforceExplainerSkeleton(slides)
 	}
 	return slides
 }
@@ -2062,6 +2226,18 @@ func defaultArchetypeSlide(archetype pptxArchetype, idx int, deckTitle string) o
 			{Title: "Common Commands", Layout: "content", Subtitle: "Memorize the three most common command groups first, then expand usage", Sections: []officegen.SlideSection{{Heading: "Status Check", Detail: "Run config status to verify configuration and dependencies"}, {Heading: "Generate PPT", Detail: "Run new pptx to generate a local PPT file"}, {Heading: "Quality Review", Detail: "Run review pptx for structural and visual review"}}},
 			{Title: "Example Workflow", Layout: "content", Subtitle: "A full practice run should cover generation, checking, and revision", Sections: []officegen.SlideSection{{Heading: "Step 1 Scope", Detail: "Define topic, audience, and style before generating output"}, {Heading: "Step 2 Generate", Detail: "Run new pptx and confirm the file was written successfully"}, {Heading: "Step 3 Review", Detail: "Run review pptx and iterate based on the findings"}}},
 			{Title: "Cautions", Layout: "content", Subtitle: "Validate quality locally before moving into the formal collaboration flow", Sections: []officegen.SlideSection{{Heading: "Validate Locally", Detail: "Keep publishing off by default until output quality is confirmed"}, {Heading: "Complete Config", Detail: "Missing models, image settings, or dependencies will degrade results"}, {Heading: "Keep Commands Intact", Detail: "Preserve full commands, paths, and parameters without truncation"}}},
+		}
+		if idx < len(defaults) {
+			return defaults[idx]
+		}
+	case pptxArchetypeExplainer:
+		defaults := []officegen.Slide{
+			{NarrativeRole: "cover", Role: "cover", Title: firstNonEmpty(deckTitle, "Minecraft Introduction"), Layout: "title", IsTitle: true, Subtitle: "A beginner-friendly overview of what it is, why people enjoy it, and how to get started"},
+			{NarrativeRole: "summary", Role: "summary", Title: "What It Is", Layout: "content", Subtitle: "Start with the basic idea, then frame the experience in plain language", Sections: []officegen.SlideSection{{Heading: "Sandbox World", Detail: "Players explore an open block-based world and decide their own goals"}, {Heading: "Create and Survive", Detail: "The core loop mixes building, gathering, and staying safe from threats"}, {Heading: "Flexible Play", Detail: "It can feel creative, relaxing, social, or challenging depending on the mode"}}},
+			{NarrativeRole: "analysis", Role: "analysis", Title: "Core Mechanics", Layout: "content", Subtitle: "A few simple systems create most of the experience", Sections: []officegen.SlideSection{{Heading: "Build", Detail: "Turn blocks into houses, machines, or entire worlds"}, {Heading: "Explore", Detail: "Travel through caves, villages, and other dimensions to find resources"}, {Heading: "Craft", Detail: "Combine materials into tools, gear, and useful items"}}},
+			{NarrativeRole: "analysis", Role: "analysis", Title: "Why It Stands Out", Layout: "content", Subtitle: "Its appeal comes from freedom, creativity, and replayability", Sections: []officegen.SlideSection{{Heading: "Open-Ended", Detail: "There is no single correct way to play or progress"}, {Heading: "Creative Range", Detail: "Players can design tiny homes, giant cities, or working contraptions"}, {Heading: "Shared Play", Detail: "Friends can build, survive, and experiment together in the same world"}}},
+			{NarrativeRole: "analysis", Role: "analysis", Title: "Who It Suits", Layout: "content", Subtitle: "Different play styles make it approachable for different audiences", Sections: []officegen.SlideSection{{Heading: "Beginners", Detail: "Simple controls and clear goals make the first hour approachable"}, {Heading: "Creative Players", Detail: "Building tools reward imagination and experimentation"}, {Heading: "Challenge Seekers", Detail: "Survival mode, exploration, and self-set goals keep the game engaging"}}},
+			{NarrativeRole: "closing", Role: "closing", Title: "How to Start", Layout: "closing", Subtitle: "Close with easy first steps instead of business next actions", Sections: []officegen.SlideSection{{Heading: "Pick a Mode", Detail: "Creative mode is easiest for learning the basics without pressure"}, {Heading: "Try a Small Goal", Detail: "Start by gathering materials and building a first shelter"}, {Heading: "Learn by Playing", Detail: "A short early session is enough to understand the main loop and see if it fits"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
@@ -2367,9 +2543,42 @@ func enforceTrainingSkeleton(slides []officegen.Slide) {
 	slides[5].Subtitle = "Validate quality locally before moving into the formal collaboration flow"
 }
 
+func enforceExplainerSkeleton(slides []officegen.Slide) {
+	if len(slides) < 6 {
+		return
+	}
+	slides[1].Title = "What It Is"
+	slides[1].Layout = "content"
+	slides[1].HasImage = false
+	slides[1].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "Core Idea", Detail: "Define the topic in plain language before adding detail or judgment"},
+		{Heading: "Main Experience", Detail: "Show what people actually do, feel, or encounter"},
+		{Heading: "Why Notice It", Detail: "Explain why the topic is memorable, useful, or popular"},
+	}, 3)
+	slides[1].Points = nil
+	slides[1].Metrics = nil
+	slides[1].Chart = nil
+	slides[1].Source = ""
+	slides[1].Subtitle = "Start with the core idea, then frame the experience in clear language"
+
+	slides[5].Title = "How to Start"
+	slides[5].Layout = "content"
+	slides[5].HasImage = false
+	slides[5].Sections = normalizeSections([]officegen.SlideSection{
+		{Heading: "First Step", Detail: "Give one low-friction way to begin exploring the topic"},
+		{Heading: "Good Fit", Detail: "Clarify who will likely enjoy or benefit from it most"},
+		{Heading: "Takeaway", Detail: "End with the one idea the audience should remember"},
+	}, 3)
+	slides[5].Points = nil
+	slides[5].Metrics = nil
+	slides[5].Chart = nil
+	slides[5].Source = ""
+	slides[5].Subtitle = "Close with starter guidance and the key takeaway, not rollout actions"
+}
+
 func isActionSlide(slide officegen.Slide) bool {
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution"} {
+	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution", "how to start", "key takeaway", "beginner tip", "建议", "下一步", "推进", "计划", "发布", "培训", "路径", "行动", "注意事项", "如何开始", "入门建议", "核心结论"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}

@@ -354,7 +354,7 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		"subtitle must be a takeaway sentence",
 		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
-		"The closing slide must include 2-3 next-step actions",
+		"Business decks should include 2-3 next-step actions",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -378,6 +378,13 @@ func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 	trainingPrompt := BuildPPTXPrompt("new hire onboarding training", generateengine.PromptTarget{}, false)
 	if !strings.Contains(trainingPrompt, "a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions") {
 		t.Fatalf("training prompt missing archetype outline:\n%s", trainingPrompt)
+	}
+	explainerPrompt := BuildPPTXPrompt("minecraft 游戏介绍", generateengine.PromptTarget{}, true)
+	if !strings.Contains(explainerPrompt, "a strong storyline is usually cover -> what it is -> core mechanics or main parts -> why it stands out -> examples or who it suits -> how to start") {
+		t.Fatalf("explainer prompt missing archetype outline:\n%s", explainerPrompt)
+	}
+	if !strings.Contains(explainerPrompt, "Do not use rollout plans, owners, milestones, or decision language.") {
+		t.Fatalf("explainer prompt missing explainer closing rule:\n%s", explainerPrompt)
 	}
 }
 
@@ -528,6 +535,35 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 	}
 	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
 		t.Fatalf("training closing slide = %#v", payload.Slides[len(payload.Slides)-1])
+	}
+}
+
+func TestNormalizePPTXPayload_UsesExplainerClosingForGameTopics(t *testing.T) {
+	payload := &pptxPayload{
+		Title: "minecraft 游戏介绍",
+		Slides: []officegen.Slide{
+			{Title: "minecraft 游戏介绍", Layout: "title", IsTitle: true},
+			{Title: "first slide"},
+			{Title: "second slide"},
+		},
+	}
+	normalizePPTXPayload(payload, "minecraft 游戏介绍", "", true)
+	if len(payload.Slides) < 4 {
+		t.Fatalf("slide count = %d, want at least 4", len(payload.Slides))
+	}
+	joined := make([]string, 0, len(payload.Slides))
+	for _, slide := range payload.Slides {
+		joined = append(joined, slide.Title)
+	}
+	allTitles := strings.Join(joined, " | ")
+	if !strings.Contains(allTitles, "What It Is") {
+		t.Fatalf("slides missing explainer summary: %s", allTitles)
+	}
+	if !strings.Contains(allTitles, "Core Mechanics") {
+		t.Fatalf("slides missing explainer mechanics: %s", allTitles)
+	}
+	if payload.Slides[len(payload.Slides)-1].Title != "How to Start" {
+		t.Fatalf("closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
 
@@ -803,6 +839,55 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	}
 	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/slide", ".xml", "Higher collaboration efficiency") {
 		t.Fatalf("deck should contain repaired slide content")
+	}
+}
+
+func TestDetectPPTXArchetype_SupportsChineseKeywords(t *testing.T) {
+	if got := detectPPTXArchetype("企业协作平台介绍，面向潜在客户", ""); got != pptxArchetypeCompany {
+		t.Fatalf("company archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("市场分析与出海机会评估", ""); got != pptxArchetypeMarket {
+		t.Fatalf("market archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("季度经营分析和运营复盘", ""); got != pptxArchetypeOps {
+		t.Fatalf("ops archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("新员工培训上手指南", ""); got != pptxArchetypeTraining {
+		t.Fatalf("training archetype = %q", got)
+	}
+	if got := detectPPTXArchetype("minecraft 游戏介绍", ""); got != pptxArchetypeExplainer {
+		t.Fatalf("explainer archetype = %q", got)
+	}
+}
+
+func TestNormalizeSlideVariant_UsesFeatureGridAndStatBand(t *testing.T) {
+	featureGrid := normalizeSlideVariant(officegen.Slide{
+		Role:   "analysis",
+		Title:  "核心功能",
+		Layout: "content",
+		Sections: []officegen.SlideSection{
+			{Heading: "统一入口", Detail: "聚合消息、文档和审批"},
+			{Heading: "流程协同", Detail: "自动串联任务和通知"},
+			{Heading: "权限治理", Detail: "细粒度权限和审计"},
+			{Heading: "知识沉淀", Detail: "模板和FAQ持续复用"},
+		},
+	})
+	if featureGrid != "sections-grid" {
+		t.Fatalf("feature grid variant = %q", featureGrid)
+	}
+
+	statBand := normalizeSlideVariant(officegen.Slide{
+		Role:   "evidence",
+		Title:  "客户价值",
+		Layout: "dashboard",
+		Metrics: []officegen.MetricCard{
+			{Label: "审批周期", Value: "-30%", Note: "8周试点"},
+			{Label: "按时完成率", Value: "+15%", Note: "周度跟踪"},
+			{Label: "知识复用率", Value: "+25%", Note: "季度评估"},
+		},
+	})
+	if statBand != "kpi-band" {
+		t.Fatalf("stat band variant = %q", statBand)
 	}
 }
 

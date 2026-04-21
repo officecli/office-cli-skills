@@ -67,6 +67,7 @@ type GenerateJob struct {
 	DocumentType   engine.DocumentType
 	Topic          string
 	Brief          string
+	OriginalPrompt string
 	Prompt         string
 	SourceFilePath string
 	RuntimeMode    RuntimeMode
@@ -79,6 +80,7 @@ type GenerateJob struct {
 	OutputDir      string
 	Publish        bool
 	JSONOutput     bool
+	Warnings       []engine.GenerateIssue
 	LicenseCheck   *LicenseCheckResult
 }
 

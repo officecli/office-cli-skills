@@ -70,6 +70,10 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 			return GenerateResult{}, err
 		}
 	}
+	job, err = a.preparePPTPrompt(ctx, llmClient, job, progress)
+	if err != nil {
+		return GenerateResult{}, err
+	}
 	if deferAccessCheck {
 		if err := runAccessCheck(); err != nil {
 			return GenerateResult{}, err
@@ -180,6 +184,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	return GenerateJob{
 		DocumentType:   documentType,
 		Topic:          topic,
+		OriginalPrompt: prompt,
 		Prompt:         prompt,
 		SourceFilePath: sourceFile,
 		RuntimeMode:    runtimeMode,

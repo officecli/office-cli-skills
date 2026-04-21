@@ -132,6 +132,8 @@ func truncateRawPreview(raw string) string {
 }
 
 func buildQuestionContext(req engine.PrepareExecutionPlanRequest, documentType string) string {
+	language := detectQuestionLanguageName(req.UserPrompt)
+	pptScenario := detectPPTQuestionScenario(req.UserPrompt)
 	var sb strings.Builder
 	sb.WriteString("Generate focused clarification questions based on the information below.\n")
 	sb.WriteString("Original user prompt: ")
@@ -144,19 +146,26 @@ func buildQuestionContext(req engine.PrepareExecutionPlanRequest, documentType s
 	sb.WriteString("Generation mode: ")
 	sb.WriteString(strings.TrimSpace(req.GenerationMode))
 	sb.WriteString("\n")
-	sb.WriteString(buildQuestionGoal(documentType))
+	if normalizeDocumentType(documentType) == "pptx" {
+		sb.WriteString("PPT scenario: ")
+		sb.WriteString(pptScenario)
+		sb.WriteString("\n")
+	}
+	sb.WriteString(buildQuestionGoal(req, documentType))
 	sb.WriteString("\n\n")
-	sb.WriteString(`Requirements:
+	sb.WriteString(fmt.Sprintf(`Requirements:
 1. Ask only the questions that most improve content quality and narrow the generation space.
 2. Return 1 to 3 questions, favoring fewer but sharper questions.
 3. Each question must include 2 to 4 selectable options, with exactly 1 option marked recommended=true.
 4. allowFreeform should usually be true.
-5. Write all question text in English.
-6. Avoid overlap between questions and avoid vague catch-all prompts.`)
+5. Write all question text in %s.
+6. For PPT decks, prioritize audience, intro angle, content density, image preference, and ending style when those details are missing.
+7. If the scenario is explainer, entertainment, or game-related, avoid consulting or executive jargon.
+8. Avoid overlap between questions and avoid vague catch-all prompts.`, language))
 	return sb.String()
 }
 
-func buildQuestionGoal(documentType string) string {
+func buildQuestionGoal(req engine.PrepareExecutionPlanRequest, documentType string) string {
 	switch normalizeDocumentType(documentType) {
 	case "docx":
 		return "Goal: fill in document purpose, target readers, length, and argument depth with the fewest questions so the final document structure is complete and professional."
@@ -165,7 +174,16 @@ func buildQuestionGoal(documentType string) string {
 	case "report":
 		return "Goal: fill in audience, report storyline, chart density, and decision focus with the fewest questions so the workbook-backed report is narrative, data-rich, and presentation-ready."
 	default:
-		return "Goal: fill in audience, presentation goal, structural approach, and page density with the fewest questions so the PPT is better suited for a consulting-style deck."
+		switch detectPPTQuestionScenario(req.UserPrompt) {
+		case "explainer":
+			return "Goal: fill in audience familiarity, intro angle, structural approach, image preference, and page density with the fewest questions so the PPT reads like a clear explainer deck instead of a consulting-style deck."
+		case "project":
+			return "Goal: fill in audience, update focus, structural approach, and page density with the fewest questions so the PPT reads like a sharp progress update."
+		case "training":
+			return "Goal: fill in learner level, lesson emphasis, structural approach, and page density with the fewest questions so the PPT is practical and easy to follow."
+		default:
+			return "Goal: fill in audience, presentation goal, structural approach, and page density with the fewest questions so the PPT fits the real use case instead of defaulting to a consulting-style deck."
+		}
 	}
 }
 
@@ -601,9 +619,157 @@ func buildDynamicFallbackQuestions(req engine.PrepareExecutionPlanRequest, docum
 				questions[1],
 				questions[2],
 			}
+		case detectPPTQuestionScenario(prompt) == "explainer":
+			return buildExplainerFallbackQuestions(prompt)
 		default:
+			if isChineseQuestionPrompt(prompt) {
+				return buildChinesePPTFallbackQuestions()
+			}
 			return questions
 		}
+	}
+}
+
+func detectQuestionLanguageName(prompt string) string {
+	if isChineseQuestionPrompt(prompt) {
+		return "Simplified Chinese"
+	}
+	return "English"
+}
+
+func isChineseQuestionPrompt(prompt string) bool {
+	han := 0
+	letters := 0
+	for _, r := range strings.TrimSpace(prompt) {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
+			letters++
+		case r >= '0' && r <= '9':
+		case r > 127:
+			if r >= 0x4E00 && r <= 0x9FFF {
+				han++
+			}
+		}
+	}
+	return han > letters/2
+}
+
+func detectPPTQuestionScenario(prompt string) string {
+	switch {
+	case containsAnyKeyword(prompt, "fundraising", "roadshow", "investor", "business model", "valuation", "\u878d\u8d44", "\u8def\u6f14", "\u6295\u8d44\u4eba", "\u5546\u4e1a\u6a21\u5f0f", "\u4f30\u503c"):
+		return "business"
+	case containsAnyKeyword(prompt, "project", "update", "progress", "milestone", "review", "plan", "quarterly", "\u9879\u76ee", "\u6c47\u62a5", "\u8fdb\u5ea6", "\u91cc\u7a0b\u7891", "\u590d\u76d8", "\u8ba1\u5212", "\u5b63\u5ea6"):
+		return "project"
+	case containsAnyKeyword(prompt, "training", "class", "teaching", "sharing", "\u57f9\u8bad", "\u8bfe\u5802", "\u6559\u5b66", "\u5206\u4eab"):
+		return "training"
+	case containsAnyKeyword(prompt, "game", "minecraft", "explain", "introduction", "overview", "what is", "guide", "\u6e38\u620f", "\u4ecb\u7ecd", "\u79d1\u666e", "\u662f\u4ec0\u4e48", "\u600e\u4e48\u73a9", "\u5165\u95e8", "\u5386\u53f2"):
+		return "explainer"
+	default:
+		return "general"
+	}
+}
+
+func buildExplainerFallbackQuestions(prompt string) []engine.PlanQuestion {
+	if isChineseQuestionPrompt(prompt) {
+		return []engine.PlanQuestion{
+			{
+				ID:       "ppt_explainer_audience",
+				Question: "这份 PPT 主要是讲给谁看的？",
+				Options: []engine.PlanQuestionOption{
+					{ID: "beginner", Label: "第一次接触的人", Description: "先讲清楚它是什么、为什么值得了解。", Recommended: true},
+					{ID: "interested", Label: "有点兴趣但不熟", Description: "兼顾基础介绍和几个有代表性的亮点。"},
+					{ID: "familiar", Label: "已经了解一些的人", Description: "减少背景铺垫，更多讲机制、特色或比较。"},
+				},
+				AllowFreeform: true,
+			},
+			{
+				ID:       "ppt_explainer_focus",
+				Question: "这份介绍应该先突出什么？",
+				Options: []engine.PlanQuestionOption{
+					{ID: "basics", Label: "先讲清是什么和怎么玩", Description: "适合入门介绍，先建立最基本的理解。", Recommended: true},
+					{ID: "standout", Label: "先讲它为什么特别", Description: "适合先抓住兴趣，再补基础信息。"},
+					{ID: "usage", Label: "先讲适合谁和怎么开始", Description: "适合面向新手的实用型介绍。"},
+				},
+				AllowFreeform: true,
+			},
+			{
+				ID:       "ppt_explainer_density",
+				Question: "页数和信息密度更适合哪种节奏？",
+				Options: []engine.PlanQuestionOption{
+					{ID: "light", Label: "轻松入门", Description: "每页只讲一个重点，文字更短更易读。", Recommended: true},
+					{ID: "balanced", Label: "平衡介绍", Description: "兼顾背景、亮点和入门建议。"},
+					{ID: "detailed", Label: "更完整一些", Description: "允许加入更多玩法、场景或比较。"},
+				},
+				AllowFreeform: true,
+			},
+		}
+	}
+	return []engine.PlanQuestion{
+		{
+			ID:       "ppt_explainer_audience",
+			Question: "Who is this explainer deck mainly for?",
+			Options: []engine.PlanQuestionOption{
+				{ID: "beginner", Label: "People new to the topic", Description: "Start with what it is and why it matters.", Recommended: true},
+				{ID: "interested", Label: "Interested but not familiar", Description: "Balance basics with standout examples."},
+				{ID: "familiar", Label: "Already somewhat familiar", Description: "Spend less time on basics and more on specifics."},
+			},
+			AllowFreeform: true,
+		},
+		{
+			ID:       "ppt_explainer_focus",
+			Question: "What should the deck help the audience understand first?",
+			Options: []engine.PlanQuestionOption{
+				{ID: "basics", Label: "What it is and how it works", Description: "Best for beginner-friendly explainers.", Recommended: true},
+				{ID: "standout", Label: "Why it stands out", Description: "Lead with the most memorable strengths or traits."},
+				{ID: "usage", Label: "Who it suits and how to start", Description: "Lead with practical starting guidance."},
+			},
+			AllowFreeform: true,
+		},
+		{
+			ID:       "ppt_explainer_density",
+			Question: "What level of detail should this PPT use?",
+			Options: []engine.PlanQuestionOption{
+				{ID: "light", Label: "Light and beginner-friendly", Description: "Keep each slide short, clean, and easy to scan.", Recommended: true},
+				{ID: "balanced", Label: "Balanced", Description: "Mix background, examples, and takeaway guidance."},
+				{ID: "detailed", Label: "More complete", Description: "Allow more mechanics, examples, or comparisons."},
+			},
+			AllowFreeform: true,
+		},
+	}
+}
+
+func buildChinesePPTFallbackQuestions() []engine.PlanQuestion {
+	return []engine.PlanQuestion{
+		{
+			ID:       "ppt_audience",
+			Question: "这份 PPT 主要是给谁看的？",
+			Options: []engine.PlanQuestionOption{
+				{ID: "beginner", Label: "第一次接触主题的人", Description: "需要先讲清背景、概念和核心信息。", Recommended: true},
+				{ID: "mixed", Label: "有一定了解的混合受众", Description: "需要兼顾背景介绍和重点信息。"},
+				{ID: "expert", Label: "已经比较熟悉的人", Description: "可以减少铺垫，直接进入重点。"},
+			},
+			AllowFreeform: true,
+		},
+		{
+			ID:       "ppt_goal",
+			Question: "这份演示最想先帮观众获得什么？",
+			Options: []engine.PlanQuestionOption{
+				{ID: "understand", Label: "快速理解主题", Description: "优先讲清楚主题、结构和关键点。", Recommended: true},
+				{ID: "compare", Label: "看清差异或亮点", Description: "优先突出对比、特色和判断依据。"},
+				{ID: "action", Label: "知道怎么开始或怎么用", Description: "优先给出步骤、建议或实践路径。"},
+			},
+			AllowFreeform: true,
+		},
+		{
+			ID:       "ppt_shape",
+			Question: "整体节奏更适合哪种方式？",
+			Options: []engine.PlanQuestionOption{
+				{ID: "concise", Label: "更精炼", Description: "控制页数和文字密度，每页只放一个重点。", Recommended: true},
+				{ID: "balanced", Label: "平衡一些", Description: "兼顾背景、主体内容和结尾总结。"},
+				{ID: "detailed", Label: "更完整一些", Description: "允许加入更多例子、细节或拆解。"},
+			},
+			AllowFreeform: true,
+		},
 	}
 }
 
