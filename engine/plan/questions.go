@@ -674,31 +674,31 @@ func buildExplainerFallbackQuestions(prompt string) []engine.PlanQuestion {
 		return []engine.PlanQuestion{
 			{
 				ID:       "ppt_explainer_audience",
-				Question: "这份 PPT 主要是讲给谁看的？",
+				Question: "这份介绍主要是讲给谁看的？",
 				Options: []engine.PlanQuestionOption{
 					{ID: "beginner", Label: "第一次接触的人", Description: "先讲清楚它是什么、为什么值得了解。", Recommended: true},
-					{ID: "interested", Label: "有点兴趣但不熟", Description: "兼顾基础介绍和几个有代表性的亮点。"},
-					{ID: "familiar", Label: "已经了解一些的人", Description: "减少背景铺垫，更多讲机制、特色或比较。"},
+					{ID: "interested", Label: "有点兴趣但不熟的人", Description: "兼顾基础介绍和几个代表性亮点。"},
+					{ID: "familiar", Label: "已经了解一些的人", Description: "减少铺垫，更多讲机制、特色或比较。"},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "ppt_explainer_focus",
-				Question: "这份介绍应该先突出什么？",
+				Question: "这份介绍应该先从什么角度切入？",
 				Options: []engine.PlanQuestionOption{
-					{ID: "basics", Label: "先讲清是什么和怎么玩", Description: "适合入门介绍，先建立最基本的理解。", Recommended: true},
-					{ID: "standout", Label: "先讲它为什么特别", Description: "适合先抓住兴趣，再补基础信息。"},
-					{ID: "usage", Label: "先讲适合谁和怎么开始", Description: "适合面向新手的实用型介绍。"},
+					{ID: "basics", Label: "先讲它是什么和怎么玩", Description: "适合入门观众，先建立最基本理解。", Recommended: true},
+					{ID: "standout", Label: "先讲它为什么特别", Description: "先抓兴趣点，再补基础信息。"},
+					{ID: "usage", Label: "先讲适合谁和怎么开始", Description: "适合更实用的入门型介绍。"},
 				},
 				AllowFreeform: true,
 			},
 			{
 				ID:       "ppt_explainer_density",
-				Question: "页数和信息密度更适合哪种节奏？",
+				Question: "视觉和信息密度更适合哪种策略？",
 				Options: []engine.PlanQuestionOption{
-					{ID: "light", Label: "轻松入门", Description: "每页只讲一个重点，文字更短更易读。", Recommended: true},
-					{ID: "balanced", Label: "平衡介绍", Description: "兼顾背景、亮点和入门建议。"},
-					{ID: "detailed", Label: "更完整一些", Description: "允许加入更多玩法、场景或比较。"},
+					{ID: "recommended", Label: "6-8 页、每页简洁、保留 2-3 张强相关图片", Description: "默认推荐，用简洁页面和少量强相关视觉来讲清主题。", Recommended: true},
+					{ID: "text_only", Label: "6 页左右、偏正文、不要单独视觉页", Description: "适合禁图或更偏内容讲解的版本。"},
+					{ID: "lighter", Label: "更轻量、文字更少、视觉更集中", Description: "适合更短更快的扫读型介绍。"},
 				},
 				AllowFreeform: true,
 			},
@@ -727,11 +727,11 @@ func buildExplainerFallbackQuestions(prompt string) []engine.PlanQuestion {
 		},
 		{
 			ID:       "ppt_explainer_density",
-			Question: "What level of detail should this PPT use?",
+			Question: "How should visuals and information density be handled?",
 			Options: []engine.PlanQuestionOption{
-				{ID: "light", Label: "Light and beginner-friendly", Description: "Keep each slide short, clean, and easy to scan.", Recommended: true},
-				{ID: "balanced", Label: "Balanced", Description: "Mix background, examples, and takeaway guidance."},
-				{ID: "detailed", Label: "More complete", Description: "Allow more mechanics, examples, or comparisons."},
+				{ID: "recommended", Label: "6-8 slides, keep each slide concise, preserve 2-3 strong related images", Description: "Recommended default for a short, visual-first explainer.", Recommended: true},
+				{ID: "text_only", Label: "Around 6 slides, more text-led, no separate visual slide", Description: "Better when images are disabled or not important."},
+				{ID: "lighter", Label: "Shorter copy, fewer visuals, faster scan", Description: "Best for a very light overview."},
 			},
 			AllowFreeform: true,
 		},
@@ -754,7 +754,7 @@ func buildChinesePPTFallbackQuestions() []engine.PlanQuestion {
 			ID:       "ppt_goal",
 			Question: "这份演示最想先帮观众获得什么？",
 			Options: []engine.PlanQuestionOption{
-				{ID: "understand", Label: "快速理解主题", Description: "优先讲清楚主题、结构和关键点。", Recommended: true},
+				{ID: "understand", Label: "快速理解主题", Description: "优先讲清主题、结构和关键点。", Recommended: true},
 				{ID: "compare", Label: "看清差异或亮点", Description: "优先突出对比、特色和判断依据。"},
 				{ID: "action", Label: "知道怎么开始或怎么用", Description: "优先给出步骤、建议或实践路径。"},
 			},
@@ -762,11 +762,11 @@ func buildChinesePPTFallbackQuestions() []engine.PlanQuestion {
 		},
 		{
 			ID:       "ppt_shape",
-			Question: "整体节奏更适合哪种方式？",
+			Question: "这份 PPT 更适合哪种节奏？",
 			Options: []engine.PlanQuestionOption{
-				{ID: "concise", Label: "更精炼", Description: "控制页数和文字密度，每页只放一个重点。", Recommended: true},
-				{ID: "balanced", Label: "平衡一些", Description: "兼顾背景、主体内容和结尾总结。"},
-				{ID: "detailed", Label: "更完整一些", Description: "允许加入更多例子、细节或拆解。"},
+				{ID: "concise", Label: "6-8 页，简洁清楚", Description: "每页一个重点，信息量更克制。", Recommended: true},
+				{ID: "balanced", Label: "平衡一些", Description: "兼顾背景、重点和结论。"},
+				{ID: "detailed", Label: "更完整一些", Description: "允许更多背景和细节展开。"},
 			},
 			AllowFreeform: true,
 		},

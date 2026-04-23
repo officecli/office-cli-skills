@@ -31,7 +31,7 @@ type pptPromptEnrichmentResult struct {
 }
 
 func (a *App) preparePPTPrompt(ctx context.Context, llm GeneratorLLMClient, job GenerateJob, progress engine.ProgressEmitter) (GenerateJob, error) {
-	if job.DocumentType != engine.DocumentTypePPTX || llm == nil {
+	if job.DocumentType != engine.DocumentTypePPTX || llm == nil || job.Mode != generateengine.ModeFast {
 		return job, nil
 	}
 
@@ -44,6 +44,9 @@ func (a *App) preparePPTPrompt(ctx context.Context, llm GeneratorLLMClient, job 
 		basePrompt = strings.TrimSpace(job.Topic)
 	}
 	if !shouldEnrichPPTPrompt(job.Topic, basePrompt) {
+		if detectPromptPreparationScenario(job.Topic, basePrompt) == "explainer" && !job.StyleSpecified {
+			job.Style = ""
+		}
 		return job, nil
 	}
 
@@ -56,18 +59,27 @@ func (a *App) preparePPTPrompt(ctx context.Context, llm GeneratorLLMClient, job 
 			Field:   "prompt",
 			Message: "The PPT request looked too brief, but automatic prompt expansion failed, so generation continued with the original wording.",
 		})
+		if detectPromptPreparationScenario(job.Topic, basePrompt) == "explainer" && !job.StyleSpecified {
+			job.Style = ""
+		}
 		return job, nil
 	}
 	if strings.TrimSpace(result.Prompt) == "" || samePromptMeaning(basePrompt, result.Prompt) {
 		emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Prompt expansion determined the brief was already usable")
+		if detectPromptPreparationScenario(job.Topic, basePrompt) == "explainer" && !job.StyleSpecified {
+			job.Style = ""
+		}
 		return job, nil
 	}
 
-	if strings.TrimSpace(job.OriginalPrompt) == "" {
-		job.OriginalPrompt = job.Prompt
-	}
 	envelope.Prompt = strings.TrimSpace(result.Prompt)
 	job.Prompt = marshalPreparedPrompt(job.Prompt, envelope)
+	if strings.TrimSpace(job.OriginalPrompt) == "" {
+		job.OriginalPrompt = basePrompt
+	}
+	if detectPromptPreparationScenario(job.Topic, basePrompt) == "explainer" && !job.StyleSpecified {
+		job.Style = ""
+	}
 	job.Warnings = append(job.Warnings, engine.GenerateIssue{
 		Code:    "WARN_PROMPT_ENRICHED",
 		Field:   "prompt",
@@ -95,11 +107,49 @@ func enrichPPTPrompt(ctx context.Context, llm GeneratorLLMClient, job GenerateJo
 func buildPPTPromptEnrichmentRequest(job GenerateJob, basePrompt string) engine.StructuredCompletionRequest {
 	userLanguage := detectPromptLanguageName(basePrompt + " " + job.Topic)
 	scenario := detectPromptPreparationScenario(job.Topic, basePrompt)
+	audienceLocked := job.Audience != "" || hasExplicitPPTAudienceSignal(basePrompt)
+	pageLocked := hasExplicitPPTPageSignal(basePrompt)
+	styleLocked := job.StyleSpecified || hasExplicitPPTStyleSignal(basePrompt)
+	imageLocked := !job.EnableImages || hasExplicitPPTImageSignal(basePrompt)
+	requestedStyle := ""
+	if job.StyleSpecified {
+		requestedStyle = job.Style
+	}
+
+	additionalRequirements := `- Keep the rewritten brief in ` + userLanguage + `.
+- Preserve the original subject and intent exactly.
+- Add missing guidance for audience fit, storyline, slide density, image usage, and the closing slide style.
+- Do not invent statistics, history, product claims, or any precise facts that the user did not provide.`
+	if scenario == "explainer" {
+		additionalRequirements += `
+- This is an explainer/game-style PPT. Keep it direct and beginner-friendly instead of consulting-style.
+- The rewritten brief must explicitly cover: audience familiarity, a 6-8 slide target, short titles and short card headings, a rule to preserve complete visible wording and split/reflow instead of clipping text, image strategy, and a non-business ending style.
+- Prefer this default slide arc: Cover -> What It Is -> Core Ways to Play -> Why It Stands Out -> Example or Gameplay Visual -> Who It Suits -> How to Start.
+- Do not ask for or imply agenda, contents, chapter divider, rollout, owner, milestone, decision, or executive-summary slides.
+- Default visual direction is editorial-light.
+- When images are enabled, allow one cover hero image and keep the total image budget at 2-3 strong related visuals, concentrated on the cover and the example/gameplay slide.
+- When images are disabled, merge the example/gameplay material into the body and keep the deck close to 6 slides.
+- For Minecraft or voxel-sandbox topics, any fallback visual should explicitly prefer blocky voxel terrain, crafting, biomes, shelters, and cubic building, while avoiding hand-painted fantasy scenes, workshop illustration, and corporate-style diagrams.`
+	} else {
+		additionalRequirements += `
+- For business, product, market, or operations topics, keep a professional decision-oriented deck style.
+- Keep card headings short and readable, and prefer splitting dense content into an extra slide over shrinking or clipping visible text.`
+	}
+
+	lockRules := fmt.Sprintf(`Existing user constraints you must preserve:
+- audience_already_specified=%t
+- page_count_already_specified=%t
+- style_already_specified=%t
+- image_preference_already_specified=%t
+- cli_images_enabled=%t
+
+If a value is already specified, keep it and do not replace it with a new default. Only fill what is missing.`, audienceLocked, pageLocked, styleLocked, imageLocked, job.EnableImages)
+
 	return engine.StructuredCompletionRequest{
 		Messages: []engine.LLMMessage{
 			{
 				Role:    "system",
-				Content: "You improve underspecified PPT generation requests for OfficeCLI. Preserve the original intent, add only framing guidance, never invent factual claims, and return JSON that matches the schema exactly.",
+				Content: "You improve underspecified PPT generation requests for OfficeCLI. Preserve intent, add only missing guidance, never invent facts, and return JSON that matches the schema exactly.",
 			},
 			{
 				Role: "user",
@@ -113,15 +163,10 @@ Requested style: %s
 User prompt language: %s
 Scenario: %s
 
+%s
+
 Requirements:
-- Keep the rewritten brief in %s.
-- Preserve the original subject and intent exactly.
-- Add missing guidance for audience fit, storyline, slide density, image usage, and the closing slide style.
-- Ask for short card headings and readable body copy, and explicitly avoid crowded cards or clipped text.
-- Do not invent statistics, history, product claims, or any precise facts that the user did not provide.
-- For game, hobby, culture, science, education, or general explainer topics, avoid executive-summary, rollout, owner, milestone, or next-step business framing. Prefer what it is, why it stands out, core mechanics or examples, who it suits, how to start, and key takeaways.
-- For business, product, market, or operations topics, keep a professional decision-oriented deck style.
-- Output one rewritten prompt string that is detailed enough for direct PPT generation, plus a short list of assumptions you added.`, strings.TrimSpace(job.Topic), strings.TrimSpace(basePrompt), blankAsNotSpecified(job.Language), blankAsNotSpecified(job.Audience), blankAsNotSpecified(job.Style), userLanguage, scenario, userLanguage),
+%s`, strings.TrimSpace(job.Topic), strings.TrimSpace(basePrompt), blankAsNotSpecified(job.Language), blankAsNotSpecified(job.Audience), blankAsNotSpecified(requestedStyle), userLanguage, scenario, lockRules, additionalRequirements),
 			},
 		},
 		Schema: engine.StructuredSchema{
@@ -174,7 +219,7 @@ func shouldEnrichPPTPrompt(topic, prompt string) bool {
 	if isGenericPPTPrompt(prompt) {
 		return true
 	}
-	if length <= 64 && !hasPPTPromptDetailSignal(prompt) {
+	if length <= 72 && !hasPPTPromptDetailSignal(prompt) {
 		return true
 	}
 	return false
@@ -193,6 +238,33 @@ func hasPPTPromptDetailSignal(prompt string) bool {
 	return containsAnyText(normalized,
 		"audience", "for ", "include", "emphasize", "compare", "timeline", "history", "feature", "features", "use case", "why", "how",
 		"面向", "适合", "包含", "重点", "突出", "对比", "历史", "玩法", "机制", "亮点", "入门", "步骤", "原因", "影响", "总结")
+}
+
+func hasExplicitPPTAudienceSignal(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	return containsAnyText(normalized,
+		"for beginners", "for kids", "for parents", "for players", "for teachers", "for students", "for leadership", "for exec", "for internal team",
+		"面向", "给新手", "给入门", "给学生", "给老师", "给家长", "给玩家", "适合谁", "受众", "观众")
+}
+
+func hasExplicitPPTPageSignal(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	return containsAnyText(normalized,
+		"slide", "slides", "page", "pages", "6-8", "6 页", "7 页", "8 页", "6页", "7页", "8页", "页左右", "页以内")
+}
+
+func hasExplicitPPTStyleSignal(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	return containsAnyText(normalized,
+		"editorial-light", "tech-contrast", "executive-dark", "training-manual", "editorial", "magazine", "minimal", "professional", "playful",
+		"简洁", "专业", "杂志感", "编辑感", "科技感", "商务风", "轻量", "清爽")
+}
+
+func hasExplicitPPTImageSignal(prompt string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	return containsAnyText(normalized,
+		"with image", "with images", "no image", "no images", "hero image", "visual example", "image-heavy",
+		"带图", "带图片", "不要图", "不要图片", "无图", "封面图", "示意图", "视觉页")
 }
 
 func detectPromptPreparationScenario(topic, prompt string) string {
@@ -256,7 +328,7 @@ func normalizePromptComparison(value string) string {
 }
 
 func buildPromptEnrichedWarning(assumptions []string) string {
-	message := "The PPT request was automatically expanded with audience, storyline, and layout guidance because the original prompt was too brief."
+	message := "The PPT request was automatically expanded with audience, storyline, and density guidance because the original prompt was too brief."
 	if len(assumptions) == 0 {
 		return message
 	}

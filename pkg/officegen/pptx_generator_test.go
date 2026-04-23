@@ -8,6 +8,8 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -276,6 +278,32 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 			contains: []string{`<p:pic>`, `name="DiagonalImage"`},
 		},
 		{
+			name: "timeline background",
+			slide: Slide{
+				Title:     "Timeline With Background",
+				Layout:    "timeline",
+				Variant:   "timeline",
+				Sections:  []SlideSection{{Heading: "Step 1", Detail: "Start"}, {Heading: "Step 2", Detail: "Scale"}},
+				HasImage:  true,
+				ImagePos:  "background",
+				ImageData: samplePNG,
+			},
+			contains: []string{`<p:pic>`, `name="TimelineBackgroundImage"`, `name="TimelineOverlay"`},
+		},
+		{
+			name: "closing background",
+			slide: Slide{
+				Title:     "Closing With Background",
+				Layout:    "closing",
+				Variant:   "closing",
+				Sections:  []SlideSection{{Heading: "Now", Detail: "Confirm scope"}, {Heading: "Next", Detail: "Start pilot"}},
+				HasImage:  true,
+				ImagePos:  "background",
+				ImageData: samplePNG,
+			},
+			contains: []string{`<p:pic>`, `name="ClosingBackgroundImage"`, `name="ClosingOverlay"`},
+		},
+		{
 			name: "chart ignores image",
 			slide: Slide{
 				Title:     "Chart Slide",
@@ -311,6 +339,12 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 			for _, unwanted := range tc.notExists {
 				if strings.Contains(slideXML, unwanted) {
 					t.Fatalf("slide xml unexpectedly contains %q: %s", unwanted, slideXML)
+				}
+			}
+			if len(tc.contains) > 0 {
+				rels := files["ppt/slides/_rels/slide1.xml.rels"]
+				if !strings.Contains(rels, `relationships/image`) {
+					t.Fatalf("slide rels must include image relationship, got %s", rels)
 				}
 			}
 		})
@@ -377,6 +411,16 @@ func TestTargetAspectRatioForSlide(t *testing.T) {
 	})
 	if ratio <= 1.5 || ratio >= 1.6 {
 		t.Fatalf("ratio = %f, want diagonal image frame ratio", ratio)
+	}
+
+	closingRatio := TargetAspectRatioForSlide(Slide{
+		Layout:    "closing",
+		HasImage:  true,
+		ImagePos:  "background",
+		ImageData: samplePNG,
+	})
+	if closingRatio <= 1.77 || closingRatio >= 1.78 {
+		t.Fatalf("closing ratio = %f, want full-slide background ratio", closingRatio)
 	}
 }
 
@@ -516,119 +560,204 @@ func TestPPTXChartMatchesLocalOfficeSDKCompatibleFormat(t *testing.T) {
 	}
 }
 
-func TestPPTXContentPatternComparisonRendersStructuredCards(t *testing.T) {
+func TestPPTXSectionCards_LongHeadingUsesBodyTitleInsteadOfBadge(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:   "Before vs After",
+			Title:   "What It Is",
 			Layout:  "content",
-			Variant: "comparison",
+			Variant: "sections-grid",
 			Sections: []SlideSection{
-				{Heading: "Before", Detail: "Teams pass files manually and approvals stall across departments."},
-				{Heading: "After", Detail: "Requests route in one workflow with visible owners and auditable status."},
+				{Heading: "High Replayability", Detail: "Players can keep discovering new goals instead of following one fixed path."},
+				{Heading: "Creative Players", Detail: "Building tools reward imagination and experimentation."},
+				{Heading: "Simple Start", Detail: "A short first session is enough to understand the loop."},
 			},
 		},
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "Comparison Pattern", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Section Card Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
-	for _, needle := range []string{`name="ComparisonCard1"`, `name="ComparisonCard2"`, `name="ComparisonDivider"`} {
-		if !strings.Contains(slideXML, needle) {
-			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
-		}
+	files := openZipFiles(t, data)
+	slideXML := files["ppt/slides/slide1.xml"]
+	if strings.Contains(slideXML, `name="SectionHeader1"`) {
+		t.Fatalf("long heading should not render as a narrow badge:\n%s", slideXML)
+	}
+	if !strings.Contains(slideXML, "High Replayability") {
+		t.Fatalf("slide xml should contain the long heading:\n%s", slideXML)
 	}
 }
 
-func TestPPTXContentPatternTimelineRendersNodesAndConnectors(t *testing.T) {
+func TestPPTXSectionCards_ThreeLongCardsPreferTwoColumns(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:   "Rollout Plan",
+			Title:   "Why It Stands Out",
 			Layout:  "content",
-			Variant: "timeline",
+			Variant: "sections-grid",
 			Sections: []SlideSection{
-				{Heading: "Discover", Detail: "Confirm scope, owner map, and the pilot workflow."},
-				{Heading: "Pilot", Detail: "Launch one controlled scenario and measure adoption."},
-				{Heading: "Expand", Detail: "Add adjacent teams after validating cycle-time gains."},
+				{Heading: "High Replayability", Detail: "Open-ended goals and different modes keep the experience fresh over time."},
+				{Heading: "Creative Players", Detail: "Players can build small shelters or giant collaborative worlds."},
+				{Heading: "Beginner-Friendly Start", Detail: "Simple first steps make the topic approachable without heavy setup."},
 			},
 		},
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "Timeline Pattern", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Section Columns Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
-	for _, needle := range []string{`name="TimelineNode1"`, `name="TimelineConnector1"`, `name="TimelineCard2"`} {
-		if !strings.Contains(slideXML, needle) {
-			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
-		}
+	files := openZipFiles(t, data)
+	slideXML := files["ppt/slides/slide1.xml"]
+	if strings.Contains(slideXML, `cx="3453333"`) {
+		t.Fatalf("expected long three-card layout to avoid the narrow three-column width:\n%s", slideXML)
+	}
+	if !strings.Contains(slideXML, `cx="5290000"`) {
+		t.Fatalf("expected long three-card layout to use the wider two-column card width:\n%s", slideXML)
 	}
 }
 
-func TestPPTXContentPatternFeatureGridRendersFourCards(t *testing.T) {
+func TestPPTXBulletsVariant_RendersBulletTextWithoutSectionCards(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:   "Core Capabilities",
+			Title:   "What It Is",
 			Layout:  "content",
-			Variant: "feature-grid",
-			Sections: []SlideSection{
-				{Heading: "Unified Entry", Detail: "Bring messages, docs, and approvals into one workspace."},
-				{Heading: "Workflow Sync", Detail: "Connect forms, tasks, and notifications."},
-				{Heading: "Governance", Detail: "Control access with auditability."},
-				{Heading: "Knowledge", Detail: "Reuse templates and FAQs across teams."},
-			},
+			Variant: "bullets",
+			Points:  []string{"Minecraft is a sandbox game.", "The world is built from simple blocks.", "Players set their own goals."},
 		},
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "Feature Grid Pattern", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Bullets Test", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
-	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
-	for _, needle := range []string{`name="FeatureGridCard1"`, `name="FeatureGridCard4"`, `name="FeatureGridBadge3"`} {
-		if !strings.Contains(slideXML, needle) {
-			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
+	files := openZipFiles(t, data)
+	slideXML := files["ppt/slides/slide1.xml"]
+	if strings.Contains(slideXML, "SectionCard") {
+		t.Fatalf("bullets variant should not render section cards:\n%s", slideXML)
+	}
+	if !strings.Contains(slideXML, "●") {
+		t.Fatalf("bullets variant should render bullet paragraphs:\n%s", slideXML)
+	}
+}
+
+func TestPPTXSubstyleVariants_RenderDistinctStructures(t *testing.T) {
+	slides := []Slide{
+		{Title: "What It Is", Layout: "content", Variant: "bullets-band", Subtitle: "Start with the core idea", Points: []string{"Minecraft is a sandbox game.", "Players build and explore.", "Goals are self-directed."}},
+		{Title: "Definition", Layout: "content", Variant: "bullets-callout", Subtitle: "A blocky world you shape yourself", Points: []string{"A block-based world", "Explore and gather", "Build and survive"}},
+		{Title: "Why It Stands Out", Layout: "comparison", Variant: "comparison-vs-band", Sections: []SlideSection{{Heading: "Freedom", Detail: "Players set their own goals."}, {Heading: "Creativity", Detail: "Simple blocks become ideas."}}},
+		{Title: "Core Ways to Play", Layout: "timeline", Variant: "timeline-zigzag", Sections: []SlideSection{{Heading: "Explore", Detail: "Find places."}, {Heading: "Build", Detail: "Make shelter."}, {Heading: "Grow", Detail: "Expand your goals."}}},
+		{Title: "Visual Example", Layout: "gallery", Variant: "gallery-filmstrip", Visuals: []SlideVisual{{Label: "Main", Caption: "Main scene", ImageData: samplePNG, ImageMIME: "image/png"}, {Label: "Detail", Caption: "Detail scene", ImageData: samplePNG, ImageMIME: "image/png"}}},
+		{Title: "Starter Tips", Layout: "closing", Variant: "closing-checklist", Sections: []SlideSection{{Heading: "Pick a Mode", Detail: "Choose Creative or Survival."}, {Heading: "Start Small", Detail: "Build one shelter first."}}},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Variant Test", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	files := openZipFiles(t, data)
+	for _, check := range []struct {
+		path   string
+		needle string
+	}{
+		{"ppt/slides/slide1.xml", "BulletsBandPanel"},
+		{"ppt/slides/slide2.xml", "BulletsCalloutPanel"},
+		{"ppt/slides/slide3.xml", "ComparisonVSBand"},
+		{"ppt/slides/slide4.xml", "TimelineZigzag"},
+		{"ppt/slides/slide5.xml", "GalleryFilmstripImage"},
+		{"ppt/slides/slide6.xml", "ClosingChecklistItem"},
+	} {
+		if !strings.Contains(files[check.path], check.needle) {
+			t.Fatalf("%s should contain %q:\n%s", check.path, check.needle, files[check.path])
 		}
 	}
 }
 
-func TestPPTXDashboardStatBandRendersMetricBand(t *testing.T) {
+func TestPPTXNarrativeLayouts_RenderDedicatedComparisonTimelineAndClosing(t *testing.T) {
+	slides := []Slide{
+		{Title: "Why It Stands Out", Layout: "comparison", Variant: "comparison-columns", Sections: []SlideSection{{Heading: "Freedom", Detail: "Players set their own goals."}, {Heading: "Creativity", Detail: "Simple blocks become big ideas."}}},
+		{Title: "How to Start", Layout: "timeline", Variant: "timeline-axis", Sections: []SlideSection{{Heading: "Pick a Mode", Detail: "Start with Creative or Survival."}, {Heading: "Try One Goal", Detail: "Build a first shelter."}}},
+		{Title: "Starter Tips", Layout: "closing", Variant: "closing-cards-light", Sections: []SlideSection{{Heading: "Start Small", Detail: "Keep the first session light."}, {Heading: "Notice the Loop", Detail: "Explore, gather, and build."}}},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Narrative Layouts Test", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	files := openZipFiles(t, data)
+	if !strings.Contains(files["ppt/slides/slide1.xml"], "ComparePanel") {
+		t.Fatalf("comparison slide should render dedicated comparison panels:\n%s", files["ppt/slides/slide1.xml"])
+	}
+	if !strings.Contains(files["ppt/slides/slide2.xml"], "TimelineAxis") {
+		t.Fatalf("timeline slide should render timeline axis:\n%s", files["ppt/slides/slide2.xml"])
+	}
+	if !strings.Contains(files["ppt/slides/slide3.xml"], "ClosingCard") {
+		t.Fatalf("closing slide should render dedicated closing cards:\n%s", files["ppt/slides/slide3.xml"])
+	}
+}
+
+func TestPPTXDashboard_LongSubtitlePushesMetricsDown(t *testing.T) {
 	slides := []Slide{
 		{
-			Title:   "Customer Value",
-			Layout:  "dashboard",
-			Variant: "stat-band",
+			Title:    "为什么值得做",
+			Layout:   "dashboard",
+			Variant:  "kpi-band",
+			Subtitle: "需求来源不只是减少人工“手录报表”，而是更稳定的服务质量、更低的管理成本和更可控的合规风险。",
 			Metrics: []MetricCard{
-				{Label: "Approval Cycle", Value: "-30%", Note: "8-week pilot"},
-				{Label: "On-Time Delivery", Value: "+15%", Note: "weekly tracking"},
-				{Label: "Knowledge Reuse", Value: "+25%", Note: "quarterly review"},
+				{Label: "服务提效", Value: "平台化", Note: "从单点工具扩展为持续使用的管理系统"},
+				{Label: "风控与合规", Value: "全量 + 实时 + 可追溯", Note: "让管理动作更及时、更标准、也更可验证"},
 			},
-			Points: []string{
-				"Signal: Start with one high-frequency pilot workflow.",
-				"Decision: Expand after cycle-time gains are stable.",
-			},
+			Points: []string{"企业越重视服务体验与风险控制，越需要从抽检走向全量智能质检。"},
 		},
 	}
 
 	gen := NewPPTXGenerator()
-	data, err := gen.Generate(slides, PPTXOptions{Title: "Stat Band Pattern", Creator: "Test"})
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Dashboard Spacing", Creator: "Test"})
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
 
 	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
-	for _, needle := range []string{`name="MetricBandCard1"`, `name="MetricBandValue2"`, `name="PointCard1"`} {
-		if !strings.Contains(slideXML, needle) {
-			t.Fatalf("slide xml missing %q:\n%s", needle, slideXML)
-		}
+	subtitleY := extractShapeY(t, slideXML, "Subtitle")
+	metricY := extractShapeY(t, slideXML, "MetricBg1")
+	if metricY <= subtitleY+500000 {
+		t.Fatalf("metric band should be pushed below a long subtitle, subtitleY=%d metricY=%d\n%s", subtitleY, metricY, slideXML)
+	}
+}
+
+func TestPPTXDashboard_LongMetricValuesReduceValueFont(t *testing.T) {
+	slides := []Slide{
+		{
+			Title:   "核心结论",
+			Layout:  "dashboard",
+			Variant: "kpi-band",
+			Metrics: []MetricCard{
+				{Label: "收入完成率", Value: "整体达成基本符合预期", Note: "接近目标"},
+				{Label: "利润完成率", Value: "需要结构优化后再释放", Note: "费用刚性偏高"},
+				{Label: "新增客户数", Value: "重点行业持续提升", Note: "增长来源集中"},
+				{Label: "回款周期", Value: "仍需逐月修复", Note: "大客户账期拉长"},
+			},
+		},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Dashboard Typography", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	slideXML := openZipFiles(t, data)["ppt/slides/slide1.xml"]
+	if strings.Contains(slideXML, `name="MetricText0"`) && strings.Contains(slideXML, `sz="3000"`) {
+		t.Fatalf("long dashboard metric values should not keep the oversized default value font:\n%s", slideXML)
 	}
 }
 
@@ -665,4 +794,18 @@ func openZipFiles(t *testing.T, data []byte) map[string]string {
 		files[f.Name] = buf.String()
 	}
 	return files
+}
+
+func extractShapeY(t *testing.T, slideXML, shapeName string) int {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)name="` + regexp.QuoteMeta(shapeName) + `".*?<a:off x="[^"]+" y="([^"]+)"`)
+	m := re.FindStringSubmatch(slideXML)
+	if len(m) != 2 {
+		t.Fatalf("shape %q not found in slide xml:\n%s", shapeName, slideXML)
+	}
+	value, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("parse y for %q: %v", shapeName, err)
+	}
+	return value
 }

@@ -174,6 +174,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		enableImages = false
 	}
 	finalStyle := strings.TrimSpace(style)
+	styleSpecified := finalStyle != ""
 	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
 		finalStyle = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
@@ -199,6 +200,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		Mode:           strings.ToLower(finalMode),
 		Language:       strings.TrimSpace(lang),
 		Style:          finalStyle,
+		StyleSpecified: styleSpecified,
 		Audience:       strings.TrimSpace(audience),
 		EnableImages:   enableImages,
 		LocalPreview:   localPreview,

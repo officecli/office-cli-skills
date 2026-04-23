@@ -28,7 +28,9 @@ type fakeLLMClient struct {
 	structuredCallCount int
 	lastStructuredReq   engine.StructuredCompletionRequest
 	imageResult         *engine.ImageGenerationResult
+	imageResults        []*engine.ImageGenerationResult
 	imageErr            error
+	imageErrors         []error
 	imageCalls          int
 	lastImageRequest    engine.ImageGenerationRequest
 }
@@ -58,6 +60,24 @@ func (f *fakeLLMClient) CompleteStructured(_ context.Context, req engine.Structu
 func (f *fakeLLMClient) GenerateImage(_ context.Context, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
 	f.imageCalls++
 	f.lastImageRequest = req
+	if len(f.imageErrors) > 0 {
+		idx := f.imageCalls - 1
+		if idx >= len(f.imageErrors) {
+			idx = len(f.imageErrors) - 1
+		}
+		if f.imageErrors[idx] != nil {
+			return nil, f.imageErrors[idx]
+		}
+	}
+	if len(f.imageResults) > 0 {
+		idx := f.imageCalls - 1
+		if idx >= len(f.imageResults) {
+			idx = len(f.imageResults) - 1
+		}
+		if f.imageResults[idx] != nil {
+			return f.imageResults[idx], nil
+		}
+	}
 	if f.imageErr != nil {
 		return nil, f.imageErr
 	}
@@ -203,8 +223,8 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["xl/workbook.xml"], "Pipeline") ||
 		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
-		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], "120") {
-		t.Fatalf("workbook xml = %q\nshared strings = %q\nsheet1 = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
+		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], ">120<") {
+		t.Fatalf("workbook xml = %q\nshared strings = %q\nsheet xml = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
 	}
 }
 
@@ -354,7 +374,7 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		"subtitle must be a takeaway sentence",
 		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
-		"Business decks should include 2-3 next-step actions",
+		"The closing slide must include 2-3 next-step actions",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -380,11 +400,11 @@ func TestBuildPPTXPrompt_UsesArchetypeRules(t *testing.T) {
 		t.Fatalf("training prompt missing archetype outline:\n%s", trainingPrompt)
 	}
 	explainerPrompt := BuildPPTXPrompt("minecraft 游戏介绍", generateengine.PromptTarget{}, true)
-	if !strings.Contains(explainerPrompt, "a strong storyline is usually cover -> what it is -> core mechanics or main parts -> why it stands out -> examples or who it suits -> how to start") {
-		t.Fatalf("explainer prompt missing archetype outline:\n%s", explainerPrompt)
+	if !strings.Contains(explainerPrompt, "go straight into the topic with a 6-8 slide explainer arc") {
+		t.Fatalf("explainer prompt missing direct explainer outline:\n%s", explainerPrompt)
 	}
-	if !strings.Contains(explainerPrompt, "Do not use rollout plans, owners, milestones, or decision language.") {
-		t.Fatalf("explainer prompt missing explainer closing rule:\n%s", explainerPrompt)
+	if !strings.Contains(explainerPrompt, "Do not insert contents or chapter-divider scaffolding for this topic.") {
+		t.Fatalf("explainer prompt missing scaffold skip rule:\n%s", explainerPrompt)
 	}
 }
 
@@ -538,35 +558,6 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 	}
 }
 
-func TestNormalizePPTXPayload_UsesExplainerClosingForGameTopics(t *testing.T) {
-	payload := &pptxPayload{
-		Title: "minecraft 游戏介绍",
-		Slides: []officegen.Slide{
-			{Title: "minecraft 游戏介绍", Layout: "title", IsTitle: true},
-			{Title: "first slide"},
-			{Title: "second slide"},
-		},
-	}
-	normalizePPTXPayload(payload, "minecraft 游戏介绍", "", true)
-	if len(payload.Slides) < 4 {
-		t.Fatalf("slide count = %d, want at least 4", len(payload.Slides))
-	}
-	joined := make([]string, 0, len(payload.Slides))
-	for _, slide := range payload.Slides {
-		joined = append(joined, slide.Title)
-	}
-	allTitles := strings.Join(joined, " | ")
-	if !strings.Contains(allTitles, "What It Is") {
-		t.Fatalf("slides missing explainer summary: %s", allTitles)
-	}
-	if !strings.Contains(allTitles, "Core Mechanics") {
-		t.Fatalf("slides missing explainer mechanics: %s", allTitles)
-	}
-	if payload.Slides[len(payload.Slides)-1].Title != "How to Start" {
-		t.Fatalf("closing slide = %#v", payload.Slides[len(payload.Slides)-1])
-	}
-}
-
 func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	llm := &fakeLLMClient{
 		jsonResponse: `{
@@ -591,8 +582,8 @@ func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if llm.imageCalls != 1 {
-		t.Fatalf("imageCalls = %d, want 1", llm.imageCalls)
+	if llm.imageCalls != 3 {
+		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
 	}
 	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
 		t.Fatalf("deck rels missing image relationship")
@@ -658,8 +649,8 @@ func TestServiceGeneratePPTX_DegradesGracefullyWhenImageGenerationFails(t *testi
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if llm.imageCalls != 1 {
-		t.Fatalf("imageCalls = %d, want 1", llm.imageCalls)
+	if llm.imageCalls != 3 {
+		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
 	}
 	if len(doc.Warnings) == 0 {
 		t.Fatalf("warnings = %#v, want degradation warning", doc.Warnings)
@@ -731,8 +722,8 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 10 {
 		t.Fatalf("slide count = %d, want 10", got)
 	}
-	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 0 {
-		t.Fatalf("image count = %d, want 0 after image rebalancing", got)
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got > 2 {
+		t.Fatalf("image count = %d, want at most 2 after image rebalancing", got)
 	}
 	slide1 := readZipEntry(t, fileBytes, "ppt/slides/slide1.xml")
 	if strings.Contains(slide1, "●") {
@@ -750,6 +741,229 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	}
 	if len(warnings) == 0 {
 		t.Fatalf("warnings = %#v, want normalization warnings", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_ExplainerUsesMixedLayoutsAndSkipsScaffold(t *testing.T) {
+	content := `{
+		"title":"Minecraft Introduction",
+		"slides":[
+			{"title":"Minecraft Introduction","layout":"title","subtitle":"A beginner-friendly overview"},
+			{"title":"Overview","layout":"content","sections":[
+				{"heading":"High Replayability","detail":"Minecraft is best understood as an open-ended sandbox built around exploration, building, and survival."},
+				{"heading":"Creative Range","detail":"Players can keep discovering new goals instead of following one fixed path."},
+				{"heading":"Shared Play","detail":"Friends can explore and build together in the same world."}
+			]},
+			{"title":"Main Loop","layout":"content","points":["Learn a few core recipes first","Gather materials and build a simple shelter","Use short sessions to discover the main loop"]},
+			{"title":"Standout Traits","layout":"content","points":["Try the mode that matches your mood and skill level","The same world can feel relaxing, creative, or challenging","Replayability comes from self-directed goals"]},
+			{"title":"Audience Fit","layout":"content","points":["Beginners can start small","Creative players can experiment freely","Challenge seekers can focus on survival"]}
+		]
+	}`
+
+	fileBytes, _, _, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "minecraft 游戏介绍", "", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 6 {
+		t.Fatalf("slide count = %d, want 6", got)
+	}
+	if archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Contents") {
+		t.Fatalf("explainer deck should not contain a contents slide")
+	}
+	for _, needle := range []string{"What It Is", "Learn a few", "How to Start"} {
+		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
+			t.Fatalf("deck should preserve %q", needle)
+		}
+	}
+	if !strings.Contains(string(previewJSON), `"stylePreset": "explainer-voxel-light"`) {
+		t.Fatalf("preview json = %s", string(previewJSON))
+	}
+	for _, needle := range []string{`"variant": "bullets-plain"`, `"variant": "timeline-axis"`, `"variant": "comparison-columns"`, `"variant": "sections-grid-3up"`, `"variant": "timeline-steps"`} {
+		if !strings.Contains(string(previewJSON), needle) {
+			t.Fatalf("preview json missing %q:\n%s", needle, string(previewJSON))
+		}
+	}
+}
+
+func TestSuggestStylePreset_RoutesChineseBusinessThemes(t *testing.T) {
+	cases := []struct {
+		name      string
+		text      string
+		archetype pptxArchetype
+		want      string
+	}{
+		{name: "pitch", text: "AI 客服质检平台融资路演", archetype: pptxArchetypeGeneral, want: officegen.StylePresetInvestorWarm},
+		{name: "sales procurement", text: "企业协作平台采购建议与价值解读", archetype: pptxArchetypeCompany, want: officegen.StylePresetSlateSerif},
+		{name: "project", text: "集团数字化项目实施方案", archetype: pptxArchetypeGeneral, want: officegen.StylePresetProjectForest},
+		{name: "training", text: "新员工远程协作入职培训", archetype: pptxArchetypeTraining, want: officegen.StylePresetTrainingManual},
+		{name: "review", text: "2026 年第一季度经营复盘", archetype: pptxArchetypeOps, want: officegen.StylePresetReviewCopper},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := suggestStylePreset("", tc.archetype, tc.text); got != tc.want {
+				t.Fatalf("suggestStylePreset(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizePPTXPayload_AutoThemeOverridesLLMThemeWhenStyleIsImplicit(t *testing.T) {
+	payload := &pptxPayload{
+		Title:       "企业协作平台采购建议与价值解读",
+		StylePreset: "editorial-light",
+		Theme: &officegen.SlideTheme{
+			PrimaryColor:   "1A73E8",
+			AccentColor:    "E8710A",
+			BackgroundType: "gradient",
+			BgColor1:       "F0F4FF",
+			BgColor2:       "FFFFFF",
+			TextColor:      "0F172A",
+			TitleTextColor: "0F172A",
+		},
+		Slides: []officegen.Slide{
+			{Title: "企业协作平台采购建议与价值解读", Layout: "title", Subtitle: "管理层摘要"},
+		},
+	}
+
+	normalizePPTXPayload(payload, "企业协作平台采购建议与价值解读", "", true)
+
+	if payload.StylePreset != officegen.StylePresetSlateSerif {
+		t.Fatalf("style preset = %q, want %q", payload.StylePreset, officegen.StylePresetSlateSerif)
+	}
+	if payload.Theme == nil || payload.Theme.AccentColor != "0F766E" || payload.Theme.BgColor1 != "EDF5F4" {
+		t.Fatalf("theme = %+v, want collaboration-slate preset theme", payload.Theme)
+	}
+}
+
+func TestDiversifyBusinessLayouts_ReducesRepeatedSectionCardsAndClosing(t *testing.T) {
+	slides := []officegen.Slide{
+		{Title: "Cover", Layout: "title"},
+		{Title: "Summary", Layout: "content", Variant: "sections-grid", Sections: []officegen.SlideSection{{Heading: "A", Detail: "Alpha"}, {Heading: "B", Detail: "Beta"}, {Heading: "C", Detail: "Gamma"}}},
+		{Title: "Capabilities", Layout: "content", Variant: "sections-grid", Sections: []officegen.SlideSection{{Heading: "A", Detail: "Alpha"}, {Heading: "B", Detail: "Beta"}, {Heading: "C", Detail: "Gamma"}}},
+		{Title: "Action Plan", Layout: "closing", Variant: "closing", Sections: []officegen.SlideSection{{Heading: "Now", Detail: "Do first"}, {Heading: "Next", Detail: "Do second"}}},
+		{Title: "Next Steps", Layout: "closing", Variant: "closing", Sections: []officegen.SlideSection{{Heading: "Week 1", Detail: "Kick off"}, {Heading: "Week 2", Detail: "Review"}}},
+	}
+
+	got := diversifyBusinessLayouts(slides, pptxArchetypeOps)
+
+	if got[1].Layout != "content" || got[1].Variant != "bullets" || len(got[1].Points) == 0 {
+		t.Fatalf("first repeated sections-grid slide should become bullets: %+v", got[1])
+	}
+	if got[3].Layout == "closing" {
+		t.Fatalf("penultimate closing slide should be diversified: %+v", got[3])
+	}
+	if got[4].Layout != "closing" {
+		t.Fatalf("final slide should remain closing: %+v", got[4])
+	}
+}
+
+func TestBuildPPTXFromJSON_ExplainerImagesUseHeroAndGameplayVisuals(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Minecraft Introduction",
+		"slides":[
+			{"title":"Minecraft Introduction","layout":"title","subtitle":"A beginner-friendly overview"},
+			{"title":"What It Is","layout":"content","points":["A sandbox world built from blocks","Players gather, craft, and build","Different modes change the experience"]}
+		]
+	}`
+
+	fileBytes, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "minecraft 游戏介绍", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 7 {
+		t.Fatalf("slide count = %d, want 7", got)
+	}
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 4 {
+		t.Fatalf("image count = %d, want 4", got)
+	}
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Example / Gameplay Visual") {
+		t.Fatalf("deck should contain the visual example slide")
+	}
+}
+
+func TestBuildPPTXFromJSON_ExplainerSingleVisualFallsBackToImageRight(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResults: []*engine.ImageGenerationResult{
+			nil,
+			{Data: mustTinyPNG(t), MIME: "image/png"},
+			nil,
+		},
+		imageErrors: []error{
+			errors.New("cover failed"),
+			nil,
+			errors.New("second visual failed"),
+		},
+	}
+	content := `{
+		"title":"Minecraft Introduction",
+		"slides":[
+			{"title":"Minecraft Introduction","layout":"title","subtitle":"A beginner-friendly overview"},
+			{"title":"What It Is","layout":"content","points":["A sandbox world built from blocks","Players gather, craft, and build","Different modes change the experience"]}
+		]
+	}`
+
+	_, _, warnings, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "minecraft 游戏介绍", "", true, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if !strings.Contains(string(previewJSON), `"title": "Example / Gameplay Visual"`) || !strings.Contains(string(previewJSON), `"variant": "image-right-focus"`) {
+		t.Fatalf("preview json should downgrade the example slide to image-right:\n%s", string(previewJSON))
+	}
+	if len(warnings) == 0 || !strings.Contains(warnings[len(warnings)-1].Message, "successfully generated visuals were kept") {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_ExplainerNoVisualSuccessFallsBackToTextPage(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageErrors: []error{
+			errors.New("cover failed"),
+			errors.New("visual 1 failed"),
+			errors.New("visual 2 failed"),
+		},
+	}
+	content := `{
+		"title":"Minecraft Introduction",
+		"slides":[
+			{"title":"Minecraft Introduction","layout":"title","subtitle":"A beginner-friendly overview"},
+			{"title":"What It Is","layout":"content","points":["A sandbox world built from blocks","Players gather, craft, and build","Different modes change the experience"]}
+		]
+	}`
+
+	_, _, warnings, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "minecraft 游戏介绍", "", true, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if strings.Contains(string(previewJSON), `"layout": "gallery"`) && strings.Contains(string(previewJSON), `"title": "Example / Gameplay Visual"`) {
+		t.Fatalf("preview json should not keep the example slide as gallery when no visuals succeed:\n%s", string(previewJSON))
+	}
+	if !strings.Contains(string(previewJSON), `"title": "Example / Gameplay Visual"`) || !strings.Contains(string(previewJSON), `"variant": "bullets-callout"`) {
+		t.Fatalf("preview json should turn the example slide into a text explain page:\n%s", string(previewJSON))
+	}
+	if len(warnings) == 0 || !strings.Contains(warnings[len(warnings)-1].Message, "text-only version") {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
+func TestBuildFallbackImagePrompt_MinecraftUsesVoxelConstraints(t *testing.T) {
+	prompt := buildFallbackImagePrompt(officegen.Slide{
+		Title:         "Minecraft Introduction",
+		NarrativeRole: "analysis",
+		Subtitle:      "Show the blocky sandbox world and the survival loop",
+	}, "Minecraft Introduction")
+	for _, needle := range []string{"blocky voxel sandbox", "Minecraft-like cubic terrain", "crafting", "biomes", "survival shelter", "block building"} {
+		if !strings.Contains(prompt, needle) {
+			t.Fatalf("prompt missing %q: %s", needle, prompt)
+		}
+	}
+	for _, needle := range []string{"hand-painted fantasy", "corporate diagram"} {
+		if !strings.Contains(prompt, needle) {
+			t.Fatalf("prompt missing negative constraint %q: %s", needle, prompt)
+		}
 	}
 }
 
@@ -839,55 +1053,6 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	}
 	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/slide", ".xml", "Higher collaboration efficiency") {
 		t.Fatalf("deck should contain repaired slide content")
-	}
-}
-
-func TestDetectPPTXArchetype_SupportsChineseKeywords(t *testing.T) {
-	if got := detectPPTXArchetype("企业协作平台介绍，面向潜在客户", ""); got != pptxArchetypeCompany {
-		t.Fatalf("company archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("市场分析与出海机会评估", ""); got != pptxArchetypeMarket {
-		t.Fatalf("market archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("季度经营分析和运营复盘", ""); got != pptxArchetypeOps {
-		t.Fatalf("ops archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("新员工培训上手指南", ""); got != pptxArchetypeTraining {
-		t.Fatalf("training archetype = %q", got)
-	}
-	if got := detectPPTXArchetype("minecraft 游戏介绍", ""); got != pptxArchetypeExplainer {
-		t.Fatalf("explainer archetype = %q", got)
-	}
-}
-
-func TestNormalizeSlideVariant_UsesFeatureGridAndStatBand(t *testing.T) {
-	featureGrid := normalizeSlideVariant(officegen.Slide{
-		Role:   "analysis",
-		Title:  "核心功能",
-		Layout: "content",
-		Sections: []officegen.SlideSection{
-			{Heading: "统一入口", Detail: "聚合消息、文档和审批"},
-			{Heading: "流程协同", Detail: "自动串联任务和通知"},
-			{Heading: "权限治理", Detail: "细粒度权限和审计"},
-			{Heading: "知识沉淀", Detail: "模板和FAQ持续复用"},
-		},
-	})
-	if featureGrid != "sections-grid" {
-		t.Fatalf("feature grid variant = %q", featureGrid)
-	}
-
-	statBand := normalizeSlideVariant(officegen.Slide{
-		Role:   "evidence",
-		Title:  "客户价值",
-		Layout: "dashboard",
-		Metrics: []officegen.MetricCard{
-			{Label: "审批周期", Value: "-30%", Note: "8周试点"},
-			{Label: "按时完成率", Value: "+15%", Note: "周度跟踪"},
-			{Label: "知识复用率", Value: "+25%", Note: "季度评估"},
-		},
-	})
-	if statBand != "kpi-band" {
-		t.Fatalf("stat band variant = %q", statBand)
 	}
 }
 

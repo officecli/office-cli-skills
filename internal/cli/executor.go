@@ -53,7 +53,6 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	localPreviewDataPath := filepath.Join(job.OutputDir, fileBase+".preview.json")
 	allWarnings := append([]engine.GenerateIssue(nil), job.Warnings...)
 	allWarnings = append(allWarnings, artifact.Warnings...)
-
 	result := GenerateResult{
 		Status:       "success",
 		FilePath:     filePath,

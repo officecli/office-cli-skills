@@ -343,3 +343,29 @@ func TestApproveExecutionPlan_UsesExistingArtifacts(t *testing.T) {
 		t.Fatal("expected execution prompt")
 	}
 }
+
+func TestBuildExecutionPlanSynthesisMessages_ExplainerAddsScenarioRequirements(t *testing.T) {
+	session := &engine.PlanSession{
+		DocumentType: "pptx",
+		UserPrompt:   "介绍 minecraft 这款游戏",
+		Answers: []engine.PlanAnswer{
+			{QuestionID: "ppt_explainer_audience", Answer: "第一次接触的人"},
+			{QuestionID: "ppt_explainer_focus", Answer: "先讲它是什么和怎么玩"},
+		},
+	}
+	msgs := buildExecutionPlanSynthesisMessages(session)
+	if len(msgs) != 2 {
+		t.Fatalf("message count = %d, want 2", len(msgs))
+	}
+	userMsg := msgs[1].Content
+	for _, needle := range []string{
+		"audience familiarity level",
+		"cover hero visual allowance",
+		"preserve complete visible wording",
+		"beginner tips, who it suits, or how to start",
+	} {
+		if !strings.Contains(userMsg, needle) {
+			t.Fatalf("user synthesis prompt missing %q:\n%s", needle, userMsg)
+		}
+	}
+}

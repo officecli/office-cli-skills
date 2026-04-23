@@ -74,6 +74,7 @@ type GenerateJob struct {
 	Mode           string
 	Language       string
 	Style          string
+	StyleSpecified bool
 	Audience       string
 	EnableImages   bool
 	LocalPreview   bool

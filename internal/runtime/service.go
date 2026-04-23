@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/officecli/officecli/engine"
@@ -447,7 +448,7 @@ const pptxStructuredSchema = `{
 
 func BuildPPTXPrompt(description string, target generateengine.PromptTarget, enableImages bool) string {
 	archetype := detectPPTXArchetype(description, "")
-	presetHint := suggestStylePreset(target.Style, archetype)
+	presetHint := suggestStylePreset(target.Style, archetype, description)
 	slideExample := `    {
       "title": "Section Title",
       "layout": "content",
@@ -516,14 +517,14 @@ Return JSON only. Do not add any extra commentary:
 
 Requirements:
 	- Keep the deck to 6-10 slides, usually 7-9.
-	- stylePreset must be one of executive-dark, editorial-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
+	- stylePreset must be one of executive-dark, editorial-light, explainer-voxel-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
-		- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline such as cover -> toc -> chapter -> summary -> supporting evidence/capabilities -> chapter -> action/closing.
-		- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
-		- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
-		- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
-		- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
-		- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
+	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline that fits the topic instead of reusing one generic scaffold.
+	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+	- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
+	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
+	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
+	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
 - toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
 - comparison, timeline, and closing should rely on sections rather than long bullets.
@@ -536,7 +537,7 @@ Requirements:
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
 - When a chart fits, chart may include type, categories, values, and title, plus 2-3 takeaway points.
 - When a dashboard fits, metrics may include label, value, and note, plus 2-3 action or takeaway points.
-- The closing slide must match the topic. Business decks should include 2-3 next-step actions with time, owner, or validation criteria. Explainer decks should instead close with 2-3 onboarding tips, audience-fit notes, starter ideas, or concise takeaways.
+- The closing slide must include 2-3 next-step actions with time, owner, or validation criteria.
 - Wording should fit the audience and style. Prefer quantified, conclusion-first language for business topics, and plain, vivid, example-led language for explainer topics. Avoid vague slogans.
 	%s
 	%s`, description, generateengine.FormatDocumentPromptTarget(target), presetHint, slideExample, imageRules, outlineRules)
@@ -593,7 +594,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
-			if len(warnings) == 0 {
+			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
 					Message: "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`.",
@@ -618,7 +619,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 			payload.Slides[idx].Visuals[visualIdx].ImageData = nil
 			payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
-			if len(warnings) == 0 {
+			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
 					Message: "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`.",
@@ -627,6 +628,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 		}
 	}
+	warnings = finalizePPTImageResults(&payload, fallback, warnings)
 
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Packaging the PPTX file")
 	fileBytes, err := officegen.NewPPTXGenerator().Generate(payload.Slides, officegen.PPTXOptions{
@@ -673,15 +675,39 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 
 	const maxSlides = 10
 	warnings := make([]engine.GenerateIssue, 0, 3)
-	payload.Title = trimRunes(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"), 30)
+	payload.Title = cleanVisibleText(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"))
 	archetype := detectPPTXArchetype(fallback, payload.Title)
-	payload.StylePreset = suggestStylePreset(firstNonEmpty(strings.TrimSpace(payload.StylePreset), strings.TrimSpace(requestedStyle)), archetype)
-	payload.Theme = officegen.MergeThemeWithPreset(payload.Theme, payload.StylePreset)
+	explicitStyle := strings.TrimSpace(requestedStyle)
+	if explicitStyle != "" {
+		payload.StylePreset = suggestStylePreset(explicitStyle, archetype, fallback+" "+payload.Title)
+	} else {
+		payload.StylePreset = suggestStylePreset("", archetype, fallback+" "+payload.Title)
+	}
+	if archetype == pptxArchetypeExplainer && explainerShouldUseVoxelLight(payload.StylePreset, requestedStyle) {
+		payload.StylePreset = officegen.StylePresetExplainerVoxel
+	}
+	if archetype == pptxArchetypeExplainer || explicitStyle == "" {
+		payload.Theme = officegen.MergeThemeWithPreset(nil, payload.StylePreset)
+	} else {
+		payload.Theme = officegen.MergeThemeWithPreset(payload.Theme, payload.StylePreset)
+	}
 
 	slides := make([]officegen.Slide, 0, len(payload.Slides))
+	coverImageBudget := 0
+	closingImageBudget := 0
 	imageBudget := 1
 	galleryBudget := 1
 	visualBudget := 4
+	if enableImages {
+		coverImageBudget = 1
+		closingImageBudget = 1
+	}
+	if archetype == pptxArchetypeExplainer {
+		coverImageBudget = 1
+		closingImageBudget = 1
+		imageBudget = 0
+		visualBudget = 2
+	}
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
@@ -689,7 +715,7 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 			slidesTrimmed = true
 			break
 		}
-		normalized, imageKept, visualsKept := normalizePPTXSlide(slide, idx, payload.Title, enableImages, &imageBudget, &galleryBudget, &visualBudget)
+		normalized, imageKept, visualsKept := normalizePPTXSlide(slide, idx, payload.Title, archetype, enableImages, &coverImageBudget, &closingImageBudget, &imageBudget, &galleryBudget, &visualBudget)
 		if slide.HasImage && !imageKept {
 			imagesAdjusted = true
 		}
@@ -713,51 +739,59 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 			Layout:        "title",
 			IsTitle:       true,
 			NarrativeRole: "cover",
-			Subtitle:      fitTextForLayout(strings.TrimSpace(fallback), 28),
+			Subtitle:      cleanVisibleText(strings.TrimSpace(fallback)),
 		})
 	}
 
-	slides[0].Layout = "title"
-	slides[0].Variant = normalizeSlideVariant(slides[0])
-	slides[0].IsTitle = true
-	slides[0].NarrativeRole = "cover"
-	slides[0].HasImage = false
-	slides[0].ImagePrompt = ""
-	slides[0].ImagePos = ""
-	slides[0].Visuals = nil
-	if strings.TrimSpace(slides[0].Title) == "" {
-		slides[0].Title = payload.Title
-	}
-	if strings.TrimSpace(slides[0].Subtitle) == "" {
-		slides[0].Subtitle = fitTextForLayout(strings.TrimSpace(fallback), 28)
-	}
-	slides[0].Points = nil
-	slides[0].Sections = nil
-	slides[0].Metrics = nil
-	slides[0].Chart = nil
-	slides[0].Content = ""
-
-	for idx := 1; idx < len(slides); idx++ {
-		slides[idx].IsTitle = false
-		if slideLayoutName(slides[idx]) == "title" {
-			slides[idx].Layout = "content"
+	if archetype == pptxArchetypeExplainer {
+		slides = buildExplainerDeck(slides, payload.Title, enableImages)
+	} else {
+		slides[0].Layout = "title"
+		slides[0].Variant = normalizeSlideVariant(slides[0])
+		slides[0].IsTitle = true
+		slides[0].NarrativeRole = "cover"
+		slides[0].Visuals = nil
+		if strings.TrimSpace(slides[0].Title) == "" {
+			slides[0].Title = payload.Title
 		}
-		if strings.TrimSpace(slides[idx].Title) == "" {
-			slides[idx].Title = fmt.Sprintf("Part %d", idx)
+		if strings.TrimSpace(slides[0].Subtitle) == "" {
+			slides[0].Subtitle = cleanVisibleText(strings.TrimSpace(fallback))
+		}
+		if enableImages {
+			slides[0].HasImage = true
+			slides[0].ImagePos = "background"
+			slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(firstNonEmpty(slides[0].ImagePrompt, buildFallbackImagePrompt(slides[0], payload.Title))), 240)
+		} else {
+			slides[0].HasImage = false
+			slides[0].ImagePrompt = ""
+			slides[0].ImagePos = ""
+		}
+		slides[0].Points = nil
+		slides[0].Sections = nil
+		slides[0].Metrics = nil
+		slides[0].Chart = nil
+		slides[0].Content = ""
+
+		for idx := 1; idx < len(slides); idx++ {
+			slides[idx].IsTitle = false
+			if slideLayoutName(slides[idx]) == "title" {
+				slides[idx].Layout = "content"
+			}
+			if strings.TrimSpace(slides[idx].Title) == "" {
+				slides[idx].Title = fmt.Sprintf("Part %d", idx)
+			}
+		}
+
+		slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
+		slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
+		slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
+		slides = diversifyBusinessLayouts(slides, archetype)
+		if len(slides) > maxSlides {
+			slidesTrimmed = true
+			slides = slides[:maxSlides]
 		}
 	}
-
-	slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
-	slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
-	slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
-	if len(slides) > maxSlides {
-		slidesTrimmed = true
-		slides = slides[:maxSlides]
-	}
-	for idx := range slides {
-		slides[idx].NarrativeRole = firstNonEmpty(normalizeNarrativeRole(slides[idx].NarrativeRole), normalizeNarrativeRole(slides[idx].Role))
-		slides[idx].Role = slides[idx].NarrativeRole
-	}
+	slides = applyCoverAndClosingImageDefaults(slides, payload.Title, enableImages)
 
 	payload.Slides = slides
 
@@ -778,14 +812,190 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	return warnings
 }
 
-func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enableImages bool, imageBudget, galleryBudget, visualBudget *int) (officegen.Slide, bool, int) {
-	slide.Title = fitTextForLayout(firstNonEmpty(slide.Title, deckTitle), 22)
-	slide.Subtitle = fitTextForLayout(strings.TrimSpace(slide.Subtitle), 30)
-	slide.SectionTitle = fitTextForLayout(strings.TrimSpace(slide.SectionTitle), 20)
+func hasWarningCode(items []engine.GenerateIssue, code string) bool {
+	for _, item := range items {
+		if item.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []engine.GenerateIssue) []engine.GenerateIssue {
+	if payload == nil {
+		return warnings
+	}
+	archetype := detectPPTXArchetype(fallback, payload.Title)
+	requested := 0
+	succeeded := 0
+	for idx := range payload.Slides {
+		slide := &payload.Slides[idx]
+		if slide.HasImage && strings.TrimSpace(slide.ImagePrompt) != "" {
+			requested++
+			if len(slide.ImageData) > 0 {
+				succeeded++
+			} else {
+				slide.HasImage = false
+				slide.ImagePrompt = ""
+				slide.ImagePos = ""
+				slide.ImageMIME = ""
+				slide.Variant = normalizeSlideVariant(*slide)
+			}
+		}
+		filteredVisuals := make([]officegen.SlideVisual, 0, len(slide.Visuals))
+		for _, visual := range slide.Visuals {
+			if strings.TrimSpace(visual.Prompt) == "" {
+				continue
+			}
+			requested++
+			if len(visual.ImageData) > 0 {
+				succeeded++
+				filteredVisuals = append(filteredVisuals, visual)
+			}
+		}
+		if len(filteredVisuals) != len(slide.Visuals) {
+			slide.Visuals = filteredVisuals
+		}
+	}
+	if archetype == pptxArchetypeExplainer {
+		applyExplainerImageOutcome(payload)
+	}
+	failed := requested - succeeded
+	if failed <= 0 {
+		return removeWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED")
+	}
+	message := "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`."
+	if succeeded > 0 {
+		message = "Some images failed to generate, but successfully generated visuals were kept in the deck. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name."
+	}
+	return upsertWarning(warnings, engine.GenerateIssue{
+		Code:    "WARN_PPT_IMAGE_DEGRADED",
+		Message: message,
+		Field:   "slides",
+	})
+}
+
+func applyExplainerImageOutcome(payload *pptxPayload) {
+	if payload == nil {
+		return
+	}
+	for idx := range payload.Slides {
+		slide := &payload.Slides[idx]
+		if strings.TrimSpace(slide.Title) != "Example / Gameplay Visual" {
+			if !slide.HasImage {
+				slide.Variant = normalizeSlideVariant(*slide)
+			}
+			continue
+		}
+		switch len(slide.Visuals) {
+		case 0:
+			slide.Layout = "content"
+			slide.Variant = "bullets-callout"
+			slide.HasImage = false
+			slide.ImagePrompt = ""
+			slide.ImagePos = ""
+			slide.Points = normalizePoints(firstNonEmptySlice(slide.Points, []string{
+				"Notice how the world is built from readable blocks and clear landmarks.",
+				"Notice how exploring, gathering, and building connect into one simple loop.",
+			}), 2, 0)
+			slide.Sections = nil
+		case 1:
+			visual := slide.Visuals[0]
+			slide.Layout = "content"
+			slide.Variant = "image-right-focus"
+			slide.HasImage = true
+			slide.ImageData = visual.ImageData
+			slide.ImageMIME = visual.ImageMIME
+			slide.ImagePrompt = visual.Prompt
+			slide.ImagePos = "right"
+			slide.Points = normalizePoints(firstNonEmptySlice(slide.Points, []string{
+				cleanVisibleText(firstNonEmpty(visual.Caption, visual.Label)),
+				"Use this visual to connect the blocky world, building tools, and the survival loop.",
+			}), 2, 0)
+			slide.Sections = nil
+			slide.Visuals = nil
+		default:
+			if len(slide.Visuals) > 2 {
+				slide.Visuals = slide.Visuals[:2]
+			}
+			slide.Layout = "gallery"
+			if strings.TrimSpace(slide.Variant) == "" || slide.Variant == "gallery" {
+				slide.Variant = "gallery-duo"
+			}
+			slide.HasImage = false
+			slide.ImagePrompt = ""
+			slide.ImagePos = ""
+		}
+		slide.Content = ""
+		slide.Metrics = nil
+		slide.Chart = nil
+		slide.Source = ""
+	}
+}
+
+func removeWarningCode(items []engine.GenerateIssue, code string) []engine.GenerateIssue {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]engine.GenerateIssue, 0, len(items))
+	for _, item := range items {
+		if item.Code == code {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func upsertWarning(items []engine.GenerateIssue, warning engine.GenerateIssue) []engine.GenerateIssue {
+	for idx := range items {
+		if items[idx].Code == warning.Code {
+			items[idx] = warning
+			return items
+		}
+	}
+	return append(items, warning)
+}
+
+func applyCoverAndClosingImageDefaults(slides []officegen.Slide, deckTitle string, enableImages bool) []officegen.Slide {
+	if len(slides) == 0 || !enableImages {
+		return slides
+	}
+	slides[0].HasImage = true
+	slides[0].ImagePos = "background"
+	if strings.TrimSpace(slides[0].ImagePrompt) == "" {
+		slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(slides[0], deckTitle)), 240)
+	}
+	lastIdx := len(slides) - 1
+	if lastIdx <= 0 {
+		return slides
+	}
+	last := slides[lastIdx]
+	last.HasImage = true
+	last.ImagePos = "background"
+	if strings.TrimSpace(last.ImagePrompt) == "" {
+		last.ImagePrompt = fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(last, deckTitle)), 240)
+	}
+	slides[lastIdx] = last
+	return slides
+}
+
+func firstNonEmptySlice(primary, fallback []string) []string {
+	for _, item := range primary {
+		if strings.TrimSpace(item) != "" {
+			return primary
+		}
+	}
+	return fallback
+}
+
+func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, archetype pptxArchetype, enableImages bool, coverImageBudget, closingImageBudget, imageBudget, galleryBudget, visualBudget *int) (officegen.Slide, bool, int) {
+	slide.Title = cleanVisibleText(firstNonEmpty(slide.Title, deckTitle))
+	slide.Subtitle = cleanVisibleText(strings.TrimSpace(slide.Subtitle))
+	slide.SectionTitle = cleanVisibleText(strings.TrimSpace(slide.SectionTitle))
 	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
-	slide.NarrativeRole = firstNonEmpty(normalizeNarrativeRole(slide.NarrativeRole), normalizeNarrativeRole(slide.Role))
-	slide.Role = slide.NarrativeRole
+	slide.NarrativeRole = normalizeNarrativeRole(slide.NarrativeRole)
 	slide.Visuals = normalizeSlideVisuals(slide.Visuals, 4)
 
 	switch {
@@ -840,19 +1050,35 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, enable
 
 	imageKept := false
 	visualsKept := 0
-	if enableImages &&
-		slide.Layout == "content" &&
-		idx > 0 &&
-		slide.HasImage &&
-		strings.TrimSpace(slide.ImagePrompt) != "" &&
-		allowImageForSlide(slide) &&
-		imageBudget != nil &&
-		*imageBudget > 0 {
-		slide.HasImage = true
-		slide.ImagePrompt = fitTextForLayout(strings.TrimSpace(slide.ImagePrompt), 120)
-		slide.ImagePos = normalizeImagePosition(slide.ImagePos)
-		*imageBudget--
-		imageKept = true
+	if enableImages && slide.HasImage && strings.TrimSpace(firstNonEmpty(slide.ImagePrompt, buildFallbackImagePrompt(slide, deckTitle))) != "" {
+		allowPrimary := false
+		switch {
+		case idx == 0 && coverImageBudget != nil && *coverImageBudget > 0:
+			allowPrimary = true
+			*coverImageBudget--
+		case slide.NarrativeRole == "closing" && closingImageBudget != nil && *closingImageBudget > 0:
+			allowPrimary = true
+			*closingImageBudget--
+		case slide.Layout == "content" && allowImageForSlide(slide) && archetype == pptxArchetypeExplainer && visualBudget != nil && *visualBudget > 0:
+			allowPrimary = true
+			*visualBudget--
+		case slide.Layout == "content" && allowImageForSlide(slide) && imageBudget != nil && *imageBudget > 0:
+			allowPrimary = true
+			*imageBudget--
+		}
+		if allowPrimary {
+			slide.HasImage = true
+			slide.ImagePrompt = fitTextForLayout(strings.TrimSpace(firstNonEmpty(slide.ImagePrompt, buildFallbackImagePrompt(slide, deckTitle))), 240)
+			if slide.NarrativeRole == "closing" {
+				slide.ImagePos = "background"
+			}
+			slide.ImagePos = normalizeImagePosition(slide.ImagePos)
+			imageKept = true
+		} else {
+			slide.HasImage = false
+			slide.ImagePrompt = ""
+			slide.ImagePos = ""
+		}
 	} else {
 		slide.HasImage = false
 		slide.ImagePrompt = ""
@@ -910,9 +1136,9 @@ func normalizeNarrativeRole(value string) string {
 func normalizeSlideVisuals(visuals []officegen.SlideVisual, limit int) []officegen.SlideVisual {
 	out := make([]officegen.SlideVisual, 0, len(visuals))
 	for _, visual := range visuals {
-		label := fitTextForLayout(cleanSentence(visual.Label), 16)
-		prompt := fitTextForLayout(strings.TrimSpace(visual.Prompt), 120)
-		caption := fitTextForLayout(cleanSentence(visual.Caption), 24)
+		label := cleanVisibleText(visual.Label)
+		prompt := fitTextForLayout(strings.TrimSpace(visual.Prompt), 240)
+		caption := cleanVisibleText(visual.Caption)
 		if prompt == "" {
 			continue
 		}
@@ -967,7 +1193,8 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 	out := make([]string, 0, len(points))
 	seen := map[string]struct{}{}
 	for _, point := range points {
-		point = fitTextForLayout(cleanSentence(point), maxRunes)
+		_ = maxRunes
+		point = cleanVisibleText(point)
 		if point == "" {
 			continue
 		}
@@ -986,8 +1213,8 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 func normalizeSections(sections []officegen.SlideSection, limit int) []officegen.SlideSection {
 	out := make([]officegen.SlideSection, 0, len(sections))
 	for _, section := range sections {
-		heading := fitTextForLayout(cleanSentence(section.Heading), 12)
-		detail := fitTextForLayout(cleanSentence(section.Detail), 30)
+		heading := cleanVisibleText(section.Heading)
+		detail := cleanVisibleText(section.Detail)
 		if heading == "" && detail == "" {
 			continue
 		}
@@ -1009,9 +1236,9 @@ func normalizeSections(sections []officegen.SlideSection, limit int) []officegen
 func normalizeMetrics(metrics []officegen.MetricCard, limit int) []officegen.MetricCard {
 	out := make([]officegen.MetricCard, 0, len(metrics))
 	for _, metric := range metrics {
-		label := fitTextForLayout(cleanSentence(metric.Label), 12)
-		value := fitTextForLayout(strings.TrimSpace(metric.Value), 12)
-		note := fitTextForLayout(cleanSentence(metric.Note), 20)
+		label := cleanVisibleText(metric.Label)
+		value := cleanVisibleText(strings.TrimSpace(metric.Value))
+		note := cleanVisibleText(metric.Note)
 		if label == "" || value == "" {
 			continue
 		}
@@ -1027,8 +1254,972 @@ func normalizeMetrics(metrics []officegen.MetricCard, limit int) []officegen.Met
 	return out
 }
 
-func suggestStylePreset(style string, archetype pptxArchetype) string {
+func explainerShouldUseVoxelLight(resolvedStyle, requestedStyle string) bool {
+	requested := strings.ToLower(strings.TrimSpace(requestedStyle))
+	if requested == "" {
+		return true
+	}
+	return requested == officegen.StylePresetTechContrast && strings.EqualFold(strings.TrimSpace(resolvedStyle), officegen.StylePresetTechContrast)
+}
+
+func buildExplainerDeck(donors []officegen.Slide, deckTitle string, enableImages bool) []officegen.Slide {
+	slides := defaultExplainerSlides(deckTitle, enableImages)
+	if len(slides) == 0 {
+		return donors
+	}
+	state := explainerVariantState{}
+	var coverDonor officegen.Slide
+	if len(donors) > 0 {
+		coverDonor = donors[0]
+	}
+	coverChoice := chooseExplainerCoverChoice(slides[0], coverDonor, enableImages, state)
+	slides[0] = mergeExplainerCover(slides[0], coverDonor, deckTitle, enableImages, coverChoice)
+	state.record(coverChoice)
+
+	bodyDonors := explainerBodyDonors(donors)
+	for idx := 1; idx < len(slides); idx++ {
+		var donor officegen.Slide
+		switch slides[idx].Title {
+		case "What It Is":
+			donor = takeExplainerDonor(&bodyDonors, looksLikeWhatItIsSlide, looksLikeGenericExplainerOverviewSlide)
+			choice := chooseExplainerWhatItIsChoice(slides[idx], donor, enableImages, state)
+			slides[idx] = buildExplainerWhatItIsSlide(slides[idx], donor, deckTitle, enableImages, choice)
+			state.record(choice)
+		case "Core Ways to Play":
+			donor = takeExplainerDonor(&bodyDonors, looksLikePlayLoopSlide)
+			choice := chooseExplainerCoreWaysChoice(slides[idx], donor, state)
+			slides[idx] = buildExplainerCoreWaysSlide(slides[idx], donor, choice)
+			state.record(choice)
+		case "Why It Stands Out":
+			donor = takeExplainerDonor(&bodyDonors, looksLikeStandoutSlide)
+			choice := chooseExplainerStandoutChoice(slides[idx], donor, state)
+			slides[idx] = buildExplainerStandoutSlide(slides[idx], donor, choice)
+			state.record(choice)
+		case "Example / Gameplay Visual":
+			donor = takeExplainerDonor(&bodyDonors, looksLikeExampleVisualSlide, looksLikePlayLoopSlide)
+			choice := chooseExplainerExampleChoice(slides[idx], donor, deckTitle, state)
+			slides[idx] = buildExplainerExampleSlide(slides[idx], donor, deckTitle, choice)
+			state.record(choice)
+		case "Who It Suits":
+			donor = takeExplainerDonor(&bodyDonors, looksLikeAudienceFitSlide)
+			choice := chooseExplainerAudienceChoice(slides[idx], donor, state)
+			slides[idx] = buildExplainerAudienceSlide(slides[idx], donor, choice)
+			state.record(choice)
+		case "How to Start":
+			donor = takeExplainerDonor(&bodyDonors, looksLikeStarterSlide)
+			choice := chooseExplainerStartChoice(slides[idx], donor, state)
+			slides[idx] = buildExplainerStartSlide(slides[idx], donor, choice)
+			state.record(choice)
+		default:
+			choice := chooseExplainerWhatItIsChoice(slides[idx], officegen.Slide{}, enableImages, state)
+			slides[idx] = buildExplainerWhatItIsSlide(slides[idx], officegen.Slide{}, deckTitle, enableImages, choice)
+			state.record(choice)
+		}
+	}
+	for idx := range slides {
+		slides[idx].Title = cleanVisibleText(slides[idx].Title)
+		slides[idx].Subtitle = cleanVisibleText(slides[idx].Subtitle)
+		slides[idx].SectionTitle = cleanVisibleText(slides[idx].SectionTitle)
+		slides[idx].Variant = normalizeSlideVariant(slides[idx])
+		if idx == 0 {
+			slides[idx].Layout = "title"
+			slides[idx].IsTitle = true
+			slides[idx].NarrativeRole = "cover"
+			slides[idx].Points = nil
+			slides[idx].Sections = nil
+			slides[idx].Metrics = nil
+			slides[idx].Chart = nil
+			slides[idx].Content = ""
+		} else {
+			slides[idx].IsTitle = false
+		}
+		if !enableImages {
+			slides[idx].HasImage = false
+			slides[idx].ImagePrompt = ""
+			slides[idx].ImagePos = ""
+			slides[idx].Visuals = nil
+		}
+	}
+	return slides
+}
+
+type explainerLayoutChoice struct {
+	Layout  string
+	Variant string
+}
+
+type explainerVariantState struct {
+	usedFamilies []string
+	usedVariants []string
+}
+
+func (s *explainerVariantState) record(choice explainerLayoutChoice) {
+	if s == nil {
+		return
+	}
+	if strings.TrimSpace(choice.Layout) != "" {
+		s.usedFamilies = append(s.usedFamilies, strings.TrimSpace(choice.Layout))
+	}
+	if strings.TrimSpace(choice.Variant) != "" {
+		s.usedVariants = append(s.usedVariants, strings.TrimSpace(choice.Variant))
+	}
+}
+
+func chooseExplainerCoverChoice(slot, donor officegen.Slide, enableImages bool, state explainerVariantState) explainerLayoutChoice {
+	if !enableImages || !hasReliableExplainerHeroImage(donor) {
+		return explainerLayoutChoice{Layout: "title", Variant: "title-center-minimal"}
+	}
+	if len([]rune(cleanVisibleText(firstNonEmpty(donor.Title, slot.Title)))) > 28 {
+		return explainerLayoutChoice{Layout: "title", Variant: "title-split-hero"}
+	}
+	return explainerLayoutChoice{Layout: "title", Variant: pickUnusedExplainerVariant(state, "title-center-hero", "title-split-hero")}
+}
+
+func chooseExplainerWhatItIsChoice(_ officegen.Slide, donor officegen.Slide, enableImages bool, state explainerVariantState) explainerLayoutChoice {
+	if enableImages && hasReliableExplainerImage(donor) {
+		return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "image-right-editorial", "image-left-editorial")}
+	}
+	subtitleLen := utf8.RuneCountInString(strings.TrimSpace(donor.Subtitle))
+	longestPoint := longestPointRunes(donor.Points)
+	totalPoints := totalRunes(donor.Points...)
+	if subtitleLen <= 56 && longestPoint <= 52 {
+		return explainerLayoutChoice{Layout: "content", Variant: "bullets-callout"}
+	}
+	if subtitleLen <= 72 && totalPoints <= 190 {
+		return explainerLayoutChoice{Layout: "content", Variant: "bullets-band"}
+	}
+	return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "bullets-plain", "bullets-band")}
+}
+
+func chooseExplainerCoreWaysChoice(_ officegen.Slide, donor officegen.Slide, state explainerVariantState) explainerLayoutChoice {
+	safeFallback := normalizeSections([]officegen.SlideSection{
+		{Heading: "Explore", Detail: "Walk through new places and notice how the world opens up."},
+		{Heading: "Gather", Detail: "Collect basic materials, food, and tools from the world."},
+		{Heading: "Build", Detail: "Turn what you find into shelter, tools, and bigger ideas."},
+	}, 3)
+	if looksLikeSequentialExplainerSlide(donor) || looksLikePlayLoopSlide(donor) || isEmptyNormalizedSlide(donor) {
+		if longestSectionDetailRunes(safeFallback) <= 62 {
+			return explainerLayoutChoice{Layout: "timeline", Variant: pickUnusedExplainerVariant(state, "timeline-axis", "timeline-zigzag")}
+		}
+		return explainerLayoutChoice{Layout: "timeline", Variant: pickUnusedExplainerVariant(state, "timeline-steps", "timeline-axis")}
+	}
+	return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "sections-grid-staggered", "sections-grid-3up")}
+}
+
+func chooseExplainerStandoutChoice(slot, donor officegen.Slide, state explainerVariantState) explainerLayoutChoice {
+	safeComparison := normalizeSections(slot.Sections, 2)
+	if looksLikeContrastExplainerSlide(donor) || len(safeComparison) <= 2 {
+		if longestSectionDetailRunes(safeComparison) <= 58 {
+			return explainerLayoutChoice{Layout: "comparison", Variant: pickUnusedExplainerVariant(state, "comparison-vs-band", "comparison-spotlight", "comparison-columns")}
+		}
+		return explainerLayoutChoice{Layout: "comparison", Variant: pickUnusedExplainerVariant(state, "comparison-columns", "comparison-spotlight")}
+	}
+	if longestSectionDetailRunes(slot.Sections) <= 58 {
+		return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "sections-grid-band", "sections-grid-3up")}
+	}
+	return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "sections-grid-3up", "sections-grid-staggered")}
+}
+
+func chooseExplainerExampleChoice(_ officegen.Slide, donor officegen.Slide, deckTitle string, state explainerVariantState) explainerLayoutChoice {
+	visuals := deriveExplainerVisuals(donor, deckTitle)
+	switch len(visuals) {
+	case 0:
+		return explainerLayoutChoice{Layout: "content", Variant: "bullets-band"}
+	case 1:
+		return explainerLayoutChoice{Layout: "content", Variant: "image-right-focus"}
+	default:
+		return explainerLayoutChoice{Layout: "gallery", Variant: pickUnusedExplainerVariant(state, "gallery-focus", "gallery-duo", "gallery-filmstrip")}
+	}
+}
+
+func chooseExplainerAudienceChoice(slot, donor officegen.Slide, state explainerVariantState) explainerLayoutChoice {
+	safeFallback := normalizeSections(slot.Sections, 3)
+	if len(safeFallback) == 2 && looksLikeContrastExplainerSlide(donor) && longestSectionDetailRunes(safeFallback) <= 80 {
+		return explainerLayoutChoice{Layout: "comparison", Variant: pickUnusedExplainerVariant(state, "comparison-spotlight", "comparison-columns")}
+	}
+	if longestSectionDetailRunes(safeFallback) <= 58 {
+		return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "sections-grid-persona", "sections-grid-staggered")}
+	}
+	return explainerLayoutChoice{Layout: "content", Variant: pickUnusedExplainerVariant(state, "sections-grid-3up", "sections-grid-staggered")}
+}
+
+func chooseExplainerStartChoice(_ officegen.Slide, donor officegen.Slide, state explainerVariantState) explainerLayoutChoice {
+	sections := deriveExplainerSections(donor, nil, 2, 3)
+	longestDetail := longestSectionDetailRunes(sections)
+	if (looksLikeSequentialExplainerSlide(donor) || looksLikeStarterSlide(donor) || isEmptyNormalizedSlide(donor)) && longestDetail <= 78 {
+		return explainerLayoutChoice{Layout: "timeline", Variant: pickUnusedExplainerVariant(state, "timeline-steps", "timeline-zigzag")}
+	}
+	return explainerLayoutChoice{Layout: "closing", Variant: pickUnusedExplainerVariant(state, "closing-checklist", "closing-cards-light", "closing-takeaway")}
+}
+
+func pickUnusedExplainerVariant(state explainerVariantState, candidates ...string) string {
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if !containsString(state.usedVariants, candidate) {
+			return candidate
+		}
+	}
+	for _, candidate := range candidates {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func hasReliableExplainerHeroImage(slide officegen.Slide) bool {
+	return slide.HasImage && strings.TrimSpace(slide.ImagePrompt) != ""
+}
+
+func hasReliableExplainerImage(slide officegen.Slide) bool {
+	if hasReliableExplainerHeroImage(slide) {
+		return true
+	}
+	for _, visual := range slide.Visuals {
+		if strings.TrimSpace(visual.Prompt) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultExplainerSlides(deckTitle string, enableImages bool) []officegen.Slide {
+	slides := []officegen.Slide{
+		{
+			Title:         firstNonEmpty(deckTitle, "Topic Explainer"),
+			Layout:        "title",
+			IsTitle:       true,
+			NarrativeRole: "cover",
+			Subtitle:      "A direct, beginner-friendly walkthrough of what it is, why it stands out, and how to get started",
+		},
+		{
+			Title:         "What It Is",
+			Layout:        "content",
+			Variant:       "bullets",
+			NarrativeRole: "summary",
+			Subtitle:      "Start with the core idea in plain language",
+			Points: []string{
+				"Minecraft is a sandbox game where players shape their own experience.",
+				"The world is made of simple blocks you can explore, gather, and build with.",
+				"There is no single correct way to play because you set your own goals.",
+			},
+		},
+		{
+			Title:         "Core Ways to Play",
+			Layout:        "timeline",
+			Variant:       "timeline",
+			NarrativeRole: "analysis",
+			Subtitle:      "Focus on the few actions that create most of the experience",
+			Sections: []officegen.SlideSection{
+				{Heading: "Explore", Detail: "Walk through forests, caves, villages, and biomes to find materials and ideas."},
+				{Heading: "Build", Detail: "Turn blocks into shelters, farms, tools, and bigger personal projects."},
+				{Heading: "Survive or Create", Detail: "Choose pressure and challenge, or remove pressure and build freely."},
+			},
+		},
+		{
+			Title:         "Why It Stands Out",
+			Layout:        "comparison",
+			Variant:       "comparison",
+			NarrativeRole: "analysis",
+			Subtitle:      "Highlight the traits that make it memorable and replayable",
+			Sections: []officegen.SlideSection{
+				{Heading: "Freedom", Detail: "There is no single fixed path, so players set their own goals."},
+				{Heading: "Creativity", Detail: "Simple blocks can become homes, machines, towns, or art."},
+			},
+		},
+	}
+	if enableImages {
+		slides = append(slides, officegen.Slide{
+			Title:         "Example / Gameplay Visual",
+			Layout:        "gallery",
+			Variant:       "gallery",
+			NarrativeRole: "analysis",
+			Subtitle:      "Use one concentrated visual example to make the experience concrete",
+			Points: []string{
+				"Notice how the world is built from readable blocks and clear landmarks.",
+				"Notice how exploring, gathering, and building connect into one simple loop.",
+			},
+		})
+	}
+	slides = append(slides,
+		officegen.Slide{
+			Title:         "Who It Suits",
+			Layout:        "content",
+			Variant:       "sections-grid",
+			NarrativeRole: "analysis",
+			Subtitle:      "Different play styles make it approachable for different people",
+			Sections: []officegen.SlideSection{
+				{Heading: "Beginners", Detail: "Simple first steps make the game easy to try."},
+				{Heading: "Creative Players", Detail: "It rewards building, designing, and shaping spaces."},
+				{Heading: "Curious Explorers", Detail: "It fits people who like discovering new places by trying things."},
+			},
+		},
+		officegen.Slide{
+			Title:         "How to Start",
+			Layout:        "timeline",
+			Variant:       "timeline",
+			NarrativeRole: "closing",
+			Subtitle:      "Close with easy first steps",
+			Sections: []officegen.SlideSection{
+				{Heading: "Pick a Mode", Detail: "Start in Creative for freedom or Survival for a gentle challenge."},
+				{Heading: "Try One Small Goal", Detail: "Build a first shelter, gather food, and learn the loop in one short session."},
+				{Heading: "Keep It Small", Detail: "A simple first objective is enough to see whether the game feels fun."},
+			},
+		},
+	)
+	return slides
+}
+
+func explainerBodyDonors(donors []officegen.Slide) []officegen.Slide {
+	if len(donors) <= 1 {
+		return nil
+	}
+	out := make([]officegen.Slide, 0, len(donors)-1)
+	for _, slide := range donors[1:] {
+		switch slideLayoutName(slide) {
+		case "title", "toc", "chapter":
+			continue
+		}
+		if isEmptyNormalizedSlide(slide) {
+			continue
+		}
+		if isExplainerScaffoldNoise(slide.Title) {
+			continue
+		}
+		out = append(out, slide)
+	}
+	return out
+}
+
+func takeExplainerDonor(remaining *[]officegen.Slide, matchers ...func(officegen.Slide) bool) officegen.Slide {
+	if remaining == nil || len(*remaining) == 0 {
+		return officegen.Slide{}
+	}
+	for _, matcher := range matchers {
+		if matcher == nil {
+			continue
+		}
+		for idx, slide := range *remaining {
+			if !matcher(slide) {
+				continue
+			}
+			chosen := slide
+			*remaining = append((*remaining)[:idx], (*remaining)[idx+1:]...)
+			return chosen
+		}
+	}
+	return officegen.Slide{}
+}
+
+func mergeExplainerCover(slot, donor officegen.Slide, deckTitle string, enableImages bool, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	if title := cleanVisibleText(donor.Title); title != "" && !isPlaceholderSlideTitle(title) {
+		out.Title = title
+	}
+	if subtitle := cleanVisibleText(firstNonEmpty(donor.Subtitle, donor.Content)); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if !enableImages {
+		return out
+	}
+	out.HasImage = true
+	out.ImagePos = normalizeImagePosition(firstNonEmpty(donor.ImagePos, "background"))
+	out.ImagePrompt = fitTextForLayout(strings.TrimSpace(firstNonEmpty(donor.ImagePrompt, buildFallbackImagePrompt(out, deckTitle))), 240)
+	if choice.Variant == "title-center-hero" || choice.Variant == "title-split-hero" {
+		out.ImagePos = "background"
+	}
+	return out
+}
+
+func buildExplainerWhatItIsSlide(slot, donor officegen.Slide, deckTitle string, enableImages bool, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "summary"
+	out.Points = deriveExplainerPoints(donor, slot.Points, 2, 3)
+	if longestPointRunes(out.Points) > 88 || totalRunes(out.Points...) > 190 {
+		out.Points = normalizePoints(slot.Points, 3, 0)
+	}
+	out.Sections = nil
+	out.Visuals = nil
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 78 {
+		out.Subtitle = slot.Subtitle
+	}
+	if enableImages {
+		if prompt, ok := extractReliableExplainerImagePrompt(donor); ok {
+			out.HasImage = true
+			out.ImagePrompt = fitTextForLayout(prompt, 240)
+			if choice.Variant == "image-left-editorial" {
+				out.ImagePos = "left"
+			} else {
+				out.ImagePos = "right"
+			}
+			if len(out.Points) > 2 {
+				out.Points = out.Points[:2]
+			}
+			return out
+		}
+	}
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	return out
+}
+
+func buildExplainerCoreWaysSlide(slot, donor officegen.Slide, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "analysis"
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 78 {
+		out.Subtitle = slot.Subtitle
+	}
+	sections := deriveExplainerSections(donor, slot.Sections, 3, 3)
+	if longestSectionDetailRunes(sections) > 84 || totalSectionRunes(sections) > 240 {
+		sections = normalizeSections(slot.Sections, 3)
+	}
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	out.Visuals = nil
+	out.Points = nil
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	if choice.Layout == "timeline" {
+		out.Sections = sections
+		return out
+	}
+	out.Sections = sections
+	return out
+}
+
+func buildExplainerStandoutSlide(slot, donor officegen.Slide, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "analysis"
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 72 {
+		out.Subtitle = slot.Subtitle
+	}
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	out.Visuals = nil
+	out.Points = nil
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	comparisonFallback := slot.Sections
+	gridFallback := append([]officegen.SlideSection(nil), slot.Sections...)
+	gridFallback = append(gridFallback, officegen.SlideSection{Heading: "Replay Value", Detail: "The same world can keep feeling fresh because goals are self-directed."})
+	comparisonSections := deriveExplainerSections(donor, comparisonFallback, 2, 2)
+	if longestSectionDetailRunes(comparisonSections) > 80 {
+		comparisonSections = normalizeSections(comparisonFallback, 2)
+	}
+	if choice.Layout == "comparison" {
+		out.Sections = comparisonSections
+		return out
+	}
+	out.Sections = deriveExplainerSections(donor, gridFallback, 3, 3)
+	if longestSectionDetailRunes(out.Sections) > 72 || totalSectionRunes(out.Sections) > 220 {
+		out.Sections = normalizeSections(gridFallback, 3)
+	}
+	return out
+}
+
+func buildExplainerExampleSlide(slot, donor officegen.Slide, deckTitle string, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "analysis"
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 72 {
+		out.Subtitle = slot.Subtitle
+	}
+	out.Points = deriveExplainerPoints(donor, slot.Points, 2, 2)
+	if longestPointRunes(out.Points) > 72 {
+		out.Points = normalizePoints(slot.Points, 2, 0)
+	}
+	out.Sections = nil
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	if choice.Layout == "gallery" || choice.Variant == "image-right-focus" {
+		out.Visuals = deriveExplainerVisuals(donor, deckTitle)
+	}
+	if choice.Variant == "image-right-focus" && len(out.Visuals) > 0 {
+		visual := out.Visuals[0]
+		out.HasImage = true
+		out.ImageData = visual.ImageData
+		out.ImageMIME = visual.ImageMIME
+		out.ImagePrompt = visual.Prompt
+		out.ImagePos = "right"
+		out.Visuals = nil
+	}
+	if strings.HasPrefix(choice.Variant, "bullets") {
+		out.Layout = "content"
+		out.HasImage = false
+		out.ImagePrompt = ""
+		out.ImagePos = ""
+		out.Visuals = nil
+	}
+	return out
+}
+
+func buildExplainerAudienceSlide(slot, donor officegen.Slide, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "analysis"
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 72 {
+		out.Subtitle = slot.Subtitle
+	}
+	fallback := slot.Sections
+	sections := deriveExplainerSections(donor, fallback, 2, 3)
+	if longestSectionDetailRunes(sections) > 72 || totalSectionRunes(sections) > 220 {
+		sections = normalizeSections(fallback, 3)
+	}
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	out.Visuals = nil
+	out.Points = nil
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	if choice.Layout == "comparison" {
+		out.Sections = sections
+		return out
+	}
+	out.Sections = deriveExplainerSections(donor, fallback, 3, 3)
+	return out
+}
+
+func buildExplainerStartSlide(slot, donor officegen.Slide, choice explainerLayoutChoice) officegen.Slide {
+	out := slot
+	out.Layout = choice.Layout
+	out.Variant = choice.Variant
+	out.NarrativeRole = "closing"
+	if subtitle := cleanVisibleText(donor.Subtitle); subtitle != "" && !looksLikeBusinessNarrative(subtitle) {
+		out.Subtitle = subtitle
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(out.Subtitle)) > 72 {
+		out.Subtitle = slot.Subtitle
+	}
+	fallback := slot.Sections
+	sections := deriveExplainerSections(donor, fallback, 2, 3)
+	if longestSectionDetailRunes(sections) > 72 || totalSectionRunes(sections) > 220 {
+		sections = normalizeSections(fallback, 3)
+	}
+	out.HasImage = false
+	out.ImagePrompt = ""
+	out.ImagePos = ""
+	out.Visuals = nil
+	out.Points = nil
+	out.Content = ""
+	out.Metrics = nil
+	out.Chart = nil
+	out.Source = ""
+	if choice.Layout == "timeline" {
+		out.Sections = sections
+		return out
+	}
+	out.Sections = sections
+	return out
+}
+
+func deriveExplainerPoints(donor officegen.Slide, fallback []string, minCount, maxCount int) []string {
+	points := make([]string, 0, maxCount)
+	for _, point := range normalizePoints(donor.Points, maxCount, 0) {
+		if point != "" {
+			points = append(points, point)
+		}
+	}
+	if len(points) == 0 {
+		for _, section := range normalizeSections(donor.Sections, maxCount) {
+			point := cleanVisibleText(firstNonEmpty(section.Detail, section.Heading))
+			if point != "" {
+				points = append(points, point)
+			}
+		}
+	}
+	if len(points) == 0 {
+		for _, point := range splitContentToPoints(cleanVisibleText(donor.Content), maxCount) {
+			if point != "" {
+				points = append(points, point)
+			}
+		}
+	}
+	if len(points) == 0 {
+		points = append(points, fallback...)
+	}
+	for _, point := range fallback {
+		if len(points) >= minCount {
+			break
+		}
+		point = cleanVisibleText(point)
+		if point == "" || containsString(points, point) {
+			continue
+		}
+		points = append(points, point)
+	}
+	if maxCount > 0 && len(points) > maxCount {
+		points = points[:maxCount]
+	}
+	return normalizePoints(points, maxCount, 0)
+}
+
+func deriveExplainerSections(donor officegen.Slide, fallback []officegen.SlideSection, minCount, maxCount int) []officegen.SlideSection {
+	sections := make([]officegen.SlideSection, 0, maxCount)
+	if len(donor.Sections) > 0 {
+		sections = append(sections, normalizeSections(donor.Sections, maxCount)...)
+	} else if len(donor.Points) > 0 {
+		sections = append(sections, pointsToSummarySections(donor.Points, maxCount)...)
+	} else if content := cleanVisibleText(donor.Content); content != "" {
+		sections = append(sections, pointsToSummarySections(splitContentToPoints(content, maxCount), maxCount)...)
+	}
+	for idx := range sections {
+		if idx >= len(fallback) {
+			break
+		}
+		if isGenericExplainerHeading(sections[idx].Heading) {
+			sections[idx].Heading = fallback[idx].Heading
+		}
+		if strings.TrimSpace(sections[idx].Detail) == "" {
+			sections[idx].Detail = fallback[idx].Detail
+		}
+	}
+	if len(sections) == 0 {
+		sections = append(sections, fallback...)
+	}
+	for _, section := range fallback {
+		if len(sections) >= minCount {
+			break
+		}
+		sections = append(sections, section)
+	}
+	if maxCount > 0 && len(sections) > maxCount {
+		sections = sections[:maxCount]
+	}
+	return normalizeSections(sections, maxCount)
+}
+
+func deriveExplainerVisuals(donor officegen.Slide, deckTitle string) []officegen.SlideVisual {
+	if visuals := normalizeSlideVisuals(donor.Visuals, 2); len(visuals) > 0 {
+		return visuals
+	}
+	if prompt, ok := extractReliableExplainerImagePrompt(donor); ok {
+		return []officegen.SlideVisual{{
+			Label:   firstNonEmpty(cleanVisibleText(donor.Title), "Gameplay"),
+			Prompt:  fitTextForLayout(prompt, 240),
+			Caption: cleanVisibleText(firstNonEmpty(donor.Subtitle, "Focused visual example")),
+		}}
+	}
+	return defaultExplainerVisuals(deckTitle)
+}
+
+func extractReliableExplainerImagePrompt(slide officegen.Slide) (string, bool) {
+	if prompt := strings.TrimSpace(slide.ImagePrompt); prompt != "" {
+		return prompt, true
+	}
+	for _, visual := range slide.Visuals {
+		if prompt := strings.TrimSpace(visual.Prompt); prompt != "" {
+			return prompt, true
+		}
+	}
+	return "", false
+}
+
+func defaultExplainerVisuals(deckTitle string) []officegen.SlideVisual {
+	titleText := strings.ToLower(strings.TrimSpace(deckTitle))
+	if strings.Contains(titleText, "minecraft") {
+		return []officegen.SlideVisual{
+			{
+				Label:   "World View",
+				Prompt:  fitTextForLayout("Minecraft gameplay scene, blocky voxel sandbox world, cubic terrain, forests and plains biomes, simple survival shelter, no hand-painted fantasy art, no corporate diagram, no text overlay", 240),
+				Caption: "A blocky voxel world makes the sandbox instantly recognizable",
+			},
+			{
+				Label:   "Craft and Build",
+				Prompt:  fitTextForLayout("Minecraft-like crafting and building scene, crafting table, wooden tools, block building in progress, cozy shelter, voxel lighting, no workshop illustration, no corporate infographic, no text overlay", 240),
+				Caption: "Crafting and building show the loop in one glance",
+			},
+		}
+	}
+	return []officegen.SlideVisual{
+		{
+			Label:   "Example",
+			Prompt:  fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(officegen.Slide{Title: deckTitle, Subtitle: "Concrete example scene"}, deckTitle)), 240),
+			Caption: "One strong example helps the audience picture the experience",
+		},
+		{
+			Label:   "How It Feels",
+			Prompt:  fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(officegen.Slide{Title: deckTitle, Subtitle: "Immersive real-world style usage scene"}, deckTitle)), 240),
+			Caption: "A second visual keeps the explanation grounded and memorable",
+		},
+	}
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func isGenericExplainerHeading(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case text == "":
+		return true
+	case strings.HasPrefix(text, "takeaway"),
+		strings.HasPrefix(text, "point"),
+		strings.HasPrefix(text, "item"),
+		strings.HasPrefix(text, "step"),
+		strings.HasPrefix(text, "section"):
+		return true
+	default:
+		return false
+	}
+}
+
+func isExplainerScaffoldNoise(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	for _, keyword := range []string{"contents", "agenda", "chapter", "next steps", "rollout", "decision"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeBusinessNarrative(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	for _, keyword := range []string{"rollout", "owner", "milestone", "next step", "decision", "executive summary", "business review"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeAudienceFitSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"who it suits", "good fit", "beginners", "players", "audience", "适合", "新手", "玩家", "受众"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeStarterSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"how to start", "first step", "start", "begin", "try", "mode", "starter", "how to", "开始", "入门", "第一步", "先试"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikePlayLoopSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"play", "gameplay", "how it works", "loop", "build", "craft", "gather", "explore", "mode", "怎么玩", "玩法", "机制", "探索", "建造", "合成"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeWhatItIsSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, keyword := range []string{"what it is", "what is", "overview", "introduction", "basic idea", "basics", "概述", "介绍", "是什么", "简介"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeGenericExplainerOverviewSlide(slide officegen.Slide) bool {
+	if isEmptyNormalizedSlide(slide) {
+		return false
+	}
+	if looksLikePlayLoopSlide(slide) || looksLikeStandoutSlide(slide) || looksLikeAudienceFitSlide(slide) || looksLikeStarterSlide(slide) || looksLikeExampleVisualSlide(slide) {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	for _, keyword := range []string{"overview", "summary", "intro", "guide", "understand", "quick look", "概览", "总览", "了解"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return len(slide.Points) > 0 || len(slide.Sections) > 0 || strings.TrimSpace(slide.Content) != ""
+}
+
+func looksLikeExampleVisualSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	if len(slide.Visuals) > 0 || strings.TrimSpace(slide.ImagePrompt) != "" || slide.HasImage {
+		return true
+	}
+	for _, keyword := range []string{"example", "scene", "visual", "gameplay", "screenshot", "demo", "示例", "画面", "场景", "演示"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeSequentialExplainerSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"step", "first", "then", "next", "start", "begin", "loop", "mode", "pick", "try", "timeline", "步骤", "开始", "然后", "接着", "下一步", "先"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeContrastExplainerSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"difference", "versus", "vs", "compare", "contrast", "modes", "types", "options", "对比", "区别", "模式", "类型"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeStandoutSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, point := range slide.Points {
+		text += " " + strings.ToLower(strings.TrimSpace(point))
+	}
+	for _, keyword := range []string{"stand out", "why it stands out", "special", "unique", "freedom", "creative", "replay", "memorable", "亮点", "特别", "自由", "创意", "重复可玩"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func buildFallbackImagePrompt(slide officegen.Slide, deckTitle string) string {
+	subject := firstNonEmpty(cleanVisibleText(slide.Title), cleanVisibleText(deckTitle), "Presentation topic")
+	fragments := make([]string, 0, 4)
+	if subtitle := cleanVisibleText(slide.Subtitle); subtitle != "" {
+		fragments = append(fragments, subtitle)
+	}
+	for _, section := range slide.Sections {
+		if len(fragments) >= 3 {
+			break
+		}
+		fragment := firstNonEmpty(cleanVisibleText(section.Heading), cleanVisibleText(section.Detail))
+		if fragment != "" {
+			fragments = append(fragments, fragment)
+		}
+	}
+	for _, point := range slide.Points {
+		if len(fragments) >= 3 {
+			break
+		}
+		if cleaned := cleanVisibleText(point); cleaned != "" {
+			fragments = append(fragments, cleaned)
+		}
+	}
+	scene := strings.Join(fragments, "; ")
+	styleHint := "editorial-light presentation visual, strong composition, no text overlay"
+	lower := strings.ToLower(strings.TrimSpace(subject + " " + scene))
+	switch {
+	case strings.Contains(lower, "minecraft"):
+		styleHint = "blocky voxel sandbox, Minecraft-like cubic terrain, crafting, biomes, survival shelter, block building, avoid hand-painted fantasy, workshop illustration, corporate diagram, no text overlay"
+	case looksLikeGameSlide(slide):
+		styleHint = "focused gameplay-style scene, immersive environment, polished editorial composition, no text overlay"
+	case slide.NarrativeRole == "cover":
+		styleHint = "editorial-light cover hero image, atmospheric composition, polished lighting, no text overlay"
+	}
+	return trimRunes(strings.TrimSpace(strings.Join([]string{subject, scene, styleHint}, ". ")), 320)
+}
+
+func looksLikeGameSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
+	for _, keyword := range []string{"game", "gameplay", "world", "character", "sandbox", "minecraft", "游戏", "玩法", "世界", "角色", "沙盒"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func suggestStylePreset(style string, archetype pptxArchetype, topic string) string {
 	text := strings.ToLower(strings.TrimSpace(style))
+	topicText := strings.ToLower(strings.TrimSpace(topic))
 	switch {
 	case text == officegen.StylePresetExecutiveDark,
 		strings.Contains(text, "board"),
@@ -1036,31 +2227,80 @@ func suggestStylePreset(style string, archetype pptxArchetype) string {
 		strings.Contains(text, "executive"):
 		return officegen.StylePresetExecutiveDark
 	case text == officegen.StylePresetEditorialLight,
+		text == officegen.StylePresetExplainerVoxel,
 		strings.Contains(text, "editorial"),
 		strings.Contains(text, "magazine"),
 		strings.Contains(text, "light background"),
 		strings.Contains(text, "light"):
+		if text == officegen.StylePresetExplainerVoxel || strings.Contains(text, "voxel") || strings.Contains(text, "sandbox") {
+			return officegen.StylePresetExplainerVoxel
+		}
 		return officegen.StylePresetEditorialLight
 	case text == officegen.StylePresetTrainingManual,
 		strings.Contains(text, "training"),
 		strings.Contains(text, "tutorial"),
 		strings.Contains(text, "manual"):
 		return officegen.StylePresetTrainingManual
+	case text == officegen.StylePresetInvestorWarm,
+		strings.Contains(text, "investor"),
+		strings.Contains(text, "fundraising"),
+		strings.Contains(text, "pitch"),
+		strings.Contains(text, "融资"),
+		strings.Contains(text, "路演"):
+		return officegen.StylePresetInvestorWarm
+	case text == officegen.StylePresetProjectForest,
+		strings.Contains(text, "project"),
+		strings.Contains(text, "implementation"),
+		strings.Contains(text, "delivery plan"),
+		strings.Contains(text, "项目"),
+		strings.Contains(text, "实施"),
+		strings.Contains(text, "里程碑"):
+		return officegen.StylePresetProjectForest
+	case text == officegen.StylePresetReviewCopper,
+		strings.Contains(text, "review"),
+		strings.Contains(text, "quarterly"),
+		strings.Contains(text, "board"),
+		strings.Contains(text, "复盘"),
+		strings.Contains(text, "经营"),
+		strings.Contains(text, "季度"):
+		return officegen.StylePresetReviewCopper
+	case text == officegen.StylePresetSlateSerif,
+		strings.Contains(text, "collaboration"),
+		strings.Contains(text, "procurement"),
+		strings.Contains(text, "sales"),
+		strings.Contains(text, "采购"),
+		strings.Contains(text, "协作"),
+		strings.Contains(text, "平台"):
+		return officegen.StylePresetSlateSerif
 	case text == officegen.StylePresetTechContrast,
 		strings.Contains(text, "tech"),
 		strings.Contains(text, "contrast"),
 		strings.Contains(text, "technical"):
 		return officegen.StylePresetTechContrast
 	}
+	switch {
+	case strings.Contains(topicText, "融资"), strings.Contains(topicText, "路演"), strings.Contains(topicText, "investor"), strings.Contains(topicText, "fundraising"), strings.Contains(topicText, "pitch deck"):
+		return officegen.StylePresetInvestorWarm
+	case strings.Contains(topicText, "采购"), strings.Contains(topicText, "协作平台"), strings.Contains(topicText, "enterprise collaboration"), strings.Contains(topicText, "sales presentation"), strings.Contains(topicText, "value interpretation"):
+		return officegen.StylePresetSlateSerif
+	case strings.Contains(topicText, "项目方案"), strings.Contains(topicText, "实施方案"), strings.Contains(topicText, "里程碑"), strings.Contains(topicText, "resource plan"), strings.Contains(topicText, "project implementation"):
+		return officegen.StylePresetProjectForest
+	case strings.Contains(topicText, "培训"), strings.Contains(topicText, "入职"), strings.Contains(topicText, "新员工"), strings.Contains(topicText, "onboarding"), strings.Contains(topicText, "tutorial"):
+		return officegen.StylePresetTrainingManual
+	case strings.Contains(topicText, "复盘"), strings.Contains(topicText, "经营"), strings.Contains(topicText, "quarterly review"), strings.Contains(topicText, "business review"), strings.Contains(topicText, "board update"):
+		return officegen.StylePresetReviewCopper
+	}
 	switch archetype {
-	case pptxArchetypeCompany, pptxArchetypeOps:
-		return officegen.StylePresetExecutiveDark
+	case pptxArchetypeCompany:
+		return officegen.StylePresetSlateSerif
+	case pptxArchetypeOps:
+		return officegen.StylePresetReviewCopper
 	case pptxArchetypeMarket:
-		return officegen.StylePresetEditorialLight
+		return officegen.StylePresetInvestorWarm
 	case pptxArchetypeTraining:
 		return officegen.StylePresetTrainingManual
 	case pptxArchetypeExplainer:
-		return officegen.StylePresetTechContrast
+		return officegen.StylePresetExplainerVoxel
 	default:
 		return officegen.StylePresetTechContrast
 	}
@@ -1442,8 +2682,6 @@ func summaryTitleForArchetype(archetype pptxArchetype) string {
 		return "Business Takeaways"
 	case pptxArchetypeTraining:
 		return "Learning Goals"
-	case pptxArchetypeExplainer:
-		return "What It Is"
 	default:
 		return "Executive Summary"
 	}
@@ -1459,8 +2697,6 @@ func summarySubtitleForArchetype(archetype pptxArchetype) string {
 		return "Start with the operating conclusion, then show what is driving it"
 	case pptxArchetypeTraining:
 		return "Clarify what the audience should learn before stepping into detail"
-	case pptxArchetypeExplainer:
-		return "Start with the core idea, then show why the topic is worth exploring"
 	default:
 		return "Lead with the decision, then support it slide by slide"
 	}
@@ -1476,8 +2712,6 @@ func actionTitleForArchetype(archetype pptxArchetype) string {
 		return "Execution Actions"
 	case pptxArchetypeTraining:
 		return "Next Practice Steps"
-	case pptxArchetypeExplainer:
-		return "How to Start"
 	default:
 		return "Next Steps"
 	}
@@ -1493,8 +2727,6 @@ func actionSubtitleForArchetype(archetype pptxArchetype) string {
 		return "Close with repair actions, owner, and the metric to track"
 	case pptxArchetypeTraining:
 		return "Close with the next commands, practice loop, and caution points"
-	case pptxArchetypeExplainer:
-		return "Close with beginner tips, who it suits, and what to try first"
 	default:
 		return "Close with a small set of actions, owners, and validation points"
 	}
@@ -1512,7 +2744,7 @@ func looksLikeOverviewSlide(slide officegen.Slide) bool {
 
 func looksLikeClosingSlide(slide officegen.Slide) bool {
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action", "how to start", "key takeaway", "who it's for", "下一步", "行动", "决策", "建议", "推进", "实施计划", "落地路径", "如何开始", "适合谁", "核心结论"} {
+	for _, keyword := range []string{"next step", "next action", "decision", "recommendation", "rollout", "plan", "action"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -1578,8 +2810,11 @@ func isPlaceholderSlideTitle(value string) bool {
 func normalizeSlideVariant(slide officegen.Slide) string {
 	switch strings.TrimSpace(slide.Layout) {
 	case "title":
-		if strings.TrimSpace(slide.Variant) == "title-split" {
-			return "title-split"
+		switch strings.TrimSpace(slide.Variant) {
+		case "title-split", "title-split-hero":
+			return strings.TrimSpace(slide.Variant)
+		case "title-center-hero", "title-center-minimal":
+			return strings.TrimSpace(slide.Variant)
 		}
 		return "title-center"
 	case "toc":
@@ -1587,12 +2822,28 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 	case "chapter":
 		return "chapter"
 	case "gallery":
+		switch strings.TrimSpace(slide.Variant) {
+		case "gallery-duo", "gallery-filmstrip", "gallery-focus":
+			return strings.TrimSpace(slide.Variant)
+		}
 		return "gallery"
 	case "comparison":
+		switch strings.TrimSpace(slide.Variant) {
+		case "comparison-columns", "comparison-vs-band", "comparison-spotlight":
+			return strings.TrimSpace(slide.Variant)
+		}
 		return "comparison"
 	case "timeline":
+		switch strings.TrimSpace(slide.Variant) {
+		case "timeline-axis", "timeline-steps", "timeline-zigzag":
+			return strings.TrimSpace(slide.Variant)
+		}
 		return "timeline"
 	case "closing":
+		switch strings.TrimSpace(slide.Variant) {
+		case "closing-checklist", "closing-takeaway", "closing-cards-light":
+			return strings.TrimSpace(slide.Variant)
+		}
 		return "closing"
 	case "chart":
 		return "chart-focus"
@@ -1600,7 +2851,13 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 		return "kpi-band"
 	default:
 		switch strings.TrimSpace(slide.Variant) {
-		case "sections-grid", "comparison", "timeline", "image-right", "gallery", "closing", "bullets":
+		case "sections-grid", "sections-grid-3up", "sections-grid-staggered", "sections-grid-band", "sections-grid-persona",
+			"comparison", "comparison-columns", "comparison-vs-band", "comparison-spotlight",
+			"timeline", "timeline-axis", "timeline-steps", "timeline-zigzag",
+			"image-right", "image-right-editorial", "image-left-editorial", "image-right-focus",
+			"gallery", "gallery-duo", "gallery-filmstrip", "gallery-focus",
+			"closing", "closing-checklist", "closing-takeaway", "closing-cards-light",
+			"bullets", "bullets-plain", "bullets-band", "bullets-callout":
 			return strings.TrimSpace(slide.Variant)
 		}
 		if slide.HasImage {
@@ -1622,17 +2879,116 @@ func expandSlideForDensity(slide officegen.Slide) []officegen.Slide {
 		return []officegen.Slide{slide}
 	}
 	switch {
-	case len(slide.Points) > 4:
-		return splitSlidePoints(slide, 4)
-	case slide.HasImage && len(slide.Points) > 3:
-		return splitSlidePoints(slide, 3)
-	case len(slide.Sections) > 3:
-		return splitSlideSections(slide, 3)
-	case len(slide.Metrics) > 4:
-		return splitSlideMetrics(slide, 4)
+	case shouldSplitPointsSlide(slide):
+		chunk := 4
+		if slide.HasImage || longestPointRunes(slide.Points) > 80 || totalRunes(slide.Points...) > 200 {
+			chunk = 3
+		}
+		if totalRunes(slide.Points...) > 260 && len(slide.Points) > 2 {
+			chunk = 2
+		}
+		return splitSlidePoints(slide, chunk)
+	case shouldSplitSectionsSlide(slide):
+		chunk := 3
+		if len(slide.Sections) > 3 || longestSectionHeadingRunes(slide.Sections) > 28 || longestSectionDetailRunes(slide.Sections) > 110 || totalSectionRunes(slide.Sections) > 280 {
+			chunk = 2
+		}
+		return splitSlideSections(slide, chunk)
+	case shouldSplitMetricsSlide(slide):
+		chunk := 4
+		if totalMetricRunes(slide.Metrics) > 160 && len(slide.Metrics) > 2 {
+			chunk = 2
+		} else if len(slide.Metrics) > 3 {
+			chunk = 3
+		}
+		return splitSlideMetrics(slide, chunk)
 	default:
 		return []officegen.Slide{slide}
 	}
+}
+
+func shouldSplitPointsSlide(slide officegen.Slide) bool {
+	if len(slide.Points) > 4 {
+		return true
+	}
+	if slide.HasImage && len(slide.Points) > 2 {
+		return true
+	}
+	return longestPointRunes(slide.Points) > 80 || totalRunes(slide.Points...) > 220
+}
+
+func shouldSplitSectionsSlide(slide officegen.Slide) bool {
+	if len(slide.Sections) > 3 {
+		return true
+	}
+	if len(slide.Sections) == 0 {
+		return false
+	}
+	return longestSectionHeadingRunes(slide.Sections) > 28 || longestSectionDetailRunes(slide.Sections) > 110 || totalSectionRunes(slide.Sections) > 280
+}
+
+func shouldSplitMetricsSlide(slide officegen.Slide) bool {
+	if len(slide.Metrics) > 4 {
+		return true
+	}
+	return len(slide.Metrics) > 2 && totalMetricRunes(slide.Metrics) > 180
+}
+
+func totalRunes(values ...string) int {
+	total := 0
+	for _, value := range values {
+		total += utf8.RuneCountInString(strings.TrimSpace(value))
+	}
+	return total
+}
+
+func longestPointRunes(points []string) int {
+	longest := 0
+	for _, point := range points {
+		if size := utf8.RuneCountInString(strings.TrimSpace(point)); size > longest {
+			longest = size
+		}
+	}
+	return longest
+}
+
+func longestSectionHeadingRunes(sections []officegen.SlideSection) int {
+	longest := 0
+	for _, section := range sections {
+		if size := utf8.RuneCountInString(strings.TrimSpace(section.Heading)); size > longest {
+			longest = size
+		}
+	}
+	return longest
+}
+
+func longestSectionDetailRunes(sections []officegen.SlideSection) int {
+	longest := 0
+	for _, section := range sections {
+		if size := utf8.RuneCountInString(strings.TrimSpace(section.Detail)); size > longest {
+			longest = size
+		}
+	}
+	return longest
+}
+
+func totalSectionRunes(sections []officegen.SlideSection) int {
+	total := 0
+	for _, section := range sections {
+		total += utf8.RuneCountInString(strings.TrimSpace(section.Heading))
+		total += utf8.RuneCountInString(strings.TrimSpace(section.Detail))
+	}
+	return total
+}
+
+func totalMetricRunes(metrics []officegen.MetricCard) int {
+	total := 0
+	for _, metric := range metrics {
+		total += utf8.RuneCountInString(strings.TrimSpace(metric.Label))
+		total += utf8.RuneCountInString(strings.TrimSpace(metric.Value))
+		total += utf8.RuneCountInString(strings.TrimSpace(metric.Note))
+	}
+	return total
 }
 
 func splitSlidePoints(slide officegen.Slide, chunk int) []officegen.Slide {
@@ -1743,7 +3099,7 @@ func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {
 		limit = 5
 	}
 	for idx := 0; idx < limit; idx++ {
-		category := fitTextForLayout(cleanSentence(chart.Categories[idx]), 10)
+		category := trimChartLabel(cleanVisibleText(chart.Categories[idx]), 10)
 		if category == "" {
 			continue
 		}
@@ -1763,7 +3119,7 @@ func normalizeChart(chart *officegen.ChartData) *officegen.ChartData {
 		Type:       chartType,
 		Categories: categories,
 		Values:     values,
-		Title:      fitTextForLayout(firstNonEmpty(chart.Title, "Key Data Comparison"), 20),
+		Title:      cleanVisibleText(firstNonEmpty(chart.Title, "Key Data Comparison")),
 	}
 }
 
@@ -1798,24 +3154,24 @@ func deriveSlideSubtitle(slide officegen.Slide) string {
 		return "用少量动作收束整套叙事。"
 	case "chart":
 		if len(slide.Points) > 0 {
-			return fitTextForLayout(slide.Points[0], 24)
+			return cleanVisibleText(slide.Points[0])
 		}
 		if slide.Chart != nil {
-			return fitTextForLayout("Start with the takeaway, then support it with data.", 24)
+			return "Start with the takeaway, then support it with data"
 		}
 	case "dashboard":
 		if len(slide.Points) > 0 {
-			return fitTextForLayout(slide.Points[0], 24)
+			return cleanVisibleText(slide.Points[0])
 		}
 		if len(slide.Metrics) > 0 {
 			return "Key metrics and action focus"
 		}
 	}
 	if len(slide.Points) > 0 {
-		return fitTextForLayout(slide.Points[0], 24)
+		return cleanVisibleText(slide.Points[0])
 	}
 	if len(slide.Sections) > 0 {
-		return fitTextForLayout(firstNonEmpty(slide.Sections[0].Detail, slide.Sections[0].Heading), 24)
+		return cleanVisibleText(firstNonEmpty(slide.Sections[0].Detail, slide.Sections[0].Heading))
 	}
 	return ""
 }
@@ -1865,138 +3221,7 @@ func normalizeImagePosition(pos string) string {
 		return "right"
 	}
 }
-func computePPTXImageBudget(slides []officegen.Slide, deckTitle string, enableImages bool) int {
-	if !enableImages || len(slides) == 0 {
-		return 0
-	}
 
-	budget := 1
-	switch {
-	case len(slides) >= 8:
-		budget = 4
-	case len(slides) >= 6:
-		budget = 3
-	case len(slides) >= 4:
-		budget = 2
-	}
-
-	switch detectPPTXArchetype(deckTitle, "") {
-	case pptxArchetypeCompany, pptxArchetypeTraining, pptxArchetypeExplainer:
-		if budget < 4 {
-			budget++
-		}
-	case pptxArchetypeMarket, pptxArchetypeOps:
-		if budget > 2 {
-			budget--
-		}
-	}
-
-	eligible := 0
-	for idx, slide := range slides {
-		role := normalizedSlideNarrativeRole(slide)
-		if role == "" {
-			if idx == 0 {
-				role = "cover"
-			} else {
-				role = "analysis"
-			}
-		}
-		if role == "cover" || role == "analysis" {
-			eligible++
-		}
-	}
-	if eligible < budget {
-		budget = eligible
-	}
-	if budget < 0 {
-		return 0
-	}
-	return budget
-}
-
-func normalizedSlideNarrativeRole(slide officegen.Slide) string {
-	return firstNonEmpty(normalizeNarrativeRole(slide.NarrativeRole), normalizeNarrativeRole(slide.Role))
-}
-
-func defaultImagePositionForSlide(slide officegen.Slide) string {
-	if normalizedSlideNarrativeRole(slide) == "cover" {
-		return "background"
-	}
-	if len(slide.Sections) >= 4 || len(slide.Points) >= 4 {
-		return "top"
-	}
-	return "right"
-}
-
-func shouldAutoAddImagePrompt(slide officegen.Slide, _ bool) bool {
-	role := normalizedSlideNarrativeRole(slide)
-	if role == "cover" {
-		return false
-	}
-	if role != "analysis" {
-		return false
-	}
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"product", "platform", "feature", "capability", "module", "interface", "screen", "scenario", "use case", "training", "workflow", "experience", "demo", "game", "gameplay", "world", "character", "collaboration", "产品", "平台", "功能", "能力", "模块", "界面", "页面", "场景", "案例", "培训", "流程", "体验", "演示", "游戏", "玩法", "世界", "角色", "协作"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func buildFallbackImagePrompt(slide officegen.Slide, deckTitle string) string {
-	subject := firstNonEmpty(slide.Title, deckTitle, "Presentation topic")
-	fragments := make([]string, 0, 4)
-	if subtitle := strings.TrimSpace(slide.Subtitle); subtitle != "" {
-		fragments = append(fragments, cleanSentence(subtitle))
-	}
-	for _, section := range slide.Sections {
-		if len(fragments) >= 3 {
-			break
-		}
-		fragment := firstNonEmpty(section.Heading, section.Detail)
-		if fragment == "" {
-			continue
-		}
-		if strings.TrimSpace(section.Detail) != "" && strings.TrimSpace(section.Heading) != "" {
-			fragment = strings.TrimSpace(section.Heading) + ": " + strings.TrimSpace(section.Detail)
-		}
-		fragments = append(fragments, cleanSentence(fragment))
-	}
-	for _, point := range slide.Points {
-		if len(fragments) >= 3 {
-			break
-		}
-		if cleaned := cleanSentence(point); cleaned != "" {
-			fragments = append(fragments, cleaned)
-		}
-	}
-	if len(fragments) == 0 && strings.TrimSpace(slide.Content) != "" {
-		fragments = append(fragments, cleanSentence(strings.TrimSpace(slide.Content)))
-	}
-
-	scene := strings.Join(fragments, "; ")
-	styleHint := "clean professional presentation visual, no text overlay"
-	if normalizedSlideNarrativeRole(slide) == "cover" {
-		styleHint = "hero visual for a presentation cover, cinematic composition, clean professional lighting, no text overlay"
-	} else if looksLikeGameSlide(slide) {
-		styleHint = "vivid gameplay-style scene, immersive environment, polished composition, no text overlay"
-	} else {
-		styleHint = "editorial product or real-world usage scene, polished composition, professional lighting, no text overlay"
-	}
-	return trimRunes(strings.TrimSpace(strings.Join([]string{subject, scene, styleHint}, ". ")), 180)
-}
-
-func looksLikeGameSlide(slide officegen.Slide) bool {
-	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.Content))
-	for _, keyword := range []string{"game", "gameplay", "world", "character", "sandbox", "minecraft", "游戏", "玩法", "世界", "角色", "沙盒", "minecraft"} {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
-}
 func allowImageForSlide(slide officegen.Slide) bool {
 	switch slideLayoutName(slide) {
 	case "toc", "closing", "chapter", "gallery", "comparison", "timeline", "chart", "dashboard":
@@ -2093,24 +3318,22 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 	switch {
 	case strings.Contains(text, "enterprise collaboration platform"),
 		strings.Contains(text, "协作平台"),
-		strings.Contains(text, "企业协作"),
-		strings.Contains(text, "办公协作"),
-		strings.Contains(text, "saas 产品介绍"),
-		strings.Contains(text, "产品介绍"),
-		strings.Contains(text, "客户方案"):
+		strings.Contains(text, "采购建议"),
+		strings.Contains(text, "value interpretation"),
+		strings.Contains(text, "价值解读"):
 		return pptxArchetypeCompany
 	case strings.Contains(text, "market opportunity") || strings.Contains(text, "market analysis") || strings.Contains(text, "global expansion") ||
-		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海") || strings.Contains(text, "行业研究"):
+		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海"):
 		return pptxArchetypeMarket
 	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review") ||
-		strings.Contains(text, "业务复盘") || strings.Contains(text, "经营分析") || strings.Contains(text, "季度复盘") || strings.Contains(text, "运营复盘") || strings.Contains(text, "数据报告"):
+		strings.Contains(text, "经营复盘") || strings.Contains(text, "季度经营") || strings.Contains(text, "月度经营") || strings.Contains(text, "管理层经营"):
 		return pptxArchetypeOps
 	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
-		strings.Contains(text, "培训") || strings.Contains(text, "上手指南") || strings.Contains(text, "新员工") || strings.Contains(text, "教程"):
+		strings.Contains(text, "培训课件") || strings.Contains(text, "入职培训") || strings.Contains(text, "新员工培训") || strings.Contains(text, "培训"):
 		return pptxArchetypeTraining
-	case strings.Contains(text, "minecraft") || strings.Contains(text, "game") || strings.Contains(text, "video game") || strings.Contains(text, "玩法") ||
-		strings.Contains(text, "游戏") || strings.Contains(text, "科普") || strings.Contains(text, "what is") || strings.Contains(text, "how it works") ||
-		strings.Contains(text, "history of") || strings.Contains(text, "introduction to"):
+	case strings.Contains(text, "minecraft") || strings.Contains(text, "game") || strings.Contains(text, "video game") || strings.Contains(text, "what is") || strings.Contains(text, "how it works") ||
+		strings.Contains(text, "introduction to") || strings.Contains(text, "gameplay") || strings.Contains(text, "history of") ||
+		strings.Contains(text, "游戏") || strings.Contains(text, "玩法") || strings.Contains(text, "介绍") || strings.Contains(text, "科普") || strings.Contains(text, "入门"):
 		return pptxArchetypeExplainer
 	default:
 		return pptxArchetypeGeneral
@@ -2140,11 +3363,11 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - Command-heavy slides should use short command names plus concise explanations. Avoid long prose and truncated commands.
 - Training decks should not use images by default, and example workflows should prefer structured steps over screenshots.`
 	case pptxArchetypeExplainer:
-		return `- For this topic, a strong storyline is usually cover -> what it is -> core mechanics or main parts -> why it stands out -> examples or who it suits -> how to start, but adapt the exact slide count to the prompt.
-- Translate that storyline into patterns: explanation slides=sections-grid or pillar-list, mechanics/features=feature-grid, examples=point-cards or image-right, closing=sections-grid.
-- Slide 2 should quickly define the topic instead of sounding like an executive summary.
-- Closing should use beginner tips, who-it-suits guidance, or key takeaways. Do not use rollout plans, owners, milestones, or decision language.
-- Keep card headings especially short and readable, and prefer splitting dense content into an extra slide over shrinking text aggressively.`
+		return `- For this topic, go straight into the topic with a 6-8 slide explainer arc such as cover -> what it is -> core ways to play or main parts -> why it stands out -> optional example or gameplay visual -> who it suits -> how to start.
+- Do not insert contents or chapter-divider scaffolding for this topic.
+- Keep card headings especially short and readable, and preserve complete visible wording. If content feels crowded, split or reflow it instead of clipping text.
+- If images are enabled, allow one cover hero image and concentrate the remaining 2-3 strong related visuals on the example or gameplay slide.
+- The ending should sound like starter tips or who-it-suits guidance, not owners, milestones, rollout, or executive next steps.`
 	default:
 		return ""
 	}
@@ -2167,8 +3390,6 @@ func enforceArchetypeSkeleton(slides []officegen.Slide, archetype pptxArchetype,
 		enforceOpsSkeleton(slides)
 	case pptxArchetypeTraining:
 		enforceTrainingSkeleton(slides)
-	case pptxArchetypeExplainer:
-		enforceExplainerSkeleton(slides)
 	}
 	return slides
 }
@@ -2226,18 +3447,6 @@ func defaultArchetypeSlide(archetype pptxArchetype, idx int, deckTitle string) o
 			{Title: "Common Commands", Layout: "content", Subtitle: "Memorize the three most common command groups first, then expand usage", Sections: []officegen.SlideSection{{Heading: "Status Check", Detail: "Run config status to verify configuration and dependencies"}, {Heading: "Generate PPT", Detail: "Run new pptx to generate a local PPT file"}, {Heading: "Quality Review", Detail: "Run review pptx for structural and visual review"}}},
 			{Title: "Example Workflow", Layout: "content", Subtitle: "A full practice run should cover generation, checking, and revision", Sections: []officegen.SlideSection{{Heading: "Step 1 Scope", Detail: "Define topic, audience, and style before generating output"}, {Heading: "Step 2 Generate", Detail: "Run new pptx and confirm the file was written successfully"}, {Heading: "Step 3 Review", Detail: "Run review pptx and iterate based on the findings"}}},
 			{Title: "Cautions", Layout: "content", Subtitle: "Validate quality locally before moving into the formal collaboration flow", Sections: []officegen.SlideSection{{Heading: "Validate Locally", Detail: "Keep publishing off by default until output quality is confirmed"}, {Heading: "Complete Config", Detail: "Missing models, image settings, or dependencies will degrade results"}, {Heading: "Keep Commands Intact", Detail: "Preserve full commands, paths, and parameters without truncation"}}},
-		}
-		if idx < len(defaults) {
-			return defaults[idx]
-		}
-	case pptxArchetypeExplainer:
-		defaults := []officegen.Slide{
-			{NarrativeRole: "cover", Role: "cover", Title: firstNonEmpty(deckTitle, "Minecraft Introduction"), Layout: "title", IsTitle: true, Subtitle: "A beginner-friendly overview of what it is, why people enjoy it, and how to get started"},
-			{NarrativeRole: "summary", Role: "summary", Title: "What It Is", Layout: "content", Subtitle: "Start with the basic idea, then frame the experience in plain language", Sections: []officegen.SlideSection{{Heading: "Sandbox World", Detail: "Players explore an open block-based world and decide their own goals"}, {Heading: "Create and Survive", Detail: "The core loop mixes building, gathering, and staying safe from threats"}, {Heading: "Flexible Play", Detail: "It can feel creative, relaxing, social, or challenging depending on the mode"}}},
-			{NarrativeRole: "analysis", Role: "analysis", Title: "Core Mechanics", Layout: "content", Subtitle: "A few simple systems create most of the experience", Sections: []officegen.SlideSection{{Heading: "Build", Detail: "Turn blocks into houses, machines, or entire worlds"}, {Heading: "Explore", Detail: "Travel through caves, villages, and other dimensions to find resources"}, {Heading: "Craft", Detail: "Combine materials into tools, gear, and useful items"}}},
-			{NarrativeRole: "analysis", Role: "analysis", Title: "Why It Stands Out", Layout: "content", Subtitle: "Its appeal comes from freedom, creativity, and replayability", Sections: []officegen.SlideSection{{Heading: "Open-Ended", Detail: "There is no single correct way to play or progress"}, {Heading: "Creative Range", Detail: "Players can design tiny homes, giant cities, or working contraptions"}, {Heading: "Shared Play", Detail: "Friends can build, survive, and experiment together in the same world"}}},
-			{NarrativeRole: "analysis", Role: "analysis", Title: "Who It Suits", Layout: "content", Subtitle: "Different play styles make it approachable for different audiences", Sections: []officegen.SlideSection{{Heading: "Beginners", Detail: "Simple controls and clear goals make the first hour approachable"}, {Heading: "Creative Players", Detail: "Building tools reward imagination and experimentation"}, {Heading: "Challenge Seekers", Detail: "Survival mode, exploration, and self-set goals keep the game engaging"}}},
-			{NarrativeRole: "closing", Role: "closing", Title: "How to Start", Layout: "closing", Subtitle: "Close with easy first steps instead of business next actions", Sections: []officegen.SlideSection{{Heading: "Pick a Mode", Detail: "Creative mode is easiest for learning the basics without pressure"}, {Heading: "Try a Small Goal", Detail: "Start by gathering materials and building a first shelter"}, {Heading: "Learn by Playing", Detail: "A short early session is enough to understand the main loop and see if it fits"}}},
 		}
 		if idx < len(defaults) {
 			return defaults[idx]
@@ -2543,42 +3752,9 @@ func enforceTrainingSkeleton(slides []officegen.Slide) {
 	slides[5].Subtitle = "Validate quality locally before moving into the formal collaboration flow"
 }
 
-func enforceExplainerSkeleton(slides []officegen.Slide) {
-	if len(slides) < 6 {
-		return
-	}
-	slides[1].Title = "What It Is"
-	slides[1].Layout = "content"
-	slides[1].HasImage = false
-	slides[1].Sections = normalizeSections([]officegen.SlideSection{
-		{Heading: "Core Idea", Detail: "Define the topic in plain language before adding detail or judgment"},
-		{Heading: "Main Experience", Detail: "Show what people actually do, feel, or encounter"},
-		{Heading: "Why Notice It", Detail: "Explain why the topic is memorable, useful, or popular"},
-	}, 3)
-	slides[1].Points = nil
-	slides[1].Metrics = nil
-	slides[1].Chart = nil
-	slides[1].Source = ""
-	slides[1].Subtitle = "Start with the core idea, then frame the experience in clear language"
-
-	slides[5].Title = "How to Start"
-	slides[5].Layout = "content"
-	slides[5].HasImage = false
-	slides[5].Sections = normalizeSections([]officegen.SlideSection{
-		{Heading: "First Step", Detail: "Give one low-friction way to begin exploring the topic"},
-		{Heading: "Good Fit", Detail: "Clarify who will likely enjoy or benefit from it most"},
-		{Heading: "Takeaway", Detail: "End with the one idea the audience should remember"},
-	}, 3)
-	slides[5].Points = nil
-	slides[5].Metrics = nil
-	slides[5].Chart = nil
-	slides[5].Source = ""
-	slides[5].Subtitle = "Close with starter guidance and the key takeaway, not rollout actions"
-}
-
 func isActionSlide(slide officegen.Slide) bool {
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
-	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution", "how to start", "key takeaway", "beginner tip", "建议", "下一步", "推进", "计划", "发布", "培训", "路径", "行动", "注意事项", "如何开始", "入门建议", "核心结论"} {
+	for _, keyword := range []string{"recommendation", "next step", "rollout", "plan", "release", "training", "path", "action", "caution", "how to start", "beginner tip", "starter tip", "who it suits", "如何开始", "入门建议"} {
 		if strings.Contains(text, keyword) {
 			return true
 		}
@@ -2587,13 +3763,13 @@ func isActionSlide(slide officegen.Slide) bool {
 }
 
 func pointToSection(point string, idx int) (string, string) {
-	cleaned := cleanSentence(point)
+	cleaned := cleanVisibleText(point)
 	if cleaned == "" {
 		return "", ""
 	}
 	for _, marker := range []string{"within 30 days", "within 60 days", "within 90 days", "weeks 1-2", "weeks 3-6", "weeks 7-10", "this week", "this month"} {
 		if strings.HasPrefix(cleaned, marker) {
-			return fitTextForLayout(marker, 10), fitTextForLayout(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)), 24)
+			return cleanVisibleText(marker), cleanVisibleText(strings.TrimSpace(strings.TrimPrefix(cleaned, marker)))
 		}
 	}
 	for _, sep := range []string{"：", ":"} {
@@ -2601,13 +3777,13 @@ func pointToSection(point string, idx int) (string, string) {
 		if len(parts) != 2 {
 			continue
 		}
-		label := fitTextForLayout(strings.TrimSpace(parts[0]), 10)
-		body := fitTextForLayout(strings.TrimSpace(parts[1]), 24)
+		label := cleanVisibleText(strings.TrimSpace(parts[0]))
+		body := cleanVisibleText(strings.TrimSpace(parts[1]))
 		if label != "" && body != "" {
 			return label, body
 		}
 	}
-	return fmt.Sprintf("Step %d", idx+1), fitTextForLayout(cleaned, 24)
+	return fmt.Sprintf("Step %d", idx+1), cleanVisibleText(cleaned)
 }
 
 func fitTextForLayout(value string, maxRunes int) string {
@@ -2630,7 +3806,111 @@ func fitTextForLayout(value string, maxRunes int) string {
 		}
 	}
 	runes := []rune(value)
+	for idx := maxRunes; idx > 0 && idx <= len(runes); idx-- {
+		if unicode.IsSpace(runes[idx-1]) {
+			candidate := strings.TrimSpace(string(runes[:idx-1]))
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+	if strings.ContainsAny(value, " \t") {
+		return value
+	}
 	return strings.TrimSpace(string(runes[:maxRunes]))
+}
+
+func diversifyBusinessLayouts(slides []officegen.Slide, archetype pptxArchetype) []officegen.Slide {
+	if len(slides) == 0 || archetype == pptxArchetypeExplainer {
+		return slides
+	}
+	sectionsGridCount := 0
+	for idx := range slides {
+		slide := slides[idx]
+		if slideLayoutName(slide) != "content" || normalizeSlideVariant(slide) != "sections-grid" {
+			continue
+		}
+		sectionsGridCount++
+		switch {
+		case sectionsGridCount == 1:
+			slides[idx] = convertSectionsGridToBullets(slide)
+		case sectionsGridCount > 2:
+			slides[idx] = diversifySectionsGridSlide(slide)
+		}
+	}
+	lastIdx := len(slides) - 1
+	if lastIdx > 0 && slideLayoutName(slides[lastIdx]) == "closing" && slideLayoutName(slides[lastIdx-1]) == "closing" {
+		slides[lastIdx-1] = diversifyClosingNeighbor(slides[lastIdx-1])
+	}
+	return slides
+}
+
+func convertSectionsGridToBullets(slide officegen.Slide) officegen.Slide {
+	if len(slide.Points) == 0 {
+		slide.Points = sectionBullets(slide.Sections, 3)
+	}
+	slide.Layout = "content"
+	slide.Variant = "bullets"
+	slide.Sections = nil
+	slide.Metrics = nil
+	slide.Chart = nil
+	return slide
+}
+
+func diversifySectionsGridSlide(slide officegen.Slide) officegen.Slide {
+	if len(slide.Sections) == 2 {
+		slide.Layout = "comparison"
+		slide.Variant = "comparison"
+		slide.Points = nil
+		return slide
+	}
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
+	switch {
+	case strings.Contains(text, "路径"), strings.Contains(text, "步骤"), strings.Contains(text, "行动"), strings.Contains(text, "计划"), strings.Contains(text, "重点"),
+		strings.Contains(text, "path"), strings.Contains(text, "step"), strings.Contains(text, "action"), strings.Contains(text, "plan"), strings.Contains(text, "priority"):
+		slide.Layout = "timeline"
+		slide.Variant = "timeline"
+		slide.Points = nil
+		return slide
+	default:
+		return convertSectionsGridToBullets(slide)
+	}
+}
+
+func diversifyClosingNeighbor(slide officegen.Slide) officegen.Slide {
+	if len(slide.Sections) == 0 && len(slide.Points) > 0 {
+		slide = normalizeActionSlide(slide)
+	}
+	if len(slide.Sections) > 0 {
+		slide.Layout = "timeline"
+		slide.Variant = "timeline"
+		slide.NarrativeRole = "action"
+		return slide
+	}
+	slide.Layout = "content"
+	slide.Variant = "bullets"
+	slide.NarrativeRole = "action"
+	return slide
+}
+
+func sectionBullets(sections []officegen.SlideSection, limit int) []string {
+	points := make([]string, 0, len(sections))
+	for _, section := range sections {
+		heading := cleanVisibleText(section.Heading)
+		detail := cleanVisibleText(section.Detail)
+		switch {
+		case heading != "" && detail != "":
+			points = append(points, fmt.Sprintf("%s: %s", heading, detail))
+		case heading != "":
+			points = append(points, heading)
+		case detail != "":
+			points = append(points, detail)
+		}
+		if limit > 0 && len(points) >= limit {
+			break
+		}
+	}
+	return normalizePoints(points, maxInt(limit, 1), 32)
 }
 
 func slideLayoutName(slide officegen.Slide) string {
@@ -2654,6 +3934,14 @@ func slideLayoutName(slide officegen.Slide) string {
 	return "content"
 }
 
+func cleanVisibleText(value string) string {
+	value = cleanSentence(value)
+	if value == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(value), " ")
+}
+
 func cleanSentence(value string) string {
 	value = strings.TrimSpace(value)
 	for _, prefix := range []string{"- ", "* ", "• ", "· ", "▪ ", "◦ "} {
@@ -2668,6 +3956,27 @@ func cleanSentence(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimSuffix(value, ".")
 	value = strings.TrimSuffix(value, ";")
+	return value
+}
+
+func trimChartLabel(value string, maxRunes int) string {
+	value = cleanVisibleText(value)
+	if value == "" || maxRunes <= 0 || utf8.RuneCountInString(value) <= maxRunes {
+		return value
+	}
+	runes := []rune(value)
+	lastSpace := -1
+	for idx, r := range runes {
+		if unicode.IsSpace(r) {
+			lastSpace = idx
+		}
+		if idx+1 >= maxRunes {
+			break
+		}
+	}
+	if lastSpace > 0 {
+		return strings.TrimSpace(string(runes[:lastSpace]))
+	}
 	return value
 }
 
