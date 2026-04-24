@@ -1,12 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { JSDOM } from 'jsdom'
+import { agentSkillsPrerenderRoutes } from '../src/agentSkillsData'
 import { renderRouteApp } from '../src/prerender'
 import { applyDocumentSEO, getRouteSEO } from '../src/seo'
 
 const distDir = path.resolve(import.meta.dirname, '..', 'dist')
 const indexPath = path.join(distDir, 'index.html')
-const prerenderRoutes = ['/', '/claude-code-codex-office-skills']
+const prerenderRoutes = ['/', ...agentSkillsPrerenderRoutes]
 
 if (!fs.existsSync(indexPath)) {
   throw new Error(`Missing built index.html at ${indexPath}`)
