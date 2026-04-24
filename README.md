@@ -13,9 +13,28 @@ This repository is the public distribution surface for:
 - the `openclaw-officecli` package for OpenClaw-oriented integrations
 - direct install scripts for local Codex-style skill installs
 
+## Fast links
+
+Site pages:
+
+- [Overview](https://officecli.io/officecli-skills)
+- [Install](https://officecli.io/officecli-skills/install)
+- [Claude Code](https://officecli.io/officecli-skills/claude-code)
+- [Codex](https://officecli.io/officecli-skills/codex)
+- [OpenClaw](https://officecli.io/officecli-skills/openclaw)
+- [FAQ](https://officecli.io/officecli-skills/faq)
+
+GitHub guides in this repository:
+
+- [Install](./install/README.md)
+- [Claude Code](./claude-code/README.md)
+- [Codex](./codex/README.md)
+- [OpenClaw](./openclaw/README.md)
+- [FAQ](./faq/README.md)
+
 Related product page:
 
-- `https://officecli.io/claude-code-codex-office-skills`
+- `https://officecli.io/officecli-skills`
 
 ## What OfficeCLI Skills supports
 
@@ -144,6 +163,11 @@ No. It contains public skill definitions, plugin wrappers, examples, and install
 
 ## Layout
 
+- `install/README.md`: install entrypoint for search and onboarding
+- `claude-code/README.md`: Claude Code marketplace install guide
+- `codex/README.md`: direct local install guide for Codex-style agents
+- `openclaw/README.md`: OpenClaw installer and bridge guide
+- `faq/README.md`: FAQ entrypoint
 - `.claude-plugin/marketplace.json`: Claude Code marketplace definition
 - `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
 - `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
