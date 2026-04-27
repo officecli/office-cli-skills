@@ -63,6 +63,8 @@ type fakeAdminRouteService struct {
 	callbackRaw  string
 	callbackTo   string
 	callbackErr  error
+	plaintext    string
+	plaintextErr error
 }
 
 func (f *fakeAdminRouteService) ResolveSession(cookieValue string) (string, error) {
@@ -92,6 +94,9 @@ func (f *fakeAdminRouteService) Overview(_ context.Context) (*model.OverviewStat
 }
 func (f *fakeAdminRouteService) ListAPIKeys(_ context.Context) ([]model.APIKey, error) {
 	return nil, nil
+}
+func (f *fakeAdminRouteService) GetAPIKeyPlaintext(_ context.Context, _ uint64, _ string) (string, error) {
+	return f.plaintext, f.plaintextErr
 }
 func (f *fakeAdminRouteService) CreateAPIKey(_ context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error) {
 	return &admin.CreateAPIKeyResponse{}, &model.APIKey{}, nil
@@ -203,6 +208,38 @@ func TestRegisterAuthRoutesMeRejectsDisabledSessionUser(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegisterAdminRoutesAPIKeyPlaintextReturnsStoredKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{
+		sessionEmail: "admin@example.com",
+		plaintext:    "cop_admin_secret_123",
+	}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/api-keys/7/plaintext", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "admin-cookie"})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var body struct {
+		Data admin.APIKeyPlaintextResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Data.PlaintextKey != "cop_admin_secret_123" {
+		t.Fatalf("plaintext = %q", body.Data.PlaintextKey)
 	}
 }
 

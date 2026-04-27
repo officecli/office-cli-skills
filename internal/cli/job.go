@@ -60,6 +60,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var sourceFile string
 	var jsonOutput bool
 	var localPreview bool
+	var debug bool
 	var publishFlag boolValue
 	var noPublishFlag boolValue
 	var noImagesFlag boolValue
@@ -75,6 +76,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&sourceFile, "file", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
+	fs.BoolVar(&debug, "debug", false, "")
 	fs.Var(&publishFlag, "publish", "")
 	fs.Var(&noPublishFlag, "no-publish", "")
 	fs.Var(&noImagesFlag, "no-images", "")
@@ -206,6 +208,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		LocalPreview:   localPreview,
 		OutputDir:      finalOutputDir,
 		Publish:        publishEnabled,
+		Debug:          debug,
 		JSONOutput:     jsonOutput,
 	}, nil
 }
@@ -225,7 +228,7 @@ func normalizeFlagArgs(args []string) []string {
 				continue
 			}
 			i++
-		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview":
+		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview", "--debug":
 			flags = append(flags, current)
 			i++
 		default:
@@ -243,7 +246,8 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--no-publish=") ||
 				strings.HasPrefix(current, "--no-images=") ||
 				strings.HasPrefix(current, "--no-visual=") ||
-				strings.HasPrefix(current, "--local-preview=") {
+				strings.HasPrefix(current, "--local-preview=") ||
+				strings.HasPrefix(current, "--debug=") {
 				flags = append(flags, current)
 			} else {
 				positionals = append(positionals, current)

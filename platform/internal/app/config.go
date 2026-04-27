@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -25,6 +26,7 @@ type Config struct {
 	AdminPassword                string
 	SessionSecret                string
 	APIKeyHashSalt               string
+	APIKeyEncryptionKey          string
 	UsageIdempotencyTTL          time.Duration
 	AdminSessionTTL              time.Duration
 	AdminStaticDir               string
@@ -87,6 +89,7 @@ func LoadConfig() (Config, error) {
 		AdminPassword:                mustEnvDefault("ADMIN_PASSWORD", "admin123"),
 		SessionSecret:                mustEnvDefault("SESSION_SECRET", "change-me-change-me-change-me-123456"),
 		APIKeyHashSalt:               mustEnvDefault("API_KEY_HASH_SALT", "change-me-salt"),
+		APIKeyEncryptionKey:          mustEnvDefault("API_KEY_ENCRYPTION_KEY", apikey.DefaultDevEncryptionKey),
 		UsageIdempotencyTTL:          mustEnvDuration("USAGE_IDEMPOTENCY_TTL", 24*time.Hour),
 		AdminSessionTTL:              mustEnvDuration("ADMIN_SESSION_TTL", 24*time.Hour),
 		AdminStaticDir:               mustEnvDefault("ADMIN_STATIC_DIR", "web/admin/dist"),
@@ -151,6 +154,9 @@ func LoadConfig() (Config, error) {
 	}
 	if len(cfg.AppSessionSecret) < 16 {
 		return Config{}, fmt.Errorf("APP_SESSION_SECRET must be at least 16 chars")
+	}
+	if err := apikey.ValidateEncryptionKey(cfg.APIKeyEncryptionKey); err != nil {
+		return Config{}, err
 	}
 	if cfg.AppEnv == "production" {
 		if err := validateProductionSecrets(cfg); err != nil {
@@ -359,6 +365,9 @@ func validateProductionSecrets(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.APIKeyHashSalt) == "" || cfg.APIKeyHashSalt == "change-me-salt" {
 		return fmt.Errorf("API_KEY_HASH_SALT must be explicitly configured in production")
+	}
+	if strings.TrimSpace(cfg.APIKeyEncryptionKey) == "" || cfg.APIKeyEncryptionKey == apikey.DefaultDevEncryptionKey {
+		return fmt.Errorf("API_KEY_ENCRYPTION_KEY must be explicitly configured in production")
 	}
 	if err := validateStripeSecretKey(cfg.StripeSecretKey); err != nil {
 		return err

@@ -31,7 +31,7 @@ func TestNewProofSignerUsesLongerDefaultTTL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProofSigner: %v", err)
 	}
-	if signer.ttl != 15*time.Minute {
-		t.Fatalf("default ttl = %s, want %s", signer.ttl, 15*time.Minute)
+	if signer.ttl != time.Hour {
+		t.Fatalf("default ttl = %s, want %s", signer.ttl, time.Hour)
 	}
 }

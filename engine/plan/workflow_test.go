@@ -187,7 +187,44 @@ func TestPrepareExecutionPlan_FallsBackToPromptJSONWhenStructuredFails(t *testin
 	if client.jsonCalls != 1 {
 		t.Fatalf("json calls = %d, want 1", client.jsonCalls)
 	}
+	if session.QuestionSource != "llm_dynamic" {
+		t.Fatalf("question source = %q, want llm_dynamic", session.QuestionSource)
+	}
 	if session.CurrentQuestion == nil || session.CurrentQuestion.ID != "audience" {
+		t.Fatalf("current question = %#v", session.CurrentQuestion)
+	}
+}
+
+func TestPrepareExecutionPlan_FallsBackToTemplateQuestionsWhenLLMGenerationFails(t *testing.T) {
+	client := &fakeLLMClient{
+		structuredErrors: []error{
+			errors.New("upstream unavailable"),
+			errors.New("upstream unavailable"),
+		},
+		jsonErrors: []error{errors.New("json unavailable")},
+	}
+	workflow := newWorkflowForTest(client)
+
+	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
+		ConversationID: "conv-1",
+		UserPrompt:     "Create a quarterly project review deck",
+		DocumentType:   "pptx",
+		RequestID:      "req-template-fallback",
+		GenerationMode: "best",
+	})
+	if err != nil {
+		t.Fatalf("PrepareExecutionPlan error: %v", err)
+	}
+	if session.QuestionSource != "template_fallback" {
+		t.Fatalf("question source = %q, want template_fallback", session.QuestionSource)
+	}
+	if session.QuestionErrorKind != "llm_request_failed" {
+		t.Fatalf("question error kind = %q, want llm_request_failed", session.QuestionErrorKind)
+	}
+	if session.QuestionFallbackReason == "" {
+		t.Fatal("expected question fallback reason")
+	}
+	if session.CurrentQuestion == nil || session.CurrentQuestion.ID != "ppt_report_audience" {
 		t.Fatalf("current question = %#v", session.CurrentQuestion)
 	}
 }

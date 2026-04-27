@@ -83,14 +83,11 @@ func (w *Workflow) PrepareExecutionPlan(ctx context.Context, req engine.PrepareE
 		if questionMeta.ValidationRule != "" {
 			questionErrorKind = "schema_validate_failed"
 		}
-		questions = buildDynamicFallbackQuestions(req, documentType)
+		questions = buildTemplateFallbackQuestions(req, documentType)
+		questionSource = "template_fallback"
+		questionFallbackReason = "Dynamic clarification generation failed, so the workflow fell back to template questions."
 		if len(questions) == 0 {
-			questions, err = w.fallbackQuestions(ctx, req, documentType)
-			if err != nil {
-				questions = buildExecutionPlanQuestions(documentType)
-				questionSource = "static_fallback"
-				questionFallbackReason = "Dynamic clarification generation failed, so the workflow fell back to static clarification questions."
-			}
+			questions = buildExecutionPlanQuestions(documentType)
 		}
 	}
 	session := &engine.PlanSession{

@@ -10,6 +10,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/model"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
@@ -23,7 +24,9 @@ func (fakeCodec) Decode(v string) (string, error) { return v, nil }
 type memoryRedis struct{ data map[string]any }
 
 func TestNewServiceNormalizesAdminAllowlist(t *testing.T) {
-	svc := NewService(nil, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, []string{
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(nil, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, []string{
 		"  LUYANG950@GMAIL.COM  ",
 		"",
 		"luyang950@gmail.com",
@@ -37,7 +40,9 @@ func TestNewServiceNormalizesAdminAllowlist(t *testing.T) {
 }
 
 func TestNewServiceRejectsNonAllowlistedEmailAfterNormalization(t *testing.T) {
-	svc := NewService(nil, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, []string{
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(nil, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, []string{
 		" luyang950@gmail.com ",
 	})
 
@@ -55,7 +60,9 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"})
 	_ = client
 	redisRepo := redisstore.NewStore(redis.NewClient(&redis.Options{Addr: "localhost:6379"}))
-	svc := NewService(store, redisRepo, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, redisRepo, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
 
 	note := "created by test"
 	quotaTotal := 20
@@ -68,10 +75,15 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, key.KeyPrefix, keys[0].KeyPrefix)
+	require.True(t, keys[0].PlaintextAvailable)
 	require.Equal(t, model.APIKeyStatusActive, keys[0].Status)
 	require.Equal(t, "pro", keys[0].PlanName)
 	require.NotNil(t, keys[0].QuotaTotal)
 	require.Equal(t, 20, *keys[0].QuotaTotal)
+
+	plaintext, err := svc.GetAPIKeyPlaintext(context.Background(), key.ID, "admin@example.com")
+	require.NoError(t, err)
+	require.Equal(t, result.PlaintextKey, plaintext)
 
 	quota := &model.DailyFreeQuota{FingerprintHash: "fp-admin", UsageDate: "2026-04-16", DailyLimit: 2, DailyUsed: 1}
 	require.NoError(t, db.Create(quota).Error)
@@ -88,7 +100,7 @@ func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
 
 	store := sqlstore.NewWithDB(db)
-	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
 
 	user := &model.User{
 		GoogleSub:  "user-sub",
@@ -134,7 +146,7 @@ func TestUpdateUserReEnableDoesNotRestoreDisabledAPIKeys(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
 
 	store := sqlstore.NewWithDB(db)
-	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
 
 	user := &model.User{
 		GoogleSub:  "user-sub",
@@ -166,4 +178,20 @@ func TestUpdateUserReEnableDoesNotRestoreDisabledAPIKeys(t *testing.T) {
 	savedKey, err := store.FindAPIKeyByID(context.Background(), key.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.APIKeyStatusDisabled, savedKey.Status)
+}
+
+func TestGetAPIKeyPlaintextRejectsLegacyRecords(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, redisstore.NewStore(redis.NewClient(&redis.Options{Addr: "localhost:6379"})), "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+
+	key := &model.APIKey{KeyHash: "legacy-hash", KeyPrefix: "cop_legacy", Status: model.APIKeyStatusActive, PlanName: "Legacy"}
+	require.NoError(t, store.CreateAPIKey(context.Background(), key))
+
+	_, err = svc.GetAPIKeyPlaintext(context.Background(), key.ID, "admin@example.com")
+	require.ErrorIs(t, err, apikey.ErrPlaintextUnavailable)
 }

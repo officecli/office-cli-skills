@@ -129,7 +129,8 @@ When the caller is an agent or TUI client, the preferred protocol surface is:
 - transport: `stdio`
 - framing: `Content-Length` headers
 - control plane: `JSON-RPC 2.0`
-- tool name: `office.generate`
+- preferred tools: `office.prepare` and `office.render`
+- compatibility tool: `office.generate`
 
 Minimum method set:
 
@@ -152,14 +153,25 @@ Important event types:
 - `task.failed`
 - `task.cancelled`
 
-When generating guidance or examples for another agent, prefer showing the `agent-bridge` protocol path first, and only fall back to `officecli new ...` when the user clearly wants the human CLI interface.
+When generating guidance or examples for another agent, prefer the agent-first render flow:
+
+- call `initialize` or `capabilities/get`
+- read `document_generation.<type>.payload_schema`, `preferred_tool`, and `prepare_required`
+- call `office.prepare` for `report`, or skip directly to rendering for `pptx`, `docx`, and `xlsx`
+- let the current agent produce the final payload JSON itself
+- call `office.render` to validate, assemble, and write the final file
+- fall back to `office.generate` only for compatibility, legacy clients, or OpenClaw-specific flows
+
+Only fall back to `officecli new ...` when the user clearly wants the human CLI interface.
 
 For all agent clients, use the following image-handling rules:
 
 - read `capabilities/get -> document_generation.pptx.image_support`
+- read `capabilities/get -> document_generation.<type>.payload_schema`
 - read `capabilities/get -> update`
 - assume `pptx` default image behavior from `default_enabled`, not from hard-coded client assumptions
 - never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
+- for `report`, call `office.prepare` first and keep the final narrative grounded in `workbook_summary` and `base_report_json`
 - if the user explicitly wants a text-only PPT, pass `enable_images=false` and mention `disable_flag` when helpful
 - if the user asks why a generated PPT has no images, point them to `config_command`
 - if `task.output`, `task.completed`, or `task/status` contains `result_meta.image_support.attention_required=true`, surface that as a first-class issue instead of burying it in raw warnings

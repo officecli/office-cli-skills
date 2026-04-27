@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 type blockingLLMClient struct {
@@ -206,6 +207,15 @@ func TestAgentBridgeCapabilitiesGetIncludesPPTImageSupport(t *testing.T) {
 	if imageSupport["invoke_field"] != "enable_images" {
 		t.Fatalf("unexpected invoke_field: %#v", imageSupport["invoke_field"])
 	}
+	if pptxCaps["agent_render_supported"] != true {
+		t.Fatalf("unexpected agent_render_supported: %#v", pptxCaps["agent_render_supported"])
+	}
+	if pptxCaps["preferred_tool"] != "office.render" {
+		t.Fatalf("unexpected preferred_tool: %#v", pptxCaps["preferred_tool"])
+	}
+	if _, ok := pptxCaps["payload_schema"].(map[string]any); !ok {
+		t.Fatalf("payload_schema missing: %#v", pptxCaps)
+	}
 }
 
 func TestAgentBridgeCapabilitiesIncludeUpdateInfo(t *testing.T) {
@@ -241,6 +251,199 @@ func TestAgentBridgeCapabilitiesIncludeUpdateInfo(t *testing.T) {
 	}
 	if updateCaps["update_command"] != "curl -fsSL https://example.com/install.sh | bash" {
 		t.Fatalf("unexpected update command: %#v", updateCaps["update_command"])
+	}
+}
+
+func TestAgentBridgeCapabilitiesExposePrepareAndRenderTools(t *testing.T) {
+	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	tools := server.initializeResult(context.Background()).Tools
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if name, ok := tool["name"].(string); ok {
+			names = append(names, name)
+		}
+	}
+	for _, expected := range []string{"office.prepare", "office.render", "office.generate"} {
+		found := false
+		for _, name := range names {
+			if name == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing tool %q in %#v", expected, names)
+		}
+	}
+}
+
+func TestAgentBridgePrepareReportReturnsWorkbookContext(t *testing.T) {
+	tmpDir := t.TempDir()
+	workbookBytes, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{
+		{
+			Name: "Summary",
+			Rows: [][]string{
+				{"Region", "Revenue"},
+				{"North America", "128"},
+				{"Europe", "96"},
+			},
+		},
+	}, officegen.XLSXOptions{Title: "Q2 Review", Creator: "OfficeCLI"})
+	if err != nil {
+		t.Fatalf("Generate workbook: %v", err)
+	}
+	workbookPath := filepath.Join(tmpDir, "source.xlsx")
+	if err := os.WriteFile(workbookPath, workbookBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- newAgentBridgeServer(NewApp(outW, bytes.NewBuffer(nil), inR), Config{}, inR, outW, bytes.NewBuffer(nil)).Serve(ctx)
+	}()
+	outReader := bufio.NewReader(outR)
+
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "task/invoke", "params": map[string]any{
+		"tool":          "office.prepare",
+		"output_format": "json",
+		"args": map[string]any{
+			"document_type": "report",
+			"topic":         "Q2 Review",
+			"file_path":     workbookPath,
+		},
+	}})
+
+	var sawCompleted bool
+	timeout := time.After(3 * time.Second)
+	for !sawCompleted {
+		select {
+		case <-timeout:
+			t.Fatal("timed out waiting for prepare events")
+		default:
+		}
+		msg := readRPC(t, outReader)
+		if msg["method"] != "event" {
+			continue
+		}
+		params := msg["params"].(map[string]any)
+		if params["type"] == bridgeEventTaskCompleted {
+			sawCompleted = true
+		}
+	}
+
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "task/status", "params": map[string]any{"task_id": "task-000001"}})
+	statusMsg := readRPC(t, outReader)
+	status := statusMsg["result"].(map[string]any)
+	result := status["result"].(map[string]any)
+	if result["preferred_tool"] != "office.render" {
+		t.Fatalf("unexpected preferred_tool: %#v", result)
+	}
+	if !strings.Contains(result["workbook_summary"].(string), "North America") {
+		t.Fatalf("unexpected workbook_summary: %#v", result["workbook_summary"])
+	}
+	if _, ok := result["payload_schema"].(map[string]any); !ok {
+		t.Fatalf("payload_schema missing: %#v", result)
+	}
+
+	_ = inW.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("bridge exited with error: %v", err)
+	}
+}
+
+func TestAgentBridgeRenderSupportsAllDocumentTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		t.Fatal("render path should not initialize llm for these cases")
+		return nil, nil
+	}
+	server := newAgentBridgeServer(app, Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	cases := []struct {
+		name         string
+		documentType string
+		topic        string
+		payload      string
+		enableImages *bool
+		wantExt      string
+	}{
+		{
+			name:         "docx",
+			documentType: "docx",
+			topic:        "Quarterly Brief",
+			payload:      `{"title":"Quarterly Brief","sections":[{"heading":"Summary","level":1,"paragraphs":["Delivery-ready content."]}]}`,
+			wantExt:      ".docx",
+		},
+		{
+			name:         "xlsx",
+			documentType: "xlsx",
+			topic:        "Sales Workbook",
+			payload:      `{"title":"Sales Workbook","sheets":[{"name":"Pipeline","headers":["Region","Amount"],"rows":[["East","100"],["West","120"]]}]}`,
+			wantExt:      ".xlsx",
+		},
+		{
+			name:         "report",
+			documentType: "report",
+			topic:        "Q2 Review",
+			payload:      `{"title":"Q2 Review","sections":[{"title":"Demand momentum","narrative":["North America stayed ahead of plan."],"takeaways":["Keep the pipeline focused."]}]}`,
+			wantExt:      ".html",
+		},
+		{
+			name:         "pptx",
+			documentType: "pptx",
+			topic:        "Platform Overview",
+			payload:      `{"title":"Platform Overview","stylePreset":"editorial-light","theme":null,"slides":[{"title":"Platform Overview","content":"","isTitle":true,"layout":"title","variant":"title-center","narrativeRole":"cover","sectionIndex":0,"sectionTitle":"","subtitle":"What the platform is and why it matters","points":[],"sections":[],"chart":null,"metrics":[],"source":"","bgColor":"","bgColor2":"","hasImage":false,"imagePrompt":"","imagePos":"","visuals":[]}]}`,
+			enableImages: boolPtr(false),
+			wantExt:      ".pptx",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			task, err := server.invokeTask(context.Background(), json.RawMessage(`1`), bridgeInvokeParams{
+				Tool:         "office.render",
+				OutputFormat: "json",
+				Args: bridgeInvokeArgs{
+					DocumentType: tc.documentType,
+					Topic:        tc.topic,
+					Payload:      json.RawMessage(tc.payload),
+					OutputDir:    tmpDir,
+					Publish:      boolPtr(false),
+					EnableImages: tc.enableImages,
+				},
+			})
+			if err != nil {
+				t.Fatalf("invokeTask: %v", err)
+			}
+			deadline := time.Now().Add(3 * time.Second)
+			for time.Now().Before(deadline) {
+				status, err := server.taskStatus(task.ID)
+				if err != nil {
+					t.Fatalf("taskStatus: %v", err)
+				}
+				if status.Status == "completed" {
+					result := status.Result.(GenerateResult)
+					if filepath.Ext(result.FilePath) != tc.wantExt {
+						t.Fatalf("unexpected file path: %s", result.FilePath)
+					}
+					return
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			t.Fatalf("timed out waiting for %s render completion", tc.documentType)
+		})
 	}
 }
 
@@ -496,6 +699,8 @@ func TestClassifyBridgeError(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func boolPtr(v bool) *bool { return &v }
 
 func writeRPC(t *testing.T, w io.Writer, payload map[string]any) {
 	t.Helper()

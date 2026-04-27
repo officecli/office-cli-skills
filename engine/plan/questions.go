@@ -88,20 +88,6 @@ func (w *Workflow) synthesizeQuestions(ctx context.Context, req engine.PrepareEx
 	return nil, meta, lastErr
 }
 
-func (w *Workflow) fallbackQuestions(ctx context.Context, req engine.PrepareExecutionPlanRequest, documentType string) ([]engine.PlanQuestion, error) {
-	if w == nil || w.llm == nil {
-		return nil, errors.New("llm unavailable")
-	}
-	response, err := w.llm.CompleteJSON(ctx, []engine.LLMMessage{
-		{Role: "system", Content: "You are a senior office-document AI assistant. Return JSON only."},
-		{Role: "user", Content: buildQuestionContext(req, documentType)},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return decodeQuestions(response)
-}
-
 func classifyQuestionError(err error) string {
 	if err == nil {
 		return ""
@@ -211,7 +197,7 @@ const planQuestionStructuredSchema = `{
             "items":{
               "type":"object",
               "additionalProperties":false,
-              "required":["label","description"],
+              "required":["id","label","description","recommended"],
               "properties":{
                 "id":{"type":"string"},
                 "label":{"type":"string"},
@@ -494,7 +480,7 @@ func buildExecutionPlanQuestions(documentType string) []engine.PlanQuestion {
 	}
 }
 
-func buildDynamicFallbackQuestions(req engine.PrepareExecutionPlanRequest, documentType string) []engine.PlanQuestion {
+func buildTemplateFallbackQuestions(req engine.PrepareExecutionPlanRequest, documentType string) []engine.PlanQuestion {
 	prompt := strings.TrimSpace(req.UserPrompt)
 	switch normalizeDocumentType(documentType) {
 	case "docx":

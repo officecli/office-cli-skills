@@ -1,5 +1,15 @@
 import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedPricingRule, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     credentials: 'include',
@@ -12,7 +22,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: response.statusText }))
-    throw new Error(payload.error || response.statusText)
+    throw new ApiError(payload.error || response.statusText, response.status)
   }
 
   const payload = (await response.json()) as Envelope<T>
@@ -28,6 +38,7 @@ export const api = {
   overview: () => request<Overview>('/api/admin/overview'),
   growth: () => request<AdminGrowth>('/api/admin/growth'),
   apiKeys: () => request<ApiKey[]>('/api/admin/api-keys'),
+  getApiKeyPlaintext: (id: number) => request<{ plaintext_key: string }>(`/api/admin/api-keys/${id}/plaintext`),
   createApiKey: (payload: Record<string, unknown>) => request<{ plaintext_key: string; key_prefix: string }>('/api/admin/api-keys', { method: 'POST', body: JSON.stringify(payload) }),
   updateApiKey: (id: number, payload: Record<string, unknown>) => request(`/api/admin/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   freeQuotas: (fingerprint = '', usageDate = '') => request<DailyFreeQuota[]>(`/api/admin/free-quotas?fingerprint=${encodeURIComponent(fingerprint)}&usage_date=${encodeURIComponent(usageDate)}`),

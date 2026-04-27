@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, KeyRound, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import type { ApiKey } from '../types'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
@@ -14,6 +14,9 @@ export default function ApiKeysPage() {
   const [createForm, setCreateForm] = useState(blankForm)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [revealedKey, setRevealedKey] = useState<string | null>(null)
+  const [copyingKeyID, setCopyingKeyID] = useState<number | null>(null)
+  const [copiedKeyID, setCopiedKeyID] = useState<number | null>(null)
+  const [copyErrorByKey, setCopyErrorByKey] = useState<Record<number, string>>({})
 
   const create = useMutation({
     mutationFn: (payload: Record<string, unknown>) => api.createApiKey(payload),
@@ -59,6 +62,22 @@ export default function ApiKeysPage() {
     quota_used: String(key.quota_used ?? 0),
     credit_balance: String(key.credit_balance ?? 0),
     note: key.note ?? '',
+  }
+
+  async function copyStoredKey(key: ApiKey) {
+    setCopyingKeyID(key.id)
+    setCopiedKeyID((current) => (current === key.id ? null : current))
+    setCopyErrorByKey((current) => ({ ...current, [key.id]: '' }))
+    try {
+      const result = await api.getApiKeyPlaintext(key.id)
+      await navigator.clipboard?.writeText(result.plaintext_key)
+      setCopiedKeyID(key.id)
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed to copy key.'
+      setCopyErrorByKey((current) => ({ ...current, [key.id]: message }))
+    } finally {
+      setCopyingKeyID((current) => (current === key.id ? null : current))
+    }
   }
 
   return (
@@ -195,6 +214,10 @@ export default function ApiKeysPage() {
                   ) : key.note ? <div className="mt-5 text-sm text-outline">{key.note}</div> : null}
 
                   <div className="mt-5 flex flex-wrap gap-3">
+                    <button type="button" className="ghost-button" disabled={!key.plaintext_available || copyingKeyID === key.id} onClick={() => copyStoredKey(key)}>
+                      <Copy size={16} />
+                      {copyingKeyID === key.id ? 'Copying...' : copiedKeyID === key.id ? 'Copied' : 'Copy full key'}
+                    </button>
                     <button type="button" className="ghost-button" onClick={() => update.mutate({ id: key.id, payload: { status: key.status === 'active' ? 'disabled' : 'active' } })}>
                       {key.status === 'active' ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
                       {key.status === 'active' ? 'Disable key' : 'Enable key'}
@@ -218,6 +241,10 @@ export default function ApiKeysPage() {
                       <button type="button" className="ghost-button" onClick={() => setEditingId(key.id)}>Edit metadata</button>
                     )}
                   </div>
+                  {!key.plaintext_available ? (
+                    <div className="mt-3 text-xs text-outline">This key was created before plaintext retention was added, so the full value cannot be copied again.</div>
+                  ) : null}
+                  {copyErrorByKey[key.id] ? <div className="mt-3 text-xs text-rose-200">{copyErrorByKey[key.id]}</div> : null}
                 </div>
               )
             })}

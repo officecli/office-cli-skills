@@ -10,6 +10,7 @@ SERVER_HOST="${SERVER_HOST:-18.141.191.80}"
 SERVER_USER="${SERVER_USER:-ubuntu}"
 SERVER="${SERVER_USER}@${SERVER_HOST}"
 DEPLOY_LOCAL="${DEPLOY_LOCAL:-0}"
+REMOTE_BUILD="${REMOTE_BUILD:-0}"
 SSH_PORT="${SSH_PORT:-22}"
 REMOTE_WORKDIR="${REMOTE_WORKDIR:-/opt/officecli-platform}"
 REMOTE_SITE_DIR="${REMOTE_SITE_DIR:-/var/www/officecli.io/dist}"
@@ -34,9 +35,14 @@ SSH_OPTS=()
 if [[ -n "${SSH_OPTS_STRING}" ]]; then
   read -r -a SSH_OPTS <<<"${SSH_OPTS_STRING}"
 fi
-SSH_BASE_OPTS=(-p "${SSH_PORT}" "${SSH_OPTS[@]}")
-SCP_BASE_OPTS=(-P "${SSH_PORT}" "${SSH_OPTS[@]}")
-RSYNC_SSH_CMD=(ssh -p "${SSH_PORT}" "${SSH_OPTS[@]}")
+SSH_BASE_OPTS=(-p "${SSH_PORT}")
+SCP_BASE_OPTS=(-P "${SSH_PORT}")
+RSYNC_SSH_CMD=(ssh -p "${SSH_PORT}")
+if (( ${#SSH_OPTS[@]} > 0 )); then
+  SSH_BASE_OPTS+=("${SSH_OPTS[@]}")
+  SCP_BASE_OPTS+=("${SSH_OPTS[@]}")
+  RSYNC_SSH_CMD+=("${SSH_OPTS[@]}")
+fi
 
 usage() {
   cat <<'EOF'
@@ -56,7 +62,7 @@ Notes:
   - If bootstrap needs a Secret and none exists yet, pass PLATFORM_ENV_FILE=<local env file path> to create it automatically.
 
 Overridable environment variables:
-  DEPLOY_LOCAL SERVER_HOST SERVER_USER SSH_PORT SSH_OPTS REMOTE_WORKDIR REMOTE_SITE_DIR REMOTE_APP_DIR REMOTE_ADMIN_DIR
+  DEPLOY_LOCAL REMOTE_BUILD SERVER_HOST SERVER_USER SSH_PORT SSH_OPTS REMOTE_WORKDIR REMOTE_SITE_DIR REMOTE_APP_DIR REMOTE_ADMIN_DIR
   KUBE_NAMESPACE DEPLOYMENT_NAME CONTAINER_NAME IMAGE_REPO SECRET_NAME PLATFORM_ENV_FILE
 EOF
 }
@@ -174,6 +180,7 @@ build_image_archive() {
   local image_ref="$1"
   local archive_path="$2"
   local dockerfile
+  local remote_build_dir remote_dockerfile
 
   dockerfile="$(mktemp "${TMPDIR:-/tmp}/officecli-platform.Dockerfile.XXXXXX")"
   trap 'rm -f "${dockerfile:-}"' RETURN
@@ -195,6 +202,25 @@ COPY web /app/web
 EXPOSE 8080
 ENTRYPOINT ["/app/officecli-platform"]
 EOF
+
+  if [[ "${REMOTE_BUILD}" == "1" ]]; then
+    remote_build_dir="${REMOTE_WORKDIR}/build-src"
+    remote_dockerfile="${remote_build_dir}/.deploy.Dockerfile"
+
+    log "Preparing remote build workspace -> ${SERVER}:${remote_build_dir}"
+    ssh_cmd "$SERVER" "mkdir -p '${remote_build_dir}'"
+    rsync_cmd -az --delete --exclude 'node_modules' "${PLATFORM_DIR}/" "${SERVER}:${remote_build_dir}/"
+    scp_cmd "${dockerfile}" "${SERVER}:${remote_dockerfile}"
+
+    log "Building image ${image_ref} on ${SERVER}"
+    ssh_cmd "$SERVER" "
+      set -euo pipefail
+      cd '${remote_build_dir}'
+      docker build --platform linux/amd64 -f '${remote_dockerfile}' -t '${image_ref}' .
+      docker save '${image_ref}' | gzip > '${archive_path}'
+    "
+    return
+  fi
 
   log "Building image ${image_ref}"
   if docker buildx version >/dev/null 2>&1; then
@@ -263,8 +289,14 @@ deploy_remote() {
     ssh_cmd "$SERVER" "sudo mkdir -p '${REMOTE_WORKDIR}' && sudo chown '${SERVER_USER}:${SERVER_USER}' '${REMOTE_WORKDIR}'"
   fi
 
-  log "Uploading image archive -> ${REMOTE_WORKDIR}/$(basename "$archive_path")"
-  if [[ "${DEPLOY_LOCAL}" == "1" ]]; then
+  if [[ "${REMOTE_BUILD}" == "1" ]]; then
+    log "Using remotely built image archive -> ${archive_path}"
+  else
+    log "Uploading image archive -> ${REMOTE_WORKDIR}/$(basename "$archive_path")"
+  fi
+  if [[ "${REMOTE_BUILD}" == "1" ]]; then
+    :
+  elif [[ "${DEPLOY_LOCAL}" == "1" ]]; then
     cp "${archive_path}" "${REMOTE_WORKDIR}/"
   else
     scp_cmd "${archive_path}" "${SERVER}:${REMOTE_WORKDIR}/"
@@ -374,7 +406,7 @@ PY
 assert_secret_keys() {
   local missing=()
   local key
-  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
+  for key in APP_ENV APP_SESSION_SECRET API_KEY_ENCRYPTION_KEY LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
@@ -741,7 +773,7 @@ PY
 assert_secret_keys() {
   local missing=()
   local key
-  for key in APP_ENV APP_SESSION_SECRET LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
+  for key in APP_ENV APP_SESSION_SECRET API_KEY_ENCRYPTION_KEY LICENSE_PROOF_SEED PREVIEW_OBJECT_ENDPOINT PREVIEW_OBJECT_ACCESS_KEY PREVIEW_OBJECT_SECRET_KEY PREVIEW_OBJECT_BUCKET OFFICESDK_HOST OFFICESDK_ENDPOINT OFFICESDK_JWT_SECRET STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
     if [[ -z "$(kubectl -n "$KUBE_NAMESPACE" get secret "$SECRET_NAME" -o "jsonpath={.data.${key}}" 2>/dev/null || true)" ]]; then
       missing+=("$key")
     fi
@@ -1051,24 +1083,34 @@ main() {
   [[ $# -le 1 ]] || { usage; exit 1; }
   [[ -f "${ROOT_DIR}/AGENTS.md" ]] || die "Run this script from the repository root or one of its subdirectories"
 
-  require_cmd go
-  require_cmd npm
-  require_cmd docker
-  require_cmd ssh
-  require_cmd scp
-  require_cmd rsync
-  require_cmd gzip
-  require_cmd curl
-
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     usage
     exit 0
   fi
 
+  if [[ "${DEPLOY_LOCAL}" == "1" && "${REMOTE_BUILD}" == "1" ]]; then
+    die "DEPLOY_LOCAL=1 cannot be combined with REMOTE_BUILD=1"
+  fi
+
+  require_cmd go
+  require_cmd npm
+  require_cmd ssh
+  require_cmd scp
+  require_cmd rsync
+  require_cmd gzip
+  require_cmd curl
+  if [[ "${REMOTE_BUILD}" != "1" ]]; then
+    require_cmd docker
+  fi
+
   base_version="$(detect_base_version)"
   tag="${1:-$(detect_next_tag "$base_version")}"
   image_ref="${IMAGE_REPO}:${tag}"
-  archive_path="${TMPDIR:-/tmp}/officecli-platform-${tag}.tar.gz"
+  if [[ "${REMOTE_BUILD}" == "1" ]]; then
+    archive_path="${REMOTE_WORKDIR}/officecli-platform-${tag}.tar.gz"
+  else
+    archive_path="${TMPDIR:-/tmp}/officecli-platform-${tag}.tar.gz"
+  fi
   archive_name="$(basename "$archive_path")"
 
   log "Release tag: ${tag}"

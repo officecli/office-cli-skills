@@ -135,12 +135,14 @@ func TestAppCreateAPIKeyUsesLeastPrivilegeDefaults(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.APIKey{}))
 
 	store := NewWithDB(db)
-	key, err := store.AppCreateAPIKey(context.Background(), 42, "Starter", "hash-1", "cop_test")
+	key, err := store.AppCreateAPIKey(context.Background(), 42, "Starter", "hash-1", "cop_test", "ciphertext-1")
 	require.NoError(t, err)
 	require.Equal(t, "external_only", key.AllowedModes)
 	require.False(t, key.HostedEnabled)
 	require.NotNil(t, key.DefaultRuntimeMode)
 	require.Equal(t, "external", *key.DefaultRuntimeMode)
+	require.NotNil(t, key.KeyCiphertext)
+	require.Equal(t, "ciphertext-1", *key.KeyCiphertext)
 }
 
 func TestAdminCreateAPIKeyUsesLeastPrivilegeDefaults(t *testing.T) {
@@ -149,12 +151,14 @@ func TestAdminCreateAPIKeyUsesLeastPrivilegeDefaults(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.APIKey{}))
 
 	store := NewWithDB(db)
-	key, err := store.AdminCreateAPIKey(context.Background(), nil, "Ops", nil, nil, nil, "hash-2", "cop_admin", nil)
+	key, err := store.AdminCreateAPIKey(context.Background(), nil, "Ops", nil, nil, nil, "hash-2", "cop_admin", "ciphertext-2", nil)
 	require.NoError(t, err)
 	require.Equal(t, "external_only", key.AllowedModes)
 	require.False(t, key.HostedEnabled)
 	require.NotNil(t, key.DefaultRuntimeMode)
 	require.Equal(t, "external", *key.DefaultRuntimeMode)
+	require.NotNil(t, key.KeyCiphertext)
+	require.Equal(t, "ciphertext-2", *key.KeyCiphertext)
 }
 
 func TestAddCreditBalanceToAPIKeyEnablesHostedEntitlement(t *testing.T) {

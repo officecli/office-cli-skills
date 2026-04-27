@@ -14,10 +14,13 @@ import (
 	"time"
 
 	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 const (
 	bridgeToolOfficeGenerate = "office.generate"
+	bridgeToolOfficePrepare  = "office.prepare"
+	bridgeToolOfficeRender   = "office.render"
 	bridgeToolOfficeReview   = "office.review"
 	bridgeToolOfficeScore    = "office.score"
 
@@ -112,20 +115,32 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType string `json:"document_type"`
-	Topic        string `json:"topic"`
-	Prompt       string `json:"prompt,omitempty"`
-	FilePath     string `json:"file_path,omitempty"`
-	Mode         string `json:"mode,omitempty"`
-	RuntimeMode  string `json:"runtime_mode,omitempty"`
-	Language     string `json:"lang,omitempty"`
-	Style        string `json:"style,omitempty"`
-	Audience     string `json:"audience,omitempty"`
-	OutputDir    string `json:"out,omitempty"`
-	Publish      *bool  `json:"publish,omitempty"`
-	EnableImages *bool  `json:"enable_images,omitempty"`
-	EnableVisual *bool  `json:"enable_visual,omitempty"`
-	FailBelow    *int   `json:"fail_below,omitempty"`
+	DocumentType string          `json:"document_type"`
+	Topic        string          `json:"topic"`
+	Prompt       string          `json:"prompt,omitempty"`
+	FilePath     string          `json:"file_path,omitempty"`
+	Payload      json.RawMessage `json:"payload,omitempty"`
+	Mode         string          `json:"mode,omitempty"`
+	RuntimeMode  string          `json:"runtime_mode,omitempty"`
+	Language     string          `json:"lang,omitempty"`
+	Style        string          `json:"style,omitempty"`
+	Audience     string          `json:"audience,omitempty"`
+	OutputDir    string          `json:"out,omitempty"`
+	Publish      *bool           `json:"publish,omitempty"`
+	EnableImages *bool           `json:"enable_images,omitempty"`
+	EnableVisual *bool           `json:"enable_visual,omitempty"`
+	FailBelow    *int            `json:"fail_below,omitempty"`
+}
+
+type bridgePrepareResult struct {
+	Status          string          `json:"status"`
+	DocumentType    string          `json:"document_type"`
+	PreferredTool   string          `json:"preferred_tool"`
+	PrepareRequired bool            `json:"prepare_required"`
+	PayloadSchema   map[string]any  `json:"payload_schema"`
+	FieldNotes      []string        `json:"field_notes,omitempty"`
+	WorkbookSummary string          `json:"workbook_summary,omitempty"`
+	BaseReportJSON  json.RawMessage `json:"base_report_json,omitempty"`
 }
 
 type bridgeRespondParams struct {
@@ -374,48 +389,38 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			},
 			"output_formats": []string{"json", "file", "bundle"},
 			"document_generation": map[string]any{
-				"pptx": map[string]any{
-					"image_support": map[string]any{
-						"default_enabled": true,
-						"disable_flag":    "--no-images",
-						"invoke_field":    "enable_images",
-						"config_command":  "officecli config set-generation",
-						"config_fields":   []string{"image_base_url", "image_api_key", "image_model"},
-						"notes": []string{
-							"pptx generation tries to add images automatically and embed them in the final file by default.",
-							"If no images appear, first check the image model URL, API key, and model name configuration.",
-							"If you only want a text-only deck, disable images explicitly.",
-						},
-					},
-				},
-				"docx": map[string]any{
-					"image_support": map[string]any{
-						"default_enabled": false,
-					},
-				},
-				"xlsx": map[string]any{
-					"image_support": map[string]any{
-						"default_enabled": false,
-					},
-				},
-				"report": map[string]any{
-					"image_support": map[string]any{
-						"default_enabled": false,
-					},
-					"source_file": map[string]any{
-						"required":            true,
-						"invoke_field":        "file_path",
-						"accepted_extensions": []string{".xlsx"},
-						"notes": []string{
-							"report generation requires a source workbook file.",
-							"The workbook data is the source of truth for charts, tables, and findings.",
-						},
-					},
-				},
+				"pptx":   s.documentGenerationCapability(engine.DocumentTypePPTX),
+				"docx":   s.documentGenerationCapability(engine.DocumentTypeDOCX),
+				"xlsx":   s.documentGenerationCapability(engine.DocumentTypeXLSX),
+				"report": s.documentGenerationCapability(engine.DocumentTypeReport),
 			},
 			"update": s.updateCapability(ctx),
 		},
 		Tools: []map[string]any{
+			{
+				"name": "office.prepare",
+				"input_schema": map[string]any{
+					"document_type": "pptx|docx|xlsx|report",
+					"topic":         "string",
+					"prompt":        "string",
+					"file_path":     "string (.xlsx for report)",
+					"lang":          "string",
+					"style":         "string",
+					"audience":      "string",
+				},
+			},
+			{
+				"name": "office.render",
+				"input_schema": map[string]any{
+					"document_type": "pptx|docx|xlsx|report",
+					"topic":         "string",
+					"payload":       "object",
+					"runtime_mode":  "external|hosted",
+					"out":           "string",
+					"publish":       "boolean",
+					"enable_images": "boolean",
+				},
+			},
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
@@ -479,6 +484,53 @@ func (s *agentBridgeServer) updateCapability(ctx context.Context) map[string]any
 	}
 }
 
+func (s *agentBridgeServer) documentGenerationCapability(documentType engine.DocumentType) map[string]any {
+	schema, err := runtime.AgentPayloadSchema(documentType)
+	if err != nil {
+		schema = map[string]any{
+			"type":  "object",
+			"error": err.Error(),
+		}
+	}
+	capability := map[string]any{
+		"agent_render_supported": true,
+		"preferred_tool":         bridgeToolOfficeRender,
+		"prepare_required":       documentType == engine.DocumentTypeReport,
+		"payload_schema":         schema,
+	}
+	switch documentType {
+	case engine.DocumentTypePPTX:
+		capability["image_support"] = map[string]any{
+			"default_enabled": true,
+			"disable_flag":    "--no-images",
+			"invoke_field":    "enable_images",
+			"config_command":  "officecli config set-generation",
+			"config_fields":   []string{"image_base_url", "image_api_key", "image_model"},
+			"notes": []string{
+				"Agent-first rendering uses the agent for slide JSON and keeps image generation on the configured OfficeCLI image provider.",
+				"If no images appear, first check the image model URL, API key, and model name configuration.",
+				"If you only want a text-only deck, disable images explicitly.",
+			},
+		}
+	default:
+		capability["image_support"] = map[string]any{
+			"default_enabled": false,
+		}
+	}
+	if documentType == engine.DocumentTypeReport {
+		capability["source_file"] = map[string]any{
+			"required":            true,
+			"invoke_field":        "file_path",
+			"accepted_extensions": []string{".xlsx"},
+			"notes": []string{
+				"Call office.prepare first for report generation so the agent receives workbook_summary and base_report_json.",
+				"The workbook data is the source of truth for charts, tables, and findings.",
+			},
+		}
+	}
+	return capability
+}
+
 func (s *agentBridgeServer) openSession() *bridgeSession {
 	session := &bridgeSession{
 		ID:        s.nextID("session"),
@@ -535,6 +587,40 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 	runCtx, cancel := context.WithCancel(ctx)
 	task.Cancel = cancel
 	switch defaultIfEmpty(strings.TrimSpace(params.Tool), bridgeToolOfficeGenerate) {
+	case bridgeToolOfficePrepare:
+		documentType, err := parseDocumentType(params.Args.DocumentType)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.tasks, task.ID)
+			s.mu.Unlock()
+			return nil, err
+		}
+		s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
+			"tool":          task.Tool,
+			"document_type": documentType,
+		})
+		go s.runPrepareTask(runCtx, task, runtime.PrepareParams{
+			DocumentType:   documentType,
+			Topic:          strings.TrimSpace(params.Args.Topic),
+			SourceFilePath: strings.TrimSpace(params.Args.FilePath),
+		})
+		return task, nil
+	case bridgeToolOfficeRender:
+		job, payload, err := s.app.buildRenderJobFromRequest(s.cfg, params)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.tasks, task.ID)
+			s.mu.Unlock()
+			return nil, err
+		}
+		s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
+			"tool":          task.Tool,
+			"document_type": job.DocumentType,
+			"runtime_mode":  job.RuntimeMode,
+			"enable_images": job.EnableImages,
+		})
+		go s.runRenderTask(runCtx, task, job, payload)
+		return task, nil
 	case bridgeToolOfficeGenerate:
 		job, err := s.app.buildGenerateJobFromRequest(s.cfg, params)
 		if err != nil {
@@ -562,7 +648,7 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		})
 		go s.runGenerateTask(runCtx, task, job, prompter)
 		return task, nil
-	case bridgeToolOfficeReview:
+	case bridgeToolOfficeReview, bridgeToolOfficeScore:
 		job, err := s.app.buildReviewJobFromRequest(params)
 		if err != nil {
 			s.mu.Lock()
@@ -585,6 +671,91 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		s.mu.Unlock()
 		return nil, fmt.Errorf("unsupported tool: %s", params.Tool)
 	}
+}
+
+func (s *agentBridgeServer) runPrepareTask(ctx context.Context, task *bridgeTask, params runtime.PrepareParams) {
+	result, err := runtime.PrepareAgentPayload(params)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			s.updateTask(task.ID, func(t *bridgeTask) {
+				t.Status = "cancelled"
+				t.UpdatedAt = time.Now().UTC()
+				t.LastError = context.Canceled.Error()
+			})
+			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
+			return
+		}
+		payload := classifyBridgeError(err)
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, payload)
+		return
+	}
+
+	bridgeResult := bridgePrepareResult{
+		Status:          "ready",
+		DocumentType:    result.DocumentType,
+		PreferredTool:   result.PreferredTool,
+		PrepareRequired: result.PrepareRequired,
+		PayloadSchema:   result.PayloadSchema,
+		FieldNotes:      append([]string(nil), result.FieldNotes...),
+		WorkbookSummary: result.WorkbookSummary,
+		BaseReportJSON:  result.BaseReportJSON,
+	}
+	s.updateTask(task.ID, func(t *bridgeTask) {
+		t.Status = "completed"
+		t.UpdatedAt = time.Now().UTC()
+		t.Result = bridgeResult
+	})
+	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, bridgeResult))
+	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
+		"status":           bridgeResult.Status,
+		"document_type":    bridgeResult.DocumentType,
+		"preferred_tool":   bridgeResult.PreferredTool,
+		"prepare_required": bridgeResult.PrepareRequired,
+	})
+}
+
+func (s *agentBridgeServer) runRenderTask(ctx context.Context, task *bridgeTask, job GenerateJob, payload json.RawMessage) {
+	progress := &bridgeProgressEmitter{server: s, task: task}
+	result, err := s.app.executeRenderJob(ctx, s.cfg, job, payload, progress)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			s.updateTask(task.ID, func(t *bridgeTask) {
+				t.Status = "cancelled"
+				t.UpdatedAt = time.Now().UTC()
+				t.LastError = context.Canceled.Error()
+			})
+			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
+			return
+		}
+		payload := classifyBridgeError(err)
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, payload)
+		return
+	}
+
+	s.updateTask(task.ID, func(t *bridgeTask) {
+		t.Status = "completed"
+		t.UpdatedAt = time.Now().UTC()
+		t.Result = result
+	})
+	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
+	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
+		"status":        result.Status,
+		"document_type": result.DocumentType,
+		"document_name": result.DocumentName,
+		"file_path":     result.FilePath,
+		"warnings":      append([]string(nil), result.Warnings...),
+		"result_meta":   buildGenerateBridgeMeta(result),
+	})
 }
 
 func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTask, job GenerateJob, prompter *bridgePrompter) {
@@ -745,6 +916,19 @@ func (s *agentBridgeServer) cancelTask(taskID string) error {
 
 func (s *agentBridgeServer) outputPayload(outputFormat string, result any) map[string]any {
 	switch typed := result.(type) {
+	case bridgePrepareResult:
+		return map[string]any{
+			"format":           outputFormat,
+			"status":           typed.Status,
+			"document_type":    typed.DocumentType,
+			"preferred_tool":   typed.PreferredTool,
+			"prepare_required": typed.PrepareRequired,
+			"payload_schema":   typed.PayloadSchema,
+			"field_notes":      append([]string(nil), typed.FieldNotes...),
+			"workbook_summary": typed.WorkbookSummary,
+			"base_report_json": typed.BaseReportJSON,
+			"result":           typed,
+		}
 	case GenerateResult:
 		payload := map[string]any{
 			"format":        outputFormat,
@@ -944,7 +1128,7 @@ func classifyBridgeError(err error) bridgeErrorPayload {
 	case strings.Contains(message, "api-key validation failed"), strings.Contains(message, "access check failed"), strings.Contains(message, "license"):
 		payload.Type = "auth_error"
 		payload.Code = "license_check_failed"
-	case strings.Contains(message, "topic is required"), strings.Contains(message, "file_path is required"), strings.Contains(message, "file is required"), strings.Contains(message, "unsupported"), strings.Contains(message, "review is currently only supported"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"), strings.Contains(message, "invalid fail_below"):
+	case strings.Contains(message, "topic is required"), strings.Contains(message, "payload is required"), strings.Contains(message, "file_path is required"), strings.Contains(message, "file is required"), strings.Contains(message, "report generation requires file_path"), strings.Contains(message, "unsupported"), strings.Contains(message, "review is currently only supported"), strings.Contains(message, "option_id"), strings.Contains(message, "answer"), strings.Contains(message, "session not found"), strings.Contains(message, "task not found"), strings.Contains(message, "question mismatch"), strings.Contains(message, "invalid fail_below"):
 		payload.Type = "validation_error"
 		payload.Code = "invalid_request"
 	case strings.Contains(message, "document assembly failed"), strings.Contains(message, "parse llm response"), strings.Contains(message, "slides cannot be empty"):

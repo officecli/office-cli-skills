@@ -10,6 +10,7 @@ default_free_limit: 10
 admin_password: "admin123"
 session_secret: "change-me-change-me-change-me-123456"
 api_key_hash_salt: "change-me-salt"
+api_key_encryption_key: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY"
 usage_idempotency_ttl: "24h"
 admin_session_ttl: "24h"
 site_base_url: "https://officecli.io"

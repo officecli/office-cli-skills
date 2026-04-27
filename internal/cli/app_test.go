@@ -244,6 +244,64 @@ type noopProgressController struct{}
 func (noopProgressController) Emit(context.Context, engine.ProgressEvent) {}
 func (noopProgressController) Pause(string)                               {}
 
+type fakeBestModeLLMClient struct {
+	structuredResponses []string
+	structuredErrors    []error
+	jsonResponses       []string
+	jsonErrors          []error
+	structuredCalls     int
+	jsonCalls           int
+}
+
+func (fakeBestModeLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (f *fakeBestModeLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	f.jsonCalls++
+	if len(f.jsonErrors) >= f.jsonCalls && f.jsonErrors[f.jsonCalls-1] != nil {
+		return "", f.jsonErrors[f.jsonCalls-1]
+	}
+	if len(f.jsonResponses) >= f.jsonCalls {
+		return f.jsonResponses[f.jsonCalls-1], nil
+	}
+	return "", fmt.Errorf("missing json response")
+}
+
+func (f *fakeBestModeLLMClient) CompleteStructured(_ context.Context, _ engine.StructuredCompletionRequest) (string, error) {
+	f.structuredCalls++
+	if len(f.structuredErrors) >= f.structuredCalls && f.structuredErrors[f.structuredCalls-1] != nil {
+		return "", f.structuredErrors[f.structuredCalls-1]
+	}
+	if len(f.structuredResponses) >= f.structuredCalls {
+		return f.structuredResponses[f.structuredCalls-1], nil
+	}
+	return "", fmt.Errorf("missing structured response")
+}
+
+func (fakeBestModeLLMClient) GenerateImage(_ context.Context, _ engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	return nil, nil
+}
+
+type errorPrompter struct {
+	err error
+}
+
+func (p errorPrompter) Ask(string, []string, bool) (string, string, error) {
+	if p.err != nil {
+		return "", "", p.err
+	}
+	return "", "", fmt.Errorf("prompt stopped")
+}
+
+type fixedPrompter struct {
+	optionID string
+	answer   string
+}
+
+func (p fixedPrompter) Ask(string, []string, bool) (string, string, error) {
+	return p.optionID, p.answer, nil
+}
 func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
 }
@@ -957,6 +1015,20 @@ func TestBuildGenerateJob_DocxAllowsLocalPreview(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_DebugFlag(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"pptx",
+		"Board Presentation",
+		"--debug",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if !job.Debug {
+		t.Fatal("expected debug to be enabled")
+	}
+}
+
 func TestBuildGenerateJob_ReportRequiresWorkbookFile(t *testing.T) {
 	_, err := BuildGenerateJob([]string{
 		"report",
@@ -988,6 +1060,94 @@ func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
 	}
 	if job.DocumentType != engine.DocumentTypeReport {
 		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
+func TestCompleteBestModeWithPrompter_DebugLogsTemplateFallback(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, bytes.NewBuffer(nil))
+	llm := &fakeBestModeLLMClient{
+		structuredErrors: []error{
+			fmt.Errorf("upstream unavailable"),
+			fmt.Errorf("upstream unavailable"),
+		},
+		jsonErrors: []error{fmt.Errorf("json unavailable")},
+	}
+
+	_, err := app.completeBestModeWithPrompter(
+		t.Context(),
+		llm,
+		errorPrompter{err: fmt.Errorf("stop after debug output")},
+		GenerateJob{
+			DocumentType: engine.DocumentTypePPTX,
+			Prompt:       "Create a quarterly project review deck",
+			Mode:         "best",
+			Debug:        true,
+		},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "stop after debug output") {
+		t.Fatalf("err = %v", err)
+	}
+	debugOutput := stderr.String()
+	for _, needle := range []string{
+		"question_source=template_fallback",
+		"question_error_kind=llm_request_failed",
+		"current_question_id=ppt_report_audience",
+	} {
+		if !strings.Contains(debugOutput, needle) {
+			t.Fatalf("stderr missing %q:\n%s", needle, debugOutput)
+		}
+	}
+}
+
+func TestCompleteBestModeWithPrompter_EmitsPlanSynthesisProgressAfterFinalAnswer(t *testing.T) {
+	app := &App{}
+	llm := &fakeBestModeLLMClient{
+		structuredResponses: []string{
+			`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail.","recommended":false}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- Conclusion-first for leadership.","execution_prompt":"Generate the PPT in 6 slides or fewer, for leadership, with a conclusion-first structure."}`,
+		},
+		jsonResponses: []string{
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":6,"contentStyle":"Conclusion-first","visualEffect":"Clean and credible","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph","suggestedLayout":"title","maxItems":1,"contentRequirements":"State the topic and audience","visualSuggestion":"hero"}],"contentGuideline":"Keep one core point per slide"}`,
+		},
+	}
+	progress := &progressCollector{}
+
+	job, err := app.completeBestModeWithPrompter(
+		t.Context(),
+		llm,
+		fixedPrompter{optionID: "1"},
+		GenerateJob{
+			DocumentType: engine.DocumentTypePPTX,
+			Prompt:       "Create a PPT about Minecraft",
+			Mode:         "best",
+		},
+		progress,
+	)
+	if err != nil {
+		t.Fatalf("completeBestModeWithPrompter: %v", err)
+	}
+	if !strings.Contains(job.Prompt, "leadership") {
+		t.Fatalf("prompt = %q", job.Prompt)
+	}
+
+	foundRunning := false
+	foundCompleted := false
+	for _, event := range progress.events {
+		if event.Step == progressStepPlanPrepare && event.Status == "running" && strings.Contains(event.Content, "Synthesizing the execution plan from your answers") {
+			foundRunning = true
+		}
+		if event.Step == progressStepPlanPrepare && event.Status == "completed" && strings.Contains(event.Content, "Execution plan synthesized from your answers") {
+			foundCompleted = true
+		}
+	}
+	if !foundRunning {
+		t.Fatalf("missing plan synthesis running progress: %#v", progress.events)
+	}
+	if !foundCompleted {
+		t.Fatalf("missing plan synthesis completed progress: %#v", progress.events)
 	}
 }
 
@@ -2096,7 +2256,7 @@ func TestCheckLicenseOfflineWithPaidKeyRequiresOnlineValidation(t *testing.T) {
 	}
 }
 
-func TestExecuteGenerateJob_BestExternalDefersAccessCheckUntilAfterFollowUp(t *testing.T) {
+func TestExecuteGenerateJob_BestExternalChecksStatusBeforeFollowUp(t *testing.T) {
 	events := []string{}
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
@@ -2146,7 +2306,7 @@ func TestExecuteGenerateJob_BestExternalDefersAccessCheckUntilAfterFollowUp(t *t
 	if !strings.Contains(err.Error(), "quota exhausted") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Join(events, ",") != "prompt,check" {
+	if strings.Join(events, ",") != "check" {
 		t.Fatalf("events = %v", events)
 	}
 }

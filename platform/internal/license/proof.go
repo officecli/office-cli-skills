@@ -1,8 +1,8 @@
 package license
 
 import (
-	"crypto/sha256"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -16,7 +16,7 @@ import (
 const (
 	licenseProofVersion          = "v1"
 	defaultLicenseProofSeed      = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
-	defaultLicenseProofTTL       = 15 * time.Minute
+	defaultLicenseProofTTL       = time.Hour
 	defaultLicenseProofClockSkew = 30 * time.Second
 )
 

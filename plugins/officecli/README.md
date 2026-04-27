@@ -15,7 +15,9 @@ The plugin adds the `officecli` skill to Claude Code so the agent can:
 
 - check whether the local `officecli` binary supports the requested Office workflow
 - prefer `officecli` for the final Office artifact path when support is available
-- guide users toward the structured `officecli agent-bridge` flow for agent integrations
+- use the structured `officecli agent-bridge` flow for agent integrations
+- let Claude Code produce the final structured payload itself, then call `office.render` so OfficeCLI only validates, assembles, and writes the file
+- call `office.prepare` first for workbook-backed `report` generation so the narrative stays grounded in workbook data
 - keep Office file generation on the local machine instead of using a hosted plugin backend
 
 ## Requirements and prerequisites
@@ -37,7 +39,7 @@ After installation, a user should be able to:
 
 1. confirm the local binary exists with `officecli --version`
 2. confirm local configuration is available with `officecli config status`
-3. use the `officecli` skill from Claude Code for a supported Office document request
+3. use the `officecli` skill from Claude Code for a supported Office document request through `capabilities/get -> office.prepare (if needed) -> office.render`
 
 ## Scope and limitations
 
@@ -57,3 +59,4 @@ After installation, a user should be able to:
 - Office file generation is executed through the user's local `officecli` installation
 - the skill is intended to help create local Office artifacts in `pptx`, `docx`, and `xlsx`
 - the plugin does not expose a separate hosted API endpoint on behalf of the user
+- for Codex / Claude-style agent flows, OfficeCLI is the renderer and file writer; the agent is expected to create the structured content payload
