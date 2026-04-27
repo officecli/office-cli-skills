@@ -45,6 +45,7 @@ export const api = {
   discordStatus: () => request<DiscordStatus>('/api/app/discord/status'),
   connectDiscord: (payload: { discord_user_id: string; username: string }) => request<ConnectDiscordResponse>('/api/app/discord/connect', { method: 'POST', body: JSON.stringify(payload) }),
   apiKeys: () => request<ApiKey[]>('/api/app/api-keys'),
+  getApiKeyPlaintext: (id: number) => request<{ plaintext_key: string }>(`/api/app/api-keys/${id}/plaintext`),
   createApiKey: (payload: Record<string, unknown>) => request<{ plaintext_key: string; key: ApiKey }>('/api/app/api-keys', { method: 'POST', body: JSON.stringify(payload) }),
   updateApiKey: (id: number, payload: Record<string, unknown>) => request(`/api/app/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   orders: () => request<Order[]>('/api/app/orders'),

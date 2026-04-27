@@ -73,6 +73,7 @@ type APIKey struct {
 	OwnerUserID        *uint64      `gorm:"column:owner_user_id;index" json:"owner_user_id,omitempty"`
 	KeyHash            string       `gorm:"column:key_hash;size:128;uniqueIndex;not null" json:"-"`
 	KeyPrefix          string       `gorm:"column:key_prefix;size:32;index;not null" json:"key_prefix"`
+	KeyCiphertext      *string      `gorm:"column:key_ciphertext;type:text" json:"-"`
 	Status             APIKeyStatus `gorm:"column:status;size:16;index;not null" json:"status"`
 	PlanName           string       `gorm:"column:plan_name;size:128;not null" json:"plan_name"`
 	PlanCode           *string      `gorm:"column:plan_code;size:64" json:"plan_code,omitempty"`
@@ -87,6 +88,7 @@ type APIKey struct {
 	QuotaTotal         *int         `gorm:"column:quota_total" json:"quota_total,omitempty"`
 	QuotaUsed          int          `gorm:"column:quota_used;not null;default:0" json:"quota_used"`
 	QuotaRemaining     *int         `gorm:"-" json:"quota_remaining,omitempty"`
+	PlaintextAvailable bool         `gorm:"-" json:"plaintext_available"`
 	CreatedAt          time.Time    `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 	UpdatedAt          time.Time    `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
@@ -131,6 +133,10 @@ func (k APIKey) AvailableCredits() int {
 		return 0
 	}
 	return remaining
+}
+
+func (k APIKey) HasStoredPlaintext() bool {
+	return k.KeyCiphertext != nil && *k.KeyCiphertext != ""
 }
 
 type FreeQuota struct {

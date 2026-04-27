@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
@@ -25,7 +26,7 @@ type Store interface {
 	ListReferralsByInviterUserID(ctx context.Context, inviterUserID uint64) ([]model.UserReferral, error)
 	FindDiscordConnectionByUserID(ctx context.Context, userID uint64) (*model.DiscordConnection, error)
 	CreateAuditLog(ctx context.Context, action, targetType, targetID string, payload string) error
-	AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix string) (*model.APIKey, error)
+	AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix, ciphertext string) (*model.APIKey, error)
 	UpdateAPIKey(ctx context.Context, id uint64, values map[string]any) error
 	IsAPIKeyOwnedByUser(ctx context.Context, apiKeyID, userID uint64) (bool, error)
 }
@@ -60,17 +61,18 @@ type Overview struct {
 }
 
 type APIKeyView struct {
-	ID             uint64             `json:"id"`
-	KeyPrefix      string             `json:"key_prefix"`
-	Status         model.APIKeyStatus `json:"status"`
-	PlanName       string             `json:"plan_name"`
-	Note           *string            `json:"note,omitempty"`
-	ExpiresAt      *time.Time         `json:"expires_at,omitempty"`
-	LastUsedAt     *time.Time         `json:"last_used_at,omitempty"`
-	QuotaTotal     *int               `json:"quota_total,omitempty"`
-	QuotaUsed      int                `json:"quota_used"`
-	QuotaRemaining int                `json:"quota_remaining"`
-	CreatedAt      time.Time          `json:"created_at"`
+	ID                 uint64             `json:"id"`
+	KeyPrefix          string             `json:"key_prefix"`
+	PlaintextAvailable bool               `json:"plaintext_available"`
+	Status             model.APIKeyStatus `json:"status"`
+	PlanName           string             `json:"plan_name"`
+	Note               *string            `json:"note,omitempty"`
+	ExpiresAt          *time.Time         `json:"expires_at,omitempty"`
+	LastUsedAt         *time.Time         `json:"last_used_at,omitempty"`
+	QuotaTotal         *int               `json:"quota_total,omitempty"`
+	QuotaUsed          int                `json:"quota_used"`
+	QuotaRemaining     int                `json:"quota_remaining"`
+	CreatedAt          time.Time          `json:"created_at"`
 }
 
 type GrowthSnapshot struct {
@@ -141,6 +143,10 @@ type CreateAPIKeyResponse struct {
 	Key          APIKeyView `json:"key"`
 }
 
+type APIKeyPlaintextResponse struct {
+	PlaintextKey string `json:"plaintext_key"`
+}
+
 type UpdateAPIKeyRequest struct {
 	Status *string `json:"status,omitempty"`
 	Note   *string `json:"note,omitempty"`
@@ -165,20 +171,21 @@ type DiscordStatusResponse struct {
 }
 
 type Service struct {
-	store   Store
-	billing Billing
-	salt    string
-	growth  GrowthManager
+	store        Store
+	billing      Billing
+	salt         string
+	apiKeyCipher *apikey.Cipher
+	growth       GrowthManager
 }
 
 const defaultDiscordJoinRewardAmount = 2
 
-func NewService(store Store, billing Billing, salt string, growth ...GrowthManager) *Service {
+func NewService(store Store, billing Billing, salt string, apiKeyCipher *apikey.Cipher, growth ...GrowthManager) *Service {
 	var manager GrowthManager
 	if len(growth) > 0 {
 		manager = growth[0]
 	}
-	return &Service{store: store, billing: billing, salt: salt, growth: manager}
+	return &Service{store: store, billing: billing, salt: salt, apiKeyCipher: apiKeyCipher, growth: manager}
 }
 
 func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error) {
@@ -274,12 +281,42 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPI
 	if err != nil {
 		return nil, err
 	}
-	key, err := s.store.AppCreateAPIKey(ctx, userID, planName, hash, prefix)
+	ciphertext, err := s.apiKeyCipher.Encrypt(plain)
+	if err != nil {
+		return nil, err
+	}
+	key, err := s.store.AppCreateAPIKey(ctx, userID, planName, hash, prefix, ciphertext)
 	if err != nil {
 		return nil, err
 	}
 	_ = s.store.CreateAuditLog(ctx, "app.api_key.create", "api_key", fmt.Sprintf("%d", key.ID), sqlstore.JSONString(key))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: newAPIKeyView(*key)}, nil
+}
+
+func (s *Service) GetAPIKeyPlaintext(ctx context.Context, userID, apiKeyID uint64) (string, error) {
+	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	for _, key := range keys {
+		if key.ID != apiKeyID {
+			continue
+		}
+		if !key.HasStoredPlaintext() {
+			return "", apikey.ErrPlaintextUnavailable
+		}
+		plaintext, err := s.apiKeyCipher.Decrypt(*key.KeyCiphertext)
+		if err != nil {
+			return "", err
+		}
+		payload := sqlstore.JSONString(map[string]any{
+			"actor_user_id": userID,
+			"surface":       "app",
+		})
+		_ = s.store.CreateAuditLog(ctx, "app.api_key.reveal", "api_key", fmt.Sprintf("%d", apiKeyID), payload)
+		return plaintext, nil
+	}
+	return "", apikey.ErrAPIKeyNotFound
 }
 
 func (s *Service) UpdateAPIKey(ctx context.Context, userID, apiKeyID uint64, req UpdateAPIKeyRequest) error {
@@ -530,17 +567,18 @@ func visibleUsageEvents(events []model.UsageEvent) []model.UsageEvent {
 
 func newAPIKeyView(key model.APIKey) APIKeyView {
 	return APIKeyView{
-		ID:             key.ID,
-		KeyPrefix:      key.KeyPrefix,
-		Status:         key.Status,
-		PlanName:       key.PlanName,
-		Note:           key.Note,
-		ExpiresAt:      key.ExpiresAt,
-		LastUsedAt:     key.LastUsedAt,
-		QuotaTotal:     key.QuotaTotal,
-		QuotaUsed:      key.QuotaUsed,
-		QuotaRemaining: key.PaidQuotaRemaining(),
-		CreatedAt:      key.CreatedAt,
+		ID:                 key.ID,
+		KeyPrefix:          key.KeyPrefix,
+		PlaintextAvailable: key.HasStoredPlaintext(),
+		Status:             key.Status,
+		PlanName:           key.PlanName,
+		Note:               key.Note,
+		ExpiresAt:          key.ExpiresAt,
+		LastUsedAt:         key.LastUsedAt,
+		QuotaTotal:         key.QuotaTotal,
+		QuotaUsed:          key.QuotaUsed,
+		QuotaRemaining:     key.PaidQuotaRemaining(),
+		CreatedAt:          key.CreatedAt,
 	}
 }
 

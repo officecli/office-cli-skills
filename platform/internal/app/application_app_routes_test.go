@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/appuser"
 	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/discordoauth"
@@ -59,8 +60,8 @@ func (s *overviewRouteStore) CreateAuditLog(_ context.Context, _, _, _, _ string
 	return nil
 }
 
-func (s *overviewRouteStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix string) (*model.APIKey, error) {
-	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix}, nil
+func (s *overviewRouteStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix, ciphertext string) (*model.APIKey, error) {
+	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext}, nil
 }
 
 func (s *overviewRouteStore) UpdateAPIKey(_ context.Context, _ uint64, _ map[string]any) error {
@@ -152,7 +153,7 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 	appSvc := appuser.NewService(store, overviewRouteBilling{
 		orders:  []model.Order{{ID: 11, PackKind: model.PackKindExternalGeneration}},
 		pricing: []model.PricingPack{{Code: "external-500", AmountTotal: 2268, QuotaAmount: 500, PackKind: string(model.PackKindExternalGeneration)}},
-	}, "salt")
+	}, "salt", mustTestAPIKeyCipher(t))
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
@@ -200,7 +201,7 @@ func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testi
 		},
 		rewardGrants: []model.RewardGrant{{AmountTotal: 9, AmountUsed: 3, Reason: "invite activation reward", SourceType: model.RewardSourceInviteActivation}},
 	}
-	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", mustTestAPIKeyCipher(t))
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
@@ -234,6 +235,80 @@ func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testi
 	}
 	if len(body.Data.PaidExternalQuota.Keys) != 2 || len(body.Data.RewardQuota.Grants) != 1 {
 		t.Fatalf("summary detail = %+v", body.Data)
+	}
+}
+
+func TestRegisterAppRoutesAPIKeyPlaintextReturnsStoredKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cipher := mustTestAPIKeyCipher(t)
+	ciphertext, err := cipher.Encrypt("cop_live_secret_123")
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+	store := &overviewRouteStore{
+		apiKeys: []model.APIKey{{
+			ID:            7,
+			KeyPrefix:     "cop_live_demo",
+			KeyCiphertext: &ciphertext,
+			Status:        model.APIKeyStatusActive,
+			PlanName:      "Growth",
+		}},
+	}
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", cipher)
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
+
+	router := gin.New()
+	api := router.Group("/api")
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/app/api-keys/7/plaintext", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	var body struct {
+		Data appuser.APIKeyPlaintextResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Data.PlaintextKey != "cop_live_secret_123" {
+		t.Fatalf("plaintext = %q", body.Data.PlaintextKey)
+	}
+}
+
+func TestRegisterAppRoutesAPIKeyPlaintextRejectsLegacyKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	store := &overviewRouteStore{
+		apiKeys: []model.APIKey{{
+			ID:        7,
+			KeyPrefix: "cop_live_legacy",
+			Status:    model.APIKeyStatusActive,
+			PlanName:  "Legacy",
+		}},
+	}
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", mustTestAPIKeyCipher(t))
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
+
+	router := gin.New()
+	api := router.Group("/api")
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/app/api-keys/7/plaintext", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -284,7 +359,7 @@ func TestRegisterAppRoutesDiscordConnectReturnsBlockedVerificationStatus(t *test
 		},
 	}
 	growth := &routeGrowthManager{}
-	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", growth)
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", mustTestAPIKeyCipher(t), growth)
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
@@ -338,7 +413,7 @@ func TestRegisterAppRoutesDiscordStatusReturnsCurrentSnapshot(t *testing.T) {
 			ConnectedAt:   time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", mustTestAPIKeyCipher(t))
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
@@ -373,7 +448,7 @@ func TestRegisterAppRoutesDiscordLoginRedirectsBackWhenOAuthUnavailable(t *testi
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{user: &model.User{ID: 42, InviteCode: "invite-xyz"}}
-	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt")
+	appSvc := appuser.NewService(store, overviewRouteBilling{}, "salt", mustTestAPIKeyCipher(t))
 	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, overviewCookieCodec{}, nil, nil)
 
 	router := gin.New()
@@ -400,4 +475,13 @@ func routeIntPtr(v int) *int { return &v }
 func routeTimePtr() *time.Time {
 	now := time.Now().UTC()
 	return &now
+}
+
+func mustTestAPIKeyCipher(t *testing.T) *apikey.Cipher {
+	t.Helper()
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	if err != nil {
+		t.Fatalf("NewCipher() error = %v", err)
+	}
+	return cipher
 }

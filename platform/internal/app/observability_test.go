@@ -57,6 +57,9 @@ func (fakeAdminRouteFailureService) Overview(_ context.Context) (*model.Overview
 func (fakeAdminRouteFailureService) ListAPIKeys(_ context.Context) ([]model.APIKey, error) {
 	return nil, nil
 }
+func (fakeAdminRouteFailureService) GetAPIKeyPlaintext(_ context.Context, _ uint64, _ string) (string, error) {
+	return "", nil
+}
 func (fakeAdminRouteFailureService) CreateAPIKey(_ context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error) {
 	return nil, nil, nil
 }

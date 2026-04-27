@@ -1174,12 +1174,13 @@ func (s *Store) SeedDemoData(ctx context.Context, defaultFreeLimit int) error {
 	return nil
 }
 
-func (s *Store) AdminCreateAPIKey(ctx context.Context, ownerUserID *uint64, planName string, expiresAt *time.Time, note *string, planCode *string, hash, prefix string, quotaTotal *int) (*model.APIKey, error) {
+func (s *Store) AdminCreateAPIKey(ctx context.Context, ownerUserID *uint64, planName string, expiresAt *time.Time, note *string, planCode *string, hash, prefix, ciphertext string, quotaTotal *int) (*model.APIKey, error) {
 	defaultRuntimeMode := "external"
 	key := &model.APIKey{
 		OwnerUserID:        ownerUserID,
 		KeyHash:            hash,
 		KeyPrefix:          prefix,
+		KeyCiphertext:      &ciphertext,
 		Status:             model.APIKeyStatusActive,
 		PlanName:           planName,
 		AllowedModes:       "external_only",
@@ -1193,12 +1194,13 @@ func (s *Store) AdminCreateAPIKey(ctx context.Context, ownerUserID *uint64, plan
 	return key, s.CreateAPIKey(ctx, key)
 }
 
-func (s *Store) AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix string) (*model.APIKey, error) {
+func (s *Store) AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix, ciphertext string) (*model.APIKey, error) {
 	defaultRuntimeMode := "external"
 	key := &model.APIKey{
 		OwnerUserID:        &userID,
 		KeyHash:            hash,
 		KeyPrefix:          prefix,
+		KeyCiphertext:      &ciphertext,
 		Status:             model.APIKeyStatusActive,
 		PlanName:           planName,
 		AllowedModes:       "external_only",
@@ -1245,6 +1247,7 @@ func withRemaining(key model.APIKey) *model.APIKey {
 		remaining := key.PaidQuotaRemaining()
 		key.QuotaRemaining = &remaining
 	}
+	key.PlaintextAvailable = key.HasStoredPlaintext()
 	return &key
 }
 

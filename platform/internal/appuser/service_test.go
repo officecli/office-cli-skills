@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	growthsvc "github.com/officecli/officecli/platform/internal/growth"
 	"github.com/officecli/officecli/platform/internal/model"
 )
@@ -48,8 +49,8 @@ func (f *fakeStore) CreateAuditLog(_ context.Context, _, _, _, _ string) error {
 	f.auditLogCalls++
 	return nil
 }
-func (f *fakeStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix string) (*model.APIKey, error) {
-	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, Status: model.APIKeyStatusActive}, nil
+func (f *fakeStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix, ciphertext string) (*model.APIKey, error) {
+	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext, Status: model.APIKeyStatusActive}, nil
 }
 func (f *fakeStore) UpdateAPIKey(_ context.Context, _ uint64, values map[string]any) error {
 	f.updateCalls++
@@ -130,6 +131,7 @@ func TestUpdateAPIKeyOnlyPersistsStatusAndNote(t *testing.T) {
 	status := string(model.APIKeyStatusDisabled)
 	note := "rotate after handoff"
 	store := &fakeStore{owned: true}
+	cipher := testAPIKeyCipher(t)
 	svc := NewService(store, fakeBillingWithData{
 		orders: []model.Order{
 			{ID: 1, PackKind: model.PackKindExternalGeneration},
@@ -139,7 +141,7 @@ func TestUpdateAPIKeyOnlyPersistsStatusAndNote(t *testing.T) {
 			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
-	}, "salt")
+	}, "salt", cipher)
 
 	err := svc.UpdateAPIKey(context.Background(), 42, 7, UpdateAPIKeyRequest{
 		Status: &status,
@@ -164,6 +166,7 @@ func TestUpdateAPIKeyRejectsForeignKey(t *testing.T) {
 
 	status := string(model.APIKeyStatusDisabled)
 	store := &fakeStore{owned: false}
+	cipher := testAPIKeyCipher(t)
 	svc := NewService(store, fakeBillingWithData{
 		orders: []model.Order{
 			{ID: 1, PackKind: model.PackKindExternalGeneration},
@@ -173,7 +176,7 @@ func TestUpdateAPIKeyRejectsForeignKey(t *testing.T) {
 			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
-	}, "salt")
+	}, "salt", cipher)
 
 	err := svc.UpdateAPIKey(context.Background(), 42, 9, UpdateAPIKeyRequest{Status: &status})
 
@@ -201,6 +204,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 		},
 		discord: &model.DiscordConnection{UserID: 42, GuildMember: true},
 	}
+	cipher := testAPIKeyCipher(t)
 	svc := NewService(store, fakeBillingWithData{
 		orders: []model.Order{
 			{ID: 1, PackKind: model.PackKindExternalGeneration},
@@ -210,7 +214,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 			{Code: "external-100", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
 			{Code: "hosted-300", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		},
-	}, "salt")
+	}, "salt", cipher)
 
 	overview, err := svc.Overview(context.Background(), 42)
 	require.NoError(t, err)
@@ -237,6 +241,7 @@ func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
 		apiKeysByOwner: []model.APIKey{{
 			ID:                 7,
 			KeyPrefix:          "cop_live_demo",
+			KeyCiphertext:      stringPtr("ciphertext-demo"),
 			Status:             model.APIKeyStatusActive,
 			PlanName:           "Growth",
 			AllowedModes:       "hybrid",
@@ -249,12 +254,13 @@ func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
 			CreatedAt:          time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
 		}},
 	}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
 
 	keys, err := svc.ListAPIKeys(context.Background(), 42)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, "cop_live_demo", keys[0].KeyPrefix)
+	require.True(t, keys[0].PlaintextAvailable)
 	require.Equal(t, 40, keys[0].QuotaRemaining)
 }
 
@@ -268,13 +274,71 @@ func TestListUsageEventsFiltersHostedEvents(t *testing.T) {
 			{ID: 2, Mode: model.UsageModeHosted},
 			{ID: 3, Mode: model.UsageModeFree},
 		},
-	}, fakeBilling{}, "salt")
+	}, fakeBilling{}, "salt", testAPIKeyCipher(t))
 
 	events, err := svc.ListUsageEvents(context.Background(), 42)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	require.Equal(t, uint64(1), events[0].ID)
 	require.Equal(t, uint64(3), events[1].ID)
+}
+
+func TestGetAPIKeyPlaintextReturnsStoredValueForOwnedKey(t *testing.T) {
+	t.Parallel()
+
+	cipher := testAPIKeyCipher(t)
+	ciphertext, err := cipher.Encrypt("cop_live_secret_123")
+	require.NoError(t, err)
+	store := &fakeStore{
+		apiKeysByOwner: []model.APIKey{{
+			ID:            7,
+			KeyPrefix:     "cop_live_demo",
+			KeyCiphertext: &ciphertext,
+			Status:        model.APIKeyStatusActive,
+			PlanName:      "Growth",
+		}},
+	}
+	svc := NewService(store, fakeBilling{}, "salt", cipher)
+
+	plaintext, err := svc.GetAPIKeyPlaintext(context.Background(), 42, 7)
+	require.NoError(t, err)
+	require.Equal(t, "cop_live_secret_123", plaintext)
+	require.Equal(t, 1, store.auditLogCalls)
+}
+
+func TestGetAPIKeyPlaintextRejectsLegacyKey(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		apiKeysByOwner: []model.APIKey{{
+			ID:        7,
+			KeyPrefix: "cop_live_legacy",
+			Status:    model.APIKeyStatusActive,
+			PlanName:  "Legacy",
+		}},
+	}
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
+
+	_, err := svc.GetAPIKeyPlaintext(context.Background(), 42, 7)
+	require.ErrorIs(t, err, apikey.ErrPlaintextUnavailable)
+	require.Zero(t, store.auditLogCalls)
+}
+
+func TestGetAPIKeyPlaintextRejectsForeignKey(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		apiKeysByOwner: []model.APIKey{{
+			ID:        8,
+			KeyPrefix: "cop_live_other",
+			Status:    model.APIKeyStatusActive,
+			PlanName:  "Other",
+		}},
+	}
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
+
+	_, err := svc.GetAPIKeyPlaintext(context.Background(), 42, 7)
+	require.ErrorIs(t, err, apikey.ErrAPIKeyNotFound)
 }
 
 func TestGrowthReturnsUserFacingRewardReferralAndDiscordData(t *testing.T) {
@@ -309,7 +373,7 @@ func TestGrowthReturnsUserFacingRewardReferralAndDiscordData(t *testing.T) {
 			RewardGrantedAt: &rewardGrantedAt,
 		},
 	}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
 
 	growth, err := svc.Growth(context.Background(), 42)
 	require.NoError(t, err)
@@ -354,7 +418,7 @@ func TestConnectDiscordReturnsBlockedVerificationStateWithoutReward(t *testing.T
 			ConnectedAt:   time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	svc := NewService(store, fakeBilling{}, "salt", growth)
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t), growth)
 
 	response, err := svc.ConnectDiscord(context.Background(), 42, ConnectDiscordRequest{
 		DiscordUserID: "discord-42",
@@ -386,13 +450,20 @@ func TestDiscordStatusReturnsConnectionAndRewardBalance(t *testing.T) {
 			ConnectedAt:   time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	svc := NewService(store, fakeBilling{}, "salt")
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
 
 	status, err := svc.DiscordStatus(context.Background(), 42)
 	require.NoError(t, err)
 	require.Equal(t, 3, status.RewardRemaining)
 	require.NotNil(t, status.Connection)
 	require.Equal(t, "verification_blocked", status.Connection.VerificationStatus)
+}
+
+func testAPIKeyCipher(t *testing.T) *apikey.Cipher {
+	t.Helper()
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	return cipher
 }
 
 func intPtr(v int) *int { return &v }

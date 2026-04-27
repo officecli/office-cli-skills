@@ -7,6 +7,7 @@ export interface AdminIdentity {
 export interface ApiKey {
   id: number
   key_prefix: string
+  plaintext_available?: boolean
   status: 'active' | 'disabled'
   plan_name: string
   owner_user_id?: number

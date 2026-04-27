@@ -77,3 +77,7 @@ type CreateAPIKeyResponse struct {
 	PlaintextKey string `json:"plaintext_key"`
 	KeyPrefix    string `json:"key_prefix"`
 }
+
+type APIKeyPlaintextResponse struct {
+	PlaintextKey string `json:"plaintext_key"`
+}

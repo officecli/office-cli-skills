@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/model"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
@@ -35,6 +36,7 @@ type Service struct {
 	sessionCookieCodec CookieCodec
 	cookieName         string
 	apiKeySalt         string
+	apiKeyCipher       *apikey.Cipher
 	oauthProvider      auth.OAuthProvider
 	adminAllowlist     map[string]struct{}
 	hostedPricing      HostedPricingManager
@@ -73,7 +75,7 @@ type CookieCodec interface {
 	Decode(value string) (string, error)
 }
 
-func NewService(store *sqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
+func NewService(store *sqlstore.Store, redis *redisstore.Store, adminPassword string, sessionTTL time.Duration, cookieName string, codec CookieCodec, apiKeySalt string, apiKeyCipher *apikey.Cipher, oauthProvider auth.OAuthProvider, adminAllowlist []string, hostedPricing ...HostedPricingManager) *Service {
 	allowlist := make(map[string]struct{}, len(adminAllowlist))
 	for _, email := range adminAllowlist {
 		normalized := strings.ToLower(strings.TrimSpace(email))
@@ -94,6 +96,7 @@ func NewService(store *sqlstore.Store, redis *redisstore.Store, adminPassword st
 		cookieName:         cookieName,
 		sessionCookieCodec: codec,
 		apiKeySalt:         apiKeySalt,
+		apiKeyCipher:       apiKeyCipher,
 		oauthProvider:      oauthProvider,
 		adminAllowlist:     allowlist,
 		hostedPricing:      hostedPricingManager,
@@ -237,7 +240,11 @@ func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*C
 	if err != nil {
 		return nil, nil, err
 	}
-	key, err := s.store.AdminCreateAPIKey(ctx, req.OwnerUserID, req.PlanName, req.ExpiresAt, req.Note, req.PlanCode, hash, prefix, req.QuotaTotal)
+	ciphertext, err := s.apiKeyCipher.Encrypt(plain)
+	if err != nil {
+		return nil, nil, err
+	}
+	key, err := s.store.AdminCreateAPIKey(ctx, req.OwnerUserID, req.PlanName, req.ExpiresAt, req.Note, req.PlanCode, hash, prefix, ciphertext, req.QuotaTotal)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,6 +273,29 @@ func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*C
 	payload, _ := json.Marshal(key)
 	_ = s.store.CreateAuditLog(ctx, "api_key.create", "api_key", fmt.Sprintf("%d", key.ID), string(payload))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, KeyPrefix: prefix}, key, nil
+}
+
+func (s *Service) GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error) {
+	key, err := s.store.FindAPIKeyByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if key == nil {
+		return "", apikey.ErrAPIKeyNotFound
+	}
+	if !key.HasStoredPlaintext() {
+		return "", apikey.ErrPlaintextUnavailable
+	}
+	plaintext, err := s.apiKeyCipher.Decrypt(*key.KeyCiphertext)
+	if err != nil {
+		return "", err
+	}
+	payload := sqlstore.JSONString(map[string]any{
+		"actor":   strings.TrimSpace(actor),
+		"surface": "admin",
+	})
+	_ = s.store.CreateAuditLog(ctx, "api_key.reveal", "api_key", fmt.Sprintf("%d", id), payload)
+	return plaintext, nil
 }
 
 func (s *Service) UpdateAPIKey(ctx context.Context, id uint64, req UpdateAPIKeyRequest) error {

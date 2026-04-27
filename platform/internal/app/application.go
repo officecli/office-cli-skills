@@ -25,6 +25,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/officecli/officecli/platform/internal/admin"
+	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/appuser"
 	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/billing"
@@ -70,6 +71,7 @@ type adminRouteService interface {
 	Logout(ctx context.Context, rawCookie string) error
 	Overview(ctx context.Context) (*model.OverviewStats, error)
 	ListAPIKeys(ctx context.Context) ([]model.APIKey, error)
+	GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error)
 	CreateAPIKey(ctx context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error)
 	UpdateAPIKey(ctx context.Context, id uint64, req admin.UpdateAPIKeyRequest) error
 	ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error)
@@ -140,6 +142,10 @@ func New() (*Application, error) {
 
 	rewardService := rewardsvc.NewService(dbStore)
 	growthService := growthsvc.NewService(dbStore, dbStore, dbStore, dbStore)
+	apiKeyCipher, err := apikey.NewCipher(cfg.APIKeyEncryptionKey)
+	if err != nil {
+		return nil, err
+	}
 	lic := licensesvc.NewService(
 		apiKeyRepo{store: dbStore},
 		freeQuotaRepo{store: dbStore},
@@ -165,10 +171,10 @@ func New() (*Application, error) {
 		TimeoutSec: 60,
 	})
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
-	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
 	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
-	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, growthService)
+	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, apiKeyCipher, growthService)
 	fileStore := officesdk.NewFileStore(redisRepo)
 	previewShares := previewshare.NewService(dbStore.DB(), cfg.AppSessionSecret, cfg.AppSessionCookieDomain, fileStore, previewObjects)
 	sdkProvider := officesdk.NewFileProvider(fileStore, previewObjects, previewShares)
@@ -630,6 +636,26 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/api-keys/:id/plaintext", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		actor := "admin"
+		if raw, err := c.Cookie("cop_admin_session"); err == nil && raw != "" {
+			if identity, err := adminSvc.CurrentIdentity(c.Request.Context(), raw); err == nil && identity != nil && strings.TrimSpace(identity.Email) != "" {
+				actor = identity.Email
+			}
+		}
+		plaintext, err := adminSvc.GetAPIKeyPlaintext(c.Request.Context(), id, actor)
+		switch {
+		case err == nil:
+			httpapi.JSON(c, http.StatusOK, admin.APIKeyPlaintextResponse{PlaintextKey: plaintext})
+		case errors.Is(err, apikey.ErrAPIKeyNotFound):
+			httpapi.Error(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, apikey.ErrPlaintextUnavailable):
+			httpapi.Error(c, http.StatusConflict, err.Error())
+		default:
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+		}
 	})
 	protected.POST("/api-keys", func(c *gin.Context) {
 		var req admin.CreateAPIKeyRequest
@@ -1136,6 +1162,20 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/api-keys/:id/plaintext", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		plaintext, err := appSvc.GetAPIKeyPlaintext(c.Request.Context(), currentUserID(c), id)
+		switch {
+		case err == nil:
+			httpapi.JSON(c, http.StatusOK, appuser.APIKeyPlaintextResponse{PlaintextKey: plaintext})
+		case errors.Is(err, apikey.ErrAPIKeyNotFound):
+			httpapi.Error(c, http.StatusNotFound, err.Error())
+		case errors.Is(err, apikey.ErrPlaintextUnavailable):
+			httpapi.Error(c, http.StatusConflict, err.Error())
+		default:
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+		}
 	})
 	protected.POST("/api-keys", func(c *gin.Context) {
 		var req appuser.CreateAPIKeyRequest
