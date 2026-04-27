@@ -196,6 +196,15 @@ func (p errorPrompter) Ask(string, []string, bool) (string, string, error) {
 	return "", "", fmt.Errorf("prompt stopped")
 }
 
+type fixedPrompter struct {
+	optionID string
+	answer   string
+}
+
+func (p fixedPrompter) Ask(string, []string, bool) (string, string, error) {
+	return p.optionID, p.answer, nil
+}
+
 func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
 }
@@ -979,6 +988,55 @@ func TestCompleteBestModeWithPrompter_DebugLogsTemplateFallback(t *testing.T) {
 		if !strings.Contains(debugOutput, needle) {
 			t.Fatalf("stderr missing %q:\n%s", needle, debugOutput)
 		}
+	}
+}
+
+func TestCompleteBestModeWithPrompter_EmitsPlanSynthesisProgressAfterFinalAnswer(t *testing.T) {
+	app := &App{}
+	llm := &fakeBestModeLLMClient{
+		structuredResponses: []string{
+			`{"questions":[{"id":"audience","question":"Who is the main audience for this deck?","allowFreeform":true,"options":[{"id":"management","label":"Leadership","description":"Emphasize conclusions and judgment.","recommended":true},{"id":"team","label":"Internal team","description":"Emphasize execution detail.","recommended":false}]}]}`,
+			`{"plan_markdown":"# Execution Plan\n\n## Summary\n- Conclusion-first for leadership.","execution_prompt":"Generate the PPT in 6 slides or fewer, for leadership, with a conclusion-first structure."}`,
+		},
+		jsonResponses: []string{
+			`{"presentationType":"Overview deck","targetAudience":"Leadership","presentationPurpose":"Introduce Minecraft","pageCount":6,"contentStyle":"Conclusion-first","visualEffect":"Clean and credible","slideOutline":[{"slideIndex":1,"purpose":"Cover","contentFormat":"paragraph","suggestedLayout":"title","maxItems":1,"contentRequirements":"State the topic and audience","visualSuggestion":"hero"}],"contentGuideline":"Keep one core point per slide"}`,
+		},
+	}
+	progress := &progressCollector{}
+
+	job, err := app.completeBestModeWithPrompter(
+		t.Context(),
+		llm,
+		fixedPrompter{optionID: "1"},
+		GenerateJob{
+			DocumentType: engine.DocumentTypePPTX,
+			Prompt:       "Create a PPT about Minecraft",
+			Mode:         "best",
+		},
+		progress,
+	)
+	if err != nil {
+		t.Fatalf("completeBestModeWithPrompter: %v", err)
+	}
+	if !strings.Contains(job.Prompt, "leadership") {
+		t.Fatalf("prompt = %q", job.Prompt)
+	}
+
+	foundRunning := false
+	foundCompleted := false
+	for _, event := range progress.events {
+		if event.Step == progressStepPlanPrepare && event.Status == "running" && strings.Contains(event.Content, "Synthesizing the execution plan from your answers") {
+			foundRunning = true
+		}
+		if event.Step == progressStepPlanPrepare && event.Status == "completed" && strings.Contains(event.Content, "Execution plan synthesized from your answers") {
+			foundCompleted = true
+		}
+	}
+	if !foundRunning {
+		t.Fatalf("missing plan synthesis running progress: %#v", progress.events)
+	}
+	if !foundCompleted {
+		t.Fatalf("missing plan synthesis completed progress: %#v", progress.events)
 	}
 }
 

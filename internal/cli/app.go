@@ -1210,10 +1210,21 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 				req.Answer = ""
 			}
 		}
+		finalAnswer := len(session.Answers)+1 >= len(session.Questions)
+		if finalAnswer {
+			emitProgress(ctx, progress, progressStepPlanPrepare, "running", "Synthesizing the execution plan from your answers")
+		}
 		session, err = workflow.AnswerExecutionPlanQuestion(ctx, req)
 		if err != nil {
-			emitProgress(ctx, progress, progressStepQuestion, "failed", "Failed to update the execution plan")
+			if finalAnswer {
+				emitProgress(ctx, progress, progressStepPlanPrepare, "failed", "Failed to synthesize the execution plan from your answers")
+			} else {
+				emitProgress(ctx, progress, progressStepQuestion, "failed", "Failed to update the execution plan")
+			}
 			return job, err
+		}
+		if finalAnswer {
+			emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Execution plan synthesized from your answers")
 		}
 	}
 	if session != nil && session.Status != "approved" {
