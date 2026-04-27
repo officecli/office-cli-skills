@@ -80,6 +80,7 @@ type GenerateJob struct {
 	LocalPreview   bool
 	OutputDir      string
 	Publish        bool
+	Debug          bool
 	JSONOutput     bool
 	Warnings       []engine.GenerateIssue
 	LicenseCheck   *LicenseCheckResult

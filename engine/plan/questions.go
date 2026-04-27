@@ -197,7 +197,7 @@ const planQuestionStructuredSchema = `{
             "items":{
               "type":"object",
               "additionalProperties":false,
-              "required":["label","description"],
+              "required":["id","label","description","recommended"],
               "properties":{
                 "id":{"type":"string"},
                 "label":{"type":"string"},

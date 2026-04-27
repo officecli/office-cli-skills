@@ -299,6 +299,7 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
   --no-images             Disable automatic PPT images
@@ -378,6 +379,7 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --local-preview         Generate local HTML/JSON preview sidecars (pptx only)
+  --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
   --no-images             Disable automatic PPT images
@@ -1182,6 +1184,7 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 		emitProgress(ctx, progress, progressStepPlanPrepare, "failed", "Failed to prepare the execution plan")
 		return job, err
 	}
+	a.emitPlanDebug(job, session)
 	emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Execution plan prepared")
 	for session != nil && session.Status == "questioning" && session.CurrentQuestion != nil {
 		emitProgress(ctx, progress, progressStepQuestion, "running", "Waiting for follow-up answers")
@@ -1226,6 +1229,38 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 		job.Prompt = session.ExecutionPrompt
 	}
 	return job, nil
+}
+
+func (a *App) emitPlanDebug(job GenerateJob, session *engine.PlanSession) {
+	if a == nil || !job.Debug || a.Stderr == nil || session == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(
+		a.Stderr,
+		"[debug] best_mode question_source=%s question_error_kind=%s question_fallback_reason=%q current_question_id=%s\n",
+		strings.TrimSpace(session.QuestionSource),
+		strings.TrimSpace(session.QuestionErrorKind),
+		strings.TrimSpace(session.QuestionFallbackReason),
+		currentQuestionID(session),
+	)
+	if strings.TrimSpace(session.QuestionValidationRule) != "" || strings.TrimSpace(session.QuestionValidationDetail) != "" {
+		_, _ = fmt.Fprintf(
+			a.Stderr,
+			"[debug] best_mode question_validation_rule=%s question_validation_detail=%q\n",
+			strings.TrimSpace(session.QuestionValidationRule),
+			strings.TrimSpace(session.QuestionValidationDetail),
+		)
+	}
+	if strings.TrimSpace(session.QuestionRawPreview) != "" {
+		_, _ = fmt.Fprintf(a.Stderr, "[debug] best_mode question_raw_preview=%s\n", strings.TrimSpace(session.QuestionRawPreview))
+	}
+}
+
+func currentQuestionID(session *engine.PlanSession) string {
+	if session == nil || session.CurrentQuestion == nil {
+		return ""
+	}
+	return strings.TrimSpace(session.CurrentQuestion.ID)
 }
 
 func readStdin(stdin io.Reader) (string, bool, error) {

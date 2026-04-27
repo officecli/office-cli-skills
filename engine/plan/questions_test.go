@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -74,5 +75,53 @@ func TestBuildTemplateFallbackQuestions_UsesExplainerQuestions(t *testing.T) {
 	}
 	if !questions[2].Options[0].Recommended {
 		t.Fatalf("expected the first explainer density option to be recommended")
+	}
+}
+
+func TestPlanQuestionStructuredSchema_StrictObjectsRequireAllProperties(t *testing.T) {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(planQuestionStructuredSchema), &schema); err != nil {
+		t.Fatalf("Unmarshal schema: %v", err)
+	}
+	assertStrictSchemaRequiredCoverage(t, "root", schema)
+}
+
+func assertStrictSchemaRequiredCoverage(t *testing.T, path string, node any) {
+	t.Helper()
+
+	objectNode, ok := node.(map[string]any)
+	if !ok {
+		return
+	}
+	if propertiesRaw, ok := objectNode["properties"]; ok {
+		properties, ok := propertiesRaw.(map[string]any)
+		if !ok {
+			t.Fatalf("%s properties type = %T", path, propertiesRaw)
+		}
+		requiredRaw, ok := objectNode["required"]
+		if !ok {
+			t.Fatalf("%s is missing required", path)
+		}
+		requiredItems, ok := requiredRaw.([]any)
+		if !ok {
+			t.Fatalf("%s required type = %T", path, requiredRaw)
+		}
+		required := make(map[string]struct{}, len(requiredItems))
+		for _, item := range requiredItems {
+			text, ok := item.(string)
+			if !ok {
+				t.Fatalf("%s required item type = %T", path, item)
+			}
+			required[text] = struct{}{}
+		}
+		for key, child := range properties {
+			if _, ok := required[key]; !ok {
+				t.Fatalf("%s missing required key %q", path, key)
+			}
+			assertStrictSchemaRequiredCoverage(t, path+"."+key, child)
+		}
+	}
+	if itemsRaw, ok := objectNode["items"]; ok {
+		assertStrictSchemaRequiredCoverage(t, path+"[]", itemsRaw)
 	}
 }

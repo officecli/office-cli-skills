@@ -146,6 +146,56 @@ func (fakeAppLLMClient) GenerateImage(_ context.Context, _ engine.ImageGeneratio
 	return nil, nil
 }
 
+type fakeBestModeLLMClient struct {
+	structuredResponses []string
+	structuredErrors    []error
+	jsonResponses       []string
+	jsonErrors          []error
+	structuredCalls     int
+	jsonCalls           int
+}
+
+func (fakeBestModeLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (f *fakeBestModeLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
+	f.jsonCalls++
+	if len(f.jsonErrors) >= f.jsonCalls && f.jsonErrors[f.jsonCalls-1] != nil {
+		return "", f.jsonErrors[f.jsonCalls-1]
+	}
+	if len(f.jsonResponses) >= f.jsonCalls {
+		return f.jsonResponses[f.jsonCalls-1], nil
+	}
+	return "", fmt.Errorf("missing json response")
+}
+
+func (f *fakeBestModeLLMClient) CompleteStructured(_ context.Context, _ engine.StructuredCompletionRequest) (string, error) {
+	f.structuredCalls++
+	if len(f.structuredErrors) >= f.structuredCalls && f.structuredErrors[f.structuredCalls-1] != nil {
+		return "", f.structuredErrors[f.structuredCalls-1]
+	}
+	if len(f.structuredResponses) >= f.structuredCalls {
+		return f.structuredResponses[f.structuredCalls-1], nil
+	}
+	return "", fmt.Errorf("missing structured response")
+}
+
+func (fakeBestModeLLMClient) GenerateImage(_ context.Context, _ engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	return nil, nil
+}
+
+type errorPrompter struct {
+	err error
+}
+
+func (p errorPrompter) Ask(string, []string, bool) (string, string, error) {
+	if p.err != nil {
+		return "", "", p.err
+	}
+	return "", "", fmt.Errorf("prompt stopped")
+}
+
 func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
 }
@@ -845,6 +895,20 @@ func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T)
 	}
 }
 
+func TestBuildGenerateJob_DebugFlag(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"pptx",
+		"Board Presentation",
+		"--debug",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if !job.Debug {
+		t.Fatal("expected debug to be enabled")
+	}
+}
+
 func TestBuildGenerateJob_ReportRequiresWorkbookFile(t *testing.T) {
 	_, err := BuildGenerateJob([]string{
 		"report",
@@ -876,6 +940,45 @@ func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
 	}
 	if job.DocumentType != engine.DocumentTypeReport {
 		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
+func TestCompleteBestModeWithPrompter_DebugLogsTemplateFallback(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, bytes.NewBuffer(nil))
+	llm := &fakeBestModeLLMClient{
+		structuredErrors: []error{
+			fmt.Errorf("upstream unavailable"),
+			fmt.Errorf("upstream unavailable"),
+		},
+		jsonErrors: []error{fmt.Errorf("json unavailable")},
+	}
+
+	_, err := app.completeBestModeWithPrompter(
+		t.Context(),
+		llm,
+		errorPrompter{err: fmt.Errorf("stop after debug output")},
+		GenerateJob{
+			DocumentType: engine.DocumentTypePPTX,
+			Prompt:       "Create a quarterly project review deck",
+			Mode:         "best",
+			Debug:        true,
+		},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "stop after debug output") {
+		t.Fatalf("err = %v", err)
+	}
+	debugOutput := stderr.String()
+	for _, needle := range []string{
+		"question_source=template_fallback",
+		"question_error_kind=llm_request_failed",
+		"current_question_id=ppt_report_audience",
+	} {
+		if !strings.Contains(debugOutput, needle) {
+			t.Fatalf("stderr missing %q:\n%s", needle, debugOutput)
+		}
 	}
 }
 
