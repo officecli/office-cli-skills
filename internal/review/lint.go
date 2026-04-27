@@ -156,7 +156,7 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			Code:       "VARIANT_VARIETY_LOW",
 			Title:      "Variant variety is too low",
 			Message:    fmt.Sprintf("This deck uses only %d distinct substyles across its body slides, so the presentation still feels repetitive.", uniqueVariantCount(variantCounts)),
-			Suggestion: "Mix more substyles such as bullets-band, bullets-callout, comparison-vs-band, timeline-zigzag, gallery-filmstrip, or closing-checklist.",
+			Suggestion: "Mix more substyles such as bullets-band, bullets-callout, comparison-vs-band, timeline-zigzag, gallery-filmstrip, closing-decision-banner, or closing-starter-guidance.",
 		})
 	}
 
@@ -330,6 +330,12 @@ func inferSlideLayoutAndVariant(xmlContent string) (string, string, int) {
 		return "timeline", "timeline-axis", 0
 	case strings.Contains(xmlContent, "ClosingChecklistItem"):
 		return "closing", "closing-checklist", 0
+	case strings.Contains(xmlContent, "ClosingDecisionBanner"):
+		return "closing", "closing-decision-banner", 0
+	case strings.Contains(xmlContent, "ClosingRolloutStep"):
+		return "closing", "closing-rollout-strip", 0
+	case strings.Contains(xmlContent, "ClosingStarterGuidancePanel"):
+		return "closing", "closing-starter-guidance", 0
 	case strings.Contains(xmlContent, "ClosingTakeawayPanel"):
 		return "closing", "closing-takeaway", 0
 	case strings.Contains(xmlContent, "ClosingCardLight"):

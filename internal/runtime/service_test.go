@@ -465,7 +465,7 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 		"subtitle must be a takeaway sentence",
 		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
-		"The closing slide must include 2-3 next-step actions",
+		"Only use rollout-style endings when the request explicitly asks for rollout",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -646,6 +646,64 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 	}
 	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
 		t.Fatalf("training closing slide = %#v", payload.Slides[len(payload.Slides)-1])
+	}
+}
+
+func TestNormalizePPTXSlide_BusinessClosingUsesDecisionBannerAndDropsBackgroundImage(t *testing.T) {
+	coverBudget := 0
+	closingBudget := 0
+	imageBudget := 1
+	galleryBudget := 0
+	visualBudget := 0
+
+	slide, imageKept, _ := normalizePPTXSlide(officegen.Slide{
+		Title:         "Recommendation",
+		Layout:        "closing",
+		NarrativeRole: "closing",
+		Subtitle:      "Approve the first pilot now.",
+		Sections: []officegen.SlideSection{
+			{Heading: "Decision", Detail: "Approve the pilot scope this week."},
+			{Heading: "Guardrail", Detail: "Keep the first validation cycle limited to one team."},
+		},
+		HasImage:    true,
+		ImagePos:    "background",
+		ImagePrompt: "A boardroom hero background",
+	}, 5, "OfficeCLI", pptxArchetypeCompany, true, &coverBudget, &closingBudget, &imageBudget, &galleryBudget, &visualBudget)
+
+	if slide.Variant != "closing-decision-banner" {
+		t.Fatalf("variant = %q, want closing-decision-banner", slide.Variant)
+	}
+	if slide.HasImage || imageKept {
+		t.Fatalf("business closing should drop background image: %+v kept=%v", slide, imageKept)
+	}
+}
+
+func TestNormalizePPTXSlide_ExplainerClosingUsesStarterGuidanceAndCanKeepShortBackgroundImage(t *testing.T) {
+	coverBudget := 0
+	closingBudget := 1
+	imageBudget := 0
+	galleryBudget := 0
+	visualBudget := 0
+
+	slide, imageKept, _ := normalizePPTXSlide(officegen.Slide{
+		Title:         "How to Start",
+		Layout:        "closing",
+		NarrativeRole: "closing",
+		Subtitle:      "Start small and learn the loop by doing.",
+		Sections: []officegen.SlideSection{
+			{Heading: "Pick One Mode", Detail: "Creative or Survival."},
+			{Heading: "Try One Goal", Detail: "Build one shelter."},
+		},
+		HasImage:    true,
+		ImagePos:    "background",
+		ImagePrompt: "A bright voxel landscape at sunset",
+	}, 5, "Minecraft", pptxArchetypeExplainer, true, &coverBudget, &closingBudget, &imageBudget, &galleryBudget, &visualBudget)
+
+	if slide.Variant != "closing-starter-guidance" {
+		t.Fatalf("variant = %q, want closing-starter-guidance", slide.Variant)
+	}
+	if !slide.HasImage || !imageKept {
+		t.Fatalf("short explainer closing should be allowed to keep a background image: %+v kept=%v", slide, imageKept)
 	}
 }
 

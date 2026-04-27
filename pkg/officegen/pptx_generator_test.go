@@ -705,6 +705,34 @@ func TestPPTXNarrativeLayouts_RenderDedicatedComparisonTimelineAndClosing(t *tes
 	}
 }
 
+func TestPPTXClosingVariants_RenderDistinctStructures(t *testing.T) {
+	slides := []Slide{
+		{Title: "Recommendation", Layout: "closing", Variant: "closing-decision-banner", Subtitle: "Approve the pilot now.", Sections: []SlideSection{{Heading: "Decision", Detail: "Approve the first pilot this week."}, {Heading: "Guardrail", Detail: "Limit phase one to one team."}}},
+		{Title: "Rollout Path", Layout: "closing", Variant: "closing-rollout-strip", Subtitle: "Keep the plan phased.", Sections: []SlideSection{{Heading: "Week 1", Detail: "Align owner and scope."}, {Heading: "Week 3", Detail: "Review the first metrics."}}},
+		{Title: "How to Start", Layout: "closing", Variant: "closing-starter-guidance", Subtitle: "Start simple and keep it fun.", Sections: []SlideSection{{Heading: "Pick a Mode", Detail: "Choose Creative or Survival."}, {Heading: "Try One Goal", Detail: "Build one shelter first."}}},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Closing Variants Test", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	files := openZipFiles(t, data)
+	for _, check := range []struct {
+		path   string
+		needle string
+	}{
+		{"ppt/slides/slide1.xml", "ClosingDecisionBanner"},
+		{"ppt/slides/slide2.xml", "ClosingRolloutStep1"},
+		{"ppt/slides/slide3.xml", "ClosingStarterGuidancePanel"},
+	} {
+		if !strings.Contains(files[check.path], check.needle) {
+			t.Fatalf("%s should contain %q:\n%s", check.path, check.needle, files[check.path])
+		}
+	}
+}
+
 func TestPPTXDashboard_LongSubtitlePushesMetricsDown(t *testing.T) {
 	slides := []Slide{
 		{

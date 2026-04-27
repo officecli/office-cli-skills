@@ -502,6 +502,90 @@ func (g *PPTXGenerator) createClosingSlideXML(slide Slide, theme *SlideTheme, st
 
 	var cards strings.Builder
 	switch strings.TrimSpace(slide.Variant) {
+	case "closing-decision-banner":
+		lead := items[0]
+		cards.WriteString(createFramedPanelXML(40, "ClosingDecisionBanner", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, 1200000, 2000000, 9800000, 1300000))
+		cards.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="41" name="ClosingDecisionHeading"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="1500000" y="2260000"/><a:ext cx="9200000" cy="360000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1700" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="42" name="ClosingDecisionText"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="1500000" y="2720000"/><a:ext cx="9200000" cy="420000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1500"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+			accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(firstNonEmpty(lead.Heading, slide.Title)),
+			textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(firstNonEmpty(lead.Detail, slide.Subtitle))))
+		for idx, item := range items[1:] {
+			x := 1500000 + idx*4450000
+			cards.WriteString(createFramedPanelXML(50+idx*3, fmt.Sprintf("ClosingDecisionChip%d", idx+1), stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, x, 3700000, 3900000, 980000))
+			cards.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingDecisionChipHead%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="3920000"/><a:ext cx="3300000" cy="280000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1350" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingDecisionChipText%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="4300000"/><a:ext cx="3300000" cy="320000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1200"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+				51+idx*3, idx+1, x+240000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Heading),
+				52+idx*3, idx+1, x+240000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Detail)))
+		}
+	case "closing-rollout-strip":
+		for idx, item := range items {
+			x := 1200000 + idx*3250000
+			cards.WriteString(createFramedPanelXML(40+idx*4, fmt.Sprintf("ClosingRolloutStep%d", idx+1), stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, x, 2250000, 2800000, 1700000))
+			cards.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingRolloutBadge%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="2460000"/><a:ext cx="520000" cy="280000"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1100" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>%d</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingRolloutHead%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="2860000"/><a:ext cx="2200000" cy="340000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1450" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingRolloutText%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="3320000"/><a:ext cx="2200000" cy="520000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1200"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+				41+idx*4, idx+1, x+220000, accentColor, idx+1,
+				42+idx*4, idx+1, x+220000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Heading),
+				43+idx*4, idx+1, x+220000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Detail)))
+		}
+	case "closing-starter-guidance":
+		lead := items[0]
+		cards.WriteString(createFramedPanelXML(40, "ClosingStarterGuidancePanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, 1200000, 2050000, 9800000, 1000000))
+		cards.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="41" name="ClosingStarterGuidanceText"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="1500000" y="2380000"/><a:ext cx="9200000" cy="360000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1900" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+			accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(firstNonEmpty(lead.Detail, lead.Heading))))
+		for idx, item := range items {
+			x := 1100000 + idx*3350000
+			cards.WriteString(createFramedPanelXML(50+idx*3, fmt.Sprintf("ClosingStarterGuidanceChip%d", idx+1), stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, x, 3420000, 3000000, 1200000))
+			cards.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingStarterGuidanceChipHead%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="3650000"/><a:ext cx="2400000" cy="280000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1300" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="ClosingStarterGuidanceChipText%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="4050000"/><a:ext cx="2400000" cy="360000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1180"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+				51+idx*3, idx+1, x+300000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Heading),
+				52+idx*3, idx+1, x+300000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(item.Detail)))
+		}
 	case "closing-checklist":
 		for idx, item := range items {
 			y := 2100000 + idx*900000

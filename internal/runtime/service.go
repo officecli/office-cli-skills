@@ -520,10 +520,10 @@ Requirements:
 	- stylePreset must be one of executive-dark, editorial-light, explainer-voxel-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- The first slide must use the title layout.
 	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline that fits the topic instead of reusing one generic scaffold.
-	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as decision, next steps, or rollout actions.
+	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as recommendation, decision, or one clear next action. Only use rollout-style endings when the request explicitly asks for rollout, implementation cadence, or milestones.
 	- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
 	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
-	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing should use closing. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
+	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing may use closing-decision-banner, closing-rollout-strip, closing-starter-guidance, closing-takeaway, closing-checklist, or closing-cards-light. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
 	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
 - toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
@@ -537,7 +537,8 @@ Requirements:
 - Use charts only for objective data with units, scale, and ordering logic. Do not use charts for priorities, milestones, strategy, risks, or process flows.
 - When a chart fits, chart may include type, categories, values, and title, plus 2-3 takeaway points.
 - When a dashboard fits, metrics may include label, value, and note, plus 2-3 action or takeaway points.
-- The closing slide must include 2-3 next-step actions with time, owner, or validation criteria.
+- For business topics, the closing slide should end on one clear recommendation or decision ask with at most 2 supporting action chips. Only use rollout strips or 2-3 action steps when the request explicitly asks for rollout, implementation cadence, or milestones.
+- For game, hobby, culture, science, education, or general explainer topics, the closing slide should end on a takeaway, who-it-suits summary, or how-to-start guidance, and must not sound like owners, milestones, rollout, or validation criteria.
 - Wording should fit the audience and style. Prefer quantified, conclusion-first language for business topics, and plain, vivid, example-led language for explainer topics. Avoid vague slogans.
 	%s
 	%s`, description, generateengine.FormatDocumentPromptTarget(target), presetHint, slideExample, imageRules, outlineRules)
@@ -700,7 +701,6 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 	visualBudget := 4
 	if enableImages {
 		coverImageBudget = 1
-		closingImageBudget = 1
 	}
 	if archetype == pptxArchetypeExplainer {
 		coverImageBudget = 1
@@ -1011,7 +1011,6 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, archet
 		slide.Layout = strings.ToLower(strings.TrimSpace(slide.Layout))
 	}
 	slide = upgradeSlideLayout(slide)
-	slide.Variant = normalizeSlideVariant(slide)
 
 	slide.Points = normalizePoints(slide.Points, 4, 32)
 	slide.Sections = normalizeSections(slide.Sections, 3)
@@ -1019,6 +1018,8 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, archet
 	slide.Chart = normalizeChart(slide.Chart)
 	slide = normalizeEvidenceSlide(slide)
 	slide = normalizeActionSlide(slide)
+	slide = normalizeClosingSlide(slide, archetype)
+	slide.Variant = normalizeSlideVariant(slide)
 	if len(slide.Sections) > 0 {
 		// Section slides already contain grouped copy; keeping a source footer here can trigger false bullet-overload lint results.
 		slide.Source = ""
@@ -1056,7 +1057,7 @@ func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, archet
 		case idx == 0 && coverImageBudget != nil && *coverImageBudget > 0:
 			allowPrimary = true
 			*coverImageBudget--
-		case slide.NarrativeRole == "closing" && closingImageBudget != nil && *closingImageBudget > 0:
+		case slide.NarrativeRole == "closing" && allowClosingPrimaryImage(slide, archetype) && closingImageBudget != nil && *closingImageBudget > 0:
 			allowPrimary = true
 			*closingImageBudget--
 		case slide.Layout == "content" && allowImageForSlide(slide) && archetype == pptxArchetypeExplainer && visualBudget != nil && *visualBudget > 0:
@@ -1449,7 +1450,7 @@ func chooseExplainerStartChoice(_ officegen.Slide, donor officegen.Slide, state 
 	if (looksLikeSequentialExplainerSlide(donor) || looksLikeStarterSlide(donor) || isEmptyNormalizedSlide(donor)) && longestDetail <= 78 {
 		return explainerLayoutChoice{Layout: "timeline", Variant: pickUnusedExplainerVariant(state, "timeline-steps", "timeline-zigzag")}
 	}
-	return explainerLayoutChoice{Layout: "closing", Variant: pickUnusedExplainerVariant(state, "closing-checklist", "closing-cards-light", "closing-takeaway")}
+	return explainerLayoutChoice{Layout: "closing", Variant: pickUnusedExplainerVariant(state, "closing-starter-guidance", "closing-takeaway", "closing-cards-light")}
 }
 
 func pickUnusedExplainerVariant(state explainerVariantState, candidates ...string) string {
@@ -2841,8 +2842,11 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 		return "timeline"
 	case "closing":
 		switch strings.TrimSpace(slide.Variant) {
-		case "closing-checklist", "closing-takeaway", "closing-cards-light":
+		case "closing-checklist", "closing-takeaway", "closing-cards-light", "closing-decision-banner", "closing-rollout-strip", "closing-starter-guidance":
 			return strings.TrimSpace(slide.Variant)
+		}
+		if slide.NarrativeRole == "closing" {
+			return chooseClosingVariant(slide, pptxArchetypeGeneral)
 		}
 		return "closing"
 	case "chart":
@@ -2856,7 +2860,7 @@ func normalizeSlideVariant(slide officegen.Slide) string {
 			"timeline", "timeline-axis", "timeline-steps", "timeline-zigzag",
 			"image-right", "image-right-editorial", "image-left-editorial", "image-right-focus",
 			"gallery", "gallery-duo", "gallery-filmstrip", "gallery-focus",
-			"closing", "closing-checklist", "closing-takeaway", "closing-cards-light",
+			"closing", "closing-checklist", "closing-takeaway", "closing-cards-light", "closing-decision-banner", "closing-rollout-strip", "closing-starter-guidance",
 			"bullets", "bullets-plain", "bullets-band", "bullets-callout":
 			return strings.TrimSpace(slide.Variant)
 		}
@@ -3270,6 +3274,80 @@ func normalizeActionSlide(slide officegen.Slide) officegen.Slide {
 		slide.Points = nil
 	}
 	return slide
+}
+
+func normalizeClosingSlide(slide officegen.Slide, archetype pptxArchetype) officegen.Slide {
+	if slideLayoutName(slide) != "closing" && slide.NarrativeRole != "closing" {
+		return slide
+	}
+	slide.Layout = "closing"
+	slide.NarrativeRole = "closing"
+	if len(slide.Sections) == 0 && len(slide.Points) > 0 {
+		slide = normalizeActionSlide(slide)
+	}
+	slide.Sections = normalizeSections(slide.Sections, 3)
+	if isBusinessLikeArchetype(archetype) && len(slide.Sections) > 0 {
+		for idx := range slide.Sections {
+			slide.Sections[idx].Detail = fitTextForLayout(slide.Sections[idx].Detail, 56)
+		}
+	}
+	slide.Variant = chooseClosingVariant(slide, archetype)
+	return slide
+}
+
+func chooseClosingVariant(slide officegen.Slide, archetype pptxArchetype) string {
+	if strings.TrimSpace(slide.Variant) != "" {
+		switch strings.TrimSpace(slide.Variant) {
+		case "closing-checklist", "closing-takeaway", "closing-cards-light", "closing-decision-banner", "closing-rollout-strip", "closing-starter-guidance":
+			return strings.TrimSpace(slide.Variant)
+		}
+	}
+	if archetype == pptxArchetypeExplainer {
+		if looksLikeStarterSlide(slide) || looksLikeAudienceFitSlide(slide) {
+			return "closing-starter-guidance"
+		}
+		return "closing-takeaway"
+	}
+	if looksLikeRolloutClosingSlide(slide) {
+		return "closing-rollout-strip"
+	}
+	return "closing-decision-banner"
+}
+
+func isBusinessLikeArchetype(archetype pptxArchetype) bool {
+	switch archetype {
+	case pptxArchetypeCompany, pptxArchetypeMarket, pptxArchetypeOps, pptxArchetypeTraining:
+		return true
+	default:
+		return false
+	}
+}
+
+func allowClosingPrimaryImage(slide officegen.Slide, archetype pptxArchetype) bool {
+	if archetype != pptxArchetypeExplainer {
+		return false
+	}
+	if strings.TrimSpace(slide.ImagePos) != "" && strings.ToLower(strings.TrimSpace(slide.ImagePos)) != "background" {
+		return false
+	}
+	if len(slide.Sections) > 2 || longestSectionDetailRunes(slide.Sections) > 42 {
+		return false
+	}
+	variant := chooseClosingVariant(slide, archetype)
+	return variant == "closing-starter-guidance" || variant == "closing-takeaway"
+}
+
+func looksLikeRolloutClosingSlide(slide officegen.Slide) bool {
+	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle + " " + slide.SectionTitle))
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(strings.TrimSpace(section.Heading+" "+section.Detail))
+	}
+	for _, keyword := range []string{"rollout", "milestone", "timeline", "phase", "launch plan", "implementation", "cadence", "roadmap", "workstream", "上线", "里程碑", "阶段", "实施", "节奏", "路线图"} {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeEvidenceSlide(slide officegen.Slide) officegen.Slide {
