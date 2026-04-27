@@ -43,8 +43,8 @@ func TestBuildExecutionPlanQuestions_DOCXAndXLSXReturnThreeQuestions(t *testing.
 	}
 }
 
-func TestBuildDynamicFallbackQuestions_UsesScenarioSpecificQuestions(t *testing.T) {
-	reportQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Prepare a quarterly project review deck"}, "pptx")
+func TestBuildTemplateFallbackQuestions_UsesScenarioSpecificQuestions(t *testing.T) {
+	reportQuestions := buildTemplateFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Prepare a quarterly project review deck"}, "pptx")
 	if len(reportQuestions) < 3 {
 		t.Fatalf("report question count = %d, want at least 3", len(reportQuestions))
 	}
@@ -52,8 +52,27 @@ func TestBuildDynamicFallbackQuestions_UsesScenarioSpecificQuestions(t *testing.
 		t.Fatalf("question = %q, want report-specific focus", reportQuestions[1].Question)
 	}
 
-	pitchQuestions := buildDynamicFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Build a fundraising roadshow deck for an AI startup"}, "pptx")
+	pitchQuestions := buildTemplateFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "Build a fundraising roadshow deck for an AI startup"}, "pptx")
 	if !strings.Contains(pitchQuestions[0].Question, "audience") {
 		t.Fatalf("question = %q, want pitch-specific audience", pitchQuestions[0].Question)
+	}
+}
+
+func TestBuildTemplateFallbackQuestions_UsesExplainerQuestions(t *testing.T) {
+	questions := buildTemplateFallbackQuestions(engine.PrepareExecutionPlanRequest{UserPrompt: "介绍 minecraft 这款游戏"}, "pptx")
+	if len(questions) != 3 {
+		t.Fatalf("question count = %d, want 3", len(questions))
+	}
+	if !strings.Contains(questions[0].Question, "谁") {
+		t.Fatalf("question = %q, want audience-familiarity question", questions[0].Question)
+	}
+	if !strings.Contains(questions[1].Question, "切入") {
+		t.Fatalf("question = %q, want intro-angle question", questions[1].Question)
+	}
+	if got := questions[2].Options[0].Label; got != "6-8 页、每页简洁、保留 2-3 张强相关图片" {
+		t.Fatalf("recommended option = %q", got)
+	}
+	if !questions[2].Options[0].Recommended {
+		t.Fatalf("expected the first explainer density option to be recommended")
 	}
 }

@@ -46,6 +46,11 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
+	job, err = a.preparePPTPrompt(ctx, llmClient, job, progress)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+
 	if job.Mode == generateengine.ModeBest {
 		if prompter == nil {
 			if !isTTY {
@@ -145,6 +150,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		prompt = topic
 	}
 	style := strings.TrimSpace(req.Args.Style)
+	styleSpecified := style != ""
 	if style == "" && documentType == engine.DocumentTypePPTX {
 		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
@@ -163,12 +169,14 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	return GenerateJob{
 		DocumentType:   documentType,
 		Topic:          topic,
+		OriginalPrompt: prompt,
 		Prompt:         prompt,
 		SourceFilePath: sourceFile,
 		RuntimeMode:    runtimeMode,
 		Mode:           mode,
 		Language:       strings.TrimSpace(req.Args.Language),
 		Style:          style,
+		StyleSpecified: styleSpecified,
 		Audience:       strings.TrimSpace(req.Args.Audience),
 		EnableImages:   enableImages,
 		LocalPreview:   false,

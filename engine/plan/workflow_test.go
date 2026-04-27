@@ -187,7 +187,44 @@ func TestPrepareExecutionPlan_FallsBackToPromptJSONWhenStructuredFails(t *testin
 	if client.jsonCalls != 1 {
 		t.Fatalf("json calls = %d, want 1", client.jsonCalls)
 	}
+	if session.QuestionSource != "llm_dynamic" {
+		t.Fatalf("question source = %q, want llm_dynamic", session.QuestionSource)
+	}
 	if session.CurrentQuestion == nil || session.CurrentQuestion.ID != "audience" {
+		t.Fatalf("current question = %#v", session.CurrentQuestion)
+	}
+}
+
+func TestPrepareExecutionPlan_FallsBackToTemplateQuestionsWhenLLMGenerationFails(t *testing.T) {
+	client := &fakeLLMClient{
+		structuredErrors: []error{
+			errors.New("upstream unavailable"),
+			errors.New("upstream unavailable"),
+		},
+		jsonErrors: []error{errors.New("json unavailable")},
+	}
+	workflow := newWorkflowForTest(client)
+
+	session, err := workflow.PrepareExecutionPlan(context.Background(), engine.PrepareExecutionPlanRequest{
+		ConversationID: "conv-1",
+		UserPrompt:     "Create a quarterly project review deck",
+		DocumentType:   "pptx",
+		RequestID:      "req-template-fallback",
+		GenerationMode: "best",
+	})
+	if err != nil {
+		t.Fatalf("PrepareExecutionPlan error: %v", err)
+	}
+	if session.QuestionSource != "template_fallback" {
+		t.Fatalf("question source = %q, want template_fallback", session.QuestionSource)
+	}
+	if session.QuestionErrorKind != "llm_request_failed" {
+		t.Fatalf("question error kind = %q, want llm_request_failed", session.QuestionErrorKind)
+	}
+	if session.QuestionFallbackReason == "" {
+		t.Fatal("expected question fallback reason")
+	}
+	if session.CurrentQuestion == nil || session.CurrentQuestion.ID != "ppt_report_audience" {
 		t.Fatalf("current question = %#v", session.CurrentQuestion)
 	}
 }
@@ -341,5 +378,31 @@ func TestApproveExecutionPlan_UsesExistingArtifacts(t *testing.T) {
 	}
 	if session.ExecutionPrompt == "" {
 		t.Fatal("expected execution prompt")
+	}
+}
+
+func TestBuildExecutionPlanSynthesisMessages_ExplainerAddsScenarioRequirements(t *testing.T) {
+	session := &engine.PlanSession{
+		DocumentType: "pptx",
+		UserPrompt:   "介绍 minecraft 这款游戏",
+		Answers: []engine.PlanAnswer{
+			{QuestionID: "ppt_explainer_audience", Answer: "第一次接触的人"},
+			{QuestionID: "ppt_explainer_focus", Answer: "先讲它是什么和怎么玩"},
+		},
+	}
+	msgs := buildExecutionPlanSynthesisMessages(session)
+	if len(msgs) != 2 {
+		t.Fatalf("message count = %d, want 2", len(msgs))
+	}
+	userMsg := msgs[1].Content
+	for _, needle := range []string{
+		"audience familiarity level",
+		"cover hero visual allowance",
+		"preserve complete visible wording",
+		"beginner tips, who it suits, or how to start",
+	} {
+		if !strings.Contains(userMsg, needle) {
+			t.Fatalf("user synthesis prompt missing %q:\n%s", needle, userMsg)
+		}
 	}
 }

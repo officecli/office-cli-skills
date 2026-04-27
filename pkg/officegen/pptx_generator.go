@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // SlideTheme defines the theme color palette.
@@ -209,6 +210,11 @@ func requestedImagePos(slide Slide) string {
 			return "right"
 		}
 		return pos
+	case "timeline", "closing":
+		if normalizeImagePos(slide.ImagePos) == "background" {
+			return "background"
+		}
+		return ""
 	default:
 		return ""
 	}
@@ -285,6 +291,12 @@ func imageFrameForSlide(slide Slide) (imageFrame, bool) {
 		default:
 			return imageFrame{}, false
 		}
+	}
+	if layout := resolvedLayout(slide); layout == "timeline" || layout == "closing" {
+		if imagePos == "background" {
+			return imageFrame{x: 0, y: 0, cx: 12192000, cy: 6858000}, true
+		}
+		return imageFrame{}, false
 	}
 
 	switch imagePos {
@@ -859,9 +871,9 @@ func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, s
 	case "comparison":
 		return g.createComparisonSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 	case "timeline":
-		return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 	case "closing":
-		return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+		return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 	case "chart":
 		if hasChart {
 			return g.createChartSlideXML(slide, theme, stylePreset, chartIndex, slideNum, totalSlides)
@@ -877,11 +889,11 @@ func (g *PPTXGenerator) createSlideXMLEnhanced(slide Slide, theme *SlideTheme, s
 		case "comparison":
 			return g.createComparisonSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
 		case "timeline":
-			return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+			return g.createTimelineSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 		case "gallery":
 			return g.createGallerySlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 		case "closing":
-			return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides)
+			return g.createClosingSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 		default:
 			return g.createContentSlideXML(slide, theme, stylePreset, slideNum, totalSlides, assets)
 		}
@@ -897,6 +909,7 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
 	textColor := getTextColor(theme)
 	fontFamily := theme.FontFamily
 	eaFontFamily := theme.EAFontFamily
+	boxHeight := estimatedSubtitleHeight(subtitle)
 	return fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -907,7 +920,7 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
                 <p:spPr>
                     <a:xfrm>
                         <a:off x="700000" y="%d"/>
-                        <a:ext cx="10800000" cy="400000"/>
+                        <a:ext cx="10800000" cy="%d"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
@@ -926,7 +939,144 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>`, shapeID, y, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
+            </p:sp>`, shapeID, y, boxHeight, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(subtitle))
+}
+
+func estimatedWrappedLines(text string, charsPerLine int) int {
+	if charsPerLine <= 0 {
+		charsPerLine = 20
+	}
+	lines := 0
+	for _, block := range strings.Split(strings.TrimSpace(text), "\n") {
+		block = strings.TrimSpace(block)
+		if block == "" {
+			continue
+		}
+		runes := utf8.RuneCountInString(block)
+		blockLines := int(math.Ceil(float64(runes) / float64(charsPerLine)))
+		if blockLines < 1 {
+			blockLines = 1
+		}
+		lines += blockLines
+	}
+	if lines == 0 {
+		return 0
+	}
+	return lines
+}
+
+func estimatedSubtitleHeight(subtitle string) int {
+	lines := estimatedWrappedLines(subtitle, 28)
+	if lines == 0 {
+		return 0
+	}
+	height := 120000 + lines*240000
+	if height < 360000 {
+		height = 360000
+	}
+	if height > 900000 {
+		height = 900000
+	}
+	return height
+}
+
+func estimatedContentTitleFrame(title string) (fontSize int, boxHeight int) {
+	runes := utf8.RuneCountInString(strings.TrimSpace(title))
+	fontSize = 3200
+	charsPerLine := 18
+	switch {
+	case runes > 34:
+		fontSize = 2500
+		charsPerLine = 22
+	case runes > 22:
+		fontSize = 2800
+		charsPerLine = 20
+	}
+	lines := estimatedWrappedLines(title, charsPerLine)
+	if lines < 1 {
+		lines = 1
+	}
+	boxHeight = 260000 + lines*300000
+	if boxHeight < 620000 {
+		boxHeight = 620000
+	}
+	if boxHeight > 1260000 {
+		boxHeight = 1260000
+	}
+	return fontSize, boxHeight
+}
+
+func estimatedDashboardTitleFrame(title string) (fontSize int, boxHeight int) {
+	runes := utf8.RuneCountInString(strings.TrimSpace(title))
+	fontSize = 2800
+	charsPerLine := 24
+	switch {
+	case runes > 36:
+		fontSize = 2200
+		charsPerLine = 28
+	case runes > 24:
+		fontSize = 2500
+		charsPerLine = 26
+	}
+	lines := estimatedWrappedLines(title, charsPerLine)
+	if lines < 1 {
+		lines = 1
+	}
+	boxHeight = 220000 + lines*270000
+	if boxHeight < 520000 {
+		boxHeight = 520000
+	}
+	if boxHeight > 1100000 {
+		boxHeight = 1100000
+	}
+	return fontSize, boxHeight
+}
+
+func metricCardTypography(metrics []MetricCard, count int) (labelFont, valueFont, noteFont int) {
+	labelFont = 1100
+	valueFont = 2700
+	noteFont = 980
+	maxLabel := 0
+	maxValue := 0
+	maxNote := 0
+	for _, metric := range metrics {
+		if size := utf8.RuneCountInString(strings.TrimSpace(metric.Label)); size > maxLabel {
+			maxLabel = size
+		}
+		if size := utf8.RuneCountInString(strings.TrimSpace(metric.Value)); size > maxValue {
+			maxValue = size
+		}
+		if size := utf8.RuneCountInString(strings.TrimSpace(metric.Note)); size > maxNote {
+			maxNote = size
+		}
+	}
+	if count >= 4 {
+		labelFont = 1000
+		valueFont = 2300
+		noteFont = 920
+	}
+	if maxLabel > 8 {
+		labelFont -= 80
+	}
+	if maxValue > 8 {
+		valueFont -= 220
+	}
+	if maxValue > 14 {
+		valueFont -= 260
+	}
+	if maxNote > 22 {
+		noteFont -= 80
+	}
+	if labelFont < 900 {
+		labelFont = 900
+	}
+	if valueFont < 1800 {
+		valueFont = 1800
+	}
+	if noteFont < 820 {
+		noteFont = 820
+	}
+	return labelFont, valueFont, noteFont
 }
 
 // generateFooterXML builds footer XML for the bottom of the slide.
@@ -1145,16 +1295,24 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 	fontFamily := theme.FontFamily
 	eaFontFamily := theme.EAFontFamily
 	imagePos := resolvedImagePos(slide)
+	isSplit := strings.HasPrefix(strings.TrimSpace(slide.Variant), "title-split")
+	isMinimal := strings.TrimSpace(slide.Variant) == "title-center-minimal"
+	isCenterHero := strings.TrimSpace(slide.Variant) == "title-center-hero"
 
 	titleX, titleY, titleCX, titleCY := 1500000, 2200000, 9200000, 1200000
 	subtitleX, subtitleY, subtitleCX, subtitleCY := 1500000, 3800000, 9200000, 800000
 	decorX, decorY, decorCX := 4596000, 3600000, 3000000
 	titleAlign := "ctr"
-	if slide.Variant == "title-split" || stylePreset.ID == StylePresetExecutiveDark {
+	if isSplit || stylePreset.ID == StylePresetExecutiveDark {
 		titleX, titleY, titleCX, titleCY = 1000000, 1850000, 5000000, 1450000
 		subtitleX, subtitleY, subtitleCX, subtitleCY = 1000000, 3550000, 5000000, 850000
 		decorX, decorY, decorCX = 1000000, 1500000, 2600000
 		titleAlign = stylePreset.TitleAlign
+	}
+	if isMinimal {
+		titleY = 2400000
+		subtitleY = 3950000
+		decorY = 2050000
 	}
 	imageXML := ""
 	overlayXML := ""
@@ -1168,15 +1326,36 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 	if imagePos == "background" {
 		titleColor = "FFFFFF"
 		subtitleColor = "FFFFFF"
+		if isCenterHero {
+			titleY = 520000
+			titleCY = 850000
+			subtitleY = 5650000
+			subtitleCY = 620000
+			decorY = 5100000
+			decorCX = 3400000
+		}
 		imageXML = createImagePictureXML(90, "BackgroundImage", assets.PrimaryImageRel, 0, 0, 12192000, 6858000, slide.ImageData)
-		overlayXML = createSolidOverlayXML(91, "ImageOverlay", "000000", 35000, 0, 0, 12192000, 6858000)
+		overlayAlpha := 35000
+		if isCenterHero {
+			overlayAlpha = 20000
+		}
+		overlayXML = createSolidOverlayXML(91, "ImageOverlay", "000000", overlayAlpha, 0, 0, 12192000, 6858000)
 	} else if imagePos == "center" {
-		titleY = 750000
-		subtitleY = 5450000
-		decorY = 4700000
-		imageXML = createImagePictureXML(90, "CenterImage", assets.PrimaryImageRel, 2460000, 1550000, 7272000, 3200000, slide.ImageData)
+		if isCenterHero {
+			titleY = 680000
+			subtitleY = 5480000
+			decorY = 4740000
+			imageXML = createImagePictureXML(90, "CenterHeroImage", assets.PrimaryImageRel, 1860000, 1480000, 8472000, 3300000, slide.ImageData)
+		} else {
+			titleY = 750000
+			subtitleY = 5450000
+			decorY = 4700000
+			imageXML = createImagePictureXML(90, "CenterImage", assets.PrimaryImageRel, 2460000, 1550000, 7272000, 3200000, slide.ImageData)
+		}
 	} else {
-		titlePanelXML = createFramedPanelXML(92, "TitlePanel", stylePreset.BackgroundOverlay, panelAlpha, theme.AccentColor, panelLineAlpha, titleX-250000, titleY-450000, titleCX+500000, 2500000)
+		if !isMinimal {
+			titlePanelXML = createFramedPanelXML(92, "TitlePanel", stylePreset.BackgroundOverlay, panelAlpha, theme.AccentColor, panelLineAlpha, titleX-250000, titleY-450000, titleCX+500000, 2500000)
+		}
 	}
 
 	subtitle := slide.Subtitle
@@ -1395,13 +1574,7 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
 	if len(sections) == 0 {
 		return ""
 	}
-	cols := 1
-	switch {
-	case len(sections) >= 3 && cx >= 9000000:
-		cols = 3
-	case len(sections) >= 2 && cx >= 6800000:
-		cols = 2
-	}
+	cols := chooseSectionCardColumns(sections, cx)
 	rows := int(math.Ceil(float64(len(sections)) / float64(cols)))
 	gapX, gapY := 220000, 220000
 	cardW := (cx - gapX*(cols-1)) / cols
@@ -1431,6 +1604,20 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
 		cardID := 40 + idx*3
 		headerID := cardID + 1
 		textID := cardID + 2
+		heading := strings.TrimSpace(section.Heading)
+		detail := strings.TrimSpace(section.Detail)
+		useBadge := shouldUseSectionBadge(heading)
+		longHeading := len([]rune(heading)) > 16 || len([]rune(detail)) > 70
+		titleFont := 1800
+		bodyFont := 1500
+		bodyTopInset := 240000
+		bodyBottomInset := 180000
+		if longHeading {
+			titleFont = 1650
+			bodyFont = 1380
+			bodyTopInset = 200000
+			bodyBottomInset = 150000
+		}
 		sb.WriteString(fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
@@ -1449,7 +1636,86 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                         <a:solidFill><a:srgbClr val="%s"><a:alpha val="18000"/></a:srgbClr></a:solidFill>
                     </a:ln>
                 </p:spPr>
-            </p:sp>
+            </p:sp>%s
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="%d" name="SectionBody%d"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="%d" y="%d"/>
+                        <a:ext cx="%d" cy="%d"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr lIns="220000" tIns="%d" rIns="220000" bIns="%d" anchor="t"/>
+                    <a:lstStyle/>%s
+                </p:txBody>
+            </p:sp>`, cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, buildSectionCardBadgeXML(useBadge, headerID, idx+1, heading, cardX, cardY, accentColor, fontFamily, eaFontFamily), textID, idx+1, cardX, cardY+220000, cardW, cardH-260000, bodyTopInset, bodyBottomInset, buildSectionCardBodyXML(useBadge, heading, detail, textColor, fontFamily, eaFontFamily, titleFont, bodyFont)))
+	}
+	return sb.String()
+}
+
+func chooseSectionCardColumns(sections []SlideSection, cx int) int {
+	if len(sections) <= 1 {
+		return 1
+	}
+	maxHeading := 0
+	maxDetail := 0
+	for _, section := range sections {
+		if size := len([]rune(strings.TrimSpace(section.Heading))); size > maxHeading {
+			maxHeading = size
+		}
+		if size := len([]rune(strings.TrimSpace(section.Detail))); size > maxDetail {
+			maxDetail = size
+		}
+	}
+	switch {
+	case len(sections) >= 3 && cx >= 9000000:
+		if maxHeading <= 10 && maxDetail <= 34 {
+			return 3
+		}
+		return 2
+	case len(sections) >= 2 && cx >= 6800000:
+		return 2
+	default:
+		return 1
+	}
+}
+
+func shouldUseSectionBadge(heading string) bool {
+	heading = strings.TrimSpace(heading)
+	if heading == "" {
+		return false
+	}
+	lower := strings.ToLower(heading)
+	switch {
+	case lower == "p0", lower == "p1", lower == "p2", lower == "p3":
+		return true
+	case strings.HasPrefix(lower, "step "), strings.HasPrefix(lower, "part "), strings.HasPrefix(lower, "phase "):
+		return len([]rune(heading)) <= 8
+	}
+	for _, r := range heading {
+		if (r >= '0' && r <= '9') || r == ' ' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return len([]rune(heading)) <= 4
+}
+
+func buildSectionCardBadgeXML(useBadge bool, shapeID, idx int, heading string, cardX, cardY int, accentColor, fontFamily, eaFontFamily string) string {
+	if !useBadge {
+		return ""
+	}
+	badgeW := 520000 + len([]rune(strings.TrimSpace(heading)))*130000
+	if badgeW > 1800000 {
+		badgeW = 1800000
+	}
+	return fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
                     <p:cNvPr id="%d" name="SectionHeader%d"/>
@@ -1480,10 +1746,92 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                         </a:r>
                     </a:p>
                 </p:txBody>
-            </p:sp>
+            </p:sp>`, shapeID, idx, cardX+220000, cardY-120000, badgeW, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(heading))
+}
+
+func buildSectionCardBodyXML(useBadge bool, heading, detail, textColor, fontFamily, eaFontFamily string, titleFont, bodyFont int) string {
+	if useBadge {
+		if detail == "" {
+			detail = heading
+		}
+		return fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr algn="l"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, bodyFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(detail))
+	}
+	headingXML := fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr algn="l"/>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d" b="1">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, titleFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(heading))
+	if detail == "" {
+		return headingXML
+	}
+	return headingXML + fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr algn="l">
+                            <a:spcBef><a:spcPts val="300"/></a:spcBef>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, bodyFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(detail))
+}
+
+func createBulletTextXML(points []string, x, y, cx, cy int, textColor, fontFamily, eaFontFamily string) string {
+	if len(points) == 0 {
+		return ""
+	}
+	pointCount := len(points)
+	pointFontSize := 2000
+	pointSpcBefore := 700
+	if pointCount <= 3 {
+		pointFontSize = 2200
+		pointSpcBefore = 1100
+	}
+	paragraphs := ""
+	for _, point := range points {
+		paragraphs += fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr marL="342900" indent="-342900" algn="l">
+                            <a:spcBef><a:spcPts val="%d"/></a:spcBef>
+                            <a:buFont typeface="Arial"/>
+                            <a:buChar char="●"/>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="%d">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, pointSpcBefore, pointFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
+	}
+	return fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
-                    <p:cNvPr id="%d" name="SectionBody%d"/>
+                    <p:cNvPr id="3" name="Content"/>
                     <p:cNvSpPr/>
                     <p:nvPr/>
                 </p:nvSpPr>
@@ -1495,23 +1843,164 @@ func createSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColo
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
                 <p:txBody>
-                    <a:bodyPr lIns="220000" tIns="250000" rIns="220000" bIns="180000" anchor="t"/>
-                    <a:lstStyle/>
-                    <a:p>
-                        <a:pPr algn="l"/>
-                        <a:r>
-                            <a:rPr lang="zh-CN" sz="1800">
-                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
-                                <a:latin typeface="%s"/>
-                                <a:ea typeface="%s"/>
-                            </a:rPr>
-                            <a:t>%s</a:t>
-                        </a:r>
-                    </a:p>
+                    <a:bodyPr anchor="t" lIns="40000" rIns="40000"/>
+                    <a:lstStyle/>%s
                 </p:txBody>
-            </p:sp>`, cardID, idx+1, cardX, cardY, cardW, cardH, cardFill, cardAlpha, accentColor, headerID, idx+1, cardX+220000, cardY-120000, 1500000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading), textID, idx+1, cardX, cardY+220000, cardW, cardH-260000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+            </p:sp>`, x, y, cx, cy, paragraphs)
+}
+
+func createBulletsBandXML(slide Slide, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	if len(slide.Points) == 0 {
+		return ""
+	}
+	headline := slide.Points[0]
+	body := slide.Points
+	if len(body) > 1 {
+		body = body[1:]
+	}
+	if len(body) == 0 {
+		body = slide.Points[:1]
+	}
+	headlineLen := len([]rune(strings.TrimSpace(headline)))
+	bandHeight := 760000
+	headlineFont := 2200
+	if headlineLen > 70 {
+		bandHeight = 940000
+		headlineFont = 1900
+	}
+	bandXML := createFramedPanelXML(30, "BulletsBandPanel", cardFill, cardAlpha, accentColor, 12000, x, y, cx, bandHeight)
+	bandXML += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="31" name="BulletsBandText"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="420000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr" lIns="40000" rIns="40000"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="%d" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`, x+220000, y+170000, cx-440000, headlineFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(headline))
+	bodyXML := createBulletTextXML(body, x, y+bandHeight+220000, cx, cy-bandHeight-220000, textColor, fontFamily, eaFontFamily)
+	return bandXML + bodyXML
+}
+
+func createBulletsCalloutXML(slide Slide, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	if len(slide.Points) == 0 {
+		return ""
+	}
+	callout := firstNonEmpty(slide.Subtitle, slide.Points[0])
+	points := slide.Points
+	if len(points) > 1 {
+		points = points[1:]
+	}
+	if len(points) == 0 {
+		points = slide.Points[:1]
+	}
+	calloutLen := len([]rune(strings.TrimSpace(callout)))
+	calloutW := cx * 2 / 5
+	bulletsW := cx - calloutW - 220000
+	calloutFont := 2400
+	if calloutLen > 72 {
+		calloutFont = 2000
+	}
+	calloutXML := createFramedPanelXML(30, "BulletsCalloutPanel", cardFill, cardAlpha, accentColor, 12000, x, y, calloutW, cy)
+	calloutXML += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="31" name="BulletsCalloutText"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="ctr" lIns="180000" rIns="180000"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="%d" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`, x+120000, y+260000, calloutW-240000, cy-520000, calloutFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(callout))
+	bulletsXML := createBulletTextXML(points, x+calloutW+220000, y, bulletsW, cy, textColor, fontFamily, eaFontFamily)
+	return calloutXML + bulletsXML
+}
+
+func createBandedSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int, namePrefix string) string {
+	if len(sections) == 0 {
+		return ""
+	}
+	gapY := 180000
+	cardH := (cy - gapY*(len(sections)-1)) / len(sections)
+	if cardH < 980000 {
+		cardH = 980000
+	}
+	var sb strings.Builder
+	for idx, section := range sections {
+		cardY := y + idx*(cardH+gapY)
+		headFont := 1600
+		detailFont := 1300
+		detailHeight := cardH - 520000
+		if len([]rune(strings.TrimSpace(section.Detail))) > 90 {
+			headFont = 1500
+			detailFont = 1220
+			detailHeight = cardH - 460000
+		}
+		sb.WriteString(createFramedPanelXML(40+idx*3, fmt.Sprintf("%sBandCard%d", namePrefix, idx+1), cardFill, cardAlpha, accentColor, 12000, x, cardY, cx, cardH))
+		sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="%sBandHead%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="2200000" cy="360000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="%d" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="%sBandDetail%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="%d"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+			41+idx*3, escapeXML(namePrefix), idx+1, x+180000, cardY+120000, headFont, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading),
+			42+idx*3, escapeXML(namePrefix), idx+1, x+2600000, cardY+120000, cx-2780000, detailHeight, detailFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
 	}
 	return sb.String()
+}
+
+func createPersonaSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	return createBandedSectionCardsXML(sections, x, y, cx, cy, accentColor, textColor, fontFamily, eaFontFamily, cardFill, cardAlpha, "Persona")
+}
+
+func createStaggeredSectionCardsXML(sections []SlideSection, x, y, cx, cy int, accentColor, textColor, fontFamily, eaFontFamily, cardFill string, cardAlpha int) string {
+	if len(sections) == 0 {
+		return ""
+	}
+	if len(sections) < 3 {
+		return createSectionCardsXML(sections, x, y, cx, cy, accentColor, textColor, fontFamily, eaFontFamily, cardFill, cardAlpha)
+	}
+	colW := (cx - 220000) / 2
+	positions := []struct{ x, y int }{
+		{x: x, y: y},
+		{x: x + colW + 220000, y: y + 260000},
+		{x: x, y: y + 1560000},
+	}
+	var sb strings.Builder
+	for idx, section := range sections {
+		if idx >= len(positions) {
+			break
+		}
+		pos := positions[idx]
+		sb.WriteString(createFramedPanelXML(40+idx*3, fmt.Sprintf("SectionStaggerCard%d", idx+1), cardFill, cardAlpha, accentColor, 12000, pos.x, pos.y, colW, 1280000))
+		sb.WriteString(fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="SectionStaggerHead%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="340000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1750" b="1"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>
+            <p:sp>
+                <p:nvSpPr><p:cNvPr id="%d" name="SectionStaggerDetail%d"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+                <p:spPr><a:xfrm><a:off x="%d" y="%d"/><a:ext cx="%d" cy="540000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+                <p:txBody><a:bodyPr anchor="t"/><a:lstStyle/><a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-CN" sz="1400"><a:solidFill><a:srgbClr val="%s"/></a:solidFill><a:latin typeface="%s"/><a:ea typeface="%s"/></a:rPr><a:t>%s</a:t></a:r></a:p></p:txBody>
+            </p:sp>`,
+			41+idx*3, idx+1, pos.x+150000, pos.y+150000, colW-300000, accentColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Heading),
+			42+idx*3, idx+1, pos.x+150000, pos.y+520000, colW-300000, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(section.Detail)))
+	}
+	return sb.String()
+}
+
+func isBulletsVariant(variant string) bool {
+	return strings.HasPrefix(strings.TrimSpace(variant), "bullets")
+}
+
+func imageVariantPosition(variant string) string {
+	switch strings.TrimSpace(variant) {
+	case "image-left-editorial":
+		return "left"
+	case "image-right-editorial", "image-right-focus":
+		return "right"
+	default:
+		return ""
+	}
 }
 
 // createContentSlideXML builds XML for a content slide, including bullet support.
@@ -1526,16 +2015,22 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 	imagePos := resolvedImagePos(slide)
 
 	contentX, contentY, contentCX, contentCY := 700000, 1500000, 10800000, 4800000
-	titleY, titleCY := 300000, 700000
-	subtitleY := 1000000
+	titleY := 300000
+	titleFontSize, titleCY := estimatedContentTitleFrame(slide.Title)
+	subtitleY := titleY + titleCY + 60000
 	imageXML := ""
 	contentPanelXML := ""
-	if slide.Variant == "image-right" {
-		imagePos = "right"
+	if variantPos := imageVariantPosition(strings.TrimSpace(slide.Variant)); variantPos != "" {
+		imagePos = variantPos
 	}
 	if imagePos == "right" {
 		contentX, contentY, contentCX, contentCY = 700000, 1500000, 5400000, 4800000
-		imageXML = createImagePictureXML(90, "RightImage", assets.PrimaryImageRel, 6400000, 1450000, 4800000, 4300000, slide.ImageData)
+		if strings.TrimSpace(slide.Variant) == "image-right-focus" {
+			contentCX = 4700000
+			imageXML = createImagePictureXML(90, "RightFocusImage", assets.PrimaryImageRel, 5900000, 1350000, 5500000, 4600000, slide.ImageData)
+		} else {
+			imageXML = createImagePictureXML(90, "RightImage", assets.PrimaryImageRel, 6400000, 1450000, 4800000, 4300000, slide.ImageData)
+		}
 	} else if imagePos == "left" {
 		contentX, contentY, contentCX, contentCY = 6100000, 1500000, 5000000, 4800000
 		imageXML = createImagePictureXML(90, "LeftImage", assets.PrimaryImageRel, 700000, 1450000, 4800000, 4300000, slide.ImageData)
@@ -1559,6 +2054,20 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
 		titleY, titleCY = 250000, 600000
 		subtitleY = 980000
 		imageXML = createImagePictureXML(90, "DiagonalImage", assets.PrimaryImageRel, 6900000, 1200000, 4000000, 2600000, slide.ImageData)
+	}
+	if imagePos == "" || imagePos == "right" || imagePos == "left" {
+		subtitleHeight := estimatedSubtitleHeight(slide.Subtitle)
+		minContentY := subtitleY + subtitleHeight + 180000
+		if minContentY > contentY {
+			contentY = minContentY
+		}
+		availableContentCY := 5650000 - contentY
+		if availableContentCY < 2200000 {
+			availableContentCY = 2200000
+		}
+		if imagePos == "" || availableContentCY < contentCY {
+			contentCY = availableContentCY
+		}
 	}
 
 	// Accent block on the left side of the title.
@@ -1584,67 +2093,37 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                 </p:spPr>
             </p:sp>`, titleCY-200000, titleAccentColor)
 
-	if len(slide.Sections) == 0 && (imagePos != "" || slide.Content != "" || slide.Variant == "bullets") {
+	if len(slide.Sections) == 0 && (imagePos != "" || slide.Content != "") && !isBulletsVariant(slide.Variant) {
 		contentPanelXML = createFramedPanelXML(6, "ContentPanel", stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, accentColor, 12000, contentX, contentY-100000, contentCX, contentCY+100000)
 	}
 
 	// Build the main content area.
 	contentXML := ""
 	if len(slide.Sections) > 0 {
-		contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		switch strings.TrimSpace(slide.Variant) {
+		case "sections-grid-band":
+			contentXML = createBandedSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha, "Section")
+		case "sections-grid-staggered":
+			contentXML = createStaggeredSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		case "sections-grid-persona":
+			contentXML = createPersonaSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		default:
+			contentXML = createSectionCardsXML(slide.Sections, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		}
 	} else if len(slide.Points) > 0 {
-		if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
-			contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
-		} else {
-			// Bullet layout: one paragraph per point with bullet markers.
-			// Adjust spacing and font size dynamically based on point count.
-			pointCount := len(slide.Points)
-			pointFontSize := 2000 // Default 20pt.
-			pointSpcBefore := 600 // Default spacing before paragraph.
-			if pointCount <= 3 {
-				pointFontSize = 2200 // Fewer bullets can use larger text.
-				pointSpcBefore = 1200
-			} else if pointCount <= 4 {
-				pointSpcBefore = 800
+		switch strings.TrimSpace(slide.Variant) {
+		case "bullets-band":
+			contentXML = createBulletsBandXML(slide, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		case "bullets-callout":
+			contentXML = createBulletsCalloutXML(slide, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+		case "bullets", "bullets-plain":
+			contentXML = createBulletTextXML(slide.Points, contentX, contentY, contentCX, contentCY, textColor, fontFamily, eaFontFamily)
+		default:
+			if imagePos == "" || imagePos == "bottom" || imagePos == "top" {
+				contentXML = createPointCardsXML(slide.Points, contentX, contentY, contentCX, contentCY, accentColor, textColor, fontFamily, eaFontFamily, stylePreset.ContentCardFill, stylePreset.ContentCardAlpha)
+			} else {
+				contentXML = createBulletTextXML(slide.Points, contentX, contentY, contentCX, contentCY, textColor, fontFamily, eaFontFamily)
 			}
-			paragraphs := ""
-			for _, point := range slide.Points {
-				paragraphs += fmt.Sprintf(`
-                    <a:p>
-                        <a:pPr marL="342900" indent="-342900" algn="l">
-                            <a:spcBef><a:spcPts val="%d"/></a:spcBef>
-                            <a:buFont typeface="Arial"/>
-                            <a:buChar char="●"/>
-                        </a:pPr>
-                        <a:r>
-                            <a:rPr lang="zh-CN" sz="%d">
-                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
-                                <a:latin typeface="%s"/>
-                                <a:ea typeface="%s"/>
-                            </a:rPr>
-                            <a:t>%s</a:t>
-                        </a:r>
-                    </a:p>`, pointSpcBefore, pointFontSize, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
-			}
-			contentXML = fmt.Sprintf(`
-            <p:sp>
-                <p:nvSpPr>
-                    <p:cNvPr id="3" name="Content"/>
-                    <p:cNvSpPr/>
-                    <p:nvPr/>
-                </p:nvSpPr>
-                <p:spPr>
-                    <a:xfrm>
-                        <a:off x="%d" y="%d"/>
-                        <a:ext cx="%d" cy="%d"/>
-                    </a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                </p:spPr>
-                <p:txBody>
-                    <a:bodyPr anchor="ctr"/>
-                    <a:lstStyle/>%s
-                </p:txBody>
-            </p:sp>`, contentX, contentY, contentCX, contentCY, paragraphs)
 		}
 	} else if slide.Content != "" {
 		// Plain-text content: adjust font size based on length, with a lower bound.
@@ -1733,7 +2212,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
                     <a:p>
                         <a:pPr algn="l"/>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="3200" b="1">
+                            <a:rPr lang="zh-CN" sz="%d" b="1">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -1745,7 +2224,7 @@ func (g *PPTXGenerator) createContentSlideXML(slide Slide, theme *SlideTheme, st
             </p:sp>%s%s%s%s%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, contentPanelXML, contentXML, imageXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
+</p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleFontSize, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), subtitleXML, contentPanelXML, contentXML, imageXML, generateFooterXML(slide.Source, slideNum, totalSlides, 10, theme, stylePreset))
 }
 
 // createChartSlideXML builds XML for a slide that contains an embedded chart.
@@ -2178,6 +2657,15 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:spPr>
             </p:sp>`, accentColor)
 
+	titleY := 180000
+	titleFontSize, titleCY := estimatedDashboardTitleFrame(slide.Title)
+	subtitleY := titleY + titleCY + 70000
+	subtitleHeight := estimatedSubtitleHeight(slide.Subtitle)
+	metricsTop := subtitleY + subtitleHeight + 180000
+	if metricsTop < 1450000 {
+		metricsTop = 1450000
+	}
+
 	// Metric-card area, up to four cards in a single row.
 	metricsXML := ""
 	numMetrics := len(slide.Metrics)
@@ -2185,19 +2673,33 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
 		numMetrics = 4
 	}
 	hasLowerContent := hasChart || len(slide.Points) > 0
+	labelFont, valueFont, noteFont := metricCardTypography(slide.Metrics[:numMetrics], numMetrics)
 	if numMetrics > 0 {
 		// Spread cards evenly across the available horizontal range.
 		totalWidth := 10800000
 		cardGap := 150000
 		cardWidth := (totalWidth - (numMetrics-1)*cardGap) / numMetrics
-		cardHeight := 950000
+		cardHeight := 940000
+		if numMetrics <= 3 {
+			cardHeight = 1020000
+		}
 		// When there is no lower content, center the cards vertically in the usable area.
-		cardY := 1050000
+		cardY := metricsTop
 		if !hasLowerContent {
-			availTop := 1050000
-			availBottom := 6400000
+			availTop := metricsTop
+			availBottom := 5700000
 			cardHeight = 1280000
 			cardY = availTop + (availBottom-availTop-cardHeight)/2
+			if cardY < metricsTop {
+				cardY = metricsTop
+			}
+		} else {
+			if cardY+cardHeight > 2850000 {
+				cardHeight -= 120000
+				if cardHeight < 780000 {
+					cardHeight = 780000
+				}
+			}
 		}
 
 		for i := 0; i < numMetrics; i++ {
@@ -2231,14 +2733,14 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:p>
                         <a:pPr algn="ctr"/>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="1100">
+                            <a:rPr lang="zh-CN" sz="%d">
                                 <a:solidFill><a:srgbClr val="%s"><a:alpha val="62000"/></a:srgbClr></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
                             </a:rPr>
                             <a:t>%s</a:t>
                         </a:r>
-                    </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Note))
+                    </a:p>`, noteFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Note))
 			}
 
 			metricsXML += fmt.Sprintf(`
@@ -2256,12 +2758,12 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
                 <p:txBody>
-                    <a:bodyPr anchor="ctr" lIns="72000" rIns="72000"/>
+                    <a:bodyPr anchor="ctr" lIns="72000" tIns="100000" rIns="72000" bIns="60000"/>
                     <a:lstStyle/>
                     <a:p>
                         <a:pPr algn="ctr"/>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="1200">
+                            <a:rPr lang="zh-CN" sz="%d">
                                 <a:solidFill><a:srgbClr val="%s"><a:alpha val="62000"/></a:srgbClr></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -2272,7 +2774,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:p>
                         <a:pPr algn="ctr"/>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="3000" b="1">
+                            <a:rPr lang="zh-CN" sz="%d" b="1">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -2282,22 +2784,34 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     </a:p>%s
                 </p:txBody>
             </p:sp>`, shapeID+1, i, cardX, cardY, cardWidth, cardHeight,
-				textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Label),
-				primaryColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Value),
+				labelFont, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Label),
+				valueFont, primaryColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(m.Value),
 				noteXML)
 		}
 	}
 
 	// Lower-half content: chart and/or points.
 	lowerContentXML := ""
-	lowerY := 2200000
 	if numMetrics > 0 {
-		lowerY = 2200000
-	}
-
-	if hasChart && len(slide.Points) > 0 {
-		// Chart on the left, points on the right.
-		lowerContentXML += fmt.Sprintf(`
+		lowerY := metricsTop + 1180000
+		if numMetrics <= 3 {
+			lowerY = metricsTop + 1320000
+		}
+		if !hasLowerContent {
+			lowerY = 0
+		}
+		if lowerY > 3100000 {
+			lowerY = 3100000
+		}
+		if hasLowerContent {
+			// Chart and points share the lower half; keep some breathing room from the cards.
+			if lowerY < 2600000 {
+				lowerY = 2600000
+			}
+		}
+		if hasChart && len(slide.Points) > 0 {
+			// Chart on the left, points on the right.
+			lowerContentXML += fmt.Sprintf(`
             <p:graphicFrame>
                 <p:nvGraphicFramePr>
                     <p:cNvPr id="40" name="Chart"/>
@@ -2308,7 +2822,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:nvGraphicFramePr>
                 <p:xfrm>
                     <a:off x="400000" y="%d"/>
-                    <a:ext cx="6200000" cy="4000000"/>
+                    <a:ext cx="6200000" cy="2900000"/>
                 </p:xfrm>
                 <a:graphic>
                     <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
@@ -2317,17 +2831,17 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </a:graphic>
             </p:graphicFrame>`, lowerY)
 
-		// Right-side points.
-		pointsParagraphs := ""
-		for _, point := range slide.Points {
-			pointsParagraphs += fmt.Sprintf(`
+			// Right-side points.
+			pointsParagraphs := ""
+			for _, point := range slide.Points {
+				pointsParagraphs += fmt.Sprintf(`
                     <a:p>
                         <a:pPr marL="228600" indent="-228600" algn="l">
                             <a:buFont typeface="Arial"/>
                             <a:buChar char="●"/>
                         </a:pPr>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="1400">
+                            <a:rPr lang="zh-CN" sz="1300">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -2335,8 +2849,8 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                             <a:t>%s</a:t>
                         </a:r>
                     </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
-		}
-		lowerContentXML += fmt.Sprintf(`
+			}
+			lowerContentXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
                     <p:cNvPr id="41" name="Points"/>
@@ -2346,7 +2860,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 <p:spPr>
                     <a:xfrm>
                         <a:off x="6800000" y="%d"/>
-                        <a:ext cx="4800000" cy="4000000"/>
+                        <a:ext cx="4800000" cy="2800000"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
@@ -2355,9 +2869,9 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:lstStyle/>%s
                 </p:txBody>
             </p:sp>`, lowerY, pointsParagraphs)
-	} else if hasChart {
-		// Chart only, centered.
-		lowerContentXML += fmt.Sprintf(`
+		} else if hasChart {
+			// Chart only, centered.
+			lowerContentXML += fmt.Sprintf(`
             <p:graphicFrame>
                 <p:nvGraphicFramePr>
                     <p:cNvPr id="40" name="Chart"/>
@@ -2368,7 +2882,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:nvGraphicFramePr>
                 <p:xfrm>
                     <a:off x="700000" y="%d"/>
-                    <a:ext cx="10800000" cy="4000000"/>
+                    <a:ext cx="10800000" cy="3000000"/>
                 </p:xfrm>
                 <a:graphic>
                     <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
@@ -2376,18 +2890,18 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     </a:graphicData>
                 </a:graphic>
             </p:graphicFrame>`, lowerY)
-	} else if len(slide.Points) > 0 {
-		// Points only, full width.
-		pointsParagraphs := ""
-		for _, point := range slide.Points {
-			pointsParagraphs += fmt.Sprintf(`
+		} else if len(slide.Points) > 0 {
+			// Points only, full width.
+			pointsParagraphs := ""
+			for _, point := range slide.Points {
+				pointsParagraphs += fmt.Sprintf(`
                     <a:p>
                         <a:pPr marL="342900" indent="-342900" algn="l">
                             <a:buFont typeface="Arial"/>
                             <a:buChar char="●"/>
                         </a:pPr>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="1600">
+                            <a:rPr lang="zh-CN" sz="1480">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -2395,8 +2909,8 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                             <a:t>%s</a:t>
                         </a:r>
                     </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
-		}
-		lowerContentXML += fmt.Sprintf(`
+			}
+			lowerContentXML += fmt.Sprintf(`
             <p:sp>
                 <p:nvSpPr>
                     <p:cNvPr id="41" name="Points"/>
@@ -2406,7 +2920,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 <p:spPr>
                     <a:xfrm>
                         <a:off x="700000" y="%d"/>
-                        <a:ext cx="10800000" cy="4000000"/>
+                        <a:ext cx="10800000" cy="2500000"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
@@ -2415,12 +2929,131 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:lstStyle/>%s
                 </p:txBody>
             </p:sp>`, lowerY, pointsParagraphs)
+		}
+	} else if hasChart || len(slide.Points) > 0 {
+		lowerY := 2200000
+		if hasChart && len(slide.Points) > 0 {
+			lowerContentXML += fmt.Sprintf(`
+            <p:graphicFrame>
+                <p:nvGraphicFramePr>
+                    <p:cNvPr id="40" name="Chart"/>
+                    <p:cNvGraphicFramePr>
+                        <a:graphicFrameLocks noGrp="1"/>
+                    </p:cNvGraphicFramePr>
+                    <p:nvPr/>
+                </p:nvGraphicFramePr>
+                <p:xfrm>
+                    <a:off x="400000" y="%d"/>
+                    <a:ext cx="6200000" cy="3200000"/>
+                </p:xfrm>
+                <a:graphic>
+                    <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                        <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>
+                    </a:graphicData>
+                </a:graphic>
+            </p:graphicFrame>`, lowerY)
+			pointsParagraphs := ""
+			for _, point := range slide.Points {
+				pointsParagraphs += fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr marL="228600" indent="-228600" algn="l">
+                            <a:buFont typeface="Arial"/>
+                            <a:buChar char="●"/>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1300">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
+			}
+			lowerContentXML += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="41" name="Points"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="6800000" y="%d"/>
+                        <a:ext cx="4800000" cy="3000000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t" lIns="72000" rIns="72000"/>
+                    <a:lstStyle/>%s
+                </p:txBody>
+            </p:sp>`, lowerY, pointsParagraphs)
+		} else if hasChart {
+			lowerContentXML += fmt.Sprintf(`
+            <p:graphicFrame>
+                <p:nvGraphicFramePr>
+                    <p:cNvPr id="40" name="Chart"/>
+                    <p:cNvGraphicFramePr>
+                        <a:graphicFrameLocks noGrp="1"/>
+                    </p:cNvGraphicFramePr>
+                    <p:nvPr/>
+                </p:nvGraphicFramePr>
+                <p:xfrm>
+                    <a:off x="700000" y="%d"/>
+                    <a:ext cx="10800000" cy="3300000"/>
+                </p:xfrm>
+                <a:graphic>
+                    <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                        <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>
+                    </a:graphicData>
+                </a:graphic>
+            </p:graphicFrame>`, lowerY)
+		} else {
+			pointsParagraphs := ""
+			for _, point := range slide.Points {
+				pointsParagraphs += fmt.Sprintf(`
+                    <a:p>
+                        <a:pPr marL="342900" indent="-342900" algn="l">
+                            <a:buFont typeface="Arial"/>
+                            <a:buChar char="●"/>
+                        </a:pPr>
+                        <a:r>
+                            <a:rPr lang="zh-CN" sz="1480">
+                                <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
+                                <a:latin typeface="%s"/>
+                                <a:ea typeface="%s"/>
+                            </a:rPr>
+                            <a:t>%s</a:t>
+                        </a:r>
+                    </a:p>`, textColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(point))
+			}
+			lowerContentXML += fmt.Sprintf(`
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="41" name="Points"/>
+                    <p:cNvSpPr/>
+                    <p:nvPr/>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="700000" y="%d"/>
+                        <a:ext cx="10800000" cy="2800000"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr anchor="t"/>
+                    <a:lstStyle/>%s
+                </p:txBody>
+            </p:sp>`, lowerY, pointsParagraphs)
+		}
 	}
 
 	footerXML := generateFooterXML(slide.Source, slideNum, totalSlides, 60, theme, stylePreset)
 
 	// Subtitle.
-	dashSubtitleXML := generateSubtitleXML(slide.Subtitle, 55, 750000, theme)
+	dashSubtitleXML := generateSubtitleXML(slide.Subtitle, 55, subtitleY, theme)
 
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" 
@@ -2451,8 +3084,8 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                 </p:nvSpPr>
                 <p:spPr>
                     <a:xfrm>
-                        <a:off x="700000" y="150000"/>
-                        <a:ext cx="10800000" cy="600000"/>
+                        <a:off x="700000" y="%d"/>
+                        <a:ext cx="10800000" cy="%d"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
                 </p:spPr>
@@ -2462,7 +3095,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
                     <a:p>
                         <a:pPr algn="l"/>
                         <a:r>
-                            <a:rPr lang="zh-CN" sz="2800" b="1">
+                            <a:rPr lang="zh-CN" sz="%d" b="1">
                                 <a:solidFill><a:srgbClr val="%s"/></a:solidFill>
                                 <a:latin typeface="%s"/>
                                 <a:ea typeface="%s"/>
@@ -2474,7 +3107,7 @@ func (g *PPTXGenerator) createDashboardSlideXML(slide Slide, theme *SlideTheme, 
             </p:sp>%s%s%s%s
         </p:spTree>
     </p:cSld>
-</p:sld>`, bgXML, titleDecoXML, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), dashSubtitleXML, metricsXML, lowerContentXML, footerXML)
+</p:sld>`, bgXML, titleDecoXML, titleY, titleCY, titleFontSize, titleColor, escapeXML(fontFamily), escapeXML(eaFontFamily), escapeXML(slide.Title), dashSubtitleXML, metricsXML, lowerContentXML, footerXML)
 }
 
 // createSlideRelsWithChart builds slide rels with a chart reference.

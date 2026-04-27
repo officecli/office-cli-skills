@@ -10,6 +10,11 @@ import (
 const (
 	StylePresetExecutiveDark  = "executive-dark"
 	StylePresetEditorialLight = "editorial-light"
+	StylePresetExplainerVoxel = "explainer-voxel-light"
+	StylePresetInvestorWarm   = "investor-warm"
+	StylePresetProjectForest  = "project-forest"
+	StylePresetReviewCopper   = "review-copper"
+	StylePresetSlateSerif     = "collaboration-slate"
 	StylePresetTechContrast   = "tech-contrast"
 	StylePresetTrainingManual = "training-manual"
 )
@@ -31,6 +36,16 @@ func NormalizeStylePreset(value string) string {
 		return StylePresetExecutiveDark
 	case StylePresetEditorialLight:
 		return StylePresetEditorialLight
+	case StylePresetExplainerVoxel:
+		return StylePresetExplainerVoxel
+	case StylePresetInvestorWarm:
+		return StylePresetInvestorWarm
+	case StylePresetProjectForest:
+		return StylePresetProjectForest
+	case StylePresetReviewCopper:
+		return StylePresetReviewCopper
+	case StylePresetSlateSerif:
+		return StylePresetSlateSerif
 	case StylePresetTrainingManual:
 		return StylePresetTrainingManual
 	default:
@@ -62,16 +77,71 @@ func ResolveStylePreset(value string) PPTXStylePreset {
 			FooterLineColor:   "D6D3D1",
 			BackgroundOverlay: "F8F5EF",
 		}
+	case StylePresetExplainerVoxel:
+		return PPTXStylePreset{
+			ID:                StylePresetExplainerVoxel,
+			TitleAlign:        "l",
+			TitleAccentShape:  "line",
+			ContentCardFill:   "FFFFFF",
+			ContentCardAlpha:  96000,
+			SectionBadgeFill:  "3A7D44",
+			FooterLineColor:   "D8E1E8",
+			BackgroundOverlay: "F4F1E8",
+		}
+	case StylePresetInvestorWarm:
+		return PPTXStylePreset{
+			ID:                StylePresetInvestorWarm,
+			TitleAlign:        "l",
+			TitleAccentShape:  "line",
+			ContentCardFill:   "FFF8F0",
+			ContentCardAlpha:  98500,
+			SectionBadgeFill:  "C96C3A",
+			FooterLineColor:   "D8C7B6",
+			BackgroundOverlay: "FBF4EB",
+		}
+	case StylePresetProjectForest:
+		return PPTXStylePreset{
+			ID:                StylePresetProjectForest,
+			TitleAlign:        "l",
+			TitleAccentShape:  "rect",
+			ContentCardFill:   "F4F8F1",
+			ContentCardAlpha:  98500,
+			SectionBadgeFill:  "4D7C0F",
+			FooterLineColor:   "D7E2D1",
+			BackgroundOverlay: "EEF5EA",
+		}
+	case StylePresetReviewCopper:
+		return PPTXStylePreset{
+			ID:                StylePresetReviewCopper,
+			TitleAlign:        "l",
+			TitleAccentShape:  "line",
+			ContentCardFill:   "FFF7F1",
+			ContentCardAlpha:  98500,
+			SectionBadgeFill:  "9A3412",
+			FooterLineColor:   "E7D4C7",
+			BackgroundOverlay: "FAF1EA",
+		}
+	case StylePresetSlateSerif:
+		return PPTXStylePreset{
+			ID:                StylePresetSlateSerif,
+			TitleAlign:        "l",
+			TitleAccentShape:  "rect",
+			ContentCardFill:   "F6FAFB",
+			ContentCardAlpha:  98500,
+			SectionBadgeFill:  "0F766E",
+			FooterLineColor:   "D5E2E1",
+			BackgroundOverlay: "EDF5F4",
+		}
 	case StylePresetTrainingManual:
 		return PPTXStylePreset{
 			ID:                StylePresetTrainingManual,
 			TitleAlign:        "l",
 			TitleAccentShape:  "rect",
-			ContentCardFill:   "F8FAFC",
+			ContentCardFill:   "FFFDF6",
 			ContentCardAlpha:  98000,
-			SectionBadgeFill:  "2563EB",
-			FooterLineColor:   "2563EB",
-			BackgroundOverlay: "EFF6FF",
+			SectionBadgeFill:  "0F766E",
+			FooterLineColor:   "D7E5DE",
+			BackgroundOverlay: "F4F8F3",
 		}
 	default:
 		return PPTXStylePreset{
@@ -115,18 +185,83 @@ func DefaultThemeForPreset(preset string) *SlideTheme {
 			FontFamily:     "Georgia",
 			EAFontFamily:   "Noto Serif CJK SC",
 		}
-	case StylePresetTrainingManual:
+	case StylePresetExplainerVoxel:
 		return &SlideTheme{
-			PrimaryColor:   "2563EB",
-			AccentColor:    "0F172A",
-			HighlightColor: "60A5FA",
-			BackgroundType: "gradient",
-			BgColor1:       "EFF6FF",
-			BgColor2:       "FFFFFF",
-			TextColor:      "0F172A",
+			PrimaryColor:   "16324F",
+			AccentColor:    "3A7D44",
+			HighlightColor: "D9A441",
+			BackgroundType: "solid",
+			BgColor1:       "F4F1E8",
+			BgColor2:       "F4F1E8",
+			TextColor:      "1F2933",
+			TitleTextColor: "16324F",
+			FontFamily:     "Aptos",
+			EAFontFamily:   "Noto Sans CJK SC",
+		}
+	case StylePresetInvestorWarm:
+		return &SlideTheme{
+			PrimaryColor:   "6E2F1D",
+			AccentColor:    "C96C3A",
+			HighlightColor: "D9A441",
+			BackgroundType: "solid",
+			BgColor1:       "FBF4EB",
+			BgColor2:       "FBF4EB",
+			TextColor:      "2F241B",
+			TitleTextColor: "5B2419",
+			FontFamily:     "Georgia",
+			EAFontFamily:   "Noto Serif CJK SC",
+		}
+	case StylePresetProjectForest:
+		return &SlideTheme{
+			PrimaryColor:   "2F4F3E",
+			AccentColor:    "4D7C0F",
+			HighlightColor: "B45309",
+			BackgroundType: "solid",
+			BgColor1:       "EEF5EA",
+			BgColor2:       "EEF5EA",
+			TextColor:      "23312A",
+			TitleTextColor: "254234",
+			FontFamily:     "Aptos",
+			EAFontFamily:   "Noto Sans CJK SC",
+		}
+	case StylePresetReviewCopper:
+		return &SlideTheme{
+			PrimaryColor:   "7C2D12",
+			AccentColor:    "9A3412",
+			HighlightColor: "A16207",
+			BackgroundType: "solid",
+			BgColor1:       "FAF1EA",
+			BgColor2:       "FAF1EA",
+			TextColor:      "3A2A22",
+			TitleTextColor: "5E2415",
+			FontFamily:     "Georgia",
+			EAFontFamily:   "Noto Serif CJK SC",
+		}
+	case StylePresetSlateSerif:
+		return &SlideTheme{
+			PrimaryColor:   "1F2937",
+			AccentColor:    "0F766E",
+			HighlightColor: "C06A2B",
+			BackgroundType: "solid",
+			BgColor1:       "EDF5F4",
+			BgColor2:       "EDF5F4",
+			TextColor:      "1F2937",
 			TitleTextColor: "0F172A",
 			FontFamily:     "Aptos",
-			EAFontFamily:   "Microsoft YaHei",
+			EAFontFamily:   "Noto Sans CJK SC",
+		}
+	case StylePresetTrainingManual:
+		return &SlideTheme{
+			PrimaryColor:   "14532D",
+			AccentColor:    "0F766E",
+			HighlightColor: "B45309",
+			BackgroundType: "solid",
+			BgColor1:       "F4F8F3",
+			BgColor2:       "F4F8F3",
+			TextColor:      "1F2937",
+			TitleTextColor: "14532D",
+			FontFamily:     "Aptos",
+			EAFontFamily:   "Noto Sans CJK SC",
 		}
 	default:
 		return &SlideTheme{

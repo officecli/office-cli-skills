@@ -67,18 +67,21 @@ type GenerateJob struct {
 	DocumentType   engine.DocumentType
 	Topic          string
 	Brief          string
+	OriginalPrompt string
 	Prompt         string
 	SourceFilePath string
 	RuntimeMode    RuntimeMode
 	Mode           string
 	Language       string
 	Style          string
+	StyleSpecified bool
 	Audience       string
 	EnableImages   bool
 	LocalPreview   bool
 	OutputDir      string
 	Publish        bool
 	JSONOutput     bool
+	Warnings       []engine.GenerateIssue
 	LicenseCheck   *LicenseCheckResult
 }
 

@@ -83,14 +83,11 @@ func (w *Workflow) PrepareExecutionPlan(ctx context.Context, req engine.PrepareE
 		if questionMeta.ValidationRule != "" {
 			questionErrorKind = "schema_validate_failed"
 		}
-		questions = buildDynamicFallbackQuestions(req, documentType)
+		questions = buildTemplateFallbackQuestions(req, documentType)
+		questionSource = "template_fallback"
+		questionFallbackReason = "Dynamic clarification generation failed, so the workflow fell back to template questions."
 		if len(questions) == 0 {
-			questions, err = w.fallbackQuestions(ctx, req, documentType)
-			if err != nil {
-				questions = buildExecutionPlanQuestions(documentType)
-				questionSource = "static_fallback"
-				questionFallbackReason = "Dynamic clarification generation failed, so the workflow fell back to static clarification questions."
-			}
+			questions = buildExecutionPlanQuestions(documentType)
 		}
 	}
 	session := &engine.PlanSession{
@@ -496,6 +493,7 @@ func buildExecutionPlanSynthesisMessages(session *engine.PlanSession) []engine.L
 	if constraints != "" {
 		constraints = "- " + constraints
 	}
+	extraRequirements := strings.TrimSpace(buildExecutionPlanSynthesisRequirements(session))
 	userPrompt := fmt.Sprintf(`Based on the information below, prepare a user-facing execution plan for review and also produce the execution baseline for later generation.
 
 Task type: create a new document
@@ -521,6 +519,9 @@ Output requirements:
 		blueprintSection,
 		constraints,
 	)
+	if extraRequirements != "" {
+		userPrompt += "\n6. Also satisfy these scenario-specific execution-prompt requirements:\n" + extraRequirements
+	}
 	return []engine.LLMMessage{
 		{Role: "system", Content: "You organize execution plans for office documents. You must return JSON that matches the schema exactly."},
 		{Role: "user", Content: userPrompt},
@@ -553,5 +554,23 @@ func buildExecutionQualityConstraints(documentType string) []string {
 			"Give each slide one clear job and avoid repetitive or low-value slides.",
 			"Keep the slide-to-slide narrative progressive, and make titles and points serve the core conclusion.",
 		}
+	}
+}
+
+func buildExecutionPlanSynthesisRequirements(session *engine.PlanSession) string {
+	if session == nil || normalizeDocumentType(session.DocumentType) != "pptx" {
+		return ""
+	}
+	switch detectPPTQuestionScenario(session.UserPrompt) {
+	case "explainer":
+		return strings.Join([]string{
+			"- execution_prompt must explicitly state the intended audience familiarity level.",
+			"- execution_prompt must explicitly state a 6-8 slide target and keep the structure direct rather than consulting-style.",
+			"- execution_prompt must explicitly state the image strategy, including a cover hero visual allowance and a total budget of 2-3 strong related images when images are used.",
+			"- execution_prompt must explicitly state density rules: short titles, short card headings, preserve complete visible wording, and reflow or split instead of clipping copy.",
+			"- execution_prompt must explicitly state the ending style as beginner tips, who it suits, or how to start, and must forbid owners, milestones, rollout, or business next-step framing.",
+		}, "\n")
+	default:
+		return ""
 	}
 }

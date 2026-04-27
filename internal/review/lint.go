@@ -17,7 +17,7 @@ import (
 
 var (
 	slideNumPattern        = regexp.MustCompile(`slide(\d+)\.xml$`)
-	paragraphPattern       = regexp.MustCompile(`(?s)<a:p\b`)
+	bulletPattern          = regexp.MustCompile(`(?s)<a:bu(Char|AutoNum)\b`)
 	placeholderTextPattern = regexp.MustCompile(`(?i)(IMG_PLACEHOLDER_|click to add|placeholder)`) //nolint:lll
 	fontFamilyPattern      = regexp.MustCompile(`typeface="([^"]+)"`)
 )
@@ -40,6 +40,11 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 	hasDenseSlide := false
 	hasBulletOverflow := false
 	hasPlaceholderResidue := false
+	layoutCounts := map[string]int{}
+	variantCounts := map[string]int{}
+	sectionsGridSlides := make([]int, 0, 4)
+	twoCardGridSlides := make([]int, 0, 4)
+	slideVariants := make([]string, 0, len(paths))
 
 	for _, path := range paths {
 		slideNumber := extractSlideNumber(path)
@@ -82,14 +87,14 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			})
 		}
 
-		paragraphs := len(paragraphPattern.FindAllStringIndex(xmlContent, -1))
-		if paragraphs > 8 || len(nonEmptyRuns) > 8 {
+		bulletParagraphs := len(bulletPattern.FindAllStringIndex(xmlContent, -1))
+		if bulletParagraphs > 8 {
 			hasBulletOverflow = true
 			issues = append(issues, Issue{
 				Severity:     "medium",
 				Code:         "BULLET_OVERLOAD",
 				Title:        "Too many bullet points",
-				Message:      fmt.Sprintf("Slide %d contains too many bullet points (about %d paragraphs), which makes the main point harder to follow.", slideNumber, maxInt(paragraphs, len(nonEmptyRuns))),
+				Message:      fmt.Sprintf("Slide %d contains too many bullet points (about %d bullets), which makes the main point harder to follow.", slideNumber, bulletParagraphs),
 				SlideNumbers: []int{slideNumber},
 				Suggestion:   "Keep 3-5 main takeaways and move the rest into speaker notes or a follow-up slide.",
 			})
@@ -106,6 +111,64 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 				Suggestion:   "Remove template copy, placeholders, and test assets so every element reflects final content.",
 			})
 		}
+
+		layoutName, variantName, cardCount := inferSlideLayoutAndVariant(xmlContent)
+		if layoutName != "" {
+			layoutCounts[layoutName]++
+			if variantName != "" {
+				variantCounts[variantName]++
+			}
+			if layoutName == "sections-grid" {
+				sectionsGridSlides = append(sectionsGridSlides, slideNumber)
+				if cardCount == 2 {
+					twoCardGridSlides = append(twoCardGridSlides, slideNumber)
+				}
+			}
+		}
+		slideVariants = append(slideVariants, variantName)
+	}
+
+	if repeatedLayout, repeatedCount := findRepeatedLayout(layoutCounts); repeatedCount >= 3 && len(sectionsGridSlides) >= 2 {
+		issues = append(issues, Issue{
+			Severity:     "medium",
+			Code:         "LAYOUT_REPETITION_HIGH",
+			Title:        "Layout variety is too low",
+			Message:      fmt.Sprintf("The deck repeats the %s layout across %d slides, so the visual rhythm feels too uniform.", repeatedLayout, repeatedCount),
+			SlideNumbers: append([]int(nil), sectionsGridSlides...),
+			Suggestion:   "Mix statement, image-right, comparison, timeline, gallery, and closing layouts instead of reusing the same card layout repeatedly.",
+		})
+	}
+
+	if len(twoCardGridSlides) >= 2 {
+		issues = append(issues, Issue{
+			Severity:     "medium",
+			Code:         "TWO_CARD_GRID_OVERUSED",
+			Title:        "Two-card grids are overused",
+			Message:      fmt.Sprintf("The deck uses a two-card grid on %d slides, which makes the structure feel repetitive.", len(twoCardGridSlides)),
+			SlideNumbers: append([]int(nil), twoCardGridSlides...),
+			Suggestion:   "Convert some two-card pages into bullets, comparison, timeline, image-right, or a three-item structure.",
+		})
+	}
+
+	if uniqueVariantCount(variantCounts) > 0 && uniqueVariantCount(variantCounts) < 4 && len(paths) >= 6 {
+		issues = append(issues, Issue{
+			Severity:   "medium",
+			Code:       "VARIANT_VARIETY_LOW",
+			Title:      "Variant variety is too low",
+			Message:    fmt.Sprintf("This deck uses only %d distinct substyles across its body slides, so the presentation still feels repetitive.", uniqueVariantCount(variantCounts)),
+			Suggestion: "Mix more substyles such as bullets-band, bullets-callout, comparison-vs-band, timeline-zigzag, gallery-filmstrip, or closing-checklist.",
+		})
+	}
+
+	if left, right, variant := findAdjacentRepeatedVariant(slideVariants); variant != "" {
+		issues = append(issues, Issue{
+			Severity:     "medium",
+			Code:         "VARIANT_REPETITION_ADJACENT",
+			Title:        "Adjacent slides reuse the same substyle",
+			Message:      fmt.Sprintf("Slides %d and %d both use the %s variant, which makes the visual rhythm feel repetitive.", left, right, variant),
+			SlideNumbers: []int{left, right},
+			Suggestion:   "Choose a different substyle for one of the adjacent slides so the deck keeps changing pace.",
+		})
 	}
 
 	fonts, err := extractPPTXFontFamilies(deck)
@@ -226,11 +289,99 @@ func structurePenalty(code string) int {
 		return 12
 	case "BULLET_OVERLOAD":
 		return 10
+	case "LAYOUT_REPETITION_HIGH":
+		return 12
+	case "TWO_CARD_GRID_OVERUSED":
+		return 10
 	case "FONT_INCONSISTENT":
 		return 15
 	default:
 		return 8
 	}
+}
+
+func inferSlideLayoutAndVariant(xmlContent string) (string, string, int) {
+	switch {
+	case strings.Contains(xmlContent, "BulletsBandPanel"):
+		return "bullets", "bullets-band", 0
+	case strings.Contains(xmlContent, "BulletsCalloutPanel"):
+		return "bullets", "bullets-callout", 0
+	case bulletPattern.MatchString(xmlContent):
+		return "bullets", "bullets-plain", 0
+	case strings.Contains(xmlContent, "SectionPersonaBandCard") || strings.Contains(xmlContent, "PersonaBandCard") || strings.Contains(xmlContent, "PersonaBandHead"):
+		return "sections-grid", "sections-grid-persona", strings.Count(xmlContent, "PersonaBandCard")
+	case strings.Contains(xmlContent, "SectionBandCard"):
+		return "sections-grid", "sections-grid-band", strings.Count(xmlContent, "SectionBandCard")
+	case strings.Contains(xmlContent, "SectionStaggerCard"):
+		return "sections-grid", "sections-grid-staggered", strings.Count(xmlContent, "SectionStaggerCard")
+	case strings.Contains(xmlContent, "SectionCard"):
+		return "sections-grid", "sections-grid-3up", strings.Count(xmlContent, "SectionCard")
+	case strings.Contains(xmlContent, "CompareVSBand"):
+		return "comparison", "comparison-vs-band", 0
+	case strings.Contains(xmlContent, "CompareSpotlight"):
+		return "comparison", "comparison-spotlight", 0
+	case strings.Contains(xmlContent, "ComparePanel"):
+		return "comparison", "comparison-columns", 0
+	case strings.Contains(xmlContent, "TimelineStepsCard"):
+		return "timeline", "timeline-steps", 0
+	case strings.Contains(xmlContent, "TimelineZigzag"):
+		return "timeline", "timeline-zigzag", 0
+	case strings.Contains(xmlContent, "TimelineAxis"):
+		return "timeline", "timeline-axis", 0
+	case strings.Contains(xmlContent, "ClosingChecklistItem"):
+		return "closing", "closing-checklist", 0
+	case strings.Contains(xmlContent, "ClosingTakeawayPanel"):
+		return "closing", "closing-takeaway", 0
+	case strings.Contains(xmlContent, "ClosingCardLight"):
+		return "closing", "closing-cards-light", 0
+	case strings.Contains(xmlContent, "ClosingCard"):
+		return "closing", "closing", 0
+	case strings.Contains(xmlContent, "GalleryFilmstripImage"):
+		return "gallery", "gallery-filmstrip", 0
+	case strings.Contains(xmlContent, "GalleryFocusImage"):
+		return "gallery", "gallery-focus", 0
+	case strings.Contains(xmlContent, "GalleryDuoImage"):
+		return "gallery", "gallery-duo", 0
+	case strings.Contains(xmlContent, "GalleryImage") || strings.Contains(xmlContent, "GalleryFallback"):
+		return "gallery", "gallery", 0
+	default:
+		return "", "", 0
+	}
+}
+
+func findRepeatedLayout(layoutCounts map[string]int) (string, int) {
+	bestName := ""
+	bestCount := 0
+	for name, count := range layoutCounts {
+		if count > bestCount {
+			bestName = name
+			bestCount = count
+		}
+	}
+	return bestName, bestCount
+}
+
+func uniqueVariantCount(items map[string]int) int {
+	count := 0
+	for _, total := range items {
+		if total > 0 {
+			count++
+		}
+	}
+	return count
+}
+
+func findAdjacentRepeatedVariant(slideVariants []string) (int, int, string) {
+	for idx := 1; idx < len(slideVariants); idx++ {
+		current := strings.TrimSpace(slideVariants[idx])
+		if current == "" {
+			continue
+		}
+		if current == strings.TrimSpace(slideVariants[idx-1]) {
+			return idx, idx + 1, current
+		}
+	}
+	return 0, 0, ""
 }
 
 func sortIssues(items []Issue) []Issue {

@@ -51,13 +51,15 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	fileBase := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	localPreviewPath := filepath.Join(job.OutputDir, fileBase+".preview.html")
 	localPreviewDataPath := filepath.Join(job.OutputDir, fileBase+".preview.json")
+	allWarnings := append([]engine.GenerateIssue(nil), job.Warnings...)
+	allWarnings = append(allWarnings, artifact.Warnings...)
 	result := GenerateResult{
 		Status:       "success",
 		FilePath:     filePath,
 		DocumentType: string(job.DocumentType),
 		DocumentName: artifact.DocumentName,
 		RuntimeMode:  resultRuntimeMode(job, job.LicenseCheck),
-		Warnings:     warningMessages(artifact.Warnings),
+		Warnings:     warningMessages(allWarnings),
 	}
 	if job.LicenseCheck != nil {
 		result.AccessMode = string(job.LicenseCheck.AccessMode)
