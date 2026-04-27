@@ -1,7 +1,12 @@
-export interface FAQEntry {
-  q: string
-  a: string
-}
+import type { FAQEntry } from './agentSkillsData'
+import {
+  agentSkillsFAQs,
+  agentSkillsHubPath,
+  agentSkillsRoutes,
+  agentSkillsSubpages,
+  getAgentSkillsRoute,
+  legacyAgentSkillsPath,
+} from './agentSkillsData'
 
 export interface RouteSEO {
   title: string
@@ -29,13 +34,11 @@ export const siteBaseURL = 'https://officecli.io'
 const siteName = 'OfficeCLI'
 const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
+const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
 
 const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows'
 const homeDescription =
   'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, and REPORT outputs. Generate files from the terminal with your own LLM endpoint, without a backend stack or cluster.'
-const agentSkillsTitle = 'OfficeCLI Skills for Claude Code, Codex, and AI Agents | PPTX, DOCX, XLSX, and Report Workflows'
-const agentSkillsDescription =
-  'Explore OfficeCLI Skills for Claude Code, Codex, and AI agents. Install local skills and plugins for PPTX, DOCX, XLSX, and report workflows through the public officecli-skills repository.'
 
 export const homeFAQs: FAQEntry[] = [
   {
@@ -64,31 +67,19 @@ export const homeFAQs: FAQEntry[] = [
   },
 ]
 
-export const agentSkillsFAQs: FAQEntry[] = [
-  {
-    q: 'What is OfficeCLI Skills?',
-    a: 'OfficeCLI Skills is the public GitHub repository that distributes OfficeCLI skill definitions, plugin wrappers, and install scripts for Claude Code, Codex, and other AI agent runtimes.',
-  },
-  {
-    q: 'Can Claude Code create PPTX, DOCX, XLSX, and report outputs through OfficeCLI Skills?',
-    a: 'Yes. With a working local OfficeCLI runtime, the public skill repo provides the agent-facing installation and routing layer for supported Office document workflows.',
-  },
-  {
-    q: 'Why does this page mention Codex as well as Claude Code?',
-    a: 'Because the same public repository also supports direct local skill installation for Codex-style agents, not only marketplace installation for Claude Code.',
-  },
-  {
-    q: 'Is officecli-skills a hosted plugin backend?',
-    a: 'No. It is a public distribution repository for local wrappers, skill files, and documentation. Office document generation still runs through the user-controlled OfficeCLI runtime on the same machine.',
-  },
-]
-
 function buildCanonical(pathname: string) {
   return new URL(pathname, siteBaseURL).toString()
 }
 
-function buildRouteSEO(pathname: string, title: string, description: string, jsonLd?: RouteSEO['jsonLd']): RouteSEO {
-  const canonical = buildCanonical(pathname)
+function buildRouteSEO(
+  pathname: string,
+  title: string,
+  description: string,
+  jsonLd?: RouteSEO['jsonLd'],
+  options?: { canonicalPath?: string; image?: string },
+): RouteSEO {
+  const canonical = buildCanonical(options?.canonicalPath ?? pathname)
+  const image = options?.image ?? defaultImage
   return {
     title,
     description,
@@ -99,17 +90,134 @@ function buildRouteSEO(pathname: string, title: string, description: string, jso
       title,
       description,
       url: canonical,
-      image: defaultImage,
+      image,
       siteName,
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      image: defaultImage,
+      image,
     },
     jsonLd,
   }
+}
+
+function buildFAQJSONLD(faqs: FAQEntry[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.a,
+      },
+    })),
+  }
+}
+
+function buildBreadcrumbJSONLD(items: Array<{ name: string; path: string }>) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: buildCanonical(item.path),
+    })),
+  }
+}
+
+function buildSkillsBreadcrumbItems(pathname: string) {
+  const normalizedPath = pathname === legacyAgentSkillsPath ? agentSkillsHubPath : pathname
+  const route = getAgentSkillsRoute(normalizedPath)
+  if (!route) return []
+
+  if (route.path === agentSkillsHubPath) {
+    return [
+      { name: 'Home', path: '/' },
+      { name: 'officecli-skills', path: agentSkillsHubPath },
+    ]
+  }
+
+  return [
+    { name: 'Home', path: '/' },
+    { name: 'officecli-skills', path: agentSkillsHubPath },
+    { name: route.label, path: route.path },
+  ]
+}
+
+function buildSkillsCollectionJSONLD() {
+  const hubRoute = getAgentSkillsRoute(agentSkillsHubPath)
+  if (!hubRoute) return undefined
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'officecli-skills',
+    url: buildCanonical(agentSkillsHubPath),
+    description: hubRoute.seoDescription,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteName,
+      url: buildCanonical('/'),
+    },
+    hasPart: agentSkillsSubpages.map((route) => ({
+      '@type': 'WebPage',
+      name: route.label,
+      url: buildCanonical(route.path),
+      description: route.description,
+    })),
+  }
+}
+
+function buildSkillsWebPageJSONLD(pathname: string) {
+  const normalizedPath = pathname === legacyAgentSkillsPath ? agentSkillsHubPath : pathname
+  const route = getAgentSkillsRoute(normalizedPath)
+  if (!route) return undefined
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: route.seoTitle,
+    url: buildCanonical(route.path),
+    description: route.seoDescription,
+    isPartOf: {
+      '@type': 'WebSite',
+      name: siteName,
+      url: buildCanonical('/'),
+    },
+  }
+}
+
+function buildSkillsJSONLD(pathname: string): RouteSEO['jsonLd'] {
+  const normalizedPath = pathname === legacyAgentSkillsPath ? agentSkillsHubPath : pathname
+  const route = getAgentSkillsRoute(normalizedPath)
+  if (!route) return undefined
+
+  const jsonLd: Array<Record<string, unknown>> = []
+  const webPage = buildSkillsWebPageJSONLD(normalizedPath)
+  if (webPage) jsonLd.push(webPage)
+
+  const breadcrumbs = buildSkillsBreadcrumbItems(normalizedPath)
+  if (breadcrumbs.length > 0) {
+    jsonLd.push(buildBreadcrumbJSONLD(breadcrumbs))
+  }
+
+  if (normalizedPath === agentSkillsHubPath) {
+    const collection = buildSkillsCollectionJSONLD()
+    if (collection) jsonLd.push(collection)
+    jsonLd.push(buildFAQJSONLD(agentSkillsFAQs))
+  }
+
+  if (normalizedPath === `${agentSkillsHubPath}/faq`) {
+    jsonLd.push(buildFAQJSONLD(agentSkillsFAQs))
+  }
+
+  return jsonLd
 }
 
 const homeJSONLD: RouteSEO['jsonLd'] = [
@@ -123,43 +231,31 @@ const homeJSONLD: RouteSEO['jsonLd'] = [
     url: buildCanonical('/'),
     image: defaultImage,
   },
-  {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: homeFAQs.map((faq) => ({
-      '@type': 'Question',
-      name: faq.q,
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: faq.a,
-      },
-    })),
-  },
+  buildFAQJSONLD(homeFAQs),
 ]
 
-const agentSkillsJSONLD: RouteSEO['jsonLd'] = [
+const agentSkillsRouteSEO = agentSkillsRoutes.reduce<Record<string, RouteSEO>>((acc, route) => {
+  acc[route.path] = buildRouteSEO(route.path, route.seoTitle, route.seoDescription, buildSkillsJSONLD(route.path), {
+    image: skillsImage,
+  })
+  return acc
+}, {})
+
+const agentSkillsOverviewSEO = agentSkillsRouteSEO[agentSkillsHubPath]
+agentSkillsRouteSEO[legacyAgentSkillsPath] = buildRouteSEO(
+  legacyAgentSkillsPath,
+  agentSkillsOverviewSEO.title,
+  agentSkillsOverviewSEO.description,
+  buildSkillsJSONLD(legacyAgentSkillsPath),
   {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: agentSkillsFAQs.map((faq) => ({
-      '@type': 'Question',
-      name: faq.q,
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: faq.a,
-      },
-    })),
+    canonicalPath: agentSkillsHubPath,
+    image: skillsImage,
   },
-]
+)
 
 export const routeSEO: Record<string, RouteSEO> = {
   '/': buildRouteSEO('/', homeTitle, homeDescription, homeJSONLD),
-  '/claude-code-codex-office-skills': buildRouteSEO(
-    '/claude-code-codex-office-skills',
-    agentSkillsTitle,
-    agentSkillsDescription,
-    agentSkillsJSONLD,
-  ),
+  ...agentSkillsRouteSEO,
   '/docs': buildRouteSEO(
     '/docs',
     'OfficeCLI Docs | PPTX, DOCX, XLSX, and REPORT capabilities',

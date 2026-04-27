@@ -7,7 +7,7 @@ export default function Footer() {
 
   return (
     <footer className="bg-surface-low w-full border-t border-white/5">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-8 px-12 py-16 w-full max-w-[1440px] mx-auto">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-8 px-12 py-16 w-full max-w-[1440px] mx-auto">
         <div className="col-span-2 md:col-span-1">
           <div className="text-lg font-black text-white mb-6">OfficeCLI</div>
           <p className="text-gray-500 font-headline text-sm uppercase tracking-widest leading-relaxed">

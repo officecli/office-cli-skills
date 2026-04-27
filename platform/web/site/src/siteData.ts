@@ -14,6 +14,7 @@ export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
 
 export const navItems: NavItem[] = [
   { to: '/#', label: 'Home' },
+  { to: '/officecli-skills', label: 'Agent Skills' },
   { to: '/#pricing', label: 'Pricing' },
   { to: '/#download', label: 'Install the CLI' },
   { to: '/docs', label: 'Product Docs', newTab: true },
@@ -25,9 +26,18 @@ export const footerGroups = [
     title: 'Product',
     links: [
       { label: 'Install the CLI', to: '/#download', external: false },
-      { label: 'Agent Skills', to: '/claude-code-codex-office-skills', external: false },
+      { label: 'Agent Skills', to: '/officecli-skills', external: false },
       { label: 'Product Docs', to: '/docs', external: false },
       { label: 'Console', to: platformAppURL, external: true },
+    ],
+  },
+  {
+    title: 'Skills',
+    links: [
+      { label: 'Install', to: '/officecli-skills/install', external: false },
+      { label: 'Claude Code', to: '/officecli-skills/claude-code', external: false },
+      { label: 'Codex', to: '/officecli-skills/codex', external: false },
+      { label: 'OpenClaw', to: '/officecli-skills/openclaw', external: false },
     ],
   },
   {

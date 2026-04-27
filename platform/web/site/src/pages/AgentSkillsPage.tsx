@@ -1,101 +1,19 @@
 import { Link } from 'react-router-dom'
 import CodeBlock from '../components/CodeBlock'
-
-const githubRepoURL = 'https://github.com/officecli/officecli-skills'
-
-const keywordChips = ['Claude Code', 'Codex', 'AI Agents', 'PPTX', 'DOCX', 'XLSX', 'Report', 'Skills']
-
-const workflowCards = [
-  {
-    title: 'AI PPTX generation',
-    description:
-      'Create slide decks, proposal decks, product intros, and executive reviews from natural-language prompts while keeping generation local to the same machine.',
-  },
-  {
-    title: 'AI DOCX drafting',
-    description:
-      'Draft retrospectives, proposals, memos, and customer-facing documents through an OfficeCLI skill instead of building one-off document automation scripts.',
-  },
-  {
-    title: 'AI XLSX creation',
-    description:
-      'Generate spreadsheet structures, budget trackers, sales workbooks, and table-heavy outputs through the same skill surface used by agent clients.',
-  },
-  {
-    title: 'Workbook-backed report workflows',
-    description:
-      'Route report generation through OfficeCLI when the workbook is the source of truth and the agent needs a local report artifact rather than a chat-only summary.',
-  },
-]
-
-const installPaths = [
-  {
-    title: 'Claude Code marketplace install',
-    intro:
-      'Use the public marketplace source when you want Claude Code to discover the OfficeCLI skill through the plugin flow.',
-    command: '/plugin marketplace add officecli/officecli-skills\n/plugin install officecli@officecli-skills',
-  },
-  {
-    title: 'Codex and local agent install',
-    intro:
-      'Use the direct installer when you want the public OfficeCLI skill files on a Codex-style local agent host without a marketplace dependency.',
-    command:
-      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | bash -s -- officecli',
-  },
-  {
-    title: 'OpenClaw install',
-    intro:
-      'Use the OpenClaw-oriented installer when the agent should generate Office files through `officecli agent-bridge` and return them to chat channels as attachments.',
-    command:
-      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash',
-  },
-]
-
-const repoArtifacts = [
-  {
-    title: 'Public GitHub repository',
-    detail:
-      'The repo is the public distribution surface for OfficeCLI skills, install scripts, skill docs, and marketplace wrappers.',
-  },
-  {
-    title: 'Claude Code plugin wrappers',
-    detail:
-      'The `officecli` plugin targets Claude Code workflows where the agent should route Office tasks into the local OfficeCLI runtime.',
-  },
-  {
-    title: 'Codex-compatible skill bundle',
-    detail:
-      'The public `skills/officecli` bundle is designed for local skill installs where Codex or similar agents can refresh the bundle and validate the host environment.',
-  },
-  {
-    title: 'OpenClaw package',
-    detail:
-      'The OpenClaw-facing package keeps channel-based Office file generation on the same host through `officecli agent-bridge` instead of scraping human CLI output.',
-  },
-]
-
-const faqs = [
-  {
-    q: 'What is the difference between OfficeCLI and officecli-skills?',
-    a: 'OfficeCLI is the local document engine. `officecli-skills` is the public repository that distributes the skill definitions, plugin wrappers, and install scripts for agent clients.',
-  },
-  {
-    q: 'Can Claude Code create PPTX, DOCX, XLSX, or report outputs with this repo?',
-    a: 'Yes, when the OfficeCLI runtime is installed and configured locally. The public repo tells Claude Code how to route supported Office tasks into OfficeCLI instead of improvising another generation path.',
-  },
-  {
-    q: 'Why mention Codex if this is a GitHub skills repo?',
-    a: 'Because the repo is also a direct skill distribution surface for Codex-style local agents. Marketplace install is only one entrypoint; direct skill install is another.',
-  },
-  {
-    q: 'Is this a hosted SaaS plugin backend?',
-    a: 'No. The public skills repo distributes local wrappers and setup logic. Document generation still runs through the user-managed OfficeCLI runtime on the local machine.',
-  },
-  {
-    q: 'Which keywords should this page and repo target?',
-    a: 'The intended search terms are combinations of Claude Code, Codex, AI agents, Office skills, PPTX, DOCX, XLSX, report generation, and local Office document automation.',
-  },
-]
+import AgentSkillsSecondaryNav from '../components/AgentSkillsSecondaryNav'
+import {
+  agentSkillsFAQs,
+  agentSkillsHubPath,
+  downloadPath,
+  githubRepoURL,
+  installPaths,
+  keywordChips,
+  productDocsPath,
+  repoArtifacts,
+  runtimeQuickLinks,
+  verificationCommands,
+  workflowCards,
+} from '../agentSkillsData'
 
 export default function AgentSkillsPage() {
   return (
@@ -105,14 +23,14 @@ export default function AgentSkillsPage() {
         <div className="relative mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)] lg:items-start">
           <div>
             <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-4 py-2 font-headline text-xs uppercase tracking-[0.28em] text-primary">
-              AI agent Office document skills
+              officecli-skills public repository
             </span>
             <h1 className="max-w-5xl font-headline text-5xl font-bold tracking-tight text-white md:text-6xl lg:text-7xl">
-              OfficeCLI Skills for Claude Code, Codex, and AI Agents
+              officecli-skills for Claude Code, Codex, and AI Agents
             </h1>
             <p className="mt-6 max-w-4xl text-lg leading-relaxed text-outline-variant md:text-xl">
-              <strong className="text-white">OfficeCLI Skills</strong> is the public GitHub repository and install surface for Claude Code,
-              Codex, and other AI agents that need local <strong className="text-white">PPTX</strong>,{' '}
+              <strong className="text-white">officecli-skills</strong> is the public GitHub repository and install surface for Claude Code,
+              Codex, OpenClaw, and other AI agents that need local <strong className="text-white">PPTX</strong>,{' '}
               <strong className="text-white">DOCX</strong>, <strong className="text-white">XLSX</strong>, and workbook-backed{' '}
               <strong className="text-white">report</strong> workflows. It packages marketplace metadata, public skill bundles, install scripts,
               and agent-facing guidance so Office document automation stays on the same machine through OfficeCLI instead of a hosted plugin backend.
@@ -136,15 +54,15 @@ export default function AgentSkillsPage() {
               </a>
               <Link
                 className="rounded-full border border-outline-variant/20 px-6 py-3 font-semibold text-white transition-colors hover:border-primary/30 hover:text-primary"
-                to="/docs"
+                to={agentSkillsHubPath + '/install'}
               >
-                Read product docs
+                Open install page
               </Link>
               <Link
                 className="rounded-full border border-outline-variant/20 px-6 py-3 font-semibold text-white transition-colors hover:border-primary/30 hover:text-primary"
-                to="/download"
+                to={productDocsPath}
               >
-                Install OfficeCLI
+                Read product docs
               </Link>
             </div>
           </div>
@@ -181,6 +99,12 @@ export default function AgentSkillsPage() {
         </div>
       </section>
 
+      <section className="px-8 py-4 md:px-16 md:py-6">
+        <div className="mx-auto max-w-[1440px]">
+          <AgentSkillsSecondaryNav currentPath={agentSkillsHubPath} />
+        </div>
+      </section>
+
       <section className="px-8 py-8 md:px-16 md:py-12">
         <div className="mx-auto grid max-w-[1440px] gap-6 lg:grid-cols-4">
           {repoArtifacts.map((item) => (
@@ -189,6 +113,28 @@ export default function AgentSkillsPage() {
               <p className="mt-4 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="px-8 py-12 md:px-16 md:py-16">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="mb-10 max-w-3xl">
+            <span className="mb-4 block font-headline text-xs uppercase tracking-[0.24em] text-primary">Primary entrypoints</span>
+            <h2 className="font-headline text-4xl font-bold tracking-tight text-white md:text-5xl">
+              Give Google stable child pages instead of random file links
+            </h2>
+            <p className="mt-4 text-lg leading-relaxed text-outline-variant">
+              These pages map the main search intents around the public repo: install, Claude Code, Codex, OpenClaw, and FAQ.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {runtimeQuickLinks.map((item) => (
+              <Link key={item.href} className="rounded-3xl border border-outline-variant/10 bg-surface-low p-6 transition-colors hover:border-primary/20" to={item.href}>
+                <h3 className="font-headline text-2xl font-bold text-white">{item.title}</h3>
+                <p className="mt-4 text-sm leading-relaxed text-outline-variant">{item.description}</p>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -243,7 +189,7 @@ export default function AgentSkillsPage() {
                 The public repo only solves distribution and routing. The final Office artifact still depends on a working local OfficeCLI runtime.
               </p>
               <div className="mt-6">
-                <CodeBlock command={'officecli --version\nofficecli config status\nofficecli agent-bridge'} />
+                <CodeBlock command={verificationCommands} />
               </div>
             </article>
             <article className="rounded-3xl border border-outline-variant/10 bg-background/80 p-6">
@@ -252,10 +198,19 @@ export default function AgentSkillsPage() {
                 <a className="block text-primary transition-colors hover:text-tertiary" href={githubRepoURL}>
                   GitHub: officecli/officecli-skills
                 </a>
-                <Link className="block text-primary transition-colors hover:text-tertiary" to="/docs">
+                <Link className="block text-primary transition-colors hover:text-tertiary" to={`${agentSkillsHubPath}/claude-code`}>
+                  Claude Code marketplace install
+                </Link>
+                <Link className="block text-primary transition-colors hover:text-tertiary" to={`${agentSkillsHubPath}/codex`}>
+                  Codex direct local install
+                </Link>
+                <Link className="block text-primary transition-colors hover:text-tertiary" to={`${agentSkillsHubPath}/openclaw`}>
+                  OpenClaw bridge install
+                </Link>
+                <Link className="block text-primary transition-colors hover:text-tertiary" to={productDocsPath}>
                   Product docs for OfficeCLI formats and agent bridge
                 </Link>
-                <Link className="block text-primary transition-colors hover:text-tertiary" to="/download">
+                <Link className="block text-primary transition-colors hover:text-tertiary" to={downloadPath}>
                   OfficeCLI install methods for macOS and Linux
                 </Link>
               </div>
@@ -276,7 +231,7 @@ export default function AgentSkillsPage() {
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
-            {faqs.map((faq) => (
+            {agentSkillsFAQs.map((faq) => (
               <article key={faq.q} className="rounded-3xl border border-outline-variant/10 bg-surface-low p-7">
                 <h3 className="font-headline text-2xl font-bold text-white">{faq.q}</h3>
                 <p className="mt-4 text-sm leading-relaxed text-outline-variant">{faq.a}</p>

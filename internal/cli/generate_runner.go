@@ -24,16 +24,14 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
-	emitProgress(ctx, progress, progressStepLicense, "running", "Checking access status")
-	licenseCheck, err := a.checkLicenseWithRuntime(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate")
-	if err != nil {
-		emitProgress(ctx, progress, progressStepLicense, "failed", "Access check failed")
+	if _, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "status", "Checking access status", progress); err != nil {
 		return GenerateResult{}, err
 	}
-	emitProgress(ctx, progress, progressStepLicense, "completed", "Access check completed")
-	job.LicenseCheck = licenseCheck
 
-	var llmClient GeneratorLLMClient
+	var (
+		err       error
+		llmClient GeneratorLLMClient
+	)
 	if job.RuntimeMode == RuntimeModeHosted {
 		llmClient, err = newHostedLLMClient(cfg.License, job)
 		if err != nil {
@@ -63,6 +61,11 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 			return GenerateResult{}, err
 		}
 	}
+	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Refreshing access status before generation", progress)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	job.LicenseCheck = licenseCheck
 
 	publishCfg := cfg.Publish
 	if strings.TrimSpace(publishCfg.APIKey) == "" {

@@ -43,6 +43,13 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		return GenerateResult{}, fmt.Errorf("content generation failed: %w", err)
 	}
 	emitProgress(ctx, e.progress, progressStepGenerate, "completed", "Document content generation completed")
+	return e.finalizeArtifact(ctx, job, artifact)
+}
+
+func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifact *GeneratedArtifact) (GenerateResult, error) {
+	if artifact == nil {
+		return GenerateResult{}, fmt.Errorf("generated artifact is unavailable")
+	}
 	fileName := artifact.DocumentName
 	if fileName == "" {
 		fileName = job.Topic + "." + string(job.DocumentType)

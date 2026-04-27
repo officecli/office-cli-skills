@@ -357,9 +357,28 @@ This repository is the public distribution surface for:
 - the `openclaw-officecli` package for OpenClaw-oriented integrations
 - direct install scripts for local Codex-style skill installs
 
+## Fast links
+
+Site pages:
+
+- [Overview](https://officecli.io/officecli-skills)
+- [Install](https://officecli.io/officecli-skills/install)
+- [Claude Code](https://officecli.io/officecli-skills/claude-code)
+- [Codex](https://officecli.io/officecli-skills/codex)
+- [OpenClaw](https://officecli.io/officecli-skills/openclaw)
+- [FAQ](https://officecli.io/officecli-skills/faq)
+
+GitHub guides in this repository:
+
+- [Install](./install/README.md)
+- [Claude Code](./claude-code/README.md)
+- [Codex](./codex/README.md)
+- [OpenClaw](./openclaw/README.md)
+- [FAQ](./faq/README.md)
+
 Related product page:
 
-- `https://officecli.io/claude-code-codex-office-skills`
+- `https://officecli.io/officecli-skills`
 
 ## What OfficeCLI Skills supports
 
@@ -488,6 +507,11 @@ No. It contains public skill definitions, plugin wrappers, examples, and install
 
 ## Layout
 
+- `install/README.md`: install entrypoint for search and onboarding
+- `claude-code/README.md`: Claude Code marketplace install guide
+- `codex/README.md`: direct local install guide for Codex-style agents
+- `openclaw/README.md`: OpenClaw installer and bridge guide
+- `faq/README.md`: FAQ entrypoint
 - `.claude-plugin/marketplace.json`: Claude Code marketplace definition
 - `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
 - `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
@@ -506,6 +530,127 @@ content = path.read_text()
 content = content.replace("__PUBLIC_SKILLS_REPO__", os.environ["PUBLIC_SKILLS_REPO"])
 content = content.replace("__PUBLIC_SKILLS_DEFAULT_BRANCH__", os.environ["PUBLIC_SKILLS_DEFAULT_BRANCH"])
 path.write_text(content)
+PY
+
+mkdir -p install claude-code codex openclaw faq
+
+cat > install/README.md <<'README'
+# Install officecli-skills
+
+Use this guide when the search intent is specifically about how to install `officecli-skills`.
+
+Main page:
+
+- `https://officecli.io/officecli-skills/install`
+
+Choose the install path that matches the runtime:
+
+- [Claude Code](../claude-code/README.md)
+- [Codex](../codex/README.md)
+- [OpenClaw](../openclaw/README.md)
+
+The public repository only distributes skill wrappers and installers. Final Office file generation still
+depends on a working local `officecli` runtime.
+
+Quick verification:
+
+```bash
+officecli --version
+officecli config status
+officecli agent-bridge
+```
+README
+
+cat > claude-code/README.md <<'README'
+# officecli-skills for Claude Code
+
+Use this guide when you want the Claude Code marketplace installation path for `officecli-skills`.
+
+Main page:
+
+- `https://officecli.io/officecli-skills/claude-code`
+
+Marketplace install:
+
+```text
+/plugin marketplace add __PUBLIC_SKILLS_REPO__
+/plugin install officecli@officecli-skills
+```
+
+This path is for local Office workflows through Claude Code. It is not a hosted plugin backend.
+README
+
+cat > codex/README.md <<'README'
+# officecli-skills for Codex
+
+Use this guide when you want the direct local installer for Codex-style agents.
+
+Main page:
+
+- `https://officecli.io/officecli-skills/codex`
+
+Direct install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-skill.sh | bash -s -- officecli
+```
+
+This path installs the public skill bundle directly on the local machine without a marketplace layer.
+README
+
+cat > openclaw/README.md <<'README'
+# officecli-skills for OpenClaw
+
+Use this guide when you want the OpenClaw-oriented package and `officecli agent-bridge`.
+
+Main page:
+
+- `https://officecli.io/officecli-skills/openclaw`
+
+Install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKILLS_DEFAULT_BRANCH__/scripts/install-openclaw-skill.sh | bash
+```
+
+After installation, attach `openclaw-officecli` to the target OpenClaw agent and verify:
+
+```bash
+officecli agent-bridge
+```
+README
+
+cat > faq/README.md <<'README'
+# officecli-skills FAQ
+
+Use this guide when the question is not installation itself, but whether `officecli-skills` is the right entrypoint.
+
+Main page:
+
+- `https://officecli.io/officecli-skills/faq`
+
+Key answers:
+
+- `officecli-skills` is the public repository for wrappers, skills, and installers
+- `officecli` is the local runtime that produces the final Office file
+- marketplace install is only one path; direct local install is another
+- this repository is not a hosted SaaS plugin backend
+README
+
+PUBLIC_SKILLS_REPO="${PUBLIC_SKILLS_REPO}" PUBLIC_SKILLS_DEFAULT_BRANCH="${PUBLIC_SKILLS_DEFAULT_BRANCH}" python3 - <<'PY'
+from pathlib import Path
+import os
+
+paths = [
+    Path("claude-code/README.md"),
+    Path("codex/README.md"),
+    Path("openclaw/README.md"),
+]
+for path in paths:
+    content = path.read_text()
+    content = content.replace("__PUBLIC_SKILLS_REPO__", os.environ["PUBLIC_SKILLS_REPO"])
+    content = content.replace("__PUBLIC_SKILLS_DEFAULT_BRANCH__", os.environ["PUBLIC_SKILLS_DEFAULT_BRANCH"])
+    path.write_text(content)
 PY
 
 cat > LICENSE <<'LICENSE'

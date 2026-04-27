@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -228,6 +229,63 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 	}
 }
 
+func TestPrepareAgentPayloadForReport(t *testing.T) {
+	workbookBytes, err := officegen.NewXLSXGenerator().Generate([]officegen.XlsxSheet{
+		{
+			Name: "Summary",
+			Rows: [][]string{
+				{"Region", "Revenue", "Growth"},
+				{"North America", "128", "+12%"},
+				{"Europe", "96", "+8%"},
+			},
+		},
+	}, officegen.XLSXOptions{Title: "Q2 Review", Creator: "OfficeCLI"})
+	if err != nil {
+		t.Fatalf("Generate workbook: %v", err)
+	}
+	workbookPath := filepath.Join(t.TempDir(), "source.xlsx")
+	if err := os.WriteFile(workbookPath, workbookBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	prepared, err := PrepareAgentPayload(PrepareParams{
+		DocumentType:   engine.DocumentTypeReport,
+		Topic:          "Q2 Review",
+		SourceFilePath: workbookPath,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAgentPayload: %v", err)
+	}
+	if prepared.PreferredTool != "office.render" || !prepared.PrepareRequired {
+		t.Fatalf("unexpected prepare metadata: %#v", prepared)
+	}
+	if !strings.Contains(prepared.WorkbookSummary, "North America") {
+		t.Fatalf("unexpected workbook summary: %s", prepared.WorkbookSummary)
+	}
+	if len(prepared.BaseReportJSON) == 0 {
+		t.Fatal("expected base report json")
+	}
+}
+
+func TestServiceRenderDOCXWithoutLLM(t *testing.T) {
+	service := NewService(nil, nil)
+	doc, err := service.Render(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeDOCX,
+		Topic:        "Quarterly Brief",
+	}, json.RawMessage(`{"title":"Quarterly Brief","sections":[{"heading":"Summary","level":1,"paragraphs":["Delivery-ready content."]}]}`))
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	contentXMLs, err := ooxmledit.ExtractContentXML(doc.Bytes, ooxmledit.FileTypeDOCX)
+	if err != nil {
+		t.Fatalf("ExtractContentXML: %v", err)
+	}
+	if !strings.Contains(contentXMLs["word/document.xml"], "Quarterly Brief") {
+		t.Fatalf("document xml = %q", contentXMLs["word/document.xml"])
+	}
+}
+
 func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
 		jsonResponse: `{
@@ -256,6 +314,39 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Enterprise Collabo") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
+	}
+}
+
+func TestServiceRenderPPTXWithoutTextLLMCalls(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Render(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "Enterprise Collaboration Platform Overview",
+		Style:        "editorial-light",
+		EnableImages: true,
+	}, json.RawMessage(`{
+		"title":"Enterprise Collaboration Platform Overview",
+		"stylePreset":"editorial-light",
+		"theme":null,
+		"slides":[
+			{"title":"Enterprise Collaboration Platform Overview","content":"","isTitle":true,"layout":"title","variant":"title-center","narrativeRole":"cover","sectionIndex":0,"sectionTitle":"","subtitle":"Product context and business status","points":[],"sections":[],"chart":null,"metrics":[],"source":"","bgColor":"","bgColor2":"","hasImage":true,"imagePrompt":"A polished enterprise dashboard hero image","imagePos":"background","visuals":[]}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if llm.jsonCallCount != 0 || llm.structuredCallCount != 0 {
+		t.Fatalf("unexpected text llm calls: json=%d structured=%d", llm.jsonCallCount, llm.structuredCallCount)
+	}
+	if llm.imageCalls == 0 {
+		t.Fatal("expected image call")
+	}
+	if countZipEntries(doc.Bytes, "ppt/media/", ".png") == 0 {
+		t.Fatal("expected embedded ppt media")
 	}
 }
 
