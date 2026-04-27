@@ -18,7 +18,7 @@ officecli --version
 
 ## Version Mapping
 
-- npm package version `0.2.26` downloads OfficeCLI release `v0.2.26`
+- npm package version `0.2.27` downloads OfficeCLI release `v0.2.27`
 - the wrapper installs only the current stable binary that matches the package version
 
 ## Supported Platforms

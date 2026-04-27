@@ -2414,13 +2414,14 @@ func defaultActionSlide(archetype pptxArchetype, deckTitle string) officegen.Sli
 		return slide
 	}
 	slide := officegen.Slide{
-		Title:    "Next Steps",
-		Layout:   "content",
-		Subtitle: "Close with a small set of actions, owners, and validation points",
+		Title:    "Recommendation",
+		Layout:   "closing",
+		Variant:  "closing-decision-banner",
+		Subtitle: "Close with one clear recommendation and only the proof points needed to support it.",
 		Sections: []officegen.SlideSection{
-			{Heading: "This Week", Detail: "Owner defines the decision scope and confirms the first milestone"},
-			{Heading: "30 Days", Detail: "Team executes the first proof point and tracks the lead metric"},
-			{Heading: "Review", Detail: "Leadership decides whether to scale based on evidence and adoption"},
+			{Heading: "Recommendation", Detail: "Approve one focused pilot around the highest-friction document workflow."},
+			{Heading: "Why Now", Detail: "Validate reliability, privacy, and operator control before broader rollout."},
+			{Heading: "Proof Point", Detail: "Use one short cycle to confirm quality, review speed, and adoption."},
 		},
 	}
 	slide.Variant = normalizeSlideVariant(slide)
@@ -2710,11 +2711,11 @@ func actionTitleForArchetype(archetype pptxArchetype) string {
 	case pptxArchetypeMarket:
 		return "Entry Recommendations"
 	case pptxArchetypeOps:
-		return "Execution Actions"
+		return "Board Recommendation"
 	case pptxArchetypeTraining:
 		return "Next Practice Steps"
 	default:
-		return "Next Steps"
+		return "Recommendation"
 	}
 }
 
@@ -2725,11 +2726,11 @@ func actionSubtitleForArchetype(archetype pptxArchetype) string {
 	case pptxArchetypeMarket:
 		return "Close with the market sequence, owner, and validation window"
 	case pptxArchetypeOps:
-		return "Close with repair actions, owner, and the metric to track"
+		return "Close with one decision ask and the metric or proof point needed to validate it"
 	case pptxArchetypeTraining:
 		return "Close with the next commands, practice loop, and caution points"
 	default:
-		return "Close with a small set of actions, owners, and validation points"
+		return "Close with one recommendation and 1-2 supporting validation points"
 	}
 }
 
@@ -3404,7 +3405,8 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 		strings.Contains(text, "市场机会") || strings.Contains(text, "市场分析") || strings.Contains(text, "出海"):
 		return pptxArchetypeMarket
 	case strings.Contains(text, "business review") || strings.Contains(text, "quarterly operations") || strings.Contains(text, "data report") || strings.Contains(text, "operations review") ||
-		strings.Contains(text, "经营复盘") || strings.Contains(text, "季度经营") || strings.Contains(text, "月度经营") || strings.Contains(text, "管理层经营"):
+		strings.Contains(text, "board review") || strings.Contains(text, "qbr") ||
+		strings.Contains(text, "经营复盘") || strings.Contains(text, "季度经营") || strings.Contains(text, "月度经营") || strings.Contains(text, "管理层经营") || strings.Contains(text, "董事会复盘"):
 		return pptxArchetypeOps
 	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
 		strings.Contains(text, "培训课件") || strings.Contains(text, "入职培训") || strings.Contains(text, "新员工培训") || strings.Contains(text, "培训"):

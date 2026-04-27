@@ -707,6 +707,19 @@ func TestNormalizePPTXSlide_ExplainerClosingUsesStarterGuidanceAndCanKeepShortBa
 	}
 }
 
+func TestDefaultActionSlide_GeneralAvoidsLegacyNextStepsTemplate(t *testing.T) {
+	slide := defaultActionSlide(pptxArchetypeGeneral, "OfficeCLI")
+	if slide.Title == "Next Steps" {
+		t.Fatalf("general fallback should no longer use legacy title: %+v", slide)
+	}
+	if slide.Subtitle == "Close with a small set of actions, owners, and validation points" {
+		t.Fatalf("general fallback should no longer use legacy subtitle: %+v", slide)
+	}
+	if slide.Variant != "closing-decision-banner" {
+		t.Fatalf("variant = %q, want closing-decision-banner", slide.Variant)
+	}
+}
+
 func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	llm := &fakeLLMClient{
 		jsonResponse: `{
@@ -946,6 +959,7 @@ func TestSuggestStylePreset_RoutesChineseBusinessThemes(t *testing.T) {
 		{name: "project", text: "集团数字化项目实施方案", archetype: pptxArchetypeGeneral, want: officegen.StylePresetProjectForest},
 		{name: "training", text: "新员工远程协作入职培训", archetype: pptxArchetypeTraining, want: officegen.StylePresetTrainingManual},
 		{name: "review", text: "2026 年第一季度经营复盘", archetype: pptxArchetypeOps, want: officegen.StylePresetReviewCopper},
+		{name: "board review", text: "Q3 Board Review", archetype: pptxArchetypeOps, want: officegen.StylePresetReviewCopper},
 	}
 
 	for _, tc := range cases {
@@ -954,6 +968,12 @@ func TestSuggestStylePreset_RoutesChineseBusinessThemes(t *testing.T) {
 				t.Fatalf("suggestStylePreset(%q) = %q, want %q", tc.text, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestDetectPPTXArchetype_RecognizesBoardReview(t *testing.T) {
+	if got := detectPPTXArchetype("Create a 6-8 slide board-review deck for OfficeCLI.", "Q3 Board Review"); got != pptxArchetypeOps {
+		t.Fatalf("detectPPTXArchetype(board review) = %q, want %q", got, pptxArchetypeOps)
 	}
 }
 
