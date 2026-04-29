@@ -1,6 +1,6 @@
 name: openclaw-officecli
 version: 0.1.0
-description: Generate local PPTX, DOCX, and XLSX files through officecli agent-bridge and return them to OpenClaw users as channel attachments.
+description: Generate local PPTX, DOCX, XLSX, Report, and IMG files through officecli agent-bridge and return them to OpenClaw users as channel attachments.
 author: officecli
 license: MIT
 entrypoint: SKILL.md
@@ -11,6 +11,8 @@ tags:
   - pptx
   - docx
   - xlsx
+  - report
+  - img
   - telegram
   - discord
   - slack
@@ -19,6 +21,7 @@ intent_examples:
   - generate a five-slide PPT about an enterprise collaboration platform
   - write a customer-facing docx about our collaboration platform
   - create a project budget excel sheet
+  - generate a landscape launch image
 config:
   schema:
     type: object

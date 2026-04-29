@@ -157,4 +157,10 @@ PPT image behavior for all agents:
   - use document_generation.pptx.image_support as the source of truth
   - if users want a text-only deck, send enable_images=false
   - if a PPT returns without images, run: officecli config set-generation
+
+Standalone img behavior for all agents:
+  - use top-level image_generation as the source of truth
+  - call office.generate with document_type=img and optional ratio
+  - img uses the OfficeCLI server provider and requires config set-license
+  - img does not use local config set-generation image provider settings
 EOF

@@ -33,7 +33,9 @@ if [[ "${officecli_found}" != true ]]; then
   status="repairable"
 else
   [[ "${cli_surface_ready}" == true ]] || missing_items+=("cli_surface")
-  [[ "${generation_ready}" == true ]] || missing_items+=("generation_config")
+  if should_configure_generation && [[ "${generation_ready}" != true ]]; then
+    missing_items+=("generation_config")
+  fi
   [[ "${license_ready}" == true ]] || missing_items+=("license_config")
   if should_configure_publish && [[ "${publish_ready}" != true ]]; then
     missing_items+=("publish_config")

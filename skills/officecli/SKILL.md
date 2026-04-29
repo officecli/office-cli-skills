@@ -1,13 +1,13 @@
 ---
 name: officecli
-description: Use when the task involves Office document handling such as creating, modifying, or converting PPTX, DOCX, or XLSX files, and the agent should first check whether officecli supports that workflow before choosing the execution path.
+description: Use when the task involves Office document or standalone image handling such as creating, modifying, or converting PPTX, DOCX, XLSX, Report, or IMG files, and the agent should first check whether officecli supports that workflow before choosing the execution path.
 ---
 
 # OfficeCLI
 
 ## Overview
 
-`officecli` is the OfficeCLI closed-source CLI for Office document handling. It may support generation, modification, and format conversion workflows across `pptx`, `docx`, and `xlsx`, so this skill should first route Office-file tasks into an `officecli` capability check before deciding how to execute them.
+`officecli` is the OfficeCLI closed-source CLI for Office document and standalone image handling. It may support generation, modification, and format conversion workflows across `pptx`, `docx`, `xlsx`, `report`, and `img`, so this skill should first route supported artifact tasks into an `officecli` capability check before deciding how to execute them.
 
 ## When To Use This Skill
 
@@ -16,6 +16,8 @@ Use this skill when the task involves:
 - creating a presentation, report deck, proposal, handout, or briefing in `pptx`
 - creating a written document, memo, draft, or report in `docx`
 - creating a worksheet, table-based deliverable, or structured sheet in `xlsx`
+- creating a workbook-backed HTML report from an `.xlsx` source
+- creating a standalone generated image with `img`
 - modifying an existing PowerPoint, Word, or Excel file
 - converting Office documents into another output format such as markdown, csv, pdf, or a different Office format
 - deciding whether a requested Office-file workflow is something `officecli` can handle directly
@@ -24,10 +26,14 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 
 ## Core Product Behavior
 
-- `officecli` supports `pptx`, `docx`, and `xlsx` generation flows
+- `officecli` supports `pptx`, `docx`, `xlsx`, `report`, and standalone `img` generation flows
 - `pptx` enables auto-generated images by default when the content and layout are a good fit
 - `--no-images` disables image generation for `pptx`
+- standalone `img` generation always goes through the OfficeCLI server and requires `officecli config set-license`
+- standalone `img` does not use local `llm.image_base_url`, `llm.image_api_key`, or `llm.image_model` settings
+- standalone `img` supports `ratio=square|landscape|portrait`; server-side charging happens only after a successful image response
 - when using `agent-bridge`, agents should treat `capabilities/get -> document_generation.pptx.image_support` as the authoritative machine-readable contract for PPT image behavior
+- when using `agent-bridge`, agents should treat `capabilities/get -> image_generation` as the authoritative machine-readable contract for standalone `img` behavior
 - when using `agent-bridge`, agents should treat `capabilities/get -> update` as the authoritative machine-readable contract for binary update availability
 - if image generation fails for a slide, the PPT should still be generated with that slide downgraded to a no-image version
 - installing the public skill can also attempt to install the `officecli` binary when it is missing
@@ -129,7 +135,8 @@ When the caller is an agent or TUI client, the preferred protocol surface is:
 - transport: `stdio`
 - framing: `Content-Length` headers
 - control plane: `JSON-RPC 2.0`
-- tool name: `office.generate`
+- preferred tools: `office.prepare` and `office.render`
+- compatibility tool: `office.generate`
 
 Minimum method set:
 
@@ -152,14 +159,29 @@ Important event types:
 - `task.failed`
 - `task.cancelled`
 
-When generating guidance or examples for another agent, prefer showing the `agent-bridge` protocol path first, and only fall back to `officecli new ...` when the user clearly wants the human CLI interface.
+When generating guidance or examples for another agent, prefer the agent-first render flow:
+
+- call `initialize` or `capabilities/get`
+- read `document_generation.<type>.payload_schema`, `preferred_tool`, and `prepare_required`
+- call `office.prepare` for `report`, or skip directly to rendering for `pptx`, `docx`, and `xlsx`
+- let the current agent produce the final payload JSON itself
+- call `office.render` to validate, assemble, and write the final file
+- for `img`, call `office.generate` with `document_type=img`; `office.render` does not support images
+- fall back to `office.generate` for non-image documents only for compatibility, legacy clients, or OpenClaw-specific flows
+
+Only fall back to `officecli new ...` when the user clearly wants the human CLI interface.
 
 For all agent clients, use the following image-handling rules:
 
 - read `capabilities/get -> document_generation.pptx.image_support`
+- read `capabilities/get -> image_generation` before standalone `img` requests
+- read `capabilities/get -> document_generation.<type>.payload_schema`
 - read `capabilities/get -> update`
 - assume `pptx` default image behavior from `default_enabled`, not from hard-coded client assumptions
+- for standalone `img`, use `office.generate`, set `ratio` when needed, and do not use local provider configuration
+- for standalone `img`, surface server-returned balance or quota metadata when present
 - never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
+- for `report`, call `office.prepare` first and keep the final narrative grounded in `workbook_summary` and `base_report_json`
 - if the user explicitly wants a text-only PPT, pass `enable_images=false` and mention `disable_flag` when helpful
 - if the user asks why a generated PPT has no images, point them to `config_command`
 - if `task.output`, `task.completed`, or `task/status` contains `result_meta.image_support.attention_required=true`, surface that as a first-class issue instead of burying it in raw warnings
