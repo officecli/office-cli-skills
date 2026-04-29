@@ -99,6 +99,10 @@ check_generation_ready() {
 }
 
 check_license_ready() {
+  if should_require_license_api_key; then
+    [[ "$1" == *"Paid API key configured: true"* ]]
+    return $?
+  fi
   [[ "$1" == *"Access checks enabled: true"* || "$1" == *"Quota validation enabled: true"* ]]
 }
 
@@ -317,4 +321,13 @@ run_set_publish() {
 should_configure_publish() {
   truthy "${OFFICECLI_SKIP_PUBLISH_SETUP:-0}" && return 1
   return 0
+}
+
+should_configure_generation() {
+  truthy "${OFFICECLI_SKIP_GENERATION_SETUP:-0}" && return 1
+  return 0
+}
+
+should_require_license_api_key() {
+  truthy "${OFFICECLI_REQUIRE_LICENSE_API_KEY:-0}"
 }

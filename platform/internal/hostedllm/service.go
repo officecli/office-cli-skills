@@ -372,6 +372,8 @@ func (s *Service) matchRule(modelName string) (model.HostedPricingRule, bool) {
 
 func normalizeProfile(modelName string) string {
 	switch {
+	case strings.Contains(modelName, "hosted/img") || strings.TrimSpace(modelName) == "img":
+		return "img"
 	case strings.Contains(modelName, "pptx-with-image"):
 		return "pptx-with-image"
 	case strings.Contains(modelName, "pptx-no-image"):
@@ -429,7 +431,7 @@ func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req Ima
 	if provider == "" {
 		provider = "openai"
 	}
-	documentType := "image"
+	documentType := "img"
 	event := &model.UsageEvent{
 		RequestID:       stringPtr(req.RequestID),
 		FingerprintHash: "hosted",

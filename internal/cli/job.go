@@ -58,6 +58,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var audience string
 	var outDir string
 	var sourceFile string
+	var ratio string
 	var jsonOutput bool
 	var localPreview bool
 	var debug bool
@@ -74,6 +75,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&audience, "audience", "", "")
 	fs.StringVar(&outDir, "out", "", "")
 	fs.StringVar(&sourceFile, "file", "", "")
+	fs.StringVar(&ratio, "ratio", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.BoolVar(&debug, "debug", false, "")
@@ -126,8 +128,11 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		}
 	}
 
+	modeSpecified := strings.TrimSpace(mode) != ""
 	finalMode := strings.TrimSpace(mode)
-	if finalMode == "" {
+	if documentType == engine.DocumentTypeIMG && finalMode == "" {
+		finalMode = "fast"
+	} else if finalMode == "" {
 		finalMode = strings.TrimSpace(cfg.Defaults.Mode)
 	}
 	if finalMode == "" {
@@ -138,9 +143,15 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported mode: %s", finalMode)
 	}
+	if documentType == engine.DocumentTypeIMG && modeSpecified && strings.EqualFold(finalMode, "best") {
+		return GenerateJob{}, fmt.Errorf("--mode best is not supported for img generation")
+	}
 
 	selectedRuntimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(runtimeMode)))
-	if selectedRuntimeMode == "" {
+	runtimeModeSpecified := selectedRuntimeMode != ""
+	if documentType == engine.DocumentTypeIMG && selectedRuntimeMode == "" {
+		selectedRuntimeMode = RuntimeModeHosted
+	} else if selectedRuntimeMode == "" {
 		selectedRuntimeMode = cfg.Runtime.Mode
 	}
 	if selectedRuntimeMode == "" {
@@ -150,6 +161,12 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	case RuntimeModeExternal, RuntimeModeHosted:
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported runtime mode: %s", selectedRuntimeMode)
+	}
+	if documentType == engine.DocumentTypeIMG {
+		if runtimeModeSpecified && selectedRuntimeMode != RuntimeModeHosted {
+			return GenerateJob{}, fmt.Errorf("img generation always uses the OfficeCLI server; use --runtime-mode hosted or omit --runtime-mode")
+		}
+		selectedRuntimeMode = RuntimeModeHosted
 	}
 
 	finalOutputDir := strings.TrimSpace(outDir)
@@ -175,12 +192,45 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if noImagesFlag.set && noImagesFlag.value {
 		enableImages = false
 	}
+	ratioSpecified := strings.TrimSpace(ratio) != ""
+	if ratioSpecified && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("--ratio is only supported for img generation")
+	}
+	imageRatio := strings.ToLower(strings.TrimSpace(ratio))
+	if imageRatio == "" {
+		imageRatio = "square"
+	}
+	switch imageRatio {
+	case "square", "landscape", "portrait":
+	default:
+		return GenerateJob{}, fmt.Errorf("unsupported image ratio: %s", ratio)
+	}
 	finalStyle := strings.TrimSpace(style)
 	styleSpecified := finalStyle != ""
 	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
 		finalStyle = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
-	if documentType == engine.DocumentTypeReport {
+	var warnings []engine.GenerateIssue
+	if documentType == engine.DocumentTypeIMG {
+		switch {
+		case sourceFile != "":
+			return GenerateJob{}, fmt.Errorf("--file is not supported for img generation")
+		case localPreview:
+			return GenerateJob{}, fmt.Errorf("--local-preview is not supported for img generation")
+		case noImagesFlag.set && noImagesFlag.value:
+			return GenerateJob{}, fmt.Errorf("--no-images is not supported for img generation")
+		case publishFlag.set && publishFlag.value:
+			return GenerateJob{}, fmt.Errorf("--publish is not supported for img generation")
+		}
+		if publishEnabled {
+			warnings = append(warnings, engine.GenerateIssue{
+				Code:    "WARN_IMG_PUBLISH_UNSUPPORTED",
+				Message: "Image publishing is not supported yet, so the generated image will be saved locally only.",
+				Field:   "publish",
+			})
+			publishEnabled = false
+		}
+	} else if documentType == engine.DocumentTypeReport {
 		if sourceFile == "" {
 			return GenerateJob{}, errors.New("report generation requires --file <xlsx-path>")
 		}
@@ -205,11 +255,13 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		StyleSpecified: styleSpecified,
 		Audience:       strings.TrimSpace(audience),
 		EnableImages:   enableImages,
+		ImageRatio:     imageRatio,
 		LocalPreview:   localPreview,
 		OutputDir:      finalOutputDir,
 		Publish:        publishEnabled,
 		Debug:          debug,
 		JSONOutput:     jsonOutput,
+		Warnings:       warnings,
 	}, nil
 }
 
@@ -220,7 +272,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -241,6 +293,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--audience=") ||
 				strings.HasPrefix(current, "--out=") ||
 				strings.HasPrefix(current, "--file=") ||
+				strings.HasPrefix(current, "--ratio=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
@@ -268,6 +321,8 @@ func parseDocumentType(value string) (engine.DocumentType, error) {
 		return engine.DocumentTypeXLSX, nil
 	case "report":
 		return engine.DocumentTypeReport, nil
+	case "img", "image":
+		return engine.DocumentTypeIMG, nil
 	default:
 		return "", fmt.Errorf("unsupported document type: %s", value)
 	}

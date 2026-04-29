@@ -36,6 +36,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		Style:          job.Style,
 		Audience:       job.Audience,
 		EnableImages:   job.EnableImages,
+		ImageRatio:     job.ImageRatio,
 		LocalPreview:   job.LocalPreview,
 	})
 	if err != nil {
@@ -73,6 +74,14 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		result.AllowedModes = append([]string(nil), job.LicenseCheck.AllowedModes...)
 		result.HostedEnabled = job.LicenseCheck.HostedEnabled
 		result.CreditBalance = job.LicenseCheck.CreditBalance
+	}
+	if artifact.HostedCreditBalance != nil {
+		result.AccessMode = string(LicenseAccessModeHosted)
+		result.HostedEnabled = true
+		result.CreditBalance = *artifact.HostedCreditBalance
+		if len(quotaWarnings(result.Warnings)) == 0 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: hosted. %d credits remaining.", *artifact.HostedCreditBalance))
+		}
 	}
 
 	if e.license != nil && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted && strings.TrimSpace(job.LicenseCheck.CommitToken.RequestID) != "" {
