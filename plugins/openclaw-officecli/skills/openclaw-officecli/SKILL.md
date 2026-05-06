@@ -108,6 +108,7 @@ For standalone `img` requests:
 - use `office.generate` with `document_type=img`
 - pass `ratio=square|landscape|portrait` when the user asks for a shape; default to `square`
 - require platform/license config and let the OfficeCLI server control the image provider
+- treat quota as generation counts: one successful standalone image consumes one count, and free image usage has a separate 3-per-day bucket from free document generation
 - keep preview publishing enabled by default when publishing is configured; pass `publish=false` only for local-only output
 - do not use `office.render`, local `config set-generation` image settings, `mode=best`, source files, or local preview
 - include returned quota or credit balance metadata in the chat message when present
