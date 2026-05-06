@@ -25,6 +25,15 @@ type Config struct {
 	ImageModel   string `json:"image_model"`
 	ReviewModel  string `json:"review_model,omitempty"`
 	TimeoutSec   int    `json:"timeout_sec"`
+	ImageAccess  *InternalImageAccess
+}
+
+type InternalImageAccess struct {
+	FingerprintHash string
+	UserID          uint64
+	APIKey          string
+	AccessMode      string
+	CommitToken     json.RawMessage
 }
 
 type Provider interface {
@@ -77,10 +86,11 @@ func (p *internalProvider) NewClient() (engine.LLMClient, error) {
 		return nil, fmt.Errorf("llm base_url is required")
 	}
 	return &internalClient{
-		baseURL: strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
-		apiKey:  strings.TrimSpace(p.cfg.APIKey),
-		model:   strings.TrimSpace(p.cfg.Model),
-		client:  &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
+		baseURL:     strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
+		apiKey:      strings.TrimSpace(p.cfg.APIKey),
+		model:       strings.TrimSpace(p.cfg.Model),
+		imageAccess: p.cfg.ImageAccess,
+		client:      &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
 	}, nil
 }
 
@@ -469,10 +479,11 @@ func (c *openAIClient) doPost(ctx context.Context, url, apiKey string, payload m
 }
 
 type internalClient struct {
-	baseURL string
-	apiKey  string
-	model   string
-	client  *http.Client
+	baseURL     string
+	apiKey      string
+	model       string
+	imageAccess *InternalImageAccess
+	client      *http.Client
 }
 
 func (c *internalClient) CompleteText(ctx context.Context, messages []engine.LLMMessage) (string, error) {
@@ -497,14 +508,28 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		"prompt":       req.Prompt,
 		"aspect_ratio": req.TargetAspectRatio,
 	}
+	if c.imageAccess != nil {
+		payload["fingerprint_hash"] = c.imageAccess.FingerprintHash
+		payload["user_id"] = c.imageAccess.UserID
+		payload["api_key"] = c.imageAccess.APIKey
+		payload["access_mode"] = c.imageAccess.AccessMode
+		if len(c.imageAccess.CommitToken) > 0 {
+			payload["commit_token"] = c.imageAccess.CommitToken
+		}
+	}
 	body, err := c.post(ctx, c.baseURL+"/v1/image", payload)
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
-		Data          string `json:"data"`
-		MIME          string `json:"mime"`
-		CreditBalance *int   `json:"credit_balance,omitempty"`
+		Data               string `json:"data"`
+		MIME               string `json:"mime"`
+		CreditBalance      *int   `json:"credit_balance,omitempty"`
+		AccessMode         string `json:"access_mode,omitempty"`
+		Remaining          int    `json:"remaining,omitempty"`
+		FreeRemaining      int    `json:"free_remaining,omitempty"`
+		RewardRemaining    int    `json:"reward_remaining,omitempty"`
+		PaidQuotaRemaining int    `json:"paid_quota_remaining,omitempty"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decode internal image response: %w", err)
@@ -516,7 +541,16 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 	if err != nil {
 		return nil, err
 	}
-	return &engine.ImageGenerationResult{Data: data, MIME: resp.MIME, CreditBalance: resp.CreditBalance}, nil
+	return &engine.ImageGenerationResult{
+		Data:               data,
+		MIME:               resp.MIME,
+		CreditBalance:      resp.CreditBalance,
+		AccessMode:         resp.AccessMode,
+		Remaining:          resp.Remaining,
+		FreeRemaining:      resp.FreeRemaining,
+		RewardRemaining:    resp.RewardRemaining,
+		PaidQuotaRemaining: resp.PaidQuotaRemaining,
+	}, nil
 }
 
 func (c *internalClient) complete(ctx context.Context, kind string, messages []engine.LLMMessage, extra map[string]any) (string, error) {

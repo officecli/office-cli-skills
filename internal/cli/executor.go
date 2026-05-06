@@ -83,6 +83,13 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: hosted. %d credits remaining.", *artifact.HostedCreditBalance))
 		}
 	}
+	if strings.TrimSpace(artifact.AccessMode) != "" {
+		result.AccessMode = artifact.AccessMode
+		result.Remaining = artifact.Remaining
+		result.FreeRemaining = artifact.FreeRemaining
+		result.RewardRemaining = artifact.RewardRemaining
+		result.PaidQuotaRemaining = artifact.PaidQuotaRemaining
+	}
 
 	if e.license != nil && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted && strings.TrimSpace(job.LicenseCheck.CommitToken.RequestID) != "" {
 		consumeResult, err := e.license.Consume(ctx, job.LicenseCheck.CommitToken)

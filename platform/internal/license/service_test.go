@@ -64,24 +64,25 @@ func newFakeFreeQuotaStore() *fakeFreeQuotaStore {
 	return &fakeFreeQuotaStore{quotas: map[string]*model.DailyFreeQuota{}}
 }
 
-func (f *fakeFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+func (f *fakeFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota, ok := f.quotas[fingerprint+"|"+usageDate]
+	key := fingerprint + "|" + usageDate + "|" + documentType
+	quota, ok := f.quotas[key]
 	if ok {
 		copied := *quota
 		return &copied, false, nil
 	}
-	quota = &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DailyLimit: defaultLimit, DailyUsed: 0}
-	f.quotas[fingerprint+"|"+usageDate] = quota
+	quota = &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DocumentType: documentType, DailyLimit: defaultLimit, DailyUsed: 0}
+	f.quotas[key] = quota
 	copied := *quota
 	return &copied, true, nil
 }
 
-func (f *fakeFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
+func (f *fakeFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint+"|"+usageDate]
+	quota := f.quotas[fingerprint+"|"+usageDate+"|"+documentType]
 	if quota == nil {
 		return nil, nil
 	}
@@ -89,13 +90,13 @@ func (f *fakeFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint str
 	return &copied, nil
 }
 
-func (f *fakeFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
+func (f *fakeFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := fingerprint + "|" + usageDate
+	key := fingerprint + "|" + usageDate + "|" + documentType
 	quota := f.quotas[key]
 	if quota == nil {
-		quota = &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DailyLimit: defaultLimit, DailyUsed: 0}
+		quota = &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DocumentType: documentType, DailyLimit: defaultLimit, DailyUsed: 0}
 		f.quotas[key] = quota
 	}
 	if quota.DailyUsed >= quota.DailyLimit {
@@ -263,9 +264,45 @@ func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
 	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
 }
 
+func TestIMGFreeQuotaUsesSeparateDailyLimit(t *testing.T) {
+	quotas := newFakeFreeQuotaStore()
+	usage := newFakeUsageStore()
+	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+
+	docReq := testCheckRequest("fp-1", "generate")
+	docReq.DocumentType = "pptx"
+	docResp, err := svc.Check(context.Background(), docReq)
+	require.NoError(t, err)
+	require.Equal(t, 10, docResp.FreeLimit)
+	require.Equal(t, 10, docResp.FreeRemaining)
+
+	imgReq := testCheckRequest("fp-1", "generate")
+	imgReq.DocumentType = "img"
+	imgResp, err := svc.Check(context.Background(), imgReq)
+	require.NoError(t, err)
+	require.True(t, imgResp.Allowed)
+	require.Equal(t, model.AccessModeFree, imgResp.AccessMode)
+	require.Equal(t, 3, imgResp.FreeLimit)
+	require.Equal(t, 3, imgResp.FreeRemaining)
+
+	consumeResp, err := svc.Consume(context.Background(), ConsumeRequest{
+		FingerprintHash: imgResp.CommitToken.FingerprintHash,
+		RequestID:       imgResp.CommitToken.RequestID,
+		UsageType:       string(model.UsageActionGenerate),
+		AccessMode:      model.AccessModeFree,
+		CommitToken:     imgResp.CommitToken,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, consumeResp.FreeRemaining)
+
+	docResp, err = svc.Check(context.Background(), docReq)
+	require.NoError(t, err)
+	require.Equal(t, 10, docResp.FreeRemaining)
+}
+
 func TestCheckBlocksWhenFreeQuotaExhausted(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-2|"+time.Now().UTC().Format("2006-01-02")] = &model.DailyFreeQuota{FingerprintHash: "fp-2", UsageDate: time.Now().UTC().Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1}
+	quotas.quotas["fp-2|"+time.Now().UTC().Format("2006-01-02")+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-2", UsageDate: time.Now().UTC().Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 
 	resp, err := svc.Check(context.Background(), testCheckRequest("fp-2", "generate"))
@@ -384,7 +421,7 @@ func TestConsumeRewardIsIdempotent(t *testing.T) {
 func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-3|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-3", UsageDate: today, DailyLimit: 1, DailyUsed: 0}
+	quotas.quotas["fp-3|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-3", UsageDate: today, DailyLimit: 1, DailyUsed: 0}
 	usage := newFakeUsageStore()
 	idem := newFakeIdemStore()
 	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, idem, nil, nil, "salt", 10, time.Hour)
@@ -403,7 +440,7 @@ func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 
-	quotas.quotas["fp-4|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-4", UsageDate: today, DailyLimit: 1, DailyUsed: 0}
+	quotas.quotas["fp-4|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-4", UsageDate: today, DailyLimit: 1, DailyUsed: 0}
 	svc2 := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 	var wg sync.WaitGroup
 	var successCount int
@@ -427,7 +464,7 @@ func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
 	}
 	wg.Wait()
 	require.Equal(t, 1, successCount)
-	require.Equal(t, 1, quotas.quotas["fp-4|"+today].DailyUsed)
+	require.Equal(t, 1, quotas.quotas["fp-4|"+today+"|document"].DailyUsed)
 }
 
 func TestConsumePaidIsIdempotent(t *testing.T) {
@@ -456,7 +493,7 @@ func TestConsumePaidIsIdempotent(t *testing.T) {
 func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-ref|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
+	quotas.quotas["fp-ref|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
 	referrals := &fakeReferralActivator{}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
 	checkReq := testCheckRequest("fp-ref", "generate")
@@ -482,7 +519,7 @@ func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
 func TestConsumeIgnoresMissingReferral(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-no-ref|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-no-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
+	quotas.quotas["fp-no-ref|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-no-ref", UsageDate: today, DailyLimit: 2, DailyUsed: 0}
 	referrals := &fakeReferralActivator{err: growthsvc.ErrReferralNotFound}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
 	checkReq := testCheckRequest("fp-no-ref", "generate")
@@ -506,7 +543,7 @@ func TestConsumeIgnoresMissingReferral(t *testing.T) {
 func TestAdjustQuotaAffectsCheckRemaining(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-5|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-5", UsageDate: today, DailyLimit: 2, DailyUsed: 1}
+	quotas.quotas["fp-5|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-5", UsageDate: today, DailyLimit: 2, DailyUsed: 1}
 	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
 
 	resp, err := svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
@@ -514,7 +551,7 @@ func TestAdjustQuotaAffectsCheckRemaining(t *testing.T) {
 	require.Equal(t, 1, resp.FreeRemaining)
 
 	quotas.mu.Lock()
-	quotas.quotas["fp-5|"+today].DailyLimit = 5
+	quotas.quotas["fp-5|"+today+"|document"].DailyLimit = 5
 	quotas.mu.Unlock()
 
 	resp, err = svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
@@ -597,7 +634,7 @@ func TestConsumeRestoreExistingPaidUsageWithoutAPIKey(t *testing.T) {
 func TestConsumeRestoreExistingFreeUsageReturnsCurrentQuota(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-restore|"+today] = &model.DailyFreeQuota{FingerprintHash: "fp-restore", UsageDate: today, DailyLimit: 5, DailyUsed: 2}
+	quotas.quotas["fp-restore|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-restore", UsageDate: today, DailyLimit: 5, DailyUsed: 2}
 	usage := newFakeUsageStore()
 	requestID := "req-existing-free"
 	usage.byRequest[requestID] = &model.UsageEvent{

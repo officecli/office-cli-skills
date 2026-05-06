@@ -169,7 +169,7 @@ func New() (*Application, error) {
 		Provider:   cfg.HostedLLMProvider,
 		HashSalt:   cfg.APIKeyHashSalt,
 		TimeoutSec: 60,
-	})
+	}, lic)
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
 	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
@@ -467,9 +467,14 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, gin.H{
-			"data":           base64.StdEncoding.EncodeToString(resp.Data),
-			"mime":           resp.MIME,
-			"credit_balance": resp.CreditBalance,
+			"data":                 base64.StdEncoding.EncodeToString(resp.Data),
+			"mime":                 resp.MIME,
+			"credit_balance":       resp.CreditBalance,
+			"access_mode":          resp.AccessMode,
+			"remaining":            resp.Remaining,
+			"free_remaining":       resp.FreeRemaining,
+			"reward_remaining":     resp.RewardRemaining,
+			"paid_quota_remaining": resp.PaidQuotaRemaining,
 		})
 	})
 }
@@ -1510,14 +1515,14 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 
 type freeQuotaRepo struct{ store *sqlstore.Store }
 
-func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
-	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
+func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
 }
-func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
-	return r.store.GetDailyFreeQuota(ctx, fingerprint, usageDate)
+func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
+	return r.store.GetDailyFreeQuota(ctx, fingerprint, usageDate, documentType)
 }
-func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
-	quota, err := r.store.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
+func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
+	quota, err := r.store.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
 	if err != nil && strings.Contains(err.Error(), "quota exhausted") {
 		return nil, licensesvc.ErrQuotaExhausted
 	}

@@ -88,12 +88,19 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 }
 
 func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job GenerateJob, progress progressController) (GenerateResult, error) {
-	if missing := missingHostedConfig(cfg); missing != "" {
+	if strings.TrimSpace(cfg.License.BaseURL) == "" {
+		missing := "platform service URL"
 		return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
 	}
-	job.RuntimeMode = RuntimeModeHosted
+	job.RuntimeMode = RuntimeModeExternal
 	job.Mode = "fast"
 	job.Publish = false
+
+	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	job.LicenseCheck = licenseCheck
 
 	llmClient, err := newHostedLLMClient(cfg.License, job)
 	if err != nil {
@@ -145,9 +152,8 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	}
 
 	runtimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(req.Args.RuntimeMode)))
-	runtimeModeSpecified := runtimeMode != ""
 	if documentType == engine.DocumentTypeIMG && runtimeMode == "" {
-		runtimeMode = RuntimeModeHosted
+		runtimeMode = RuntimeModeExternal
 	} else if runtimeMode == "" {
 		runtimeMode = cfg.Runtime.Mode
 	}
@@ -160,10 +166,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		return GenerateJob{}, fmt.Errorf("unsupported runtime mode: %s", runtimeMode)
 	}
 	if documentType == engine.DocumentTypeIMG {
-		if runtimeModeSpecified && runtimeMode != RuntimeModeHosted {
-			return GenerateJob{}, fmt.Errorf("img generation always uses the OfficeCLI server; use runtime_mode=hosted or omit runtime_mode")
-		}
-		runtimeMode = RuntimeModeHosted
+		runtimeMode = RuntimeModeExternal
 	}
 
 	outputDir := strings.TrimSpace(req.Args.OutputDir)

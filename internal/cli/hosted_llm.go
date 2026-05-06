@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -14,17 +15,32 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	if baseURL == "" {
 		return nil, fmt.Errorf("platform service URL is missing, so hosted generation is unavailable")
 	}
-	if strings.TrimSpace(cfg.APIKey) == "" {
+	if job.DocumentType != engine.DocumentTypeIMG && strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, fmt.Errorf("platform access token is missing, so hosted generation is unavailable")
 	}
 	modelName := hostedModelName(job)
+	var imageAccess *llmprovider.InternalImageAccess
+	if job.DocumentType == engine.DocumentTypeIMG && job.LicenseCheck != nil {
+		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
+		if err != nil {
+			return nil, fmt.Errorf("marshal image access token: %w", err)
+		}
+		imageAccess = &llmprovider.InternalImageAccess{
+			FingerprintHash: job.LicenseCheck.CommitToken.FingerprintHash,
+			UserID:          job.LicenseCheck.CommitToken.UserID,
+			APIKey:          strings.TrimSpace(cfg.APIKey),
+			AccessMode:      string(job.LicenseCheck.AccessMode),
+			CommitToken:     json.RawMessage(tokenBytes),
+		}
+	}
 	return llmprovider.NewClient(llmprovider.Config{
-		Provider:   "internal",
-		BaseURL:    baseURL + "/api/llm",
-		APIKey:     strings.TrimSpace(cfg.APIKey),
-		Model:      modelName,
-		ImageModel: modelName,
-		TimeoutSec: cfg.TimeoutSec,
+		Provider:    "internal",
+		BaseURL:     baseURL + "/api/llm",
+		APIKey:      strings.TrimSpace(cfg.APIKey),
+		Model:       modelName,
+		ImageModel:  modelName,
+		TimeoutSec:  cfg.TimeoutSec,
+		ImageAccess: imageAccess,
 	})
 }
 

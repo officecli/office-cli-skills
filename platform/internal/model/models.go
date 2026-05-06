@@ -162,6 +162,7 @@ type DailyFreeQuota struct {
 	ID              uint64    `gorm:"primaryKey" json:"id"`
 	FingerprintHash string    `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
 	UsageDate       string    `gorm:"column:usage_date;size:10;not null" json:"usage_date"`
+	DocumentType    string    `gorm:"column:document_type;size:32;not null;default:document;index" json:"document_type"`
 	DailyLimit      int       `gorm:"column:daily_limit;not null" json:"daily_limit"`
 	DailyUsed       int       `gorm:"column:daily_used;not null" json:"daily_used"`
 	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`

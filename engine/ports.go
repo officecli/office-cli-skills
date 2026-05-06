@@ -58,9 +58,14 @@ type ImageGenerationRequest struct {
 }
 
 type ImageGenerationResult struct {
-	Data          []byte
-	MIME          string
-	CreditBalance *int
+	Data               []byte
+	MIME               string
+	CreditBalance      *int
+	AccessMode         string
+	Remaining          int
+	FreeRemaining      int
+	RewardRemaining    int
+	PaidQuotaRemaining int
 }
 
 type LLMClient interface {

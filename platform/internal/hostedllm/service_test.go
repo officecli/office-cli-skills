@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -53,6 +54,25 @@ func (f *fakeAPIKeyStore) SettleReservedCredits(_ context.Context, apiKeyID uint
 func (f *fakeAPIKeyStore) CreateUsageEvent(_ context.Context, event *model.UsageEvent) error {
 	f.events = append(f.events, event)
 	return nil
+}
+
+type fakeGenerationQuotaManager struct {
+	validations []licensesvc.ConsumeRequest
+	consumes    []licensesvc.ConsumeRequest
+	result      *licensesvc.ConsumeResponse
+}
+
+func (f *fakeGenerationQuotaManager) ValidateCommitToken(req licensesvc.ConsumeRequest) error {
+	f.validations = append(f.validations, req)
+	return nil
+}
+
+func (f *fakeGenerationQuotaManager) Consume(_ context.Context, req licensesvc.ConsumeRequest) (*licensesvc.ConsumeResponse, error) {
+	f.consumes = append(f.consumes, req)
+	if f.result != nil {
+		return f.result, nil
+	}
+	return &licensesvc.ConsumeResponse{AccessMode: model.AccessModePaid, Remaining: 8, PaidQuotaRemaining: 8}, nil
 }
 
 func TestAuthorizeRejectsDisabledKey(t *testing.T) {
@@ -147,6 +167,52 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, 1, store.events[0].ImageCount)
 	require.Equal(t, "gpt-image-test", upstreamPayload["model"])
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
+}
+
+func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/images/generations", r.URL.Path)
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer upstream.Close()
+
+	store := &fakeAPIKeyStore{}
+	quota := &fakeGenerationQuotaManager{
+		result: &licensesvc.ConsumeResponse{AccessMode: model.AccessModePaid, Remaining: 89, PaidQuotaRemaining: 89},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-test",
+		TimeoutSec: 5,
+	}, quota)
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
+		RequestID:       "req-img",
+		Model:           "hosted/img",
+		Prompt:          "A polished product launch hero image",
+		AspectRatio:     1,
+		FingerprintHash: "fp-img",
+		AccessMode:      model.AccessModePaid,
+		CommitToken: &licensesvc.CommitToken{
+			FingerprintHash: "fp-img",
+			RequestID:       "req-img",
+			AccessMode:      model.AccessModePaid,
+			DocumentType:    "img",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Equal(t, model.AccessModePaid, resp.AccessMode)
+	require.Equal(t, 89, resp.PaidQuotaRemaining)
+	require.Empty(t, store.reservations)
+	require.Empty(t, store.settlements)
+	require.Empty(t, store.events)
+	require.Len(t, quota.validations, 1)
+	require.Len(t, quota.consumes, 1)
+	require.Equal(t, "paid-key", quota.consumes[0].APIKey)
 }
 
 func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {

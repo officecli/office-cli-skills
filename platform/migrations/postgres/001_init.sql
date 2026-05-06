@@ -57,13 +57,15 @@ CREATE TABLE IF NOT EXISTS daily_free_quotas (
   id BIGSERIAL PRIMARY KEY,
   fingerprint_hash VARCHAR(128) NOT NULL,
   usage_date VARCHAR(10) NOT NULL,
+  document_type VARCHAR(32) NOT NULL DEFAULT 'document',
   daily_limit INT NOT NULL,
   daily_used INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT uk_daily_free_quotas_fingerprint_date UNIQUE (fingerprint_hash, usage_date)
+  CONSTRAINT uk_daily_free_quotas_fingerprint_date_type UNIQUE (fingerprint_hash, usage_date, document_type)
 );
 CREATE INDEX IF NOT EXISTS idx_daily_free_quotas_fingerprint ON daily_free_quotas(fingerprint_hash);
+CREATE INDEX IF NOT EXISTS idx_daily_free_quotas_document_type ON daily_free_quotas(document_type);
 
 CREATE TABLE IF NOT EXISTS usage_events (
   id BIGSERIAL PRIMARY KEY,

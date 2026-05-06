@@ -37,6 +37,11 @@ type GeneratedArtifact struct {
 	PreviewHTML         []byte
 	PreviewJSON         []byte
 	HostedCreditBalance *int
+	AccessMode          string
+	Remaining           int
+	FreeRemaining       int
+	RewardRemaining     int
+	PaidQuotaRemaining  int
 }
 
 type Service struct {
@@ -211,6 +216,11 @@ func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target 
 		Bytes:               image.Data,
 		Warnings:            convertIssues(meta),
 		HostedCreditBalance: image.CreditBalance,
+		AccessMode:          image.AccessMode,
+		Remaining:           image.Remaining,
+		FreeRemaining:       image.FreeRemaining,
+		RewardRemaining:     image.RewardRemaining,
+		PaidQuotaRemaining:  image.PaidQuotaRemaining,
 	}, nil
 }
 

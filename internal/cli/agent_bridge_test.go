@@ -494,7 +494,7 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":5}`, base64.StdEncoding.EncodeToString(imageBytes))
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"paid","remaining":41,"paid_quota_remaining":41}`, base64.StdEncoding.EncodeToString(imageBytes))
 	}))
 	defer server.Close()
 
@@ -503,9 +503,16 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 		t.Fatal("img generation must not initialize the local generation provider")
 		return nil, nil
 	}
+	licenseEvents := []string{}
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
-		t.Fatal("img generation must not consume local quota")
-		return nil, nil
+		return &orderedLicenseManager{
+			events: &licenseEvents,
+			checkResult: &LicenseCheckResult{
+				Allowed:            true,
+				AccessMode:         LicenseAccessModePaid,
+				PaidQuotaRemaining: 42,
+			},
+		}, nil
 	}
 	bridge := newAgentBridgeServer(app, Config{
 		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true, Mode: "fast"},
@@ -537,8 +544,8 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 			if result.DocumentType != "img" || filepath.Ext(result.FilePath) != ".png" {
 				t.Fatalf("unexpected result: %+v", result)
 			}
-			if result.AccessMode != "hosted" || result.CreditBalance != 5 {
-				t.Fatalf("unexpected hosted fields: %+v", result)
+			if result.AccessMode != "paid" || result.PaidQuotaRemaining != 41 || result.Remaining != 41 {
+				t.Fatalf("unexpected quota fields: %+v", result)
 			}
 			data, err := os.ReadFile(result.FilePath)
 			if err != nil {
@@ -547,8 +554,11 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 			if string(data) != string(imageBytes) {
 				t.Fatalf("image bytes = %q", string(data))
 			}
-			if gotPayload["model"] != "hosted/img" || gotPayload["aspect_ratio"] != 16.0/9.0 {
+			if gotPayload["model"] != "hosted/img" || gotPayload["aspect_ratio"] != 16.0/9.0 || gotPayload["commit_token"] == nil {
 				t.Fatalf("payload = %#v", gotPayload)
+			}
+			if strings.Join(licenseEvents, ",") != "check" {
+				t.Fatalf("license events = %#v, want check only because server consumes image quota", licenseEvents)
 			}
 			return
 		}

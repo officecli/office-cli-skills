@@ -148,9 +148,8 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 
 	selectedRuntimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(runtimeMode)))
-	runtimeModeSpecified := selectedRuntimeMode != ""
 	if documentType == engine.DocumentTypeIMG && selectedRuntimeMode == "" {
-		selectedRuntimeMode = RuntimeModeHosted
+		selectedRuntimeMode = RuntimeModeExternal
 	} else if selectedRuntimeMode == "" {
 		selectedRuntimeMode = cfg.Runtime.Mode
 	}
@@ -163,10 +162,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		return GenerateJob{}, fmt.Errorf("unsupported runtime mode: %s", selectedRuntimeMode)
 	}
 	if documentType == engine.DocumentTypeIMG {
-		if runtimeModeSpecified && selectedRuntimeMode != RuntimeModeHosted {
-			return GenerateJob{}, fmt.Errorf("img generation always uses the OfficeCLI server; use --runtime-mode hosted or omit --runtime-mode")
-		}
-		selectedRuntimeMode = RuntimeModeHosted
+		selectedRuntimeMode = RuntimeModeExternal
 	}
 
 	finalOutputDir := strings.TrimSpace(outDir)

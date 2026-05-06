@@ -21,9 +21,9 @@ type APIKeyStore interface {
 }
 
 type FreeQuotaStore interface {
-	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
-	GetByFingerprint(ctx context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error)
-	Consume(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error)
+	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
+	GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error)
+	Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error)
 }
 
 type UsageEventStore interface {
@@ -60,6 +60,8 @@ type Service struct {
 	clock            func() time.Time
 	proof            *proofSigner
 }
+
+const defaultImageFreeLimit = 3
 
 func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
 	proofCfg := ProofConfig{}
@@ -230,7 +232,9 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 
 func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
 	usageDate := s.currentUsageDate()
-	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, usageDate, s.defaultFreeLimit)
+	quotaType := quotaDocumentType(req.DocumentType)
+	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
+	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, usageDate, quotaType, freeLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -277,11 +281,8 @@ func (s *Service) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResp
 		req.AccessMode = model.AccessModeFree
 	}
 	if req.AccessMode != model.AccessModeHosted {
-		if req.CommitToken == nil {
-			return nil, fmt.Errorf("commit_token is required")
-		}
-		if err := s.proof.verifyCommitToken(*req.CommitToken, req, req.AccessMode); err != nil {
-			return nil, fmt.Errorf("invalid commit_token: %w", err)
+		if err := s.ValidateCommitToken(req); err != nil {
+			return nil, err
 		}
 	}
 
@@ -325,6 +326,19 @@ func (s *Service) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResp
 	}
 }
 
+func (s *Service) ValidateCommitToken(req ConsumeRequest) error {
+	if req.AccessMode == "" {
+		req.AccessMode = model.AccessModeFree
+	}
+	if req.CommitToken == nil {
+		return fmt.Errorf("commit_token is required")
+	}
+	if err := s.proof.verifyCommitToken(*req.CommitToken, req, req.AccessMode); err != nil {
+		return fmt.Errorf("invalid commit_token: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, existing *model.UsageEvent) (*ConsumeResponse, error) {
 	switch existing.Mode {
 	case model.UsageModePaid:
@@ -356,7 +370,11 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 		if !existing.CreatedAt.IsZero() {
 			usageDate = existing.CreatedAt.UTC().Format("2006-01-02")
 		}
-		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, usageDate)
+		documentType := ""
+		if existing.DocumentType != nil {
+			documentType = *existing.DocumentType
+		}
+		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, usageDate, quotaDocumentType(documentType))
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +392,8 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 }
 
 func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
-	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.currentUsageDate(), s.defaultFreeLimit)
+	documentType := consumeDocumentType(req)
+	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.currentUsageDate(), quotaDocumentType(documentType), s.freeLimitForDocumentType(documentType))
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +406,8 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 		Result:          model.UsageResultAllowed,
 		Charged:         true,
 		BilledUnits:     1,
-		UnitType:        "document",
+		UnitType:        unitTypeForDocumentType(documentType),
+		DocumentType:    optionalString(documentType),
 		UserID:          optionalUserID(req.UserID),
 	}
 	if err := s.usage.Create(ctx, event); err != nil {
@@ -428,7 +448,8 @@ func (s *Service) consumeReward(ctx context.Context, req ConsumeRequest) (*Consu
 		Result:          model.UsageResultAllowed,
 		Charged:         true,
 		BilledUnits:     1,
-		UnitType:        "document",
+		UnitType:        unitTypeForDocumentType(consumeDocumentType(req)),
+		DocumentType:    optionalString(consumeDocumentType(req)),
 		UserID:          optionalUserID(req.UserID),
 	}
 	if err := s.usage.Create(ctx, event); err != nil {
@@ -470,7 +491,8 @@ func (s *Service) consumePaid(ctx context.Context, req ConsumeRequest) (*Consume
 		Result:          model.UsageResultAllowed,
 		Charged:         true,
 		BilledUnits:     1,
-		UnitType:        "document",
+		UnitType:        unitTypeForDocumentType(consumeDocumentType(req)),
+		DocumentType:    optionalString(consumeDocumentType(req)),
 		UserID:          optionalUserID(req.UserID),
 	}
 	if err := s.usage.Create(ctx, event); err != nil {
@@ -517,12 +539,13 @@ func (s *Service) rewardBalanceResponse(ctx context.Context, userID uint64) (*Co
 }
 
 func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, freeQuota *model.DailyFreeQuota, rewardRemaining int) (*QuotaSnapshot, error) {
+	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
 	snapshot := &QuotaSnapshot{
 		FreeTrialDaily: FreeTrialDailySnapshot{
 			UsageDate:               s.currentUsageDate(),
-			Limit:                   s.defaultFreeLimit,
+			Limit:                   freeLimit,
 			Used:                    0,
-			Remaining:               s.defaultFreeLimit,
+			Remaining:               freeLimit,
 			BinaryOnly:              true,
 			IncludedInAccountTotals: false,
 		},
@@ -533,7 +556,7 @@ func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key 
 
 	if freeQuota == nil && s.freeQuotas != nil {
 		var err error
-		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate)
+		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate, quotaDocumentType(req.DocumentType))
 		if err != nil {
 			return nil, err
 		}
@@ -594,7 +617,7 @@ func buildUsageEvent(req CheckRequest, mode model.UsageMode, resp *CheckResponse
 		Action:          action,
 		Result:          result,
 		BilledUnits:     0,
-		UnitType:        "document",
+		UnitType:        unitTypeForDocumentType(req.DocumentType),
 		Charged:         false,
 		UserID:          optionalUserID(req.UserID),
 	}
@@ -652,9 +675,47 @@ func selectedRuntimeMode(req CheckRequest, key *model.APIKey) string {
 	return requestedRuntimeMode(req, key)
 }
 
+func (s *Service) freeLimitForDocumentType(documentType string) int {
+	if quotaDocumentType(documentType) == "img" {
+		return defaultImageFreeLimit
+	}
+	return s.defaultFreeLimit
+}
+
+func quotaDocumentType(documentType string) string {
+	switch strings.ToLower(strings.TrimSpace(documentType)) {
+	case "img", "image":
+		return "img"
+	default:
+		return "document"
+	}
+}
+
+func unitTypeForDocumentType(documentType string) string {
+	if quotaDocumentType(documentType) == "img" {
+		return "image"
+	}
+	return "document"
+}
+
+func consumeDocumentType(req ConsumeRequest) string {
+	if req.CommitToken != nil && strings.TrimSpace(req.CommitToken.DocumentType) != "" {
+		return req.CommitToken.DocumentType
+	}
+	return ""
+}
+
 func hashAPIKey(apiKey, salt string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(salt) + ":" + strings.TrimSpace(apiKey)))
 	return hex.EncodeToString(sum[:])
+}
+
+func optionalString(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func optionalUserID(userID uint64) *uint64 {

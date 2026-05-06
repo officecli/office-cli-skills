@@ -221,7 +221,7 @@ type orderedLicenseManager struct {
 	checkErr    error
 }
 
-func (m *orderedLicenseManager) Check(_ context.Context, _ LicenseCheckRequest) (*LicenseCheckResult, error) {
+func (m *orderedLicenseManager) Check(_ context.Context, req LicenseCheckRequest) (*LicenseCheckResult, error) {
 	if m.events != nil {
 		*m.events = append(*m.events, "check")
 	}
@@ -229,9 +229,17 @@ func (m *orderedLicenseManager) Check(_ context.Context, _ LicenseCheckRequest) 
 		return nil, m.checkErr
 	}
 	if m.checkResult != nil {
-		return m.checkResult, nil
+		cloned := *m.checkResult
+		if cloned.Allowed {
+			cloned.CommitToken = signTestCommitToken(req, cloned.AccessMode, cloned.CommitToken)
+		}
+		return &cloned, nil
 	}
-	return &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}, nil
+	return &LicenseCheckResult{
+		Allowed:     true,
+		AccessMode:  LicenseAccessModePaid,
+		CommitToken: signTestCommitToken(req, LicenseAccessModePaid, UsageCommitToken{}),
+	}, nil
 }
 
 func (m *orderedLicenseManager) Consume(_ context.Context, _ UsageCommitToken) (*UsageConsumeResult, error) {
@@ -1006,7 +1014,7 @@ func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
 	if job.DocumentType != engine.DocumentTypeIMG {
 		t.Fatalf("document type = %q", job.DocumentType)
 	}
-	if job.RuntimeMode != RuntimeModeHosted {
+	if job.RuntimeMode != RuntimeModeExternal {
 		t.Fatalf("runtime mode = %q", job.RuntimeMode)
 	}
 	if job.Mode != "fast" {
@@ -1035,7 +1043,6 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
 		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
 		{name: "publish", args: []string{"img", "Demo", "--publish"}, want: "--publish is not supported for img generation"},
-		{name: "external runtime", args: []string{"img", "Demo", "--runtime-mode", "external"}, want: "img generation always uses the OfficeCLI server"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1140,7 +1147,7 @@ func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
 	}
 }
 
-func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *testing.T) {
+func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing.T) {
 	imageBytes := []byte("server-png-bytes")
 	var gotAuth string
 	var gotPayload map[string]any
@@ -1152,7 +1159,7 @@ func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *te
 		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":7}`, base64.StdEncoding.EncodeToString(imageBytes))
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"paid","remaining":89,"paid_quota_remaining":89}`, base64.StdEncoding.EncodeToString(imageBytes))
 	}))
 	defer server.Close()
 
@@ -1161,9 +1168,16 @@ func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *te
 		t.Fatal("img generation must not initialize the local generation provider")
 		return nil, nil
 	}
+	licenseEvents := []string{}
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
-		t.Fatal("img generation must not use the local quota consume path")
-		return nil, nil
+		return &orderedLicenseManager{
+			events: &licenseEvents,
+			checkResult: &LicenseCheckResult{
+				Allowed:            true,
+				AccessMode:         LicenseAccessModePaid,
+				PaidQuotaRemaining: 90,
+			},
+		}, nil
 	}
 
 	tmpDir := t.TempDir()
@@ -1195,8 +1209,11 @@ func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *te
 	if result.DocumentType != "img" {
 		t.Fatalf("document type = %q", result.DocumentType)
 	}
-	if result.AccessMode != "hosted" || result.CreditBalance != 7 {
-		t.Fatalf("hosted result = %+v", result)
+	if gotPayload["commit_token"] == nil || gotPayload["access_mode"] != "paid" {
+		t.Fatalf("quota payload = %#v", gotPayload)
+	}
+	if result.AccessMode != "paid" || result.PaidQuotaRemaining != 89 || result.Remaining != 89 {
+		t.Fatalf("quota result = %+v", result)
 	}
 	data, err := os.ReadFile(result.FilePath)
 	if err != nil {
@@ -1213,6 +1230,9 @@ func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *te
 	}
 	if !containsWarning(result.Warnings, "Image publishing is not supported") {
 		t.Fatalf("warnings = %#v", result.Warnings)
+	}
+	if strings.Join(licenseEvents, ",") != "check" {
+		t.Fatalf("license events = %#v, want check only because server consumes image quota", licenseEvents)
 	}
 }
 

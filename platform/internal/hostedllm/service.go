@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
 	"github.com/officecli/officecli/platform/internal/model"
 )
 
@@ -23,6 +24,11 @@ type APIKeyStore interface {
 	ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error)
 	SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error)
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
+}
+
+type GenerationQuotaManager interface {
+	ValidateCommitToken(req licensesvc.ConsumeRequest) error
+	Consume(ctx context.Context, req licensesvc.ConsumeRequest) (*licensesvc.ConsumeResponse, error)
 }
 
 type Config struct {
@@ -38,6 +44,7 @@ type Config struct {
 
 type Service struct {
 	store  APIKeyStore
+	quota  GenerationQuotaManager
 	cfg    Config
 	mu     sync.RWMutex
 	client *http.Client
@@ -65,22 +72,37 @@ type CompletionResponse struct {
 }
 
 type ImageRequest struct {
-	RequestID   string  `json:"request_id,omitempty"`
-	Model       string  `json:"model"`
-	Prompt      string  `json:"prompt"`
-	AspectRatio float64 `json:"aspect_ratio"`
+	RequestID       string                  `json:"request_id,omitempty"`
+	Model           string                  `json:"model"`
+	Prompt          string                  `json:"prompt"`
+	AspectRatio     float64                 `json:"aspect_ratio"`
+	FingerprintHash string                  `json:"fingerprint_hash,omitempty"`
+	UserID          uint64                  `json:"user_id,omitempty"`
+	APIKey          string                  `json:"api_key,omitempty"`
+	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
+	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
 }
 
 type ImageResponse struct {
-	Data          []byte
-	MIME          string
-	CreditBalance int
+	Data               []byte
+	MIME               string
+	CreditBalance      int
+	AccessMode         model.AccessMode
+	Remaining          int
+	FreeRemaining      int
+	RewardRemaining    int
+	PaidQuotaRemaining int
 }
 
-func NewService(store APIKeyStore, cfg Config) *Service {
+func NewService(store APIKeyStore, cfg Config, quotaManagers ...GenerationQuotaManager) *Service {
 	timeout := timeoutFor(cfg.TimeoutSec)
+	var quota GenerationQuotaManager
+	if len(quotaManagers) > 0 {
+		quota = quotaManagers[0]
+	}
 	return &Service{
 		store:  store,
+		quota:  quota,
 		cfg:    cfg,
 		client: &http.Client{Timeout: timeout},
 	}
@@ -168,6 +190,9 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 }
 
 func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+	if req.CommitToken != nil {
+		return s.generateQuotaImage(ctx, bearer, req)
+	}
 	key, hash, err := s.authorize(ctx, bearer)
 	if err != nil {
 		return nil, err
@@ -225,6 +250,56 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		Data:          data,
 		MIME:          "image/png",
 		CreditBalance: creditBalance(updatedKey),
+	}, nil
+}
+
+func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+	if s.quota == nil {
+		return nil, fmt.Errorf("generation quota service is unavailable")
+	}
+	consumeReq := imageConsumeRequest(req, bearer)
+	if err := s.quota.ValidateCommitToken(consumeReq); err != nil {
+		return nil, err
+	}
+	modelName := s.normalizeModel(req.Model, true)
+	payload := map[string]any{
+		"model":           modelName,
+		"prompt":          req.Prompt,
+		"size":            pickImageSize(req.AspectRatio),
+		"response_format": "b64_json",
+	}
+	body, _, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode hosted image: %w", err)
+	}
+	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+		return nil, fmt.Errorf("hosted image is empty")
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode hosted image data: %w", err)
+	}
+	consumeResp, err := s.quota.Consume(ctx, consumeReq)
+	if err != nil {
+		return nil, err
+	}
+	return &ImageResponse{
+		Data:               data,
+		MIME:               "image/png",
+		AccessMode:         consumeResp.AccessMode,
+		Remaining:          consumeResp.Remaining,
+		FreeRemaining:      consumeResp.FreeRemaining,
+		RewardRemaining:    consumeResp.RewardRemaining,
+		PaidQuotaRemaining: consumeResp.PaidQuotaRemaining,
+		CreditBalance:      consumeResp.CreditBalance,
 	}, nil
 }
 
@@ -294,6 +369,38 @@ func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, 
 		return nil, "", fmt.Errorf("hosted mode is not enabled for this key")
 	}
 	return key, hash, nil
+}
+
+func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequest {
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
+	}
+	accessMode := req.AccessMode
+	if accessMode == "" && req.CommitToken != nil {
+		accessMode = req.CommitToken.AccessMode
+	}
+	requestID := req.RequestID
+	if requestID == "" && req.CommitToken != nil {
+		requestID = req.CommitToken.RequestID
+	}
+	fingerprint := strings.TrimSpace(req.FingerprintHash)
+	if fingerprint == "" && req.CommitToken != nil {
+		fingerprint = req.CommitToken.FingerprintHash
+	}
+	userID := req.UserID
+	if userID == 0 && req.CommitToken != nil {
+		userID = req.CommitToken.UserID
+	}
+	return licensesvc.ConsumeRequest{
+		FingerprintHash: fingerprint,
+		UserID:          userID,
+		RequestID:       requestID,
+		UsageType:       string(model.UsageActionGenerate),
+		AccessMode:      accessMode,
+		APIKey:          apiKey,
+		CommitToken:     req.CommitToken,
+	}
 }
 
 func (s *Service) normalizeModel(value string, image bool) string {

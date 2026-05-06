@@ -2,11 +2,12 @@ CREATE TABLE IF NOT EXISTS daily_free_quotas (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   fingerprint_hash VARCHAR(128) NOT NULL,
   usage_date VARCHAR(10) NOT NULL,
+  document_type VARCHAR(32) NOT NULL DEFAULT 'document',
   daily_limit INT NOT NULL,
   daily_used INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_daily_free_quotas_fingerprint_date (fingerprint_hash, usage_date),
+  UNIQUE KEY uk_daily_free_quotas_fingerprint_date_type (fingerprint_hash, usage_date, document_type),
   KEY idx_daily_free_quotas_fingerprint (fingerprint_hash)
 );
 

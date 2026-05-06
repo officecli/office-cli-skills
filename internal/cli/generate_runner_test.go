@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"strings"
@@ -73,5 +76,45 @@ func TestExecuteGenerateJobRefreshesAccessAfterBestModeQuestions(t *testing.T) {
 		t.Fatalf("ReadDir: %v", readErr)
 	} else if len(entries) != 0 {
 		t.Fatalf("expected no output files, got %d", len(entries))
+	}
+}
+
+func TestExecuteGenerateJob_IMGChecksGenerationAccessBeforeImageRequest(t *testing.T) {
+	imageCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		imageCalls++
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		http.Error(w, `{"error":"image quota check should stop before this request"}`, http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	app := NewApp(nil, nil, nil)
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkErr: fmt.Errorf("the current key has no remaining image generations")}, nil
+	}
+
+	_, err := app.executeGenerateJob(context.Background(), Config{
+		Defaults: DefaultsConfig{OutputDir: t.TempDir(), Publish: false, Mode: "fast"},
+		License:  LicenseConfig{BaseURL: server.URL, APIKey: "paid-key", Enabled: true, TimeoutSec: 5},
+		Publish:  disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch Visual",
+		Prompt:       "A polished product launch hero image",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "fast",
+		OutputDir:    t.TempDir(),
+		ImageRatio:   "square",
+	}, false, noopProgressController{}, nil)
+	if err == nil {
+		t.Fatal("expected hosted access error")
+	}
+	if !strings.Contains(err.Error(), "the current key has no remaining image generations") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if imageCalls != 0 {
+		t.Fatalf("image requests = %d, want 0", imageCalls)
 	}
 }

@@ -4,7 +4,7 @@ OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`
 
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
 
-Standalone `new img` generation always goes through the OfficeCLI server and uses the platform access key from `config set-license`. It does not use local `config set-generation` image provider settings.
+Standalone `new img` generation always goes through the OfficeCLI server and uses the generation quota from `config set-license` / license checks. It does not use local `config set-generation` image provider settings.
 
 ## Claude Marketplace Install
 
@@ -67,7 +67,7 @@ Initialize configuration:
 ./officecli config set-defaults  # optional
 ```
 
-`config set-license` is required for standalone image generation:
+`config set-license` is required for standalone image generation. A successful standalone image consumes one generation count. Free usage has a separate image bucket of 3 images per user per day, while document generation keeps the 10 documents per day free bucket:
 
 ```bash
 ./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --no-publish
@@ -168,7 +168,7 @@ Generate a standalone image:
 ./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --no-publish
 ```
 
-`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, and consumes one server-side image generation credit only after a successful image response. Image publishing and local preview are not supported yet.
+`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, and consumes one image generation count only after a successful image response. Image publishing and local preview are not supported yet.
 
 Write output to a custom directory:
 
