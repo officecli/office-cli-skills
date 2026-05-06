@@ -330,6 +330,102 @@ func TestRegisterPreviewRoutesServesSandboxedReportPreviewWithExistingCookie(t *
 	require.Contains(t, rec.Body.String(), "Demand momentum")
 }
 
+func TestRegisterPreviewRoutesServesImagePreviewAfterPasswordSubmit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	shares := newPreviewShareService(t)
+	result, err := shares.CreateWithPassword(t.Context(), previewshare.CreateParams{
+		FileID:     "file-img-1",
+		StorageKey: "preview/file-img-1/original/launch-visual.png",
+		FileName:   "launch-visual.png",
+		FileType:   "img",
+		ExpiresAt:  time.Now().UTC().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	share := result.Share
+
+	objects := &fakePreviewRouteObjectStore{
+		objects: map[string][]byte{
+			share.StorageKey: []byte("png-bytes"),
+		},
+	}
+	sdkStore := officesdk.NewFileStore(nil)
+	sdkProvider := officesdk.NewFileProvider(sdkStore, objects, shares)
+	sdkHandler := officesdk.NewHandler(sdkStore, sdkProvider, "https://officecli.io/sdk/turbo-ai", "secret")
+	component := egin.DefaultContainer().Build()
+	registerPreviewRoutes(component, Config{
+		OfficeSDKHost: "http://127.0.0.1:19101",
+	}, &fakeAuthRouteService{}, shares, sdkHandler, sdkProvider)
+
+	req := httptest.NewRequest(http.MethodPost, "/p/"+share.ShareToken, strings.NewReader("password="+result.Password))
+	req.Host = "officecli.io"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "existing"})
+	rec := httptest.NewRecorder()
+	component.Engine.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "text/html")
+	require.Contains(t, rec.Body.String(), "OfficeCLI Image Preview")
+	require.Contains(t, rec.Body.String(), "/p/"+share.ShareToken+"/raw")
+	require.Contains(t, rec.Body.String(), "download=1")
+	require.True(t, strings.Contains(strings.Join(rec.Header().Values("Set-Cookie"), "\n"), "cop_preview_access="))
+}
+
+func TestRegisterPreviewRoutesImageRawRequiresPreviewAccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	shares := newPreviewShareService(t)
+	result, err := shares.CreateWithPassword(t.Context(), previewshare.CreateParams{
+		FileID:     "file-img-2",
+		StorageKey: "preview/file-img-2/original/launch-visual.png",
+		FileName:   "launch-visual.png",
+		FileType:   "img",
+		ExpiresAt:  time.Now().UTC().Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	objects := &fakePreviewRouteObjectStore{
+		objects: map[string][]byte{
+			result.Share.StorageKey: []byte("png-bytes"),
+		},
+	}
+	sdkStore := officesdk.NewFileStore(nil)
+	sdkProvider := officesdk.NewFileProvider(sdkStore, objects, shares)
+	sdkHandler := officesdk.NewHandler(sdkStore, sdkProvider, "https://officecli.io/sdk/turbo-ai", "secret")
+	component := egin.DefaultContainer().Build()
+	registerPreviewRoutes(component, Config{
+		OfficeSDKHost: "http://127.0.0.1:19101",
+	}, &fakeAuthRouteService{}, shares, sdkHandler, sdkProvider)
+
+	unauthorizedReq := httptest.NewRequest(http.MethodGet, "/p/"+result.Share.ShareToken+"/raw", nil)
+	unauthorizedReq.Host = "officecli.io"
+	unauthorizedReq.Header.Set("X-Forwarded-Proto", "https")
+	unauthorizedRec := httptest.NewRecorder()
+	component.Engine.ServeHTTP(unauthorizedRec, unauthorizedReq)
+	require.Equal(t, http.StatusUnauthorized, unauthorizedRec.Code)
+
+	issueRec := httptest.NewRecorder()
+	issueCtx, _ := gin.CreateTestContext(issueRec)
+	issueCtx.Request = httptest.NewRequest(http.MethodGet, "/p/"+result.Share.ShareToken, nil)
+	issueCtx.Request.Host = "officecli.io"
+	issueCtx.Request.Header.Set("X-Forwarded-Proto", "https")
+	shares.IssueAccessCookie(issueCtx, result.Share)
+
+	req := httptest.NewRequest(http.MethodGet, "/p/"+result.Share.ShareToken+"/raw", nil)
+	req.Host = "officecli.io"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	for _, cookie := range issueRec.Result().Cookies() {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	component.Engine.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "image/png", rec.Header().Get("Content-Type"))
+	require.Equal(t, "inline", rec.Header().Get("Content-Disposition"))
+	require.Equal(t, "png-bytes", rec.Body.String())
+}
+
 func TestRegisterOfficeSDKProxyRewritesAbsoluteRedirectLocationToPublicHost(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

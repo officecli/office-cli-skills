@@ -311,10 +311,11 @@ Default behavior:
   - Default output directory: ./output
   - Default mode: fast
   - If access checks are enabled, availability is verified before generation
-  - If defaults.publish=true and publishing is configured, output is published automatically
+  - If defaults.publish=true and publishing is configured, document output is published automatically
+  - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
   - If publishing is not configured, files are saved locally and online preview is skipped
   - Standalone img generation always uses the OfficeCLI server and requires config set-license
-  - Image publishing and local preview are not supported yet; images are saved locally
+  - Standalone img local preview sidecars are not supported
 
 Config file:
   macOS   ~/Library/Application Support/officecli/config.json
@@ -333,7 +334,7 @@ Examples:
   officecli upgrade
   officecli upgrade --help
   officecli new pptx "Enterprise Collaboration Platform Overview" "Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform"
-  officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --no-publish
+  officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape
   officecli score pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli review pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli new --help
@@ -396,7 +397,7 @@ Description:
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
   - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
   - ` + "`img`" + ` generates one local image through the OfficeCLI server; run ` + "`officecli config set-license`" + ` first
-  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + ` and does not support best mode, source files, local preview, or publishing
+  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, publishes by default when configured, and does not support best mode, source files, or local preview
 `
 }
 

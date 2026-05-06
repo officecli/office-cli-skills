@@ -114,6 +114,22 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if imageGeneration["provider_control"] != "server" {
 		t.Fatalf("unexpected image_generation capability: %#v", imageGeneration)
 	}
+	if imageGeneration["publish_supported"] != true || imageGeneration["default_publish"] != true {
+		t.Fatalf("unexpected image publish capability: %#v", imageGeneration)
+	}
+	if imageGeneration["disable_flag"] != "--no-publish" {
+		t.Fatalf("unexpected image publish disable flag: %#v", imageGeneration["disable_flag"])
+	}
+	if imageGeneration["config_command"] != "officecli config set-publish" {
+		t.Fatalf("unexpected image publish config command: %#v", imageGeneration["config_command"])
+	}
+	imgPublishSupport, ok := imgCaps["publish_support"].(map[string]any)
+	if !ok {
+		t.Fatalf("img publish_support missing: %#v", imgCaps)
+	}
+	if imgPublishSupport["default_publish"] != true || imgPublishSupport["disable_flag"] != "--no-publish" {
+		t.Fatalf("unexpected img publish_support: %#v", imgPublishSupport)
+	}
 	pptxCaps, ok := docGen["pptx"].(map[string]any)
 	if !ok {
 		t.Fatalf("pptx capabilities missing: %#v", docGen)
@@ -276,9 +292,13 @@ func TestAgentBridgeCapabilitiesExposePrepareAndRenderTools(t *testing.T) {
 	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	tools := server.initializeResult(context.Background()).Tools
 	names := make([]string, 0, len(tools))
+	var generateSchema map[string]any
 	for _, tool := range tools {
 		if name, ok := tool["name"].(string); ok {
 			names = append(names, name)
+			if name == "office.generate" {
+				generateSchema, _ = tool["input_schema"].(map[string]any)
+			}
 		}
 	}
 	for _, expected := range []string{"office.prepare", "office.render", "office.generate"} {
@@ -292,6 +312,9 @@ func TestAgentBridgeCapabilitiesExposePrepareAndRenderTools(t *testing.T) {
 		if !found {
 			t.Fatalf("missing tool %q in %#v", expected, names)
 		}
+	}
+	if generateSchema["publish"] != "boolean" {
+		t.Fatalf("office.generate publish schema = %#v", generateSchema["publish"])
 	}
 }
 

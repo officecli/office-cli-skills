@@ -94,7 +94,6 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 	}
 	job.RuntimeMode = RuntimeModeExternal
 	job.Mode = "fast"
-	job.Publish = false
 
 	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
 	if err != nil {
@@ -106,7 +105,15 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 	if err != nil {
 		return GenerateResult{}, buildHostedModeError(err)
 	}
-	executor := NewExecutor(runtime.NewService(llmClient, progress), nil, nil)
+	publishCfg := cfg.Publish
+	if strings.TrimSpace(publishCfg.APIKey) == "" {
+		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
+	}
+	publisher, err := publishprovider.NewPublisher(publishCfg)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	executor := NewExecutor(runtime.NewService(llmClient, progress), publisher, nil)
 	executor.progress = progress
 	return executor.Run(ctx, job)
 }
@@ -178,23 +185,13 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	}
 
 	publish := cfg.Defaults.Publish
+	if documentType == engine.DocumentTypeIMG {
+		publish = true
+	}
 	if req.Args.Publish != nil {
 		publish = *req.Args.Publish
 	}
 	var warnings []engine.GenerateIssue
-	if documentType == engine.DocumentTypeIMG {
-		if req.Args.Publish != nil && *req.Args.Publish {
-			return GenerateJob{}, fmt.Errorf("publish is not supported for img generation")
-		}
-		if publish {
-			warnings = append(warnings, engine.GenerateIssue{
-				Code:    "WARN_IMG_PUBLISH_UNSUPPORTED",
-				Message: "Image publishing is not supported yet, so the generated image will be saved locally only.",
-				Field:   "publish",
-			})
-			publish = false
-		}
-	}
 	enableImages := true
 	if req.Args.EnableImages != nil {
 		enableImages = *req.Args.EnableImages

@@ -4,7 +4,7 @@ OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`
 
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
 
-Standalone `new img` generation always goes through the OfficeCLI server and uses the generation quota from `config set-license` / license checks. It does not use local `config set-generation` image provider settings.
+Standalone `new img` generation always goes through the OfficeCLI server and uses the generation quota from `config set-license` / license checks. It does not use local `config set-generation` image provider settings. Standalone images publish online by default when publishing is configured; use `--no-publish` for local-only output.
 
 ## Claude Marketplace Install
 
@@ -63,14 +63,14 @@ Initialize configuration:
 ```bash
 ./officecli config set-generation
 ./officecli config set-license
-./officecli config set-publish   # optional, only for online preview
+./officecli config set-publish   # optional for documents, required for standalone image preview links
 ./officecli config set-defaults  # optional
 ```
 
 `config set-license` is required for standalone image generation. A successful standalone image consumes one generation count. Free usage has a separate image bucket of 3 images per user per day, while document generation keeps the 10 documents per day free bucket:
 
 ```bash
-./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --no-publish
+./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape
 ```
 
 `config set-generation` also configures PPT image assets. It does not configure standalone `new img` generation:
@@ -102,7 +102,7 @@ Generate a PPTX:
 
 By default, generated files are written to `./output`.
 
-If publish is configured and enabled, OfficeCLI also returns an online access URL and password.
+If publish is configured and enabled, OfficeCLI also returns an online access URL and password. Standalone `new img` publishes by default; pass `--no-publish` to keep it local-only.
 
 To validate local generation only:
 
@@ -165,10 +165,10 @@ Generate a workbook-backed Report:
 Generate a standalone image:
 
 ```bash
-./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --no-publish
+./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape
 ```
 
-`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, and consumes one image generation count only after a successful image response. Image publishing and local preview are not supported yet.
+`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and consumes one image generation count only after a successful image response. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
 
 Write output to a custom directory:
 

@@ -178,6 +178,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 
 	publishEnabled := cfg.Defaults.Publish
+	if documentType == engine.DocumentTypeIMG {
+		publishEnabled = true
+	}
 	if publishFlag.set {
 		publishEnabled = publishFlag.value
 	}
@@ -215,16 +218,6 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 			return GenerateJob{}, fmt.Errorf("--local-preview is not supported for img generation")
 		case noImagesFlag.set && noImagesFlag.value:
 			return GenerateJob{}, fmt.Errorf("--no-images is not supported for img generation")
-		case publishFlag.set && publishFlag.value:
-			return GenerateJob{}, fmt.Errorf("--publish is not supported for img generation")
-		}
-		if publishEnabled {
-			warnings = append(warnings, engine.GenerateIssue{
-				Code:    "WARN_IMG_PUBLISH_UNSUPPORTED",
-				Message: "Image publishing is not supported yet, so the generated image will be saved locally only.",
-				Field:   "publish",
-			})
-			publishEnabled = false
 		}
 	} else if documentType == engine.DocumentTypeReport {
 		if sourceFile == "" {

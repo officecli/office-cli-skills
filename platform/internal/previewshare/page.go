@@ -132,3 +132,48 @@ func RenderReportPage(share *PreviewShare, reportHTML []byte) string {
 </body>
 </html>`, html.EscapeString(title), string(reportJSON))
 }
+
+func RenderImagePage(share *PreviewShare, rawURL, downloadURL string) string {
+	title := "OfficeCLI Image Preview"
+	fileName := ""
+	expiresAt := ""
+	if share != nil {
+		if strings.TrimSpace(share.FileName) != "" {
+			title = strings.TrimSpace(share.FileName)
+		}
+		fileName = html.EscapeString(share.FileName)
+		expiresAt = share.ExpiresAt.Local().Format(time.RFC3339)
+	}
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>%s</title>
+  <style>
+    body { margin: 0; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
+    .shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    header { padding: 16px 20px; border-bottom: 1px solid rgba(148, 163, 184, 0.24); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: 18px; font-weight: 650; }
+    .meta { margin-top: 4px; font-size: 13px; color: #94a3b8; }
+    a { color: #fff; text-decoration: none; background: #2563eb; border-radius: 8px; padding: 9px 12px; white-space: nowrap; }
+    main { min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    img { max-width: 100%%; max-height: calc(100vh - 118px); object-fit: contain; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35); background: #020617; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>OfficeCLI Image Preview</h1>
+        <div class="meta">File: %s<br>Available until: %s</div>
+      </div>
+      <a href="%s">Download</a>
+    </header>
+    <main>
+      <img src="%s" alt="%s">
+    </main>
+  </div>
+</body>
+</html>`, html.EscapeString(title), fileName, expiresAt, html.EscapeString(strings.TrimSpace(downloadURL)), html.EscapeString(strings.TrimSpace(rawURL)), fileName)
+}

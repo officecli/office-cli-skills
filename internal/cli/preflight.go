@@ -314,9 +314,6 @@ func shouldSkipPublishPreflight(command string, args []string) bool {
 	if command != "new" {
 		return false
 	}
-	if isImageNewCommand(args) {
-		return true
-	}
 	for _, arg := range args {
 		trimmed := strings.TrimSpace(arg)
 		if trimmed == "--no-publish" || strings.HasPrefix(trimmed, "--no-publish=") {

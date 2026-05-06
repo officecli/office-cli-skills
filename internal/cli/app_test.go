@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1001,7 +1002,7 @@ func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 }
 
 func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
-	cfg := Config{Defaults: DefaultsConfig{Publish: true, Mode: "best"}}
+	cfg := Config{Defaults: DefaultsConfig{Publish: false, Mode: "best"}}
 
 	job, err := BuildGenerateJob([]string{
 		"img",
@@ -1023,11 +1024,39 @@ func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
 	if job.ImageRatio != "square" {
 		t.Fatalf("image ratio = %q", job.ImageRatio)
 	}
-	if job.Publish {
-		t.Fatal("img generation should disable publishing")
+	if !job.Publish {
+		t.Fatal("img generation should publish by default")
 	}
-	if len(job.Warnings) != 1 || !strings.Contains(job.Warnings[0].Message, "Image publishing is not supported") {
+	if len(job.Warnings) != 0 {
 		t.Fatalf("warnings = %#v", job.Warnings)
+	}
+}
+
+func TestBuildGenerateJob_IMGNoPublishDisablesDefaultPublish(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--no-publish",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.Publish {
+		t.Fatal("expected --no-publish to disable image publishing")
+	}
+}
+
+func TestBuildGenerateJob_IMGAcceptsExplicitPublish(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--publish",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if !job.Publish {
+		t.Fatal("expected --publish to keep image publishing enabled")
 	}
 }
 
@@ -1042,7 +1071,7 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 		{name: "file", args: []string{"img", "Demo", "--file", "input.xlsx"}, want: "--file is not supported for img generation"},
 		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
 		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
-		{name: "publish", args: []string{"img", "Demo", "--publish"}, want: "--publish is not supported for img generation"},
+		{name: "external runtime", args: []string{"img", "Demo", "--runtime-mode", "external"}, want: "img generation always uses the OfficeCLI server"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1151,6 +1180,11 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	imageBytes := []byte("server-png-bytes")
 	var gotAuth string
 	var gotPayload map[string]any
+	var gotPublishAuth string
+	var gotPublishDocType string
+	var gotPublishDocName string
+	var gotPublishFileName string
+	var gotPublishFileBytes []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/llm/v1/image" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -1162,6 +1196,30 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"paid","remaining":89,"paid_quota_remaining":89}`, base64.StdEncoding.EncodeToString(imageBytes))
 	}))
 	defer server.Close()
+	publishServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/publish" {
+			t.Fatalf("unexpected publish path: %s", r.URL.Path)
+		}
+		gotPublishAuth = r.Header.Get("Authorization")
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			t.Fatalf("parse publish multipart: %v", err)
+		}
+		gotPublishDocType = r.FormValue("document_type")
+		gotPublishDocName = r.FormValue("document_name")
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("publish file: %v", err)
+		}
+		defer file.Close()
+		gotPublishFileName = header.Filename
+		gotPublishFileBytes, err = io.ReadAll(file)
+		if err != nil {
+			t.Fatalf("read publish file: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_url":"https://officecli.io/p/share-img","password":"654321","file_id":"file-img","expires_at":"2026-05-06T00:00:00Z"}`)
+	}))
+	defer publishServer.Close()
 
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
@@ -1193,6 +1251,7 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	result, err := app.executeGenerateJob(t.Context(), Config{
 		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true},
 		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
+		Publish:  publishprovider.Config{Enabled: true, BaseURL: publishServer.URL},
 	}, job, false, noopProgressController{}, nil)
 	if err != nil {
 		t.Fatalf("executeGenerateJob: %v", err)
@@ -1225,11 +1284,26 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	if filepath.Ext(result.FilePath) != ".png" {
 		t.Fatalf("file path = %s", result.FilePath)
 	}
-	if result.Published {
-		t.Fatal("img generation should not publish")
+	if !result.Published {
+		t.Fatal("img generation should publish")
 	}
-	if !containsWarning(result.Warnings, "Image publishing is not supported") {
-		t.Fatalf("warnings = %#v", result.Warnings)
+	if result.AccessURL != "https://officecli.io/p/share-img" || result.Password != "654321" || result.ExpiresAt != "2026-05-06T00:00:00Z" {
+		t.Fatalf("publish result = %+v", result)
+	}
+	if gotPublishAuth != "Bearer hosted-key" {
+		t.Fatalf("publish authorization = %q", gotPublishAuth)
+	}
+	if gotPublishDocType != "img" {
+		t.Fatalf("publish document_type = %q", gotPublishDocType)
+	}
+	if gotPublishDocName != result.DocumentName {
+		t.Fatalf("publish document_name = %q, result name = %q", gotPublishDocName, result.DocumentName)
+	}
+	if gotPublishFileName != filepath.Base(result.FilePath) {
+		t.Fatalf("publish filename = %q, file path = %q", gotPublishFileName, result.FilePath)
+	}
+	if string(gotPublishFileBytes) != string(imageBytes) {
+		t.Fatalf("published image bytes = %q", string(gotPublishFileBytes))
 	}
 	if strings.Join(licenseEvents, ",") != "check" {
 		t.Fatalf("license events = %#v, want check only because server consumes image quota", licenseEvents)

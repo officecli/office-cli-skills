@@ -97,16 +97,19 @@ exit 10
 	}
 }
 
-func TestPreflightSkipsGenerationAndPublishSetupForIMG(t *testing.T) {
+func TestPreflightSkipsGenerationButKeepsPublishSetupForIMG(t *testing.T) {
 	args := []string{"--json", "--prompt", "Create a launch image", "img", "Launch Visual"}
 	if !shouldSkipGenerationPreflight("new", args) {
 		t.Fatal("expected img preflight to skip generation setup")
 	}
-	if !shouldSkipPublishPreflight("new", args) {
-		t.Fatal("expected img preflight to skip publish setup")
+	if shouldSkipPublishPreflight("new", args) {
+		t.Fatal("expected img preflight to keep publish setup")
 	}
 	if !shouldRequireLicenseAPIKeyPreflight("new", args) {
 		t.Fatal("expected img preflight to require license api key")
+	}
+	if !shouldSkipPublishPreflight("new", append(args, "--no-publish")) {
+		t.Fatal("expected --no-publish to skip publish setup")
 	}
 }
 
@@ -120,7 +123,7 @@ func TestRunInstalledSkillPreflight_IMGPassesSkipSetupEnv(t *testing.T) {
 	if err := os.WriteFile(scriptPath, []byte(`#!/usr/bin/env bash
 set -euo pipefail
 test "${OFFICECLI_SKIP_GENERATION_SETUP:-}" = "1"
-test "${OFFICECLI_SKIP_PUBLISH_SETUP:-}" = "1"
+test "${OFFICECLI_SKIP_PUBLISH_SETUP:-}" = ""
 test "${OFFICECLI_REQUIRE_LICENSE_API_KEY:-}" = "1"
 printf '%s\n' '{"status":"ready","missing_items":[]}'
 `), 0o755); err != nil {

@@ -397,14 +397,19 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"img":    s.documentGenerationCapability(engine.DocumentTypeIMG),
 			},
 			"image_generation": map[string]any{
-				"provider_control": "server",
-				"preferred_tool":   bridgeToolOfficeGenerate,
-				"document_type":    "img",
-				"ratio_values":     []string{"square", "landscape", "portrait"},
+				"provider_control":  "server",
+				"preferred_tool":    bridgeToolOfficeGenerate,
+				"document_type":     "img",
+				"ratio_values":      []string{"square", "landscape", "portrait"},
+				"publish_supported": true,
+				"default_publish":   true,
+				"disable_flag":      "--no-publish",
+				"config_command":    "officecli config set-publish",
 				"notes": []string{
 					"Standalone image generation always goes through the OfficeCLI server.",
 					"Agent clients must not use local image provider configuration for document_type=img.",
 					"Successful standalone image generation consumes one generation count, not hosted credits.",
+					"Standalone images publish online by default when publishing is configured; pass publish=false or --no-publish for local-only output.",
 				},
 			},
 			"update": s.updateCapability(ctx),
@@ -444,6 +449,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"mode":          "fast|best",
 					"runtime_mode":  "external|hosted",
 					"ratio":         "square|landscape|portrait (img only)",
+					"publish":       "boolean",
 				},
 			},
 			{
@@ -507,6 +513,12 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 			"image_generation": map[string]any{
 				"provider_control": "server",
 				"ratio_values":     []string{"square", "landscape", "portrait"},
+			},
+			"publish_support": map[string]any{
+				"publish_supported": true,
+				"default_publish":   true,
+				"disable_flag":      "--no-publish",
+				"config_command":    "officecli config set-publish",
 			},
 			"image_support": map[string]any{
 				"default_enabled": true,

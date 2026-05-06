@@ -246,6 +246,44 @@ func TestPublishAcceptsReportHTML(t *testing.T) {
 	require.Equal(t, "<html><body>report</body></html>", string(objects.putData))
 }
 
+func TestPublishAcceptsStandaloneImage(t *testing.T) {
+	quotaTotal := 100
+	apiKeys := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:         9,
+			Status:     model.APIKeyStatusActive,
+			PlanName:   "Growth",
+			KeyPrefix:  "cop_paid",
+			QuotaTotal: &quotaTotal,
+		},
+	}
+	objects := &fakeObjectStore{}
+	files := &fakeFileMetaStore{}
+	shares := &fakePreviewShareStore{}
+	svc := NewService(apiKeys, objects, files, shares, Config{
+		SiteBaseURL:          "https://officecli.io",
+		HashSalt:             "salt",
+		DefaultExpireSeconds: 3600,
+	})
+
+	result, err := svc.Publish(context.Background(), "Bearer demo", Request{
+		FileName:     "launch-visual",
+		DocumentType: "img",
+		DocumentName: "Launch Visual",
+		ContentType:  "image/png",
+		Reader:       bytes.NewReader([]byte("png-bytes")),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "https://officecli.io/p/share-1", result.AccessURL)
+	require.Equal(t, "Launch Visual.png", files.meta.Name)
+	require.Equal(t, "img", shares.got.FileType)
+	require.Contains(t, objects.putKey, "preview/")
+	require.Contains(t, objects.putKey, "/original/Launch Visual.png")
+	require.Equal(t, "image/png", objects.putContentType)
+	require.Equal(t, "png-bytes", string(objects.putData))
+}
+
 func TestPublishRejectsMissingFileBytes(t *testing.T) {
 	quotaTotal := 1
 	svc := NewService(&fakeAPIKeyStore{

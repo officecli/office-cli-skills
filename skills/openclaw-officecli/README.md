@@ -126,7 +126,7 @@ For all agents that use this skill, the following bridge rules are recommended:
 
 ## Standalone Image Rules
 
-For `document_type=img`, use `office.generate` rather than `office.render`. Pass `ratio=square|landscape|portrait` when requested, default to `square`, and do not use local `config set-generation` image provider fields. Publishing and local preview are not supported for standalone images; the generated file should be returned as a local attachment.
+For `document_type=img`, use `office.generate` rather than `office.render`. Pass `ratio=square|landscape|portrait` when requested, default to `square`, and do not use local `config set-generation` image provider fields. Standalone images publish online by default when publishing is configured; pass `publish=false` or `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
 
 ## Debugging
 

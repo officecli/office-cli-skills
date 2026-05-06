@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added default online publishing for standalone `new img` outputs, including protected platform image preview links.
+
 ## 0.1.0 - 2026-03-31
 
 First usable CLI release, focused on turning the repository from a reusable library into a tool that end users can run directly.

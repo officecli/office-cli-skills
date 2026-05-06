@@ -38,7 +38,7 @@ officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --no-images
 5. Generate a standalone image:
 
 ```bash
-officecli new img "Product Launch Visual" --prompt "Create a polished launch image for an enterprise collaboration platform." --ratio landscape --out output --json --no-publish
+officecli new img "Product Launch Visual" --prompt "Create a polished launch image for an enterprise collaboration platform." --ratio landscape --out output --json
 ```
 
 ## Important Rules
@@ -46,4 +46,5 @@ officecli new img "Product Launch Visual" --prompt "Create a polished launch ima
 - User-visible output must remain English-only.
 - Binary behavior is the source of truth; do not rely on skill-only wording or wrappers to change product semantics.
 - Standalone `img` generation uses the OfficeCLI server image route and does not use local `config set-generation` image provider settings.
+- Standalone `img` publishes online by default when publishing is configured; pass `--no-publish` for local-only output.
 - If the platform returns preview links, passwords, or quota warnings, that output should already be normalized by the binary.

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -863,6 +864,22 @@ func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteServi
 		shares.IssueAccessCookie(c, share)
 		servePreviewShare(c, share, sdkHandler, sdkProvider)
 	})
+	r.GET("/p/:shareToken/raw", func(c *gin.Context) {
+		share, status, err := shares.ValidateEntryRequest(c.Request.Context(), c.Param("shareToken"))
+		if err != nil {
+			httpapi.Error(c, status, err.Error())
+			return
+		}
+		if !strings.EqualFold(strings.TrimSpace(share.FileType), "img") {
+			httpapi.Error(c, http.StatusNotFound, "image preview not found")
+			return
+		}
+		if !shares.HasAccessCookie(c, share) {
+			httpapi.Error(c, http.StatusUnauthorized, "preview access is required")
+			return
+		}
+		serveImageRaw(c, share, sdkProvider)
+	})
 
 	osdk := r.Group("/officesdk")
 	osdk.GET("/page", sdkHandler.ServePage)
@@ -887,7 +904,46 @@ func servePreviewShare(c *gin.Context, share *previewshare.PreviewShare, sdkHand
 		serveReportPreview(c, share, sdkProvider)
 		return
 	}
+	if share != nil && strings.EqualFold(strings.TrimSpace(share.FileType), "img") {
+		serveImagePreview(c, share)
+		return
+	}
 	sdkHandler.ServePageForFile(c, share.FileID)
+}
+
+func serveImagePreview(c *gin.Context, share *previewshare.PreviewShare) {
+	if c == nil || share == nil {
+		httpapi.Error(c, http.StatusInternalServerError, "image preview unavailable")
+		return
+	}
+	rawURL := "/p/" + url.PathEscape(share.ShareToken) + "/raw"
+	downloadURL := rawURL + "?download=1"
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(previewshare.RenderImagePage(share, rawURL, downloadURL)))
+}
+
+func serveImageRaw(c *gin.Context, share *previewshare.PreviewShare, sdkProvider *officesdk.FileProvider) {
+	if c == nil || share == nil || sdkProvider == nil {
+		httpapi.Error(c, http.StatusInternalServerError, "image preview unavailable")
+		return
+	}
+	imageBytes, err := sdkProvider.ReadObject(c.Request.Context(), share.StorageKey)
+	if err != nil {
+		httpapi.Error(c, http.StatusNotFound, "image preview not found")
+		return
+	}
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(share.FileName)))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if strings.TrimSpace(c.Query("download")) == "1" {
+		name := strings.ReplaceAll(share.FileName, "\"", "")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", name))
+	} else {
+		c.Header("Content-Disposition", "inline")
+	}
+	c.Header("Cache-Control", "private, max-age=60")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, contentType, imageBytes)
 }
 
 func serveReportPreview(c *gin.Context, share *previewshare.PreviewShare, sdkProvider *officesdk.FileProvider) {

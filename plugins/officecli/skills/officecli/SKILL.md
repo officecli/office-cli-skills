@@ -32,6 +32,7 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - standalone `img` generation always goes through the OfficeCLI server and requires `officecli config set-license`
 - standalone `img` does not use local `llm.image_base_url`, `llm.image_api_key`, or `llm.image_model` settings
 - standalone `img` supports `ratio=square|landscape|portrait`; server-side charging happens only after a successful image response
+- standalone `img` publishes online by default when publishing is configured; pass `publish=false` or `--no-publish` for local-only output
 - when using `agent-bridge`, agents should treat `capabilities/get -> document_generation.pptx.image_support` as the authoritative machine-readable contract for PPT image behavior
 - when using `agent-bridge`, agents should treat `capabilities/get -> image_generation` as the authoritative machine-readable contract for standalone `img` behavior
 - when using `agent-bridge`, agents should treat `capabilities/get -> update` as the authoritative machine-readable contract for binary update availability
@@ -179,6 +180,7 @@ For all agent clients, use the following image-handling rules:
 - read `capabilities/get -> update`
 - assume `pptx` default image behavior from `default_enabled`, not from hard-coded client assumptions
 - for standalone `img`, use `office.generate`, set `ratio` when needed, and do not use local provider configuration
+- for standalone `img`, keep publishing enabled by default when the user wants online access; pass `publish=false` only for local-only output
 - for standalone `img`, surface server-returned balance or quota metadata when present
 - never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
 - for `report`, call `office.prepare` first and keep the final narrative grounded in `workbook_summary` and `base_report_json`
