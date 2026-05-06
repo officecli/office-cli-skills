@@ -496,6 +496,7 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		"model":        c.model,
 		"prompt":       req.Prompt,
 		"aspect_ratio": req.TargetAspectRatio,
+		"fingerprint_hash": req.FingerprintHash,
 	}
 	body, err := c.post(ctx, c.baseURL+"/v1/image", payload)
 	if err != nil {

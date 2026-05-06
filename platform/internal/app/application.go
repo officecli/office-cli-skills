@@ -161,7 +161,7 @@ func New() (*Application, error) {
 			TTL:  cfg.LicenseProofTTL,
 		},
 	)
-	hostedLLMSvc := hostedllm.NewService(dbStore, hostedllm.Config{
+	hostedLLMSvc := hostedllm.NewService(dbStore, dbStore, hostedllm.Config{
 		BaseURL:    cfg.HostedLLMBaseURL,
 		APIKey:     cfg.HostedLLMAPIKey,
 		TextModel:  cfg.HostedLLMTextModel,
@@ -1511,14 +1511,14 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 
 type freeQuotaRepo struct{ store *sqlstore.Store }
 
-func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
-	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
+func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
 }
-func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
-	return r.store.GetDailyFreeQuota(ctx, fingerprint, usageDate)
+func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
+	return r.store.GetDailyFreeQuota(ctx, fingerprint, usageDate, documentType)
 }
-func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
-	quota, err := r.store.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
+func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
+	quota, err := r.store.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
 	if err != nil && strings.Contains(err.Error(), "quota exhausted") {
 		return nil, licensesvc.ErrQuotaExhausted
 	}

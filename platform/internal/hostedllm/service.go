@@ -37,10 +37,11 @@ type Config struct {
 }
 
 type Service struct {
-	store  APIKeyStore
-	cfg    Config
-	mu     sync.RWMutex
-	client *http.Client
+	store          APIKeyStore
+	freeQuotaStore FreeQuotaStore
+	cfg            Config
+	mu             sync.RWMutex
+	client         *http.Client
 }
 
 type CompletionRequest struct {
@@ -69,6 +70,7 @@ type ImageRequest struct {
 	Model       string  `json:"model"`
 	Prompt      string  `json:"prompt"`
 	AspectRatio float64 `json:"aspect_ratio"`
+	FingerprintHash string `json:"fingerprint_hash,omitempty"`
 }
 
 type ImageResponse struct {
@@ -77,12 +79,18 @@ type ImageResponse struct {
 	CreditBalance int
 }
 
-func NewService(store APIKeyStore, cfg Config) *Service {
+type FreeQuotaStore interface {
+	GetOrCreateDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
+	ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error)
+}
+
+func NewService(store APIKeyStore, freeQuotaStore FreeQuotaStore, cfg Config) *Service {
 	timeout := timeoutFor(cfg.TimeoutSec)
 	return &Service{
-		store:  store,
-		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		store:          store,
+		freeQuotaStore: freeQuotaStore,
+		cfg:            cfg,
+		client:         &http.Client{Timeout: timeout},
 	}
 }
 
@@ -167,7 +175,53 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	}, nil
 }
 
+func (s *Service) generateImageWithFreeQuota(ctx context.Context, req ImageRequest) (*ImageResponse, error) {
+	fingerprint := strings.TrimSpace(req.FingerprintHash)
+	if fingerprint == "" {
+		return nil, fmt.Errorf("fingerprint_hash is required for free image generation")
+	}
+	usageDate := time.Now().UTC().Format("2006-01-02")
+	_, err := s.freeQuotaStore.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, "image", 3)
+	if err != nil {
+		return nil, fmt.Errorf("free image quota exhausted: %w", err)
+	}
+	modelName := s.normalizeModel(req.Model, true)
+	payload := map[string]any{
+		"model":           modelName,
+		"prompt":          req.Prompt,
+		"size":            pickImageSize(req.AspectRatio),
+		"response_format": "b64_json",
+	}
+	body, _, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode hosted image: %w", err)
+	}
+	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+		return nil, fmt.Errorf("hosted image is empty")
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode hosted image data: %w", err)
+	}
+	return &ImageResponse{
+		Data:          data,
+		MIME:          "image/png",
+	}, nil
+}
+
 func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+	bareBearer := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
+	if bareBearer == "" && strings.TrimSpace(req.FingerprintHash) != "" && s.freeQuotaStore != nil {
+		return s.generateImageWithFreeQuota(ctx, req)
+	}
 	key, hash, err := s.authorize(ctx, bearer)
 	if err != nil {
 		return nil, err

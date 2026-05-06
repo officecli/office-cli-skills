@@ -54,6 +54,7 @@ type StructuredCompletionRequest struct {
 
 type ImageGenerationRequest struct {
 	Prompt            string
+	FingerprintHash   string
 	TargetAspectRatio float64
 }
 
