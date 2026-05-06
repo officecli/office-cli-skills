@@ -179,9 +179,9 @@ func (s *Store) GetOrCreateFreeQuota(ctx context.Context, fingerprint string, de
 	return &quota, true, nil
 }
 
-func (s *Store) GetOrCreateDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+func (s *Store) GetOrCreateDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
 	var quota model.DailyFreeQuota
-	err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).First(&quota).Error
+	err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ?", fingerprint, usageDate).First(&quota).Error
 	if err == nil {
 		return &quota, false, nil
 	}
@@ -192,13 +192,12 @@ func (s *Store) GetOrCreateDailyFreeQuota(ctx context.Context, fingerprint strin
 	quota = model.DailyFreeQuota{
 		FingerprintHash: fingerprint,
 		UsageDate:       usageDate,
-		DocumentType:    documentType,
 		DailyLimit:      defaultLimit,
 		DailyUsed:       0,
 	}
 	if err := s.db.WithContext(ctx).Create(&quota).Error; err != nil {
 		if IsDuplicateError(err) {
-			return s.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
+			return s.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
 		}
 		return nil, false, err
 	}
@@ -216,9 +215,9 @@ func (s *Store) GetFreeQuotaByFingerprint(ctx context.Context, fingerprint strin
 	return &quota, nil
 }
 
-func (s *Store) GetDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
+func (s *Store) GetDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
 	var quota model.DailyFreeQuota
-	if err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).First(&quota).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ?", fingerprint, usageDate).First(&quota).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -254,7 +253,7 @@ func (s *Store) ConsumeFreeQuota(ctx context.Context, fingerprint string) (*mode
 	return &quota, nil
 }
 
-func (s *Store) ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
+func (s *Store) ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -263,7 +262,7 @@ func (s *Store) ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, u
 
 	var quota model.DailyFreeQuota
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).
+		Where("fingerprint_hash = ? AND usage_date = ?", fingerprint, usageDate).
 		First(&quota).Error
 	switch {
 	case err == nil:
@@ -271,14 +270,13 @@ func (s *Store) ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, u
 		quota = model.DailyFreeQuota{
 			FingerprintHash: fingerprint,
 			UsageDate:       usageDate,
-			DocumentType:    documentType,
 			DailyLimit:      defaultLimit,
 			DailyUsed:       0,
 		}
 		if err := tx.Create(&quota).Error; err != nil {
 			tx.Rollback()
 			if IsDuplicateError(err) {
-				return s.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
+				return s.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, defaultLimit)
 			}
 			return nil, err
 		}

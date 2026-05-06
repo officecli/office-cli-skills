@@ -45,7 +45,7 @@ func newTestFreeQuotaStore() *testFreeQuotaStore {
 	return &testFreeQuotaStore{quotas: map[string]*model.DailyFreeQuota{}}
 }
 
-func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if quota, ok := f.quotas[fingerprint+"|"+usageDate]; ok {
@@ -58,7 +58,7 @@ func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerp
 	return &copied, true, nil
 }
 
-func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
+func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	quota := f.quotas[fingerprint+"|"+usageDate]
@@ -69,7 +69,7 @@ func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint str
 	return &copied, nil
 }
 
-func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
+func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := fingerprint + "|" + usageDate

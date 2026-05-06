@@ -496,15 +496,15 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		"model":        c.model,
 		"prompt":       req.Prompt,
 		"aspect_ratio": req.TargetAspectRatio,
-		"fingerprint_hash": req.FingerprintHash,
 	}
 	body, err := c.post(ctx, c.baseURL+"/v1/image", payload)
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
-		Data string `json:"data"`
-		MIME string `json:"mime"`
+		Data          string `json:"data"`
+		MIME          string `json:"mime"`
+		CreditBalance *int   `json:"credit_balance,omitempty"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decode internal image response: %w", err)
@@ -516,7 +516,7 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 	if err != nil {
 		return nil, err
 	}
-	return &engine.ImageGenerationResult{Data: data, MIME: resp.MIME}, nil
+	return &engine.ImageGenerationResult{Data: data, MIME: resp.MIME, CreditBalance: resp.CreditBalance}, nil
 }
 
 func (c *internalClient) complete(ctx context.Context, kind string, messages []engine.LLMMessage, extra map[string]any) (string, error) {

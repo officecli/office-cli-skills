@@ -296,3 +296,40 @@ func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 		t.Fatalf("unexpected mime: %q", image.MIME)
 	}
 }
+
+func TestInternalClient_GenerateImageReturnsCreditBalance(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":11}`, imageData)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "internal",
+		BaseURL:  server.URL,
+		APIKey:   "hosted-key",
+		Model:    "hosted/img",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt:            "Generate an illustration of a blue folder",
+		TargetAspectRatio: 1,
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+	if image.CreditBalance == nil || *image.CreditBalance != 11 {
+		t.Fatalf("credit balance = %#v", image.CreditBalance)
+	}
+}

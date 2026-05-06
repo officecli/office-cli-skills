@@ -336,6 +336,12 @@ PPT image behavior for all agents:
   - use document_generation.pptx.image_support as the source of truth
   - if users want a text-only deck, send enable_images=false
   - if a PPT returns without images, run: officecli config set-generation
+
+Standalone img behavior for all agents:
+  - use top-level image_generation as the source of truth
+  - call office.generate with document_type=img and optional ratio
+  - img uses the OfficeCLI server provider and requires config set-license
+  - img does not use local config set-generation image provider settings
 EOF
 INSTALLER
 
@@ -346,9 +352,9 @@ cat > README.md <<'README'
 
 `officecli-skills` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
 Claude Code, Codex, and other AI agents run local Office document workflows. Use this repository when
-you need an AI agent skill for `pptx`, `docx`, `xlsx`, or workbook-backed `report` tasks, and you want
-generation to stay on the same machine through a local `officecli` runtime instead of a hosted plugin
-backend.
+you need an AI agent skill for `pptx`, `docx`, `xlsx`, workbook-backed `report`, or standalone `img`
+tasks. Document generation stays on the same machine through a local `officecli` runtime; standalone
+image generation is routed through the OfficeCLI server provider.
 
 This repository is the public distribution surface for:
 
@@ -388,6 +394,7 @@ The public `officecli` skill is designed for agent workflows such as:
 - AI DOCX drafting for retrospectives, memos, and customer-facing documents
 - AI XLSX generation for workbooks, trackers, and analysis sheets
 - report workflows routed through OfficeCLI when a workbook-backed report artifact is needed
+- standalone image generation through `office.generate` with server-controlled provider settings
 - capability checks before execution so the agent can decide whether OfficeCLI supports the request
 
 ## Supported agent runtimes
@@ -463,6 +470,7 @@ curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKI
 
 - a local `officecli` binary
 - local OfficeCLI generation and license configuration
+- standalone image generation requires license configuration and does not use local generation image provider settings
 - permission for the agent client to invoke local commands on the same machine
 
 Quick verification after installation:
@@ -491,10 +499,10 @@ officecli agent-bridge
 
 No. This repository distributes local skill wrappers, not a hosted plugin backend.
 
-### Can Claude Code create PPTX, DOCX, XLSX, or report outputs with this repository?
+### Can Claude Code create PPTX, DOCX, XLSX, report, or img outputs with this repository?
 
 Yes, when the local `officecli` runtime is installed and configured. The repository tells the agent how
-to route supported Office tasks into OfficeCLI.
+to route supported Office and image tasks into OfficeCLI.
 
 ### Why does this repository mention Codex as well as Claude Code?
 

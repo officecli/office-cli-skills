@@ -176,6 +176,10 @@ func (c *runtimeProgressCollector) Emit(_ context.Context, event engine.Progress
 	c.events = append(c.events, event)
 }
 
+func intPtr(value int) *int {
+	return &value
+}
+
 func TestServiceGenerateDOCXWithFakeLLM(t *testing.T) {
 	service := NewService(&fakeLLMClient{
 		jsonResponse: `{"title":"Enterprise Collaboration Platform Overview","sections":[{"heading":"Product Overview","level":1,"paragraphs":["This collaboration platform is designed for enterprise teams."]}]}`,
@@ -226,6 +230,61 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 		!strings.Contains(contentXMLs["xl/sharedStrings.xml"], "East") ||
 		!strings.Contains(contentXMLs["xl/worksheets/sheet1.xml"], ">120<") {
 		t.Fatalf("workbook xml = %q\nshared strings = %q\nsheet xml = %q", contentXMLs["xl/workbook.xml"], contentXMLs["xl/sharedStrings.xml"], contentXMLs["xl/worksheets/sheet1.xml"])
+	}
+}
+
+func TestServiceGenerateIMGUsesImageProviderAndRatio(t *testing.T) {
+	imageBytes := []byte("server-image")
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: imageBytes, MIME: "image/png", CreditBalance: intPtr(9)},
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeIMG,
+		Prompt:       "A polished product launch hero image",
+		Topic:        "Launch Visual",
+		ImageRatio:   "portrait",
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if doc.DocumentType != "img" {
+		t.Fatalf("document type = %q", doc.DocumentType)
+	}
+	if doc.DocumentName != "Launch_Visual.png" {
+		t.Fatalf("document name = %q", doc.DocumentName)
+	}
+	if string(doc.Bytes) != string(imageBytes) {
+		t.Fatalf("image bytes = %q", string(doc.Bytes))
+	}
+	if llm.imageCalls != 1 {
+		t.Fatalf("image calls = %d", llm.imageCalls)
+	}
+	if llm.lastImageRequest.TargetAspectRatio != 9.0/16.0 {
+		t.Fatalf("aspect ratio = %f", llm.lastImageRequest.TargetAspectRatio)
+	}
+	if !strings.Contains(llm.lastImageRequest.Prompt, "product launch hero") {
+		t.Fatalf("prompt = %q", llm.lastImageRequest.Prompt)
+	}
+	if doc.HostedCreditBalance == nil || *doc.HostedCreditBalance != 9 {
+		t.Fatalf("hosted credit balance = %#v", doc.HostedCreditBalance)
+	}
+}
+
+func TestServiceGenerateIMGRejectsEmptyImageData(t *testing.T) {
+	service := NewService(&fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{MIME: "image/png"},
+	}, nil)
+
+	_, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeIMG,
+		Prompt:       "A polished product launch hero image",
+		Topic:        "Launch Visual",
+		ImageRatio:   "square",
+	})
+	if err == nil || !strings.Contains(err.Error(), "image generation returned empty data") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

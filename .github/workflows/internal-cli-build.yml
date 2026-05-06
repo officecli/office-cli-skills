@@ -1,0 +1,102 @@
+name: Internal CLI Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      internal_version:
+        description: "Internal-only version label. Must contain internal."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build internal CLI binaries
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_INTERNAL_VERSION: "0.2.28-internal.${{ github.run_number }}"
+      INTERNAL_DIST_ROOT: ".tmp/internal-builds"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve internal version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ github.event.inputs.internal_version }}"
+          if [[ -z "${version}" ]]; then
+            version="${DEFAULT_INTERNAL_VERSION}"
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "Internal builds must not run from tag refs: ${GITHUB_REF}" >&2
+            exit 1
+          fi
+          if [[ "${version}" != *internal* ]]; then
+            echo "internal_version must contain internal: ${version}" >&2
+            exit 1
+          fi
+          if [[ ! "${version}" =~ ^[0-9A-Za-z._-]*internal[0-9A-Za-z._-]*$ ]]; then
+            echo "internal_version may only contain letters, numbers, dots, underscores, and hyphens: ${version}" >&2
+            exit 1
+          fi
+          dist_dir="${INTERNAL_DIST_ROOT}/${version}"
+          case "${dist_dir}" in
+            .tmp/internal-builds/*) ;;
+            *)
+              echo "Internal DIST_DIR must stay under .tmp/internal-builds/: ${dist_dir}" >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "version=${version}"
+            echo "dist_dir=${dist_dir}"
+            echo "artifact_name=officecli-${version}-internal-binaries"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Run Go tests
+        run: go test ./... -count=1
+
+      - name: Build internal release artifacts
+        env:
+          INTERNAL_VERSION: ${{ steps.version.outputs.version }}
+          INTERNAL_DIST_DIR: ${{ steps.version.outputs.dist_dir }}
+        run: make release VERSION="${INTERNAL_VERSION}" DIST_DIR="${INTERNAL_DIST_DIR}"
+
+      - name: Generate checksums
+        env:
+          INTERNAL_DIST_DIR: ${{ steps.version.outputs.dist_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${INTERNAL_DIST_DIR}"
+          sha256sum officecli_* > checksums.txt
+          test "$(find . -maxdepth 1 -type f -name 'officecli_*' | wc -l)" -eq 4
+          test -s checksums.txt
+
+      - name: Verify internal binary version
+        env:
+          INTERNAL_VERSION: ${{ steps.version.outputs.version }}
+          INTERNAL_DIST_DIR: ${{ steps.version.outputs.dist_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x "${INTERNAL_DIST_DIR}/officecli_${INTERNAL_VERSION}_linux_amd64"
+          "${INTERNAL_DIST_DIR}/officecli_${INTERNAL_VERSION}_linux_amd64" --version | grep -F "${INTERNAL_VERSION}"
+
+      - name: Upload private internal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: ${{ steps.version.outputs.dist_dir }}/
+          if-no-files-found: error
+          retention-days: 7

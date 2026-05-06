@@ -101,7 +101,6 @@ type ConsumeRequest struct {
 	UsageType       string           `json:"usage_type"`
 	AccessMode      model.AccessMode `json:"access_mode,omitempty"`
 	APIKey          string           `json:"api_key,omitempty"`
-	DocumentType    string           `json:"document_type,omitempty"`
 	CommitToken     *CommitToken     `json:"commit_token,omitempty"`
 }
 

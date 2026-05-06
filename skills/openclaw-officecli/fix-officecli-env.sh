@@ -52,7 +52,7 @@ officecli_found=true
 status_output="$(run_config_status "${officecli_path}")"
 refresh_status_flags "${status_output}"
 
-if [[ "${generation_ready}" != true ]]; then
+if should_configure_generation && [[ "${generation_ready}" != true ]]; then
   gen_base_url="${OFFICECLI_SETUP_LLM_BASE_URL:-}"
   if [[ -z "${gen_base_url}" ]]; then
     if ! gen_base_url="$(prompt_value 'Enter the generation service URL' '' 0)"; then
@@ -74,7 +74,11 @@ fi
 
 if [[ "${license_ready}" != true ]]; then
   license_api_key="${OFFICECLI_SETUP_LICENSE_API_KEY:-}"
-  if [[ -z "${license_api_key}" && -t 0 ]]; then
+  if should_require_license_api_key && [[ -z "${license_api_key}" ]]; then
+    if ! license_api_key="$(prompt_value 'Enter the platform access API key' '' 0)"; then
+      fail_fix "missing required value for Enter the platform access API key" "license_config"
+    fi
+  elif [[ -z "${license_api_key}" && -t 0 ]]; then
     if ! license_api_key="$(prompt_value 'Enter the paid quota key (optional)' '' 1)"; then
       fail_fix "failed to read the paid quota key" "license_config"
     fi
