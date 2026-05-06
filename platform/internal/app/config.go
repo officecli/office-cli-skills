@@ -53,6 +53,7 @@ type Config struct {
 	HostedLLMTextModel           string
 	HostedLLMImageModel          string
 	HostedLLMProvider            string
+	HostedLLMTimeoutSec          int
 	PreviewObjectEndpoint        string
 	PreviewObjectAccessKey       string
 	PreviewObjectSecretKey       string
@@ -116,6 +117,7 @@ func LoadConfig() (Config, error) {
 		HostedLLMTextModel:           mustEnvDefault("HOSTED_LLM_TEXT_MODEL", "gpt-4.1"),
 		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-2"),
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
+		HostedLLMTimeoutSec:          mustEnvInt("HOSTED_LLM_TIMEOUT_SEC", 1200),
 		PreviewObjectEndpoint:        mustEnvDefault("PREVIEW_OBJECT_ENDPOINT", ""),
 		PreviewObjectAccessKey:       os.Getenv("PREVIEW_OBJECT_ACCESS_KEY"),
 		PreviewObjectSecretKey:       os.Getenv("PREVIEW_OBJECT_SECRET_KEY"),

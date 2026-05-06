@@ -168,7 +168,7 @@ func New() (*Application, error) {
 		ImageModel: cfg.HostedLLMImageModel,
 		Provider:   cfg.HostedLLMProvider,
 		HashSalt:   cfg.APIKeyHashSalt,
-		TimeoutSec: 60,
+		TimeoutSec: cfg.HostedLLMTimeoutSec,
 	}, lic)
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
