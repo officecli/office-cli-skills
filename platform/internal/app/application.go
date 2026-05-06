@@ -216,6 +216,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	api := r.Group("/api")
 
 	registerLicenseRoutesWithConfig(api, cfg, lic)
+	registerHostedLLMRoutes(api, hostedSvc)
 	registerPublishRoutes(api, cfg, publishService)
 	registerAuthRoutes(api, cfg, authSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
