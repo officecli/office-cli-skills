@@ -422,7 +422,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		httpapi.JSON(c, http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
+		c.JSON(http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
 	})
 	llmAPI.POST("/json", func(c *gin.Context) {
 		var req hostedllm.CompletionRequest
@@ -438,7 +438,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		httpapi.JSON(c, http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
+		c.JSON(http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
 	})
 	llmAPI.POST("/structured", func(c *gin.Context) {
 		var req hostedllm.CompletionRequest
@@ -453,7 +453,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		httpapi.JSON(c, http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
+		c.JSON(http.StatusOK, gin.H{"content": resp.Content, "credit_balance": resp.CreditBalance})
 	})
 	llmAPI.POST("/image", func(c *gin.Context) {
 		var req hostedllm.ImageRequest
@@ -467,7 +467,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		httpapi.JSON(c, http.StatusOK, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"data":                 base64.StdEncoding.EncodeToString(resp.Data),
 			"mime":                 resp.MIME,
 			"credit_balance":       resp.CreditBalance,
