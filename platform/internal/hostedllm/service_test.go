@@ -51,7 +51,7 @@ func TestAuthorizeRejectsDisabledKey(t *testing.T) {
 			DefaultRuntimeMode: &defaultRuntimeMode,
 			CreditBalance:      100,
 		},
-	}, Config{
+	}, nil, Config{
 		BaseURL:    "https://example.com",
 		HashSalt:   "salt",
 		TextModel:  "gpt-test",
@@ -66,7 +66,7 @@ func TestAuthorizeRejectsDisabledKey(t *testing.T) {
 }
 
 func TestNewServiceConfiguresHTTPTimeout(t *testing.T) {
-	svc := NewService(&fakeAPIKeyStore{}, Config{TimeoutSec: 7})
+	svc := NewService(&fakeAPIKeyStore{}, nil, Config{TimeoutSec: 7})
 	require.NotNil(t, svc.client)
 	require.Equal(t, 7*time.Second, svc.client.Timeout)
 }
