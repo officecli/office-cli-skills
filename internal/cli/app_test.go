@@ -1236,6 +1236,47 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	}
 }
 
+func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
+	imageBytes := []byte("slow-server-png-bytes")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		time.Sleep(1100 * time.Millisecond)
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"free","remaining":2,"free_remaining":2}`, base64.StdEncoding.EncodeToString(imageBytes))
+	}))
+	defer server.Close()
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{
+			Allowed:       true,
+			AccessMode:    LicenseAccessModeFree,
+			FreeRemaining: 3,
+		}}, nil
+	}
+
+	tmpDir := t.TempDir()
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false},
+		License:  LicenseConfig{BaseURL: server.URL, Enabled: true, TimeoutSec: 1},
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Slow Image",
+		Prompt:       "A polished product launch hero image",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "fast",
+		OutputDir:    tmpDir,
+		ImageRatio:   "square",
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if result.FreeRemaining != 2 || result.Remaining != 2 {
+		t.Fatalf("quota result = %+v", result)
+	}
+}
+
 func TestExecuteGenerateJob_IMGRequiresLicenseConfig(t *testing.T) {
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	tmpDir := t.TempDir()
