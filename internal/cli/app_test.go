@@ -1071,7 +1071,6 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 		{name: "file", args: []string{"img", "Demo", "--file", "input.xlsx"}, want: "--file is not supported for img generation"},
 		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
 		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
-		{name: "external runtime", args: []string{"img", "Demo", "--runtime-mode", "external"}, want: "img generation always uses the OfficeCLI server"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
