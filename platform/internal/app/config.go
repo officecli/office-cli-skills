@@ -114,7 +114,7 @@ func LoadConfig() (Config, error) {
 		HostedLLMBaseURL:             mustEnvDefault("HOSTED_LLM_BASE_URL", "https://api.openai.com/v1"),
 		HostedLLMAPIKey:              os.Getenv("HOSTED_LLM_API_KEY"),
 		HostedLLMTextModel:           mustEnvDefault("HOSTED_LLM_TEXT_MODEL", "gpt-4.1"),
-		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-1"),
+		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-2"),
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
 		PreviewObjectEndpoint:        mustEnvDefault("PREVIEW_OBJECT_ENDPOINT", ""),
 		PreviewObjectAccessKey:       os.Getenv("PREVIEW_OBJECT_ACCESS_KEY"),
@@ -327,7 +327,7 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 		{
 			DocumentProfile:      "img",
 			Provider:             "openai",
-			Model:                "gpt-image-1",
+			Model:                "gpt-image-2",
 			ImagePerAssetCredits: 1,
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
