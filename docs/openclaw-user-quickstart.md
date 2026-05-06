@@ -5,8 +5,7 @@ This quickstart explains how to use OfficeCLI from an OpenClaw integration witho
 ## Prerequisites
 
 - a working `officecli` binary
-- generation configuration completed through the CLI for document generation and PPT image assets
-- license configuration completed through the CLI for access checks and standalone `img`
+- generation configuration completed through the CLI
 - optional publish configuration if online preview links are required
 
 ## Basic Flow
@@ -35,15 +34,8 @@ officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --lang en-U
 officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --no-images --out output
 ```
 
-5. Generate a standalone image:
-
-```bash
-officecli new img "Product Launch Visual" --prompt "Create a polished launch image for an enterprise collaboration platform." --ratio landscape --out output --json --no-publish
-```
-
 ## Important Rules
 
 - User-visible output must remain English-only.
 - Binary behavior is the source of truth; do not rely on skill-only wording or wrappers to change product semantics.
-- Standalone `img` generation uses the OfficeCLI server image route and does not use local `config set-generation` image provider settings.
 - If the platform returns preview links, passwords, or quota warnings, that output should already be normalized by the binary.

@@ -54,13 +54,13 @@ type StructuredCompletionRequest struct {
 
 type ImageGenerationRequest struct {
 	Prompt            string
+	FingerprintHash   string
 	TargetAspectRatio float64
 }
 
 type ImageGenerationResult struct {
-	Data          []byte
-	MIME          string
-	CreditBalance *int
+	Data []byte
+	MIME string
 }
 
 type LLMClient interface {

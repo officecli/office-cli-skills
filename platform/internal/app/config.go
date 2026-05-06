@@ -325,14 +325,6 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			MinimumChargeCredits:  6,
 		},
 		{
-			DocumentProfile:      "img",
-			Provider:             "openai",
-			Model:                "gpt-image-1",
-			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
-		},
-		{
 			DocumentProfile:       "pptx-with-image",
 			Provider:              "openai",
 			Model:                 "gpt-4.1",

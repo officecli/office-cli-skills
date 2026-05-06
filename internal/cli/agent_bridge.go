@@ -126,7 +126,6 @@ type bridgeInvokeArgs struct {
 	Style        string          `json:"style,omitempty"`
 	Audience     string          `json:"audience,omitempty"`
 	OutputDir    string          `json:"out,omitempty"`
-	Ratio        string          `json:"ratio,omitempty"`
 	Publish      *bool           `json:"publish,omitempty"`
 	EnableImages *bool           `json:"enable_images,omitempty"`
 	EnableVisual *bool           `json:"enable_visual,omitempty"`
@@ -394,17 +393,6 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"docx":   s.documentGenerationCapability(engine.DocumentTypeDOCX),
 				"xlsx":   s.documentGenerationCapability(engine.DocumentTypeXLSX),
 				"report": s.documentGenerationCapability(engine.DocumentTypeReport),
-				"img":    s.documentGenerationCapability(engine.DocumentTypeIMG),
-			},
-			"image_generation": map[string]any{
-				"provider_control": "server",
-				"preferred_tool":   bridgeToolOfficeGenerate,
-				"document_type":    "img",
-				"ratio_values":     []string{"square", "landscape", "portrait"},
-				"notes": []string{
-					"Standalone image generation always goes through the OfficeCLI server.",
-					"Agent clients must not use local image provider configuration for document_type=img.",
-				},
 			},
 			"update": s.updateCapability(ctx),
 		},
@@ -436,13 +424,12 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type": "pptx|docx|xlsx|report|img",
+					"document_type": "pptx|docx|xlsx|report",
 					"topic":         "string",
 					"prompt":        "string",
 					"file_path":     "string (.xlsx for report)",
 					"mode":          "fast|best",
 					"runtime_mode":  "external|hosted",
-					"ratio":         "square|landscape|portrait (img only)",
 				},
 			},
 			{
@@ -498,20 +485,6 @@ func (s *agentBridgeServer) updateCapability(ctx context.Context) map[string]any
 }
 
 func (s *agentBridgeServer) documentGenerationCapability(documentType engine.DocumentType) map[string]any {
-	if documentType == engine.DocumentTypeIMG {
-		return map[string]any{
-			"agent_render_supported": false,
-			"preferred_tool":         bridgeToolOfficeGenerate,
-			"prepare_required":       false,
-			"image_generation": map[string]any{
-				"provider_control": "server",
-				"ratio_values":     []string{"square", "landscape", "portrait"},
-			},
-			"image_support": map[string]any{
-				"default_enabled": true,
-			},
-		}
-	}
 	schema, err := runtime.AgentPayloadSchema(documentType)
 	if err != nil {
 		schema = map[string]any{

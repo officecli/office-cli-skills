@@ -24,19 +24,17 @@ type GenerateParams struct {
 	Style          string
 	Audience       string
 	EnableImages   bool
-	ImageRatio     string
 	LocalPreview   bool
 }
 
 type GeneratedArtifact struct {
-	DocumentName        string
-	DocumentType        string
-	Bytes               []byte
-	Warnings            []engine.GenerateIssue
-	Errors              []engine.GenerateIssue
-	PreviewHTML         []byte
-	PreviewJSON         []byte
-	HostedCreditBalance *int
+	DocumentName string
+	DocumentType string
+	Bytes        []byte
+	Warnings     []engine.GenerateIssue
+	Errors       []engine.GenerateIssue
+	PreviewHTML  []byte
+	PreviewJSON  []byte
 }
 
 type Service struct {
@@ -84,8 +82,6 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
 		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
-	case engine.DocumentTypeIMG:
-		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, meta)
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", params.DocumentType)
 	}
@@ -180,80 +176,6 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
 	}, nil
-}
-
-func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
-	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting image generation from the OfficeCLI server")
-	image, err := s.llm.GenerateImage(ctx, engine.ImageGenerationRequest{
-		Prompt:            buildImageGenerationPrompt(prompt, target),
-		TargetAspectRatio: imageAspectRatio(ratio),
-	})
-	if err != nil {
-		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Image generation failed")
-		return nil, fmt.Errorf("image generation failed: %w", err)
-	}
-	if image == nil || len(image.Data) == 0 {
-		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Image generation returned empty data")
-		return nil, fmt.Errorf("image generation returned empty data")
-	}
-	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Image generation completed")
-
-	title := strings.TrimSpace(topic)
-	if title == "" {
-		title = generateengine.ExtractTitleFromDescription(prompt)
-	}
-	if title == "" {
-		title = "image"
-	}
-	return &GeneratedArtifact{
-		DocumentName:        fmt.Sprintf("%s%s", generateengine.SanitizeFileName(title), imageExtensionFromMIME(image.MIME)),
-		DocumentType:        string(engine.DocumentTypeIMG),
-		Bytes:               image.Data,
-		Warnings:            convertIssues(meta),
-		HostedCreditBalance: image.CreditBalance,
-	}, nil
-}
-
-func buildImageGenerationPrompt(prompt string, target generateengine.PromptTarget) string {
-	parts := []string{strings.TrimSpace(prompt)}
-	if strings.TrimSpace(target.Style) != "" {
-		parts = append(parts, "Style: "+strings.TrimSpace(target.Style))
-	}
-	if strings.TrimSpace(target.Audience) != "" {
-		parts = append(parts, "Audience/context: "+strings.TrimSpace(target.Audience))
-	}
-	if strings.TrimSpace(target.Language) != "" {
-		parts = append(parts, "Language/text requirement: "+strings.TrimSpace(target.Language))
-	}
-	out := strings.TrimSpace(strings.Join(parts, "\n"))
-	if out == "" {
-		return "Generate an image."
-	}
-	return out
-}
-
-func imageAspectRatio(value string) float64 {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "landscape":
-		return 16.0 / 9.0
-	case "portrait":
-		return 9.0 / 16.0
-	default:
-		return 1
-	}
-}
-
-func imageExtensionFromMIME(mime string) string {
-	switch strings.ToLower(strings.TrimSpace(mime)) {
-	case "image/jpeg", "image/jpg":
-		return ".jpg"
-	case "image/webp":
-		return ".webp"
-	case "image/png", "":
-		return ".png"
-	default:
-		return ".png"
-	}
 }
 
 func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool) (*GeneratedArtifact, error) {

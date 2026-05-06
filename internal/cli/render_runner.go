@@ -84,9 +84,6 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 	if err != nil {
 		return GenerateJob{}, nil, err
 	}
-	if documentType == engine.DocumentTypeIMG {
-		return GenerateJob{}, nil, fmt.Errorf("office.render does not support img generation; use office.generate with document_type=img")
-	}
 	topic := strings.TrimSpace(req.Args.Topic)
 	if topic == "" {
 		topic = strings.TrimSpace(req.Args.Prompt)

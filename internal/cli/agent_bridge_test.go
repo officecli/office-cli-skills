@@ -4,12 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -99,20 +95,6 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	docGen, ok := capabilities["document_generation"].(map[string]any)
 	if !ok {
 		t.Fatalf("document_generation missing: %#v", capabilities)
-	}
-	imgCaps, ok := docGen["img"].(map[string]any)
-	if !ok {
-		t.Fatalf("img capabilities missing: %#v", docGen)
-	}
-	if imgCaps["preferred_tool"] != "office.generate" || imgCaps["agent_render_supported"] != false {
-		t.Fatalf("unexpected img capabilities: %#v", imgCaps)
-	}
-	imageGeneration, ok := capabilities["image_generation"].(map[string]any)
-	if !ok {
-		t.Fatalf("image_generation missing: %#v", capabilities)
-	}
-	if imageGeneration["provider_control"] != "server" {
-		t.Fatalf("unexpected image_generation capability: %#v", imageGeneration)
 	}
 	pptxCaps, ok := docGen["pptx"].(map[string]any)
 	if !ok {
@@ -463,98 +445,6 @@ func TestAgentBridgeRenderSupportsAllDocumentTypes(t *testing.T) {
 			t.Fatalf("timed out waiting for %s render completion", tc.documentType)
 		})
 	}
-}
-
-func TestAgentBridgeRenderRejectsIMG(t *testing.T) {
-	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	_, _, err := app.buildRenderJobFromRequest(Config{}, bridgeInvokeParams{
-		Tool: bridgeToolOfficeRender,
-		Args: bridgeInvokeArgs{
-			DocumentType: "img",
-			Topic:        "Launch Visual",
-			Payload:      json.RawMessage(`{"prompt":"demo"}`),
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "office.render does not support img generation") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
-	tmpDir := t.TempDir()
-	imageBytes := []byte("bridge-png-bytes")
-	var gotPayload map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/llm/v1/image" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Header.Get("Authorization") != "Bearer hosted-key" {
-			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
-		}
-		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":5}`, base64.StdEncoding.EncodeToString(imageBytes))
-	}))
-	defer server.Close()
-
-	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		t.Fatal("img generation must not initialize the local generation provider")
-		return nil, nil
-	}
-	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
-		t.Fatal("img generation must not consume local quota")
-		return nil, nil
-	}
-	bridge := newAgentBridgeServer(app, Config{
-		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true, Mode: "fast"},
-		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
-		Publish:  disabledPublishConfig(),
-	}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-
-	task, err := bridge.invokeTask(context.Background(), json.RawMessage(`1`), bridgeInvokeParams{
-		Tool:         "office.generate",
-		OutputFormat: "json",
-		Args: bridgeInvokeArgs{
-			DocumentType: "img",
-			Topic:        "Launch Visual",
-			Prompt:       "A polished product launch hero image",
-			Ratio:        "landscape",
-		},
-	})
-	if err != nil {
-		t.Fatalf("invokeTask: %v", err)
-	}
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		status, err := bridge.taskStatus(task.ID)
-		if err != nil {
-			t.Fatalf("taskStatus: %v", err)
-		}
-		if status.Status == "completed" {
-			result := status.Result.(GenerateResult)
-			if result.DocumentType != "img" || filepath.Ext(result.FilePath) != ".png" {
-				t.Fatalf("unexpected result: %+v", result)
-			}
-			if result.AccessMode != "hosted" || result.CreditBalance != 5 {
-				t.Fatalf("unexpected hosted fields: %+v", result)
-			}
-			data, err := os.ReadFile(result.FilePath)
-			if err != nil {
-				t.Fatalf("ReadFile: %v", err)
-			}
-			if string(data) != string(imageBytes) {
-				t.Fatalf("image bytes = %q", string(data))
-			}
-			if gotPayload["model"] != "hosted/img" || gotPayload["aspect_ratio"] != 16.0/9.0 {
-				t.Fatalf("payload = %#v", gotPayload)
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for img generation")
 }
 
 func TestAgentBridgeCancelTask(t *testing.T) {

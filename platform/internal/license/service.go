@@ -21,9 +21,9 @@ type APIKeyStore interface {
 }
 
 type FreeQuotaStore interface {
-	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
-	GetByFingerprint(ctx context.Context, fingerprint string, usageDate string) (*model.DailyFreeQuota, error)
-	Consume(ctx context.Context, fingerprint string, usageDate string, defaultLimit int) (*model.DailyFreeQuota, error)
+	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
+	GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error)
+	Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error)
 }
 
 type UsageEventStore interface {
@@ -48,17 +48,18 @@ type ReferralActivator interface {
 }
 
 type Service struct {
-	apiKeys          APIKeyStore
-	freeQuotas       FreeQuotaStore
-	usage            UsageEventStore
-	idem             IdempotencyStore
-	rewards          RewardManager
-	referrals        ReferralActivator
-	salt             string
-	defaultFreeLimit int
-	idemTTL          time.Duration
-	clock            func() time.Time
-	proof            *proofSigner
+	apiKeys               APIKeyStore
+	freeQuotas            FreeQuotaStore
+	usage                 UsageEventStore
+	idem                  IdempotencyStore
+	rewards               RewardManager
+	referrals             ReferralActivator
+	salt                  string
+	defaultFreeLimit      int
+	defaultImageFreeLimit int
+	idemTTL               time.Duration
+	clock                 func() time.Time
+	proof                 *proofSigner
 }
 
 func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
@@ -71,17 +72,18 @@ func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEvent
 		panic(err)
 	}
 	service := &Service{
-		apiKeys:          apiKeys,
-		freeQuotas:       freeQuotas,
-		usage:            usage,
-		idem:             idem,
-		rewards:          rewards,
-		referrals:        referrals,
-		salt:             salt,
-		defaultFreeLimit: defaultFreeLimit,
-		idemTTL:          idemTTL,
-		clock:            time.Now,
-		proof:            signer,
+		apiKeys:               apiKeys,
+		freeQuotas:            freeQuotas,
+		usage:                 usage,
+		idem:                  idem,
+		rewards:               rewards,
+		referrals:             referrals,
+		salt:                  salt,
+		defaultFreeLimit:      defaultFreeLimit,
+		defaultImageFreeLimit: 3,
+		idemTTL:               idemTTL,
+		clock:                 time.Now,
+		proof:                 signer,
 	}
 	service.proof.clock = func() time.Time {
 		if service.clock != nil {
@@ -229,8 +231,10 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 }
 
 func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
+	docType := s.documentTypeLabel(req.DocumentType)
 	usageDate := s.currentUsageDate()
-	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, usageDate, s.defaultFreeLimit)
+	defaultLimit := s.documentFreeLimit(req.DocumentType)
+	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, usageDate, docType, defaultLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +360,8 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 		if !existing.CreatedAt.IsZero() {
 			usageDate = existing.CreatedAt.UTC().Format("2006-01-02")
 		}
-		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, usageDate)
+		docType := s.documentTypeLabel(req.DocumentType)
+		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, usageDate, docType)
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +379,9 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 }
 
 func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
-	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.currentUsageDate(), s.defaultFreeLimit)
+	docType := s.documentTypeLabel(req.DocumentType)
+	defaultLimit := s.documentFreeLimit(req.DocumentType)
+	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.currentUsageDate(), docType, defaultLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +540,8 @@ func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key 
 
 	if freeQuota == nil && s.freeQuotas != nil {
 		var err error
-		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate)
+		docType := s.documentTypeLabel(req.DocumentType)
+		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate, docType)
 		if err != nil {
 			return nil, err
 		}
@@ -565,6 +573,24 @@ func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key 
 	}
 
 	return snapshot, nil
+}
+
+func (s *Service) documentFreeLimit(documentType string) int {
+	if strings.EqualFold(strings.TrimSpace(documentType), "img") || strings.EqualFold(strings.TrimSpace(documentType), "image") {
+		if s.defaultImageFreeLimit > 0 {
+			return s.defaultImageFreeLimit
+		}
+		return 3
+	}
+	return s.defaultFreeLimit
+}
+
+func (s *Service) documentTypeLabel(documentType string) string {
+	dt := strings.TrimSpace(strings.ToLower(documentType))
+	if dt == "" || dt == "document" {
+		return "document"
+	}
+	return dt
 }
 
 func (s *Service) currentUsageDate() string {

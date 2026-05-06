@@ -1,10 +1,8 @@
 # OfficeCLI
 
-OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`, `DOCX`, `XLSX`, workbook-backed `Report`, and standalone image outputs. When publishing is configured, document outputs can also return an online preview URL.
+OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`, `DOCX`, `XLSX`, and workbook-backed `Report` outputs. When publishing is configured, it can also return an online preview URL.
 
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
-
-Standalone `new img` generation always goes through the OfficeCLI server and uses the platform access key from `config set-license`. It does not use local `config set-generation` image provider settings.
 
 ## Claude Marketplace Install
 
@@ -67,13 +65,7 @@ Initialize configuration:
 ./officecli config set-defaults  # optional
 ```
 
-`config set-license` is required for standalone image generation:
-
-```bash
-./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --no-publish
-```
-
-`config set-generation` also configures PPT image assets. It does not configure standalone `new img` generation:
+`config set-generation` also configures PPT image generation:
 
 - It first tries to reuse the text-generation provider for image creation.
 - If the text model does not expose image endpoints, switch to a dedicated image provider.
@@ -161,14 +153,6 @@ Generate a workbook-backed Report:
 ```bash
 ./officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
 ```
-
-Generate a standalone image:
-
-```bash
-./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --no-publish
-```
-
-`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, and consumes one server-side image generation credit only after a successful image response. Image publishing and local preview are not supported yet.
 
 Write output to a custom directory:
 

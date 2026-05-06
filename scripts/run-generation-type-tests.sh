@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./local-test-common.sh
 source "${SCRIPT_DIR}/local-test-common.sh"
 
-ALL_TYPES=(pptx docx xlsx report img)
+ALL_TYPES=(pptx docx xlsx report)
 SELECTED_TYPES=()
 RESULT_LABELS=()
 RESULT_STATUSES=()
@@ -26,12 +26,11 @@ PPTX_PATTERN='^(TestServiceGeneratePPTX.*|TestBuildPPTXPrompt_.*|TestNormalizePP
 DOCX_PATTERN='^(TestServiceGenerateDOCX.*|TestBuildDOCXPrompt_AndBuildDOCXFromJSON|TestNewDOCXGeneratorAvailable)$'
 XLSX_PATTERN='^(TestServiceGenerateXLSX.*|TestBuildXLSXPrompt_AndBuildXLSXFromJSON)$'
 REPORT_PATTERN='^(TestServiceGenerateReport.*|TestBuildReportPrompt_AndBuildReportFromJSON|TestBuildReport_RendersEChartsAndSectionContent|TestNormalizeReport_NormalizesUnsupportedChartType)$'
-IMG_PATTERN='^(TestServiceGenerateIMG.*|TestBuildGenerateJob_IMG.*|TestBuildGenerateJob_RatioOnlySupportedForIMG|TestExecuteGenerateJob_IMG.*|TestPreflightSkipsGenerationAndPublishSetupForIMG|TestRunInstalledSkillPreflight_IMG.*|TestAgentBridgeInitializeCapabilities|TestAgentBridgeGenerateIMG.*|TestAgentBridgeRenderRejectsIMG|TestInternalClient_GenerateImageReturnsCreditBalance|TestGenerateImageUsesImgPricing.*|TestGenerateImageFailure.*|TestDefaultHostedPricingRulesIncludeIMG)$'
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash ./scripts/run-generation-type-tests.sh [--real|--unit] [--publish|--no-publish] [--keep-license-checks] [pptx|docx|xlsx|report|img ...]
+  bash ./scripts/run-generation-type-tests.sh [--real|--unit] [--publish|--no-publish] [--keep-license-checks] [pptx|docx|xlsx|report ...]
 
 Description:
   Run generation checks for the selected document types.
@@ -40,7 +39,6 @@ Description:
   - Local shell: run real end-to-end generation against the current source checkout.
   - CI: run fast Go unit tests only.
   - `report` must be selected together with `xlsx`.
-  - `img` uses the OfficeCLI server image route and requires license config.
 
   Real mode:
   - Builds the current source once and runs actual `officecli new ...` commands.
@@ -54,7 +52,6 @@ Examples:
   bash ./scripts/run-generation-type-tests.sh
   bash ./scripts/run-generation-type-tests.sh --unit
   bash ./scripts/run-generation-type-tests.sh --real xlsx report
-  bash ./scripts/run-generation-type-tests.sh --real img
   bash ./scripts/run-generation-type-tests.sh --real --publish pptx
 EOF
 }
@@ -123,7 +120,7 @@ should_run() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      pptx|docx|xlsx|report|img)
+      pptx|docx|xlsx|report)
         SELECTED_TYPES+=("$1")
         ;;
       --real)
@@ -167,44 +164,19 @@ validate_selection_requirements() {
 ensure_real_env() {
   local skill_check="${REPO_ROOT}/skills/officecli/check-officecli-env.sh"
   local status_json
-  local check_status
   local generation_ready
-  local license_ready
   local publish_ready
-  local env_items=()
 
   if [[ ! -x "${skill_check}" ]]; then
     fail "missing OfficeCLI env check script: ${skill_check}"
   fi
 
-  if should_run img; then
-    env_items+=("OFFICECLI_REQUIRE_LICENSE_API_KEY=1")
-  fi
-
-  set +e
-  status_json="$(cd "${REPO_ROOT}" && env "${env_items[@]}" "${skill_check}")"
-  check_status=$?
-  set -e
-
-  if [[ -z "${status_json}" ]]; then
-    fail "OfficeCLI env check did not return status JSON"
-  fi
-  if [[ ${check_status} -ne 0 && ${check_status} -ne 10 ]]; then
-    fail "OfficeCLI env check failed for real mode"
-  fi
-
+  status_json="$(cd "${REPO_ROOT}" && "${skill_check}")"
   generation_ready="$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1]).get("generation_ready") else "false")' "${status_json}")"
-  license_ready="$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1]).get("license_ready") else "false")' "${status_json}")"
   publish_ready="$(python3 -c 'import json,sys; print("true" if json.loads(sys.argv[1]).get("publish_ready") else "false")' "${status_json}")"
 
-  if (should_run pptx || should_run docx || should_run xlsx || should_run report) && [[ "${generation_ready}" != "true" ]]; then
+  if [[ "${generation_ready}" != "true" ]]; then
     fail "generation environment is not ready for real mode"
-  fi
-  if should_run img && [[ "${license_ready}" != "true" ]]; then
-    fail "license environment is not ready for img real mode"
-  fi
-  if [[ ${KEEP_LICENSE_CHECKS} -eq 1 && "${license_ready}" != "true" ]]; then
-    fail "license environment is not ready while --keep-license-checks is enabled"
   fi
 
   REAL_PUBLISH_READY="${publish_ready}"
@@ -453,31 +425,6 @@ run_real_report() {
   fi
 }
 
-run_real_img() {
-  local label="img"
-  local case_dir
-  local json_path
-
-  case_dir="$(real_case_dir "${label}")"
-  json_path="${case_dir}/result.json"
-
-  mkdir -p "${case_dir}"
-  phase "${label} real generation"
-  info "Output directory: ${case_dir}"
-  info "Publish: unsupported for img; forcing local artifact output"
-
-  if run_real_command "${json_path}" new img "OfficeCLI 真实生成图片测试" \
-    --prompt "生成一张中文企业协作产品发布主视觉，现代、清晰、适合官网首屏。" \
-    --ratio landscape \
-    --json \
-    --out "${case_dir}" \
-    --no-publish; then
-    record_real_result "${label}" "${json_path}"
-  else
-    record_real_failure "${label}"
-  fi
-}
-
 run_real_mode() {
   local timestamp_utc
 
@@ -517,10 +464,6 @@ run_real_mode() {
   if should_run report; then
     run_real_report
   fi
-
-  if should_run img; then
-    run_real_img
-  fi
 }
 
 run_unit_mode() {
@@ -540,11 +483,6 @@ run_unit_mode() {
 
   if should_run report; then
     run_unit_suite report go test ./internal/runtime ./engine/generate ./pkg/officegen -count=1 -run "${REPORT_PATTERN}"
-  fi
-
-  if should_run img; then
-    run_unit_suite img go test ./internal/cli ./internal/runtime ./internal/providers/llm -count=1 -run "${IMG_PATTERN}"
-    run_unit_suite img-platform bash -c "cd platform && go test ./internal/hostedllm ./internal/app -count=1 -run '${IMG_PATTERN}'"
   fi
 }
 

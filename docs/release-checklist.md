@@ -8,7 +8,7 @@ Use this checklist before declaring a release or production rollout complete.
 - all user-visible output is English-only
 - update detection behaves correctly
 - `officecli version` reports the expected commit and build time
-- `officecli new` works for at least one PPTX, DOCX, XLSX, Report, and IMG case
+- `officecli new` works for at least one PPTX, DOCX, XLSX, and Report case
 - `officecli review` or `score` still works
 
 ## Platform

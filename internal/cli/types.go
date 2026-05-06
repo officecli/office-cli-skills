@@ -77,7 +77,6 @@ type GenerateJob struct {
 	StyleSpecified bool
 	Audience       string
 	EnableImages   bool
-	ImageRatio     string
 	LocalPreview   bool
 	OutputDir      string
 	Publish        bool

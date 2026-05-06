@@ -31,8 +31,6 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 func hostedModelName(job GenerateJob) string {
 	profile := "docx-xlsx"
 	switch job.DocumentType {
-	case engine.DocumentTypeIMG:
-		profile = "img"
 	case engine.DocumentTypePPTX:
 		if job.EnableImages {
 			profile = "pptx-with-image"

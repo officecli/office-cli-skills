@@ -14,10 +14,8 @@ import (
 )
 
 const (
-	officeTaskPreflightSkipEnv                 = "OFFICECLI_SKIP_SKILL_PREFLIGHT"
-	officeTaskPreflightSkipPublishEnv          = "OFFICECLI_SKIP_PUBLISH_SETUP"
-	officeTaskPreflightSkipGenEnv              = "OFFICECLI_SKIP_GENERATION_SETUP"
-	officeTaskPreflightRequireLicenseAPIKeyEnv = "OFFICECLI_REQUIRE_LICENSE_API_KEY"
+	officeTaskPreflightSkipEnv        = "OFFICECLI_SKIP_SKILL_PREFLIGHT"
+	officeTaskPreflightSkipPublishEnv = "OFFICECLI_SKIP_PUBLISH_SETUP"
 )
 
 func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, command string, args []string) error {
@@ -35,12 +33,6 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 			cmd.Env = append(os.Environ(), officeTaskPreflightSkipEnv+"=1")
 			if shouldSkipPublishPreflight(command, args) {
 				cmd.Env = append(cmd.Env, officeTaskPreflightSkipPublishEnv+"=1")
-			}
-			if shouldSkipGenerationPreflight(command, args) {
-				cmd.Env = append(cmd.Env, officeTaskPreflightSkipGenEnv+"=1")
-			}
-			if shouldRequireLicenseAPIKeyPreflight(command, args) {
-				cmd.Env = append(cmd.Env, officeTaskPreflightRequireLicenseAPIKeyEnv+"=1")
 			}
 			if isTerminalReader(stdin) {
 				cmd.Stdin = stdin
@@ -314,9 +306,6 @@ func shouldSkipPublishPreflight(command string, args []string) bool {
 	if command != "new" {
 		return false
 	}
-	if isImageNewCommand(args) {
-		return true
-	}
 	for _, arg := range args {
 		trimmed := strings.TrimSpace(arg)
 		if trimmed == "--no-publish" || strings.HasPrefix(trimmed, "--no-publish=") {
@@ -324,40 +313,6 @@ func shouldSkipPublishPreflight(command string, args []string) bool {
 		}
 	}
 	return false
-}
-
-func shouldSkipGenerationPreflight(command string, args []string) bool {
-	return command == "new" && isImageNewCommand(args)
-}
-
-func shouldRequireLicenseAPIKeyPreflight(command string, args []string) bool {
-	return command == "new" && isImageNewCommand(args)
-}
-
-func isImageNewCommand(args []string) bool {
-	documentType := strings.ToLower(strings.TrimSpace(firstNewDocumentTypeArg(args)))
-	return documentType == "img" || documentType == "image"
-}
-
-func firstNewDocumentTypeArg(args []string) string {
-	for i := 0; i < len(args); i++ {
-		current := strings.TrimSpace(args[i])
-		if current == "" {
-			continue
-		}
-		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--fail-below":
-			i++
-			continue
-		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview", "--debug":
-			continue
-		}
-		if strings.HasPrefix(current, "--") {
-			continue
-		}
-		return current
-	}
-	return ""
 }
 
 func shouldRetryAfterScriptRefresh(script string, run func() error) (bool, error) {

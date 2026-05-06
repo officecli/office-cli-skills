@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -245,15 +243,6 @@ type noopProgressController struct{}
 
 func (noopProgressController) Emit(context.Context, engine.ProgressEvent) {}
 func (noopProgressController) Pause(string)                               {}
-
-func containsWarning(warnings []string, needle string) bool {
-	for _, warning := range warnings {
-		if strings.Contains(warning, needle) {
-			return true
-		}
-	}
-	return false
-}
 
 type fakeBestModeLLMClient struct {
 	structuredResponses []string
@@ -992,72 +981,6 @@ func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 	}
 }
 
-func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
-	cfg := Config{Defaults: DefaultsConfig{Publish: true, Mode: "best"}}
-
-	job, err := BuildGenerateJob([]string{
-		"img",
-		"Launch Visual",
-		"--prompt", "A polished product launch hero image",
-	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err != nil {
-		t.Fatalf("BuildGenerateJob: %v", err)
-	}
-	if job.DocumentType != engine.DocumentTypeIMG {
-		t.Fatalf("document type = %q", job.DocumentType)
-	}
-	if job.RuntimeMode != RuntimeModeHosted {
-		t.Fatalf("runtime mode = %q", job.RuntimeMode)
-	}
-	if job.Mode != "fast" {
-		t.Fatalf("mode = %q", job.Mode)
-	}
-	if job.ImageRatio != "square" {
-		t.Fatalf("image ratio = %q", job.ImageRatio)
-	}
-	if job.Publish {
-		t.Fatal("img generation should disable publishing")
-	}
-	if len(job.Warnings) != 1 || !strings.Contains(job.Warnings[0].Message, "Image publishing is not supported") {
-		t.Fatalf("warnings = %#v", job.Warnings)
-	}
-}
-
-func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
-	cases := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "invalid ratio", args: []string{"img", "Demo", "--ratio", "ultrawide"}, want: "unsupported image ratio"},
-		{name: "best mode", args: []string{"img", "Demo", "--mode", "best"}, want: "--mode best is not supported for img generation"},
-		{name: "file", args: []string{"img", "Demo", "--file", "input.xlsx"}, want: "--file is not supported for img generation"},
-		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
-		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
-		{name: "publish", args: []string{"img", "Demo", "--publish"}, want: "--publish is not supported for img generation"},
-		{name: "external runtime", args: []string{"img", "Demo", "--runtime-mode", "external"}, want: "img generation always uses the OfficeCLI server"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := BuildGenerateJob(tc.args, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("err = %v, want %q", err, tc.want)
-			}
-		})
-	}
-}
-
-func TestBuildGenerateJob_RatioOnlySupportedForIMG(t *testing.T) {
-	_, err := BuildGenerateJob([]string{
-		"pptx",
-		"Demo",
-		"--ratio", "landscape",
-	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "--ratio is only supported for img generation") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func TestBuildGenerateJob_UsesDefaultPPTStylePresetAndLocalPreview(t *testing.T) {
 	cfg := Config{}
 	cfg.Defaults.PPTXStylePreset = "executive-dark"
@@ -1137,99 +1060,6 @@ func TestBuildGenerateJob_ReportAcceptsWorkbookFile(t *testing.T) {
 	}
 	if job.DocumentType != engine.DocumentTypeReport {
 		t.Fatalf("document type = %q", job.DocumentType)
-	}
-}
-
-func TestExecuteGenerateJob_IMGUsesHostedServerAndDoesNotConsumeLocalQuota(t *testing.T) {
-	imageBytes := []byte("server-png-bytes")
-	var gotAuth string
-	var gotPayload map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/llm/v1/image" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		gotAuth = r.Header.Get("Authorization")
-		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":7}`, base64.StdEncoding.EncodeToString(imageBytes))
-	}))
-	defer server.Close()
-
-	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
-		t.Fatal("img generation must not initialize the local generation provider")
-		return nil, nil
-	}
-	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
-		t.Fatal("img generation must not use the local quota consume path")
-		return nil, nil
-	}
-
-	tmpDir := t.TempDir()
-	job, err := BuildGenerateJob([]string{
-		"img",
-		"Launch Visual",
-		"--prompt", "A polished product launch hero image",
-		"--ratio", "landscape",
-	}, Config{Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true}}, InputSources{IsTTY: true, CWD: tmpDir})
-	if err != nil {
-		t.Fatalf("BuildGenerateJob: %v", err)
-	}
-	result, err := app.executeGenerateJob(t.Context(), Config{
-		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true},
-		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
-	}, job, false, noopProgressController{}, nil)
-	if err != nil {
-		t.Fatalf("executeGenerateJob: %v", err)
-	}
-	if gotAuth != "Bearer hosted-key" {
-		t.Fatalf("authorization = %q", gotAuth)
-	}
-	if gotPayload["model"] != "hosted/img" {
-		t.Fatalf("model = %#v", gotPayload["model"])
-	}
-	if gotPayload["aspect_ratio"] != 16.0/9.0 {
-		t.Fatalf("aspect_ratio = %#v", gotPayload["aspect_ratio"])
-	}
-	if result.DocumentType != "img" {
-		t.Fatalf("document type = %q", result.DocumentType)
-	}
-	if result.AccessMode != "hosted" || result.CreditBalance != 7 {
-		t.Fatalf("hosted result = %+v", result)
-	}
-	data, err := os.ReadFile(result.FilePath)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(data) != string(imageBytes) {
-		t.Fatalf("image bytes = %q", string(data))
-	}
-	if filepath.Ext(result.FilePath) != ".png" {
-		t.Fatalf("file path = %s", result.FilePath)
-	}
-	if result.Published {
-		t.Fatal("img generation should not publish")
-	}
-	if !containsWarning(result.Warnings, "Image publishing is not supported") {
-		t.Fatalf("warnings = %#v", result.Warnings)
-	}
-}
-
-func TestExecuteGenerateJob_IMGRequiresLicenseConfig(t *testing.T) {
-	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	tmpDir := t.TempDir()
-	job := GenerateJob{
-		DocumentType: engine.DocumentTypeIMG,
-		Topic:        "Launch Visual",
-		Prompt:       "A polished product launch hero image",
-		OutputDir:    tmpDir,
-		ImageRatio:   "square",
-	}
-
-	_, err := app.executeGenerateJob(t.Context(), Config{}, job, false, noopProgressController{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "officecli config set-license") {
-		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -1421,8 +1251,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"auth                    View or update access settings",
 		"score                   Run PPTX scoring on demand",
 		"upgrade                 Check for updates and upgrade officecli",
-		"new <pptx|docx|xlsx|report|img> <topic> [brief]",
-		"--ratio <value>",
+		"new <pptx|docx|xlsx|report> <topic> [brief]",
 		"officecli config status",
 		"officecli upgrade --help",
 		"officecli score --help",
@@ -1434,7 +1263,6 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"macOS   ~/Library/Application Support/officecli/config.json",
 		"Linux   ~/.config/officecli/config.json",
 		"officecli new pptx \"Enterprise Collaboration Platform Overview\" \"Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform\"",
-		"officecli new img \"Launch Visual\"",
 	} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("help output missing %q: %s", needle, output)
@@ -1454,8 +1282,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--ratio <value>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`", "officecli config set-license"}},
-		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report>", "--prompt-file", "--mode fast|best", "--file <path>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`"}},
+		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
 	for _, tc := range cases {
