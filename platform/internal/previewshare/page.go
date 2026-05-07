@@ -31,8 +31,8 @@ func RenderPasswordPage(share *PreviewShare, errorMessage string) string {
     h1 { margin: 0 0 12px; font-size: 24px; }
     p { margin: 0 0 16px; color: #475569; }
     label { display: block; margin-bottom: 8px; font-size: 14px; color: #334155; }
-    input { width: 100%%; padding: 12px 14px; border-radius: 12px; border: 1px solid #cbd5e1; font-size: 16px; }
-    button { width: 100%%; margin-top: 16px; padding: 12px 14px; border: 0; border-radius: 12px; background: #0f172a; color: #fff; font-size: 16px; cursor: pointer; }
+    input { width: 100%%; padding: 12px 14px; border-radius: 12px; border: 1px solid #cbd5e1; font-size: 16px; box-sizing: border-box; display: block; }
+    button { width: 100%%; margin-top: 16px; padding: 12px 14px; border: 0; border-radius: 12px; background: #0f172a; color: #fff; font-size: 16px; cursor: pointer; box-sizing: border-box; display: block; }
     .meta { margin-bottom: 18px; font-size: 13px; color: #64748b; }
     .error { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 14px; }
   </style>
