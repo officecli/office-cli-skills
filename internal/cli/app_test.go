@@ -1424,6 +1424,64 @@ func TestExecuteGenerateJob_IMGRequiresLicenseConfig(t *testing.T) {
 	}
 }
 
+func TestExecuteGenerateJob_IMGForcesLicenseCheckWhenAccessChecksDisabled(t *testing.T) {
+	imageBytes := []byte("server-png-bytes")
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data":%q,"mime":"image/png","access_mode":"paid","paid_quota_remaining":8,"remaining":8}`, base64.StdEncoding.EncodeToString(imageBytes))
+	}))
+	defer server.Close()
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		if !cfg.Enabled {
+			return nil, nil
+		}
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModePaid,
+					CommitToken: signTestCommitToken(req, LicenseAccessModePaid, UsageCommitToken{}),
+				}, nil
+			},
+		}, nil
+	}
+
+	tmpDir := t.TempDir()
+	job := GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch Visual",
+		Prompt:       "A polished product launch hero image",
+		OutputDir:    tmpDir,
+		ImageRatio:   "square",
+	}
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		License: LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: false, TimeoutSec: 5},
+		Publish: disabledPublishConfig(),
+	}, job, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	commitToken, ok := gotPayload["commit_token"].(map[string]any)
+	if !ok {
+		t.Fatalf("commit_token missing from payload: %#v", gotPayload)
+	}
+	if commitToken["proof_version"] != "v1" {
+		t.Fatalf("commit_token proof_version = %#v, payload = %#v", commitToken["proof_version"], gotPayload)
+	}
+	if result.AccessMode != "paid" || result.Remaining != 8 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
 func TestCompleteBestModeWithPrompter_DebugLogsTemplateFallback(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

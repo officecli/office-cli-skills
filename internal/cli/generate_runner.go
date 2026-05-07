@@ -92,10 +92,12 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 		missing := "platform service URL"
 		return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
 	}
+	licenseCfg := cfg.License
+	licenseCfg.Enabled = true
 	job.RuntimeMode = RuntimeModeExternal
 	job.Mode = "fast"
 
-	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
+	licenseCheck, err := a.runLicenseCheck(ctx, licenseCfg, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
 	if err != nil {
 		return GenerateResult{}, err
 	}
@@ -108,13 +110,13 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 		job.ReferenceImages = []engine.ImageReference{reference}
 	}
 
-	llmClient, err := newHostedLLMClient(cfg.License, job)
+	llmClient, err := newHostedLLMClient(licenseCfg, job)
 	if err != nil {
 		return GenerateResult{}, buildHostedModeError(err)
 	}
 	publishCfg := cfg.Publish
 	if strings.TrimSpace(publishCfg.APIKey) == "" {
-		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
+		publishCfg.APIKey = strings.TrimSpace(licenseCfg.APIKey)
 	}
 	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
