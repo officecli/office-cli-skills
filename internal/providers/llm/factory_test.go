@@ -3,7 +3,9 @@ package llm
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -331,5 +333,138 @@ func TestInternalClient_GenerateImageReturnsCreditBalance(t *testing.T) {
 	}
 	if image.CreditBalance == nil || *image.CreditBalance != 11 {
 		t.Fatalf("credit balance = %#v", image.CreditBalance)
+	}
+}
+
+func TestOpenAIClient_GenerateImageWithReferenceUsesImageEditMultipart(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var uploadedImage []byte
+	var filename string
+	var contentType string
+	var formValues map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer image-key" {
+			t.Fatalf("unexpected authorization: %s", r.Header.Get("Authorization"))
+		}
+		if !strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
+			t.Fatalf("unexpected content type: %s", r.Header.Get("Content-Type"))
+		}
+		if err := r.ParseMultipartForm(8 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		formValues = map[string]string{
+			"model":  r.FormValue("model"),
+			"prompt": r.FormValue("prompt"),
+			"size":   r.FormValue("size"),
+		}
+		file, header, err := r.FormFile("image[]")
+		if err != nil {
+			t.Fatalf("form file: %v", err)
+		}
+		defer file.Close()
+		filename = header.Filename
+		contentType = header.Header.Get("Content-Type")
+		uploadedImage, err = io.ReadAll(file)
+		if err != nil {
+			t.Fatalf("read uploaded image: %v", err)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider:     "openai",
+		BaseURL:      "https://chat.example.com/v1",
+		APIKey:       "text-key",
+		Model:        "gpt-test",
+		ImageBaseURL: server.URL,
+		ImageAPIKey:  "image-key",
+		ImageModel:   "gpt-image-1",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt:            "Use the uploaded reference image as visual context",
+		TargetAspectRatio: 16.0 / 9.0,
+		ReferenceImages: []engine.ImageReference{{
+			Filename: "reference.webp",
+			MIME:     "image/webp",
+			Data:     base64.StdEncoding.EncodeToString([]byte("reference-bytes")),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+	if string(uploadedImage) != "reference-bytes" {
+		t.Fatalf("unexpected uploaded image: %q", string(uploadedImage))
+	}
+	if filename != "reference.webp" {
+		t.Fatalf("filename = %q", filename)
+	}
+	if contentType != "image/webp" {
+		t.Fatalf("content type = %q", contentType)
+	}
+	wantValues := map[string]string{
+		"model":  "gpt-image-1",
+		"prompt": "Use the uploaded reference image as visual context",
+		"size":   "1536x1024",
+	}
+	if fmt.Sprint(formValues) != fmt.Sprint(wantValues) {
+		t.Fatalf("form values = %#v", formValues)
+	}
+}
+
+func TestInternalClient_GenerateImageSendsReferenceImage(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var payload struct {
+		Model          string                `json:"model"`
+		Prompt         string                `json:"prompt"`
+		ReferenceImage engine.ImageReference `json:"reference_image"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":11}`, imageData)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "internal",
+		BaseURL:  server.URL,
+		APIKey:   "hosted-key",
+		Model:    "hosted/img",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt: "Use the uploaded reference image as visual context",
+		ReferenceImages: []engine.ImageReference{{
+			MIME: "image/png",
+			Data: "cmVmZXJlbmNlLWJ5dGVz",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if payload.ReferenceImage.MIME != "image/png" || payload.ReferenceImage.Data != "cmVmZXJlbmNlLWJ5dGVz" {
+		t.Fatalf("reference image = %#v", payload.ReferenceImage)
 	}
 }

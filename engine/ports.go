@@ -55,6 +55,13 @@ type StructuredCompletionRequest struct {
 type ImageGenerationRequest struct {
 	Prompt            string
 	TargetAspectRatio float64
+	ReferenceImages   []ImageReference
+}
+
+type ImageReference struct {
+	Filename string `json:"filename,omitempty"`
+	MIME     string `json:"mime"`
+	Data     string `json:"data"`
 }
 
 type ImageGenerationResult struct {

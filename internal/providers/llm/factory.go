@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -174,6 +176,9 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 	if isGoogleImageEndpoint(imageBaseURL, model) {
 		return c.generateGoogleImage(ctx, imageBaseURL, imageAPIKey, model, req)
 	}
+	if len(req.ReferenceImages) > 0 {
+		return c.generateOpenAIImageEdit(ctx, imageBaseURL, imageAPIKey, model, req)
+	}
 	payload := map[string]any{
 		"model":           model,
 		"prompt":          req.Prompt,
@@ -198,6 +203,36 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
 	if err != nil {
 		return nil, fmt.Errorf("decode image data: %w", err)
+	}
+	return &engine.ImageGenerationResult{Data: data, MIME: "image/png"}, nil
+}
+
+func (c *openAIClient) generateOpenAIImageEdit(ctx context.Context, baseURL, apiKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	if len(req.ReferenceImages) != 1 {
+		return nil, fmt.Errorf("exactly one reference image is supported")
+	}
+	body, err := c.postMultipartImageEdit(ctx, strings.TrimRight(baseURL, "/")+"/images/edits", apiKey, map[string]string{
+		"model":  model,
+		"prompt": req.Prompt,
+		"size":   pickImageSize(req.TargetAspectRatio),
+	}, req.ReferenceImages[0])
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode image edit response: %w", err)
+	}
+	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+		return nil, fmt.Errorf("image edit response is empty")
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode image edit data: %w", err)
 	}
 	return &engine.ImageGenerationResult{Data: data, MIME: "image/png"}, nil
 }
@@ -408,6 +443,67 @@ func (c *openAIClient) postWithAPIKey(ctx context.Context, url, apiKey string, p
 	return io.ReadAll(body)
 }
 
+func (c *openAIClient) postMultipartImageEdit(ctx context.Context, rawURL, apiKey string, fields map[string]string, ref engine.ImageReference) ([]byte, error) {
+	data, err := base64.StdEncoding.DecodeString(ref.Data)
+	if err != nil {
+		return nil, fmt.Errorf("decode reference image: %w", err)
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return nil, err
+		}
+	}
+	filename := strings.TrimSpace(ref.Filename)
+	if filename == "" {
+		filename = "reference.png"
+	}
+	part, err := createImageEditPart(writer, filename, ref.MIME)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := part.Write(data); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, &body)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	if strings.TrimSpace(apiKey) != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(apiKey))
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return respBody, nil
+}
+
+func createImageEditPart(writer *multipart.Writer, filename string, mime string) (io.Writer, error) {
+	filename = strings.NewReplacer("\\", "\\\\", `"`, `\"`, "\r", "", "\n", "").Replace(filename)
+	mime = strings.TrimSpace(mime)
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image[]"; filename="%s"`, filename))
+	header.Set("Content-Type", mime)
+	return writer.CreatePart(header)
+}
+
 func (c *openAIClient) postStream(ctx context.Context, url string, payload map[string]any) (io.ReadCloser, error) {
 	body, _, err := c.doPost(ctx, url, c.apiKey, payload)
 	if err != nil {
@@ -516,6 +612,9 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		if len(c.imageAccess.CommitToken) > 0 {
 			payload["commit_token"] = c.imageAccess.CommitToken
 		}
+	}
+	if len(req.ReferenceImages) > 0 {
+		payload["reference_image"] = req.ReferenceImages[0]
 	}
 	body, err := c.post(ctx, c.baseURL+"/v1/image", payload)
 	if err != nil {

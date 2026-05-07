@@ -107,6 +107,7 @@ For standalone `img` requests:
 - inspect top-level `image_generation` during capability discovery
 - use `office.generate` with `document_type=img`
 - pass `ratio=square|landscape|portrait` when the user asks for a shape; default to `square`
+- pass one `reference_image` local path or `http/https` URL when the user provides a reference image
 - require platform/license config and let the OfficeCLI server control the image provider
 - treat quota as generation counts: one successful standalone image consumes one count, and free image usage has a separate 3-per-day bucket from free document generation
 - keep preview publishing enabled by default when publishing is configured; pass `publish=false` only for local-only output

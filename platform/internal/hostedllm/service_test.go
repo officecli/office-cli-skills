@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -169,6 +170,83 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
 }
 
+func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var uploadedImage []byte
+	var formValues map[string]string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/images/edits", r.URL.Path)
+		require.Equal(t, "Bearer upstream-key", r.Header.Get("Authorization"))
+		require.Contains(t, r.Header.Get("Content-Type"), "multipart/form-data")
+		require.NoError(t, r.ParseMultipartForm(8<<20))
+		formValues = map[string]string{
+			"model":  r.FormValue("model"),
+			"prompt": r.FormValue("prompt"),
+			"size":   r.FormValue("size"),
+		}
+		file, header, err := r.FormFile("image[]")
+		require.NoError(t, err)
+		defer file.Close()
+		require.Equal(t, "reference.png", header.Filename)
+		require.Equal(t, "image/png", header.Header.Get("Content-Type"))
+		uploadedImage, err = io.ReadAll(file)
+		require.NoError(t, err)
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-test",
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "img",
+			Provider:             "openai",
+			Model:                "gpt-image-test",
+			ImagePerAssetCredits: 1,
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+		}},
+		TimeoutSec: 5,
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "hosted/img",
+		Prompt:      "Use the uploaded reference image as visual context",
+		AspectRatio: 1,
+		ReferenceImage: &ImageReference{
+			Filename: "reference.png",
+			MIME:     "image/png",
+			Data:     base64.StdEncoding.EncodeToString([]byte("reference-bytes")),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Equal(t, []byte("reference-bytes"), uploadedImage)
+	require.Equal(t, map[string]string{
+		"model":  "gpt-image-test",
+		"prompt": "Use the uploaded reference image as visual context",
+		"size":   "1024x1024",
+	}, formValues)
+	require.Equal(t, []int{1}, store.reservations)
+	require.Equal(t, []int{1}, store.settlements)
+	require.Empty(t, store.releases)
+}
+
 func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *testing.T) {
 	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +291,56 @@ func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *
 	require.Len(t, quota.validations, 1)
 	require.Len(t, quota.consumes, 1)
 	require.Equal(t, "paid-key", quota.consumes[0].APIKey)
+}
+
+func TestGenerateImageWithCommitTokenAndReferenceConsumesQuotaAfterEdit(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/images/edits", r.URL.Path)
+		require.NoError(t, r.ParseMultipartForm(8<<20))
+		_, _, err := r.FormFile("image[]")
+		require.NoError(t, err)
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer upstream.Close()
+
+	store := &fakeAPIKeyStore{}
+	quota := &fakeGenerationQuotaManager{
+		result: &licensesvc.ConsumeResponse{AccessMode: model.AccessModePaid, Remaining: 88, PaidQuotaRemaining: 88},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-test",
+		TimeoutSec: 5,
+	}, quota)
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
+		RequestID:       "req-img",
+		Model:           "hosted/img",
+		Prompt:          "Use the uploaded reference image as visual context",
+		AspectRatio:     1,
+		FingerprintHash: "fp-img",
+		AccessMode:      model.AccessModePaid,
+		CommitToken: &licensesvc.CommitToken{
+			FingerprintHash: "fp-img",
+			RequestID:       "req-img",
+			AccessMode:      model.AccessModePaid,
+			DocumentType:    "img",
+		},
+		ReferenceImage: &ImageReference{
+			Filename: "reference.png",
+			MIME:     "image/png",
+			Data:     base64.StdEncoding.EncodeToString([]byte("reference-bytes")),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Equal(t, 88, resp.PaidQuotaRemaining)
+	require.Empty(t, store.reservations)
+	require.Len(t, quota.validations, 1)
+	require.Len(t, quota.consumes, 1)
 }
 
 func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {

@@ -299,6 +299,8 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
+  --reference-image <path-or-url>
+                          Provide one reference image for img generation
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
@@ -315,6 +317,7 @@ Default behavior:
   - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
   - If publishing is not configured, files are saved locally and online preview is skipped
   - Standalone img generation always uses the OfficeCLI server and requires config set-license
+  - Standalone img supports one reference image with --reference-image <path-or-url>
   - Standalone img local preview sidecars are not supported
 
 Config file:
@@ -334,7 +337,7 @@ Examples:
   officecli upgrade
   officecli upgrade --help
   officecli new pptx "Enterprise Collaboration Platform Overview" "Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform"
-  officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape
+  officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png
   officecli score pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli review pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli new --help
@@ -384,6 +387,8 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
+  --reference-image <path-or-url>
+                          Provide one reference image for img generation
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
@@ -397,7 +402,8 @@ Description:
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
   - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
   - ` + "`img`" + ` generates one local image through the OfficeCLI server; run ` + "`officecli config set-license`" + ` first
-  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, publishes by default when configured, and does not support best mode, source files, or local preview
+  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, ` + "`--reference-image <path-or-url>`" + `, and publishing by default when configured
+  - ` + "`img`" + ` does not support best mode, source files, or local preview
 `
 }
 

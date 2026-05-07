@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+## 0.2.35 - 2026-05-07
+
 ### Added
 
+- Added `officecli new img --reference-image <path-or-url>` for a single local or remote reference image.
+- Added `agent-bridge` `office.generate` support for `reference_image` and capability metadata under standalone image generation.
+- Added platform hosted image support for OpenAI image edits when a parsed `reference_image` payload is present.
 - Added default online publishing for standalone `new img` outputs, including protected platform image preview links.
 
 ## 0.1.0 - 2026-03-31

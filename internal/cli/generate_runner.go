@@ -100,6 +100,13 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 		return GenerateResult{}, err
 	}
 	job.LicenseCheck = licenseCheck
+	if strings.TrimSpace(job.ReferenceImageSource) != "" {
+		reference, err := resolveReferenceImage(ctx, job.ReferenceImageSource)
+		if err != nil {
+			return GenerateResult{}, err
+		}
+		job.ReferenceImages = []engine.ImageReference{reference}
+	}
 
 	llmClient, err := newHostedLLMClient(cfg.License, job)
 	if err != nil {
@@ -233,25 +240,30 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported image ratio: %s", req.Args.Ratio)
 	}
+	referenceImage := strings.TrimSpace(req.Args.ReferenceImage)
+	if referenceImage != "" && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("reference_image is only supported for img generation")
+	}
 
 	return GenerateJob{
-		DocumentType:   documentType,
-		Topic:          topic,
-		OriginalPrompt: prompt,
-		Prompt:         prompt,
-		SourceFilePath: sourceFile,
-		RuntimeMode:    runtimeMode,
-		Mode:           mode,
-		Language:       strings.TrimSpace(req.Args.Language),
-		Style:          style,
-		StyleSpecified: styleSpecified,
-		Audience:       strings.TrimSpace(req.Args.Audience),
-		EnableImages:   enableImages,
-		ImageRatio:     imageRatio,
-		LocalPreview:   false,
-		OutputDir:      outputDir,
-		Publish:        publish,
-		JSONOutput:     true,
-		Warnings:       warnings,
+		DocumentType:         documentType,
+		Topic:                topic,
+		OriginalPrompt:       prompt,
+		Prompt:               prompt,
+		SourceFilePath:       sourceFile,
+		RuntimeMode:          runtimeMode,
+		Mode:                 mode,
+		Language:             strings.TrimSpace(req.Args.Language),
+		Style:                style,
+		StyleSpecified:       styleSpecified,
+		Audience:             strings.TrimSpace(req.Args.Audience),
+		EnableImages:         enableImages,
+		ImageRatio:           imageRatio,
+		ReferenceImageSource: referenceImage,
+		LocalPreview:         false,
+		OutputDir:            outputDir,
+		Publish:              publish,
+		JSONOutput:           true,
+		Warnings:             warnings,
 	}, nil
 }

@@ -64,27 +64,29 @@ type InputSources struct {
 }
 
 type GenerateJob struct {
-	DocumentType   engine.DocumentType
-	Topic          string
-	Brief          string
-	OriginalPrompt string
-	Prompt         string
-	SourceFilePath string
-	RuntimeMode    RuntimeMode
-	Mode           string
-	Language       string
-	Style          string
-	StyleSpecified bool
-	Audience       string
-	EnableImages   bool
-	ImageRatio     string
-	LocalPreview   bool
-	OutputDir      string
-	Publish        bool
-	Debug          bool
-	JSONOutput     bool
-	Warnings       []engine.GenerateIssue
-	LicenseCheck   *LicenseCheckResult
+	DocumentType         engine.DocumentType
+	Topic                string
+	Brief                string
+	OriginalPrompt       string
+	Prompt               string
+	SourceFilePath       string
+	RuntimeMode          RuntimeMode
+	Mode                 string
+	Language             string
+	Style                string
+	StyleSpecified       bool
+	Audience             string
+	EnableImages         bool
+	ImageRatio           string
+	ReferenceImageSource string
+	ReferenceImages      []engine.ImageReference
+	LocalPreview         bool
+	OutputDir            string
+	Publish              bool
+	Debug                bool
+	JSONOutput           bool
+	Warnings             []engine.GenerateIssue
+	LicenseCheck         *LicenseCheckResult
 }
 
 type GenerateResult struct {

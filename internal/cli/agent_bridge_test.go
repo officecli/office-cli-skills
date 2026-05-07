@@ -123,12 +123,27 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if imageGeneration["config_command"] != "officecli config set-publish" {
 		t.Fatalf("unexpected image publish config command: %#v", imageGeneration["config_command"])
 	}
+	refCaps, ok := imageGeneration["reference_image"].(map[string]any)
+	if !ok {
+		t.Fatalf("reference_image capability missing: %#v", imageGeneration)
+	}
+	if refCaps["supported"] != true || refCaps["invoke_field"] != "reference_image" {
+		t.Fatalf("unexpected reference_image capability: %#v", refCaps)
+	}
 	imgPublishSupport, ok := imgCaps["publish_support"].(map[string]any)
 	if !ok {
 		t.Fatalf("img publish_support missing: %#v", imgCaps)
 	}
 	if imgPublishSupport["default_publish"] != true || imgPublishSupport["disable_flag"] != "--no-publish" {
 		t.Fatalf("unexpected img publish_support: %#v", imgPublishSupport)
+	}
+	imgImageGeneration, ok := imgCaps["image_generation"].(map[string]any)
+	if !ok {
+		t.Fatalf("img image_generation missing: %#v", imgCaps)
+	}
+	imgRefCaps, ok := imgImageGeneration["reference_image"].(map[string]any)
+	if !ok || imgRefCaps["max_count"] != float64(1) {
+		t.Fatalf("unexpected img reference_image capability: %#v", imgImageGeneration)
 	}
 	pptxCaps, ok := docGen["pptx"].(map[string]any)
 	if !ok {
@@ -505,6 +520,14 @@ func TestAgentBridgeRenderRejectsIMG(t *testing.T) {
 
 func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 	tmpDir := t.TempDir()
+	refPath := filepath.Join(tmpDir, "reference.png")
+	refBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode reference image: %v", err)
+	}
+	if err := os.WriteFile(refPath, refBytes, 0o600); err != nil {
+		t.Fatalf("write reference image: %v", err)
+	}
 	imageBytes := []byte("bridge-png-bytes")
 	var gotPayload map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -547,10 +570,11 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 		Tool:         "office.generate",
 		OutputFormat: "json",
 		Args: bridgeInvokeArgs{
-			DocumentType: "img",
-			Topic:        "Launch Visual",
-			Prompt:       "A polished product launch hero image",
-			Ratio:        "landscape",
+			DocumentType:   "img",
+			Topic:          "Launch Visual",
+			Prompt:         "A polished product launch hero image",
+			Ratio:          "landscape",
+			ReferenceImage: refPath,
 		},
 	})
 	if err != nil {
@@ -579,6 +603,10 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 			}
 			if gotPayload["model"] != "hosted/img" || gotPayload["aspect_ratio"] != 16.0/9.0 || gotPayload["commit_token"] == nil {
 				t.Fatalf("payload = %#v", gotPayload)
+			}
+			reference, ok := gotPayload["reference_image"].(map[string]any)
+			if !ok || reference["mime"] != "image/png" || strings.TrimSpace(fmt.Sprint(reference["data"])) == "" {
+				t.Fatalf("reference_image payload = %#v", gotPayload["reference_image"])
 			}
 			if strings.Join(licenseEvents, ",") != "check" {
 				t.Fatalf("license events = %#v, want check only because server consumes image quota", licenseEvents)

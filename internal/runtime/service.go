@@ -15,17 +15,18 @@ import (
 )
 
 type GenerateParams struct {
-	DocumentType   engine.DocumentType
-	Topic          string
-	Prompt         string
-	SourceFilePath string
-	Mode           string
-	Language       string
-	Style          string
-	Audience       string
-	EnableImages   bool
-	ImageRatio     string
-	LocalPreview   bool
+	DocumentType    engine.DocumentType
+	Topic           string
+	Prompt          string
+	SourceFilePath  string
+	Mode            string
+	Language        string
+	Style           string
+	Audience        string
+	EnableImages    bool
+	ImageRatio      string
+	ReferenceImages []engine.ImageReference
+	LocalPreview    bool
 }
 
 type GeneratedArtifact struct {
@@ -90,7 +91,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypePPTX:
 		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
 	case engine.DocumentTypeIMG:
-		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, meta)
+		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", params.DocumentType)
 	}
@@ -187,11 +188,12 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 	}, nil
 }
 
-func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
+func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting image generation from the OfficeCLI server")
 	image, err := s.llm.GenerateImage(ctx, engine.ImageGenerationRequest{
 		Prompt:            buildImageGenerationPrompt(prompt, target),
 		TargetAspectRatio: imageAspectRatio(ratio),
+		ReferenceImages:   append([]engine.ImageReference(nil), references...),
 	})
 	if err != nil {
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Image generation failed")

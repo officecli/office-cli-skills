@@ -43,7 +43,8 @@ It is intended for developer self-testing, QA regression, integration sign-off, 
 - `CLI-NEW-015`: publishing enabled without a publisher should return a clear warning
 - `CLI-NEW-016`: `new img` uses the OfficeCLI server image route, writes one local image, publishes by default when configured, and exposes server quota metadata
 - `CLI-NEW-017`: `new img --ratio square|landscape|portrait` maps to supported image ratios and rejects unsupported values
-- `CLI-NEW-018`: `new img` rejects `--mode best`, `--file`, `--local-preview`, and `--no-images`; `--no-publish` keeps output local-only
+- `CLI-NEW-018`: `new img --reference-image <path-or-url>` accepts one local or remote reference image and rejects unsupported document types, unsupported image types, empty files, oversized files, failed URL downloads, and repeated reference-image flags
+- `CLI-NEW-019`: `new img` rejects `--mode best`, `--file`, `--local-preview`, and `--no-images`; `--no-publish` keeps output local-only
 - `CLI-REVIEW-001`: structural review succeeds for a valid local deck
 - `CLI-REVIEW-002`: `--no-visual` skips LibreOffice-driven visual review
 

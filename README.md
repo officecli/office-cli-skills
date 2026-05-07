@@ -70,7 +70,7 @@ Initialize configuration:
 `config set-license` is required for standalone image generation. A successful standalone image consumes one generation count. Free usage has a separate image bucket of 3 images per user per day, while document generation keeps the 10 documents per day free bucket:
 
 ```bash
-./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape
+./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png
 ```
 
 `config set-generation` also configures PPT image assets. It does not configure standalone `new img` generation:
@@ -165,10 +165,10 @@ Generate a workbook-backed Report:
 Generate a standalone image:
 
 ```bash
-./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape
+./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
 ```
 
-`new img` supports `--ratio square|landscape|portrait`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and consumes one image generation count only after a successful image response. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
+`new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and consumes one image generation count only after a successful image response. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
 
 Write output to a custom directory:
 

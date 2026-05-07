@@ -59,6 +59,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var outDir string
 	var sourceFile string
 	var ratio string
+	var referenceImage string
 	var jsonOutput bool
 	var localPreview bool
 	var debug bool
@@ -76,6 +77,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&outDir, "out", "", "")
 	fs.StringVar(&sourceFile, "file", "", "")
 	fs.StringVar(&ratio, "ratio", "", "")
+	fs.StringVar(&referenceImage, "reference-image", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.BoolVar(&debug, "debug", false, "")
@@ -84,6 +86,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.Var(&noImagesFlag, "no-images", "")
 
 	normalizedArgs := normalizeFlagArgs(args)
+	if countReferenceImageFlags(normalizedArgs) > 1 {
+		return GenerateJob{}, fmt.Errorf("only one --reference-image is supported")
+	}
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return GenerateJob{}, err
 	}
@@ -195,6 +200,10 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if ratioSpecified && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--ratio is only supported for img generation")
 	}
+	referenceImage = strings.TrimSpace(referenceImage)
+	if referenceImage != "" && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img generation")
+	}
 	imageRatio := strings.ToLower(strings.TrimSpace(ratio))
 	if imageRatio == "" {
 		imageRatio = "square"
@@ -231,26 +240,27 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 
 	return GenerateJob{
-		DocumentType:   documentType,
-		Topic:          topic,
-		Brief:          brief,
-		OriginalPrompt: finalPrompt,
-		Prompt:         finalPrompt,
-		SourceFilePath: sourceFile,
-		RuntimeMode:    selectedRuntimeMode,
-		Mode:           strings.ToLower(finalMode),
-		Language:       strings.TrimSpace(lang),
-		Style:          finalStyle,
-		StyleSpecified: styleSpecified,
-		Audience:       strings.TrimSpace(audience),
-		EnableImages:   enableImages,
-		ImageRatio:     imageRatio,
-		LocalPreview:   localPreview,
-		OutputDir:      finalOutputDir,
-		Publish:        publishEnabled,
-		Debug:          debug,
-		JSONOutput:     jsonOutput,
-		Warnings:       warnings,
+		DocumentType:         documentType,
+		Topic:                topic,
+		Brief:                brief,
+		OriginalPrompt:       finalPrompt,
+		Prompt:               finalPrompt,
+		SourceFilePath:       sourceFile,
+		RuntimeMode:          selectedRuntimeMode,
+		Mode:                 strings.ToLower(finalMode),
+		Language:             strings.TrimSpace(lang),
+		Style:                finalStyle,
+		StyleSpecified:       styleSpecified,
+		Audience:             strings.TrimSpace(audience),
+		EnableImages:         enableImages,
+		ImageRatio:           imageRatio,
+		ReferenceImageSource: referenceImage,
+		LocalPreview:         localPreview,
+		OutputDir:            finalOutputDir,
+		Publish:              publishEnabled,
+		Debug:                debug,
+		JSONOutput:           jsonOutput,
+		Warnings:             warnings,
 	}, nil
 }
 
@@ -261,7 +271,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -283,6 +293,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--out=") ||
 				strings.HasPrefix(current, "--file=") ||
 				strings.HasPrefix(current, "--ratio=") ||
+				strings.HasPrefix(current, "--reference-image=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
@@ -298,6 +309,16 @@ func normalizeFlagArgs(args []string) []string {
 		}
 	}
 	return append(flags, positionals...)
+}
+
+func countReferenceImageFlags(args []string) int {
+	count := 0
+	for _, arg := range args {
+		if arg == "--reference-image" || strings.HasPrefix(arg, "--reference-image=") {
+			count++
+		}
+	}
+	return count
 }
 
 func parseDocumentType(value string) (engine.DocumentType, error) {

@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +83,13 @@ type ImageRequest struct {
 	APIKey          string                  `json:"api_key,omitempty"`
 	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
 	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
+	ReferenceImage  *ImageReference         `json:"reference_image,omitempty"`
+}
+
+type ImageReference struct {
+	Filename string `json:"filename,omitempty"`
+	MIME     string `json:"mime"`
+	Data     string `json:"data"`
 }
 
 type ImageResponse struct {
@@ -209,7 +218,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		"size":            pickImageSize(req.AspectRatio),
 		"response_format": "b64_json",
 	}
-	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+	body, usage, err := s.postImageRequest(ctx, modelName, req, payload)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
 		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
@@ -268,7 +277,7 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 		"size":            pickImageSize(req.AspectRatio),
 		"response_format": "b64_json",
 	}
-	body, _, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+	body, _, err := s.postImageRequest(ctx, modelName, req, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -348,6 +357,91 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any) 
 		CompletionTokens: envelope.Usage.CompletionTokens,
 		ReasoningTokens:  envelope.Usage.ReasoningTokens,
 	}, nil
+}
+
+func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any) ([]byte, usageSummary, error) {
+	if req.ReferenceImage == nil || strings.TrimSpace(req.ReferenceImage.Data) == "" {
+		return s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+	}
+	fields := map[string]string{
+		"model":  modelName,
+		"prompt": req.Prompt,
+		"size":   pickImageSize(req.AspectRatio),
+	}
+	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, *req.ReferenceImage)
+}
+
+func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, ref ImageReference) ([]byte, usageSummary, error) {
+	imageData, err := base64.StdEncoding.DecodeString(ref.Data)
+	if err != nil {
+		return nil, usageSummary{}, fmt.Errorf("decode reference image: %w", err)
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return nil, usageSummary{}, err
+		}
+	}
+	filename := strings.TrimSpace(ref.Filename)
+	if filename == "" {
+		filename = "reference.png"
+	}
+	part, err := createImageEditPart(writer, filename, ref.MIME)
+	if err != nil {
+		return nil, usageSummary{}, err
+	}
+	if _, err := part.Write(imageData); err != nil {
+		return nil, usageSummary{}, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, usageSummary{}, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, &body)
+	if err != nil {
+		return nil, usageSummary{}, err
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	if strings.TrimSpace(s.cfg.APIKey) != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(s.cfg.APIKey))
+	}
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return nil, usageSummary{}, err
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, usageSummary{}, err
+	}
+	if resp.StatusCode >= 300 {
+		return nil, usageSummary{}, fmt.Errorf("hosted upstream request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	var envelope struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			ReasoningTokens  int `json:"reasoning_tokens"`
+		} `json:"usage"`
+	}
+	_ = json.Unmarshal(respBody, &envelope)
+	return respBody, usageSummary{
+		PromptTokens:     envelope.Usage.PromptTokens,
+		CompletionTokens: envelope.Usage.CompletionTokens,
+		ReasoningTokens:  envelope.Usage.ReasoningTokens,
+	}, nil
+}
+
+func createImageEditPart(writer *multipart.Writer, filename string, mime string) (io.Writer, error) {
+	filename = strings.NewReplacer("\\", "\\\\", `"`, `\"`, "\r", "", "\n", "").Replace(filename)
+	mime = strings.TrimSpace(mime)
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="image[]"; filename="%s"`, filename))
+	header.Set("Content-Type", mime)
+	return writer.CreatePart(header)
 }
 
 func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, string, error) {

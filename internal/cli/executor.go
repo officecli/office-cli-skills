@@ -27,17 +27,18 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	}
 	emitProgress(ctx, e.progress, progressStepGenerate, "running", "Generating document content")
 	artifact, err := e.generator.Generate(ctx, GenerateParams{
-		DocumentType:   job.DocumentType,
-		Topic:          job.Topic,
-		Prompt:         job.Prompt,
-		SourceFilePath: job.SourceFilePath,
-		Mode:           job.Mode,
-		Language:       job.Language,
-		Style:          job.Style,
-		Audience:       job.Audience,
-		EnableImages:   job.EnableImages,
-		ImageRatio:     job.ImageRatio,
-		LocalPreview:   job.LocalPreview,
+		DocumentType:    job.DocumentType,
+		Topic:           job.Topic,
+		Prompt:          job.Prompt,
+		SourceFilePath:  job.SourceFilePath,
+		Mode:            job.Mode,
+		Language:        job.Language,
+		Style:           job.Style,
+		Audience:        job.Audience,
+		EnableImages:    job.EnableImages,
+		ImageRatio:      job.ImageRatio,
+		ReferenceImages: append([]engine.ImageReference(nil), job.ReferenceImages...),
+		LocalPreview:    job.LocalPreview,
 	})
 	if err != nil {
 		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")

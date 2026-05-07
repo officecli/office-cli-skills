@@ -115,22 +115,23 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType string          `json:"document_type"`
-	Topic        string          `json:"topic"`
-	Prompt       string          `json:"prompt,omitempty"`
-	FilePath     string          `json:"file_path,omitempty"`
-	Payload      json.RawMessage `json:"payload,omitempty"`
-	Mode         string          `json:"mode,omitempty"`
-	RuntimeMode  string          `json:"runtime_mode,omitempty"`
-	Language     string          `json:"lang,omitempty"`
-	Style        string          `json:"style,omitempty"`
-	Audience     string          `json:"audience,omitempty"`
-	OutputDir    string          `json:"out,omitempty"`
-	Ratio        string          `json:"ratio,omitempty"`
-	Publish      *bool           `json:"publish,omitempty"`
-	EnableImages *bool           `json:"enable_images,omitempty"`
-	EnableVisual *bool           `json:"enable_visual,omitempty"`
-	FailBelow    *int            `json:"fail_below,omitempty"`
+	DocumentType   string          `json:"document_type"`
+	Topic          string          `json:"topic"`
+	Prompt         string          `json:"prompt,omitempty"`
+	FilePath       string          `json:"file_path,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	Mode           string          `json:"mode,omitempty"`
+	RuntimeMode    string          `json:"runtime_mode,omitempty"`
+	Language       string          `json:"lang,omitempty"`
+	Style          string          `json:"style,omitempty"`
+	Audience       string          `json:"audience,omitempty"`
+	OutputDir      string          `json:"out,omitempty"`
+	Ratio          string          `json:"ratio,omitempty"`
+	ReferenceImage string          `json:"reference_image,omitempty"`
+	Publish        *bool           `json:"publish,omitempty"`
+	EnableImages   *bool           `json:"enable_images,omitempty"`
+	EnableVisual   *bool           `json:"enable_visual,omitempty"`
+	FailBelow      *int            `json:"fail_below,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -405,6 +406,12 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"default_publish":   true,
 				"disable_flag":      "--no-publish",
 				"config_command":    "officecli config set-publish",
+				"reference_image": map[string]any{
+					"supported":    true,
+					"max_count":    1,
+					"invoke_field": "reference_image",
+					"input":        "local path or http/https URL",
+				},
 				"notes": []string{
 					"Standalone image generation always goes through the OfficeCLI server.",
 					"Agent clients must not use local image provider configuration for document_type=img.",
@@ -442,14 +449,15 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type": "pptx|docx|xlsx|report|img",
-					"topic":         "string",
-					"prompt":        "string",
-					"file_path":     "string (.xlsx for report)",
-					"mode":          "fast|best",
-					"runtime_mode":  "external|hosted",
-					"ratio":         "square|landscape|portrait (img only)",
-					"publish":       "boolean",
+					"document_type":   "pptx|docx|xlsx|report|img",
+					"topic":           "string",
+					"prompt":          "string",
+					"file_path":       "string (.xlsx for report)",
+					"mode":            "fast|best",
+					"runtime_mode":    "external|hosted",
+					"ratio":           "square|landscape|portrait (img only)",
+					"reference_image": "local path or http/https URL (img only)",
+					"publish":         "boolean",
 				},
 			},
 			{
@@ -513,6 +521,12 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 			"image_generation": map[string]any{
 				"provider_control": "server",
 				"ratio_values":     []string{"square", "landscape", "portrait"},
+				"reference_image": map[string]any{
+					"supported":    true,
+					"max_count":    1,
+					"invoke_field": "reference_image",
+					"input":        "local path or http/https URL",
+				},
 			},
 			"publish_support": map[string]any{
 				"publish_supported": true,

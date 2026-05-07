@@ -1082,6 +1082,63 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_IMGAcceptsReferenceImageSource(t *testing.T) {
+	tmpDir := t.TempDir()
+	refPath := filepath.Join(tmpDir, "reference.png")
+	if err := os.WriteFile(refPath, []byte("png-bytes"), 0o600); err != nil {
+		t.Fatalf("write reference image: %v", err)
+	}
+
+	job, err := BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--reference-image", refPath,
+		"--no-publish",
+	}, Config{}, InputSources{IsTTY: true, CWD: tmpDir})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.ReferenceImageSource != refPath {
+		t.Fatalf("reference image source = %q, want %q", job.ReferenceImageSource, refPath)
+	}
+
+	job, err = BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--reference-image=https://assets.example.com/reference.jpg",
+		"--no-publish",
+	}, Config{}, InputSources{IsTTY: true, CWD: tmpDir})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob URL: %v", err)
+	}
+	if job.ReferenceImageSource != "https://assets.example.com/reference.jpg" {
+		t.Fatalf("reference image URL = %q", job.ReferenceImageSource)
+	}
+}
+
+func TestBuildGenerateJob_ReferenceImageOnlySupportedForIMG(t *testing.T) {
+	_, err := BuildGenerateJob([]string{
+		"pptx",
+		"Demo",
+		"--reference-image", "reference.png",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "--reference-image is only supported for img generation") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildGenerateJob_ReferenceImageRejectsMultipleValues(t *testing.T) {
+	_, err := BuildGenerateJob([]string{
+		"img",
+		"Demo",
+		"--reference-image", "first.png",
+		"--reference-image=second.png",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "only one --reference-image is supported") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestBuildGenerateJob_RatioOnlySupportedForIMG(t *testing.T) {
 	_, err := BuildGenerateJob([]string{
 		"pptx",
