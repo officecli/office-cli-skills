@@ -609,8 +609,15 @@ func TestFitTextForLayout_TruncatesLongSpacedText(t *testing.T) {
 	if utf8.RuneCountInString(got) > 32 {
 		t.Fatalf("fitTextForLayout() length = %d, want <= 32: %q", utf8.RuneCountInString(got), got)
 	}
-	if got != "This sentence has many words" {
+	if got != "This sentence has many words." {
 		t.Fatalf("fitTextForLayout() = %q", got)
+	}
+}
+
+func TestFitTextForLayout_FinishesTruncatedPhrase(t *testing.T) {
+	got := fitTextForLayout("Clear decision rights prevent duplicated work and missed handoffs across functions", 56)
+	if strings.HasSuffix(got, " and") || strings.HasSuffix(got, ",") || !strings.HasSuffix(got, ".") {
+		t.Fatalf("fitTextForLayout() produced unfinished phrase: %q", got)
 	}
 }
 

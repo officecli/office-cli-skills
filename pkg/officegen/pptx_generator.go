@@ -500,10 +500,22 @@ func (g *PPTXGenerator) generateSlidesWithEmbeds(slides []Slide, theme *SlideThe
 			result[relsPath] = slideRels
 		}
 
-		result[slidePath] = g.createSlideXMLEnhanced(slide, theme, stylePreset, hasChart, chartIndex, slideNum, len(slides), renderAssets)
+		result[slidePath] = applySlideTextAutoFit(g.createSlideXMLEnhanced(slide, theme, stylePreset, hasChart, chartIndex, slideNum, len(slides), renderAssets))
 	}
 
 	return result, binaries, nil
+}
+
+func applySlideTextAutoFit(slideXML string) string {
+	if strings.Contains(slideXML, "<a:normAutofit") || strings.Contains(slideXML, "<a:spAutoFit") {
+		return slideXML
+	}
+	autoFit := `<a:normAutofit fontScale="82000" lnSpcReduction="20000"/>`
+	selfClosingBodyPr := regexp.MustCompile(`<a:bodyPr([^>]*)/>`)
+	slideXML = selfClosingBodyPr.ReplaceAllString(slideXML, `<a:bodyPr$1>`+autoFit+`</a:bodyPr>`)
+	emptyBodyPr := regexp.MustCompile(`<a:bodyPr([^>]*)>\s*</a:bodyPr>`)
+	slideXML = emptyBodyPr.ReplaceAllString(slideXML, `<a:bodyPr$1>`+autoFit+`</a:bodyPr>`)
+	return slideXML
 }
 
 // generateContentTypes builds [Content_Types].xml dynamically.

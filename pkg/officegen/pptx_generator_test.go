@@ -42,6 +42,31 @@ func samplePNGWithSize(t *testing.T, width, height int) []byte {
 	return buf.Bytes()
 }
 
+func readZipEntryString(t *testing.T, data []byte, name string) string {
+	t.Helper()
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, file := range reader.File {
+		if file.Name != name {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", name, err)
+		}
+		defer rc.Close()
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(rc); err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return buf.String()
+	}
+	t.Fatalf("zip entry %s not found", name)
+	return ""
+}
+
 func TestTitleSlideUsesCleanControlledLightLayout(t *testing.T) {
 	theme := MergeThemeWithPreset(nil, StylePresetTechContrast)
 	xml := NewPPTXGenerator().createTitleSlideXML(Slide{
@@ -76,6 +101,23 @@ func TestSafeTextColorUsesContrastRatio(t *testing.T) {
 				t.Fatalf("getSafeTextColorForBg(%q, %q) = %q, contrast %.2f; want >= 4.5", tc.text, tc.bg, got, contrastRatio(got, tc.bg))
 			}
 		})
+	}
+}
+
+func TestGeneratedSlidesUseTextAutoFit(t *testing.T) {
+	data, err := NewPPTXGenerator().Generate([]Slide{
+		{Title: "AutoFit", Layout: "title", IsTitle: true},
+		{Title: "Dense Content", Layout: "content", Points: []string{"A concise point", "Another concise point"}},
+	}, PPTXOptions{Title: "AutoFit"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	slideXML := readZipEntryString(t, data, "ppt/slides/slide2.xml")
+	if !strings.Contains(slideXML, `<a:normAutofit fontScale="82000" lnSpcReduction="20000"/>`) {
+		t.Fatalf("slide XML missing text autofit:\n%s", slideXML)
+	}
+	if strings.Contains(slideXML, `<a:bodyPr anchor="t"/>`) {
+		t.Fatalf("slide XML still has self-closing bodyPr without autofit:\n%s", slideXML)
 	}
 }
 

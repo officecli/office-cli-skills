@@ -4090,7 +4090,7 @@ func fitTextForLayout(value string, maxRunes int) string {
 		}
 		size := utf8.RuneCountInString(prefix)
 		if size <= maxRunes && size >= maxRunes/2 {
-			return prefix
+			return finishLayoutPhrase(prefix)
 		}
 	}
 	runes := []rune(value)
@@ -4098,14 +4098,35 @@ func fitTextForLayout(value string, maxRunes int) string {
 		if unicode.IsSpace(runes[idx-1]) {
 			candidate := strings.TrimSpace(string(runes[:idx-1]))
 			if candidate != "" {
-				return candidate
+				return finishLayoutPhrase(candidate)
 			}
 		}
 	}
-	if strings.ContainsAny(value, " \t") {
+	return finishLayoutPhrase(strings.TrimSpace(string(runes[:maxRunes])))
+}
+
+func finishLayoutPhrase(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimRight(value, " ,;:，；：")
+	words := strings.Fields(value)
+	for len(words) > 1 {
+		tail := strings.ToLower(strings.Trim(words[len(words)-1], ".,;:，。；：()[]{}"))
+		switch tail {
+		case "and", "or", "but", "with", "without", "for", "from", "to", "by", "of", "in", "on", "at", "as", "the", "a", "an":
+			words = words[:len(words)-1]
+			value = strings.Join(words, " ")
+			value = strings.TrimRight(value, " ,;:，；：")
+			continue
+		}
+		break
+	}
+	if value == "" {
+		return ""
+	}
+	if strings.ContainsAny(value, ".!?。！？") {
 		return value
 	}
-	return strings.TrimSpace(string(runes[:maxRunes]))
+	return value + "."
 }
 
 func diversifyBusinessLayouts(slides []officegen.Slide, archetype pptxArchetype) []officegen.Slide {
