@@ -4093,6 +4093,9 @@ func fitTextForLayout(value string, maxRunes int) string {
 			return finishLayoutPhrase(prefix)
 		}
 	}
+	if strings.ContainsAny(value, " \t") {
+		return value
+	}
 	runes := []rune(value)
 	for idx := maxRunes; idx > 0 && idx <= len(runes); idx-- {
 		if unicode.IsSpace(runes[idx-1]) {
@@ -4208,15 +4211,21 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Sections[idx].Detail) > 44 {
-				slide.Sections[idx].Detail = fitTextForLayout(slide.Sections[idx].Detail, 44)
-				changed = true
+				next := fitTextForLayout(slide.Sections[idx].Detail, 44)
+				if next != slide.Sections[idx].Detail {
+					slide.Sections[idx].Detail = next
+					changed = true
+				}
 			}
 			if textDensityRunes(slide) <= maxRunes {
 				break
 			}
 			if utf8.RuneCountInString(slide.Sections[idx].Heading) > 20 {
-				slide.Sections[idx].Heading = fitTextForLayout(slide.Sections[idx].Heading, 20)
-				changed = true
+				next := fitTextForLayout(slide.Sections[idx].Heading, 20)
+				if next != slide.Sections[idx].Heading {
+					slide.Sections[idx].Heading = next
+					changed = true
+				}
 			}
 		}
 		for idx := range slide.Points {
@@ -4224,8 +4233,11 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Points[idx]) > 28 {
-				slide.Points[idx] = fitTextForLayout(slide.Points[idx], 28)
-				changed = true
+				next := fitTextForLayout(slide.Points[idx], 28)
+				if next != slide.Points[idx] {
+					slide.Points[idx] = next
+					changed = true
+				}
 			}
 		}
 		for idx := range slide.Metrics {
@@ -4233,8 +4245,11 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Metrics[idx].Note) > 32 {
-				slide.Metrics[idx].Note = fitTextForLayout(slide.Metrics[idx].Note, 32)
-				changed = true
+				next := fitTextForLayout(slide.Metrics[idx].Note, 32)
+				if next != slide.Metrics[idx].Note {
+					slide.Metrics[idx].Note = next
+					changed = true
+				}
 			}
 		}
 		if textDensityRunes(slide) > maxRunes && len(slide.Metrics) > 0 && len(slide.Points) > 2 {
@@ -4246,7 +4261,18 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 			changed = true
 		}
 		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Subtitle) > 58 {
-			slide.Subtitle = fitTextForLayout(slide.Subtitle, 58)
+			next := fitTextForLayout(slide.Subtitle, 58)
+			if next != slide.Subtitle {
+				slide.Subtitle = next
+				changed = true
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && len(slide.Sections) > 2 {
+			slide.Sections = slide.Sections[:2]
+			changed = true
+		}
+		if textDensityRunes(slide) > maxRunes && len(slide.Points) > 2 {
+			slide.Points = slide.Points[:2]
 			changed = true
 		}
 		if !changed {

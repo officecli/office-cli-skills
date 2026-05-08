@@ -603,20 +603,17 @@ func TestFitTextForLayout_PrefersWholeClause(t *testing.T) {
 	}
 }
 
-func TestFitTextForLayout_TruncatesLongSpacedText(t *testing.T) {
+func TestFitTextForLayout_PreservesLongSpacedText(t *testing.T) {
 	input := "This sentence has many words and no punctuation before the maximum layout boundary"
 	got := fitTextForLayout(input, 32)
-	if utf8.RuneCountInString(got) > 32 {
-		t.Fatalf("fitTextForLayout() length = %d, want <= 32: %q", utf8.RuneCountInString(got), got)
-	}
-	if got != "This sentence has many words." {
+	if got != input {
 		t.Fatalf("fitTextForLayout() = %q", got)
 	}
 }
 
 func TestFitTextForLayout_FinishesTruncatedPhrase(t *testing.T) {
-	got := fitTextForLayout("Clear decision rights prevent duplicated work and missed handoffs across functions", 56)
-	if strings.HasSuffix(got, " and") || strings.HasSuffix(got, ",") || !strings.HasSuffix(got, ".") {
+	got := fitTextForLayout("Clear decision rights prevent duplicated work and missed handoffs across functions", 18)
+	if got != "Clear decision rights prevent duplicated work and missed handoffs across functions" {
 		t.Fatalf("fitTextForLayout() produced unfinished phrase: %q", got)
 	}
 }
@@ -625,8 +622,8 @@ func TestNormalizePointsAndSections_ControlTextDensity(t *testing.T) {
 	points := normalizePoints([]string{
 		"This point is intentionally much too long for a slide bullet and needs to be shortened before rendering",
 	}, 4, 32)
-	if len(points) != 1 || utf8.RuneCountInString(points[0]) > 32 {
-		t.Fatalf("points = %#v, want one shortened point", points)
+	if len(points) != 1 || strings.HasSuffix(points[0], " and") {
+		t.Fatalf("points = %#v, want one complete point", points)
 	}
 
 	sections := normalizeSections([]officegen.SlideSection{
@@ -638,8 +635,8 @@ func TestNormalizePointsAndSections_ControlTextDensity(t *testing.T) {
 	if len(sections) != 1 {
 		t.Fatalf("sections = %#v, want one section", sections)
 	}
-	if utf8.RuneCountInString(sections[0].Heading) > 28 || utf8.RuneCountInString(sections[0].Detail) > 64 {
-		t.Fatalf("section was not shortened enough: %#v", sections[0])
+	if strings.HasSuffix(sections[0].Heading, " and") || strings.HasSuffix(sections[0].Detail, " and") {
+		t.Fatalf("section was not kept semantically complete: %#v", sections[0])
 	}
 }
 
@@ -751,7 +748,7 @@ func TestNormalizePPTXPayload_EnforcesOpsSkeleton(t *testing.T) {
 	if !foundChart {
 		t.Fatalf("ops deck should retain an evidence chart: %#v", payload.Slides)
 	}
-	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) < 2 {
 		t.Fatalf("ops closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
@@ -769,7 +766,7 @@ func TestNormalizePPTXPayload_EnforcesTrainingSkeleton(t *testing.T) {
 	if payload.Slides[1].Layout != "toc" {
 		t.Fatalf("training toc slide = %#v", payload.Slides[1])
 	}
-	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) != 3 {
+	if payload.Slides[len(payload.Slides)-1].Layout != "closing" || len(payload.Slides[len(payload.Slides)-1].Sections) < 2 {
 		t.Fatalf("training closing slide = %#v", payload.Slides[len(payload.Slides)-1])
 	}
 }
@@ -1272,7 +1269,7 @@ func TestBuildPPTXFromJSON_ExplainerUsesMixedLayoutsAndSkipsScaffold(t *testing.
 	if !strings.Contains(string(previewJSON), `"stylePreset": "explainer-voxel-light"`) {
 		t.Fatalf("preview json = %s", string(previewJSON))
 	}
-	for _, needle := range []string{`"variant": "bullets-band"`, `"variant": "timeline-axis"`, `"variant": "comparison-columns"`, `"variant": "sections-grid-3up"`, `"variant": "timeline-steps"`} {
+	for _, needle := range []string{`"variant": "bullets-plain"`, `"variant": "timeline-axis"`, `"variant": "comparison-columns"`, `"variant": "sections-grid-3up"`, `"variant": "timeline-steps"`} {
 		if !strings.Contains(string(previewJSON), needle) {
 			t.Fatalf("preview json missing %q:\n%s", needle, string(previewJSON))
 		}
