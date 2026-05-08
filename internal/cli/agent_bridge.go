@@ -126,9 +126,11 @@ type bridgeInvokeArgs struct {
 	Style          string          `json:"style,omitempty"`
 	Audience       string          `json:"audience,omitempty"`
 	OutputDir      string          `json:"out,omitempty"`
-	Ratio          string          `json:"ratio,omitempty"`
-	ReferenceImage string          `json:"reference_image,omitempty"`
-	ImageQuality   string          `json:"image_quality,omitempty"`
+	Ratio           string          `json:"ratio,omitempty"`
+	Size            string          `json:"size,omitempty"`
+	ReferenceImage  string          `json:"reference_image,omitempty"`
+	ReferenceImages []string        `json:"reference_images,omitempty"`
+	ImageQuality    string          `json:"image_quality,omitempty"`
 	Publish        *bool           `json:"publish,omitempty"`
 	EnableImages   *bool           `json:"enable_images,omitempty"`
 	EnableVisual   *bool           `json:"enable_visual,omitempty"`
@@ -409,9 +411,16 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"config_command":    "officecli config set-publish",
 				"reference_image": map[string]any{
 					"supported":    true,
-					"max_count":    1,
+					"max_count":    8,
 					"invoke_field": "reference_image",
-					"input":        "local path or http/https URL",
+					"invoke_field_array": "reference_images",
+					"input":        "local path or http/https URL; pass an array via reference_images for multiple",
+				},
+				"size": map[string]any{
+					"supported":    true,
+					"invoke_field": "size",
+					"format":       "WxH (e.g. 1280x768)",
+					"notes":        "Overrides ratio when set; upstream model may snap to nearest supported tier.",
 				},
 				"notes": []string{
 					"Standalone image generation always goes through the OfficeCLI server.",
@@ -451,16 +460,18 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type":   "pptx|docx|xlsx|report|img",
-					"topic":           "string",
-					"prompt":          "string",
-					"file_path":       "string (.xlsx for report)",
-					"mode":            "fast|best",
-					"runtime_mode":    "external|hosted",
-					"ratio":           "square|landscape|portrait (img only)",
-					"reference_image": "local path or http/https URL (img only)",
-					"image_quality":   "standard|premium (pptx only)",
-					"publish":         "boolean",
+					"document_type":    "pptx|docx|xlsx|report|img",
+					"topic":            "string",
+					"prompt":           "string",
+					"file_path":        "string (.xlsx for report)",
+					"mode":             "fast|best",
+					"runtime_mode":     "external|hosted",
+					"ratio":            "square|landscape|portrait (img only)",
+					"size":             "WxH explicit pixels, e.g. 1280x768 (img only)",
+					"reference_image":  "local path or http/https URL (img only)",
+					"reference_images": "array of paths or URLs (img only)",
+					"image_quality":    "standard|premium (pptx only)",
+					"publish":          "boolean",
 				},
 			},
 			{
@@ -525,10 +536,16 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 				"provider_control": "server",
 				"ratio_values":     []string{"square", "landscape", "portrait"},
 				"reference_image": map[string]any{
+					"supported":          true,
+					"max_count":          8,
+					"invoke_field":       "reference_image",
+					"invoke_field_array": "reference_images",
+					"input":              "local path or http/https URL; use reference_images array for multiple",
+				},
+				"size": map[string]any{
 					"supported":    true,
-					"max_count":    1,
-					"invoke_field": "reference_image",
-					"input":        "local path or http/https URL",
+					"invoke_field": "size",
+					"format":       "WxH",
 				},
 			},
 			"publish_support": map[string]any{

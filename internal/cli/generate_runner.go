@@ -136,12 +136,12 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 		return GenerateResult{}, err
 	}
 	job.LicenseCheck = licenseCheck
-	if strings.TrimSpace(job.ReferenceImageSource) != "" {
-		reference, err := resolveReferenceImage(ctx, job.ReferenceImageSource)
+	if len(job.ReferenceImageSources) > 0 {
+		references, err := resolveReferenceImages(ctx, job.ReferenceImageSources)
 		if err != nil {
 			return GenerateResult{}, err
 		}
-		job.ReferenceImages = []engine.ImageReference{reference}
+		job.ReferenceImages = references
 	}
 
 	llmClient, err := newHostedLLMClient(licenseCfg, job)
@@ -288,31 +288,49 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported image ratio: %s", req.Args.Ratio)
 	}
-	referenceImage := strings.TrimSpace(req.Args.ReferenceImage)
-	if referenceImage != "" && documentType != engine.DocumentTypeIMG {
+	referenceImageList := make([]string, 0, len(req.Args.ReferenceImages)+1)
+	if legacy := strings.TrimSpace(req.Args.ReferenceImage); legacy != "" {
+		referenceImageList = append(referenceImageList, legacy)
+	}
+	for _, src := range req.Args.ReferenceImages {
+		if v := strings.TrimSpace(src); v != "" {
+			referenceImageList = append(referenceImageList, v)
+		}
+	}
+	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("reference_image is only supported for img generation")
+	}
+	imageSize := strings.TrimSpace(req.Args.Size)
+	if imageSize != "" && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("size is only supported for img generation")
+	}
+	if imageSize != "" {
+		if _, _, err := parseImageSize(imageSize); err != nil {
+			return GenerateJob{}, err
+		}
 	}
 
 	return GenerateJob{
-		DocumentType:         documentType,
-		Topic:                topic,
-		OriginalPrompt:       prompt,
-		Prompt:               prompt,
-		SourceFilePath:       sourceFile,
-		RuntimeMode:          runtimeMode,
-		Mode:                 mode,
-		Language:             strings.TrimSpace(req.Args.Language),
-		Style:                style,
-		StyleSpecified:       styleSpecified,
-		Audience:             strings.TrimSpace(req.Args.Audience),
-		EnableImages:         enableImages,
-		ImageQuality:         imageQuality,
-		ImageRatio:           imageRatio,
-		ReferenceImageSource: referenceImage,
-		LocalPreview:         false,
-		OutputDir:            outputDir,
-		Publish:              publish,
-		JSONOutput:           true,
-		Warnings:             warnings,
+		DocumentType:          documentType,
+		Topic:                 topic,
+		OriginalPrompt:        prompt,
+		Prompt:                prompt,
+		SourceFilePath:        sourceFile,
+		RuntimeMode:           runtimeMode,
+		Mode:                  mode,
+		Language:              strings.TrimSpace(req.Args.Language),
+		Style:                 style,
+		StyleSpecified:        styleSpecified,
+		Audience:              strings.TrimSpace(req.Args.Audience),
+		EnableImages:          enableImages,
+		ImageQuality:          imageQuality,
+		ImageRatio:            imageRatio,
+		ImageSize:             imageSize,
+		ReferenceImageSources: referenceImageList,
+		LocalPreview:          false,
+		OutputDir:             outputDir,
+		Publish:               publish,
+		JSONOutput:            true,
+		Warnings:              warnings,
 	}, nil
 }

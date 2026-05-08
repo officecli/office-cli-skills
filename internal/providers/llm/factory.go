@@ -190,7 +190,7 @@ func (c *openAIClient) generateOpenAIImageGeneration(ctx context.Context, imageB
 	payload := map[string]any{
 		"model":  model,
 		"prompt": req.Prompt,
-		"size":   pickImageSize(req.TargetAspectRatio),
+		"size":   resolveImageSize(req),
 	}
 	body, err := c.postWithAPIKey(ctx, imageBaseURL+"/images/generations", imageAPIKey, payload)
 	if err != nil {
@@ -222,14 +222,14 @@ func (c *openAIClient) generateOpenAIImageGeneration(ctx context.Context, imageB
 }
 
 func (c *openAIClient) generateOpenAIImageEdit(ctx context.Context, baseURL, apiKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
-	if len(req.ReferenceImages) != 1 {
-		return nil, fmt.Errorf("exactly one reference image is supported")
+	if len(req.ReferenceImages) == 0 {
+		return nil, fmt.Errorf("at least one reference image is required")
 	}
 	body, err := c.postMultipartImageEdit(ctx, strings.TrimRight(baseURL, "/")+"/images/edits", apiKey, map[string]string{
 		"model":  model,
 		"prompt": req.Prompt,
-		"size":   pickImageSize(req.TargetAspectRatio),
-	}, req.ReferenceImages[0])
+		"size":   resolveImageSize(req),
+	}, req.ReferenceImages)
 	if err != nil {
 		return nil, err
 	}
@@ -376,6 +376,13 @@ func pickImageSize(aspectRatio float64) string {
 	}
 }
 
+func resolveImageSize(req engine.ImageGenerationRequest) string {
+	if size := strings.TrimSpace(req.Size); size != "" {
+		return size
+	}
+	return pickImageSize(req.TargetAspectRatio)
+}
+
 func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]any) (string, error) {
 	body, err := c.post(ctx, c.baseURL+"/chat/completions", payload)
 	if err != nil {
@@ -510,10 +517,9 @@ func (c *openAIClient) postWithAPIKey(ctx context.Context, url, apiKey string, p
 	return io.ReadAll(body)
 }
 
-func (c *openAIClient) postMultipartImageEdit(ctx context.Context, rawURL, apiKey string, fields map[string]string, ref engine.ImageReference) ([]byte, error) {
-	data, err := base64.StdEncoding.DecodeString(ref.Data)
-	if err != nil {
-		return nil, fmt.Errorf("decode reference image: %w", err)
+func (c *openAIClient) postMultipartImageEdit(ctx context.Context, rawURL, apiKey string, fields map[string]string, refs []engine.ImageReference) ([]byte, error) {
+	if len(refs) == 0 {
+		return nil, fmt.Errorf("at least one reference image is required")
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -522,16 +528,22 @@ func (c *openAIClient) postMultipartImageEdit(ctx context.Context, rawURL, apiKe
 			return nil, err
 		}
 	}
-	filename := strings.TrimSpace(ref.Filename)
-	if filename == "" {
-		filename = "reference.png"
-	}
-	part, err := createImageEditPart(writer, filename, ref.MIME)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := part.Write(data); err != nil {
-		return nil, err
+	for i, ref := range refs {
+		data, err := base64.StdEncoding.DecodeString(ref.Data)
+		if err != nil {
+			return nil, fmt.Errorf("decode reference image %d: %w", i, err)
+		}
+		filename := strings.TrimSpace(ref.Filename)
+		if filename == "" {
+			filename = fmt.Sprintf("reference-%d.png", i)
+		}
+		part, err := createImageEditPart(writer, filename, ref.MIME)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := part.Write(data); err != nil {
+			return nil, err
+		}
 	}
 	if err := writer.Close(); err != nil {
 		return nil, err
@@ -682,6 +694,10 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 	}
 	if len(req.ReferenceImages) > 0 {
 		payload["reference_image"] = req.ReferenceImages[0]
+		payload["reference_images"] = req.ReferenceImages
+	}
+	if size := strings.TrimSpace(req.Size); size != "" {
+		payload["size"] = size
 	}
 	body, err := c.post(ctx, c.baseURL+"/v1/image", payload)
 	if err != nil {

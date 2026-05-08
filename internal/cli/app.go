@@ -299,8 +299,9 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
+  --size <WxH>            Set explicit image pixel size, e.g. 1280x768 (img only; overrides --ratio)
   --reference-image <path-or-url>
-                          Provide one reference image for img generation
+                          Provide a reference image for img generation; repeat to upload multiple
   --image-quality <value> Set PPT image quality: standard or premium (pptx only)
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
@@ -318,7 +319,7 @@ Default behavior:
   - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
   - If publishing is not configured, files are saved locally and online preview is skipped
   - Standalone img generation always uses the OfficeCLI server and requires config set-license
-  - Standalone img supports one reference image with --reference-image <path-or-url>
+  - Standalone img accepts one or more reference images with repeated --reference-image <path-or-url>
   - Standalone img local preview sidecars are not supported
 
 Config file:
@@ -388,8 +389,9 @@ Common options:
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
+  --size <WxH>            Set explicit image pixel size, e.g. 1280x768 (img only; overrides --ratio)
   --reference-image <path-or-url>
-                          Provide one reference image for img generation
+                          Provide a reference image for img generation; repeat to upload multiple
   --image-quality <value> Set PPT image quality: standard or premium (pptx only)
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
@@ -405,7 +407,7 @@ Description:
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
   - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
   - ` + "`img`" + ` generates one local image through the OfficeCLI server; run ` + "`officecli config set-license`" + ` first
-  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, ` + "`--reference-image <path-or-url>`" + `, and publishing by default when configured
+  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, ` + "`--size <WxH>`" + `, repeated ` + "`--reference-image <path-or-url>`" + `, and publishing by default when configured
   - ` + "`img`" + ` does not support best mode, source files, or local preview
 `
 }

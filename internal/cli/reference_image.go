@@ -28,6 +28,28 @@ func resolveReferenceImage(ctx context.Context, source string) (engine.ImageRefe
 	return readReferenceImageFile(source)
 }
 
+func resolveReferenceImages(ctx context.Context, sources []string) ([]engine.ImageReference, error) {
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	out := make([]engine.ImageReference, 0, len(sources))
+	for _, src := range sources {
+		src = strings.TrimSpace(src)
+		if src == "" {
+			continue
+		}
+		ref, err := resolveReferenceImage(ctx, src)
+		if err != nil {
+			return nil, fmt.Errorf("reference image %q: %w", src, err)
+		}
+		if strings.TrimSpace(ref.Data) == "" {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out, nil
+}
+
 func isHTTPReferenceImage(source string) bool {
 	parsed, err := url.Parse(source)
 	if err != nil {

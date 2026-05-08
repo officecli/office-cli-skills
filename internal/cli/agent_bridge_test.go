@@ -142,8 +142,14 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 		t.Fatalf("img image_generation missing: %#v", imgCaps)
 	}
 	imgRefCaps, ok := imgImageGeneration["reference_image"].(map[string]any)
-	if !ok || imgRefCaps["max_count"] != float64(1) {
+	if !ok || imgRefCaps["max_count"] != float64(8) {
 		t.Fatalf("unexpected img reference_image capability: %#v", imgImageGeneration)
+	}
+	if imgRefCaps["invoke_field_array"] != "reference_images" {
+		t.Fatalf("expected invoke_field_array=reference_images, got %#v", imgRefCaps)
+	}
+	if _, ok := imgImageGeneration["size"].(map[string]any); !ok {
+		t.Fatalf("img size capability missing: %#v", imgImageGeneration)
 	}
 	pptxCaps, ok := docGen["pptx"].(map[string]any)
 	if !ok {

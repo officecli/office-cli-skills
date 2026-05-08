@@ -83,9 +83,10 @@ type GenerateJob struct {
 	Audience             string
 	EnableImages         bool
 	ImageQuality         string
-	ImageRatio           string
-	ReferenceImageSource string
-	ReferenceImages      []engine.ImageReference
+	ImageRatio            string
+	ImageSize             string
+	ReferenceImageSources []string
+	ReferenceImages       []engine.ImageReference
 	LocalPreview         bool
 	OutputDir            string
 	Publish              bool

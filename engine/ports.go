@@ -55,6 +55,7 @@ type StructuredCompletionRequest struct {
 type ImageGenerationRequest struct {
 	Prompt            string
 	TargetAspectRatio float64
+	Size              string
 	ReferenceImages   []ImageReference
 }
 

@@ -1133,8 +1133,8 @@ func TestBuildGenerateJob_IMGAcceptsReferenceImageSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
 	}
-	if job.ReferenceImageSource != refPath {
-		t.Fatalf("reference image source = %q, want %q", job.ReferenceImageSource, refPath)
+	if len(job.ReferenceImageSources) != 1 || job.ReferenceImageSources[0] != refPath {
+		t.Fatalf("reference image sources = %v, want [%q]", job.ReferenceImageSources, refPath)
 	}
 
 	job, err = BuildGenerateJob([]string{
@@ -1146,8 +1146,8 @@ func TestBuildGenerateJob_IMGAcceptsReferenceImageSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGenerateJob URL: %v", err)
 	}
-	if job.ReferenceImageSource != "https://assets.example.com/reference.jpg" {
-		t.Fatalf("reference image URL = %q", job.ReferenceImageSource)
+	if len(job.ReferenceImageSources) != 1 || job.ReferenceImageSources[0] != "https://assets.example.com/reference.jpg" {
+		t.Fatalf("reference image URL = %v", job.ReferenceImageSources)
 	}
 }
 
@@ -1162,14 +1162,52 @@ func TestBuildGenerateJob_ReferenceImageOnlySupportedForIMG(t *testing.T) {
 	}
 }
 
-func TestBuildGenerateJob_ReferenceImageRejectsMultipleValues(t *testing.T) {
-	_, err := BuildGenerateJob([]string{
+func TestBuildGenerateJob_ReferenceImageAcceptsMultipleValues(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
 		"img",
 		"Demo",
 		"--reference-image", "first.png",
 		"--reference-image=second.png",
+		"--reference-image", "https://example.com/third.png",
+		"--size", "1280x768",
+		"--no-publish",
 	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "only one --reference-image is supported") {
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	want := []string{"first.png", "second.png", "https://example.com/third.png"}
+	if len(job.ReferenceImageSources) != len(want) {
+		t.Fatalf("reference image sources = %v, want %v", job.ReferenceImageSources, want)
+	}
+	for i, src := range want {
+		if job.ReferenceImageSources[i] != src {
+			t.Fatalf("reference image[%d] = %q, want %q", i, job.ReferenceImageSources[i], src)
+		}
+	}
+	if job.ImageSize != "1280x768" {
+		t.Fatalf("ImageSize = %q, want %q", job.ImageSize, "1280x768")
+	}
+}
+
+func TestBuildGenerateJob_SizeRejectsMalformed(t *testing.T) {
+	_, err := BuildGenerateJob([]string{
+		"img",
+		"Demo",
+		"--size", "abc",
+		"--no-publish",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "--size") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildGenerateJob_SizeOnlySupportedForIMG(t *testing.T) {
+	_, err := BuildGenerateJob([]string{
+		"pptx",
+		"Demo",
+		"--size", "1280x768",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "--size is only supported for img generation") {
 		t.Fatalf("err = %v", err)
 	}
 }

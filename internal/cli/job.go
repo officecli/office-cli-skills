@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/officecli/officecli/engine"
@@ -45,6 +46,36 @@ func (b *boolValue) Set(value string) error {
 
 func (b *boolValue) IsBoolFlag() bool { return true }
 
+type stringList struct {
+	values []string
+}
+
+func (s *stringList) String() string {
+	if s == nil {
+		return ""
+	}
+	return strings.Join(s.values, ",")
+}
+
+func (s *stringList) Set(value string) error {
+	s.values = append(s.values, value)
+	return nil
+}
+
+func (s *stringList) Slice() []string {
+	if s == nil {
+		return nil
+	}
+	out := make([]string, 0, len(s.values))
+	for _, v := range s.values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob, error) {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	fs.SetOutput(ioDiscard{})
@@ -59,7 +90,8 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var outDir string
 	var sourceFile string
 	var ratio string
-	var referenceImage string
+	var referenceImages stringList
+	var imageSize string
 	var imageQuality string
 	var jsonOutput bool
 	var localPreview bool
@@ -78,7 +110,8 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&outDir, "out", "", "")
 	fs.StringVar(&sourceFile, "file", "", "")
 	fs.StringVar(&ratio, "ratio", "", "")
-	fs.StringVar(&referenceImage, "reference-image", "", "")
+	fs.Var(&referenceImages, "reference-image", "")
+	fs.StringVar(&imageSize, "size", "", "")
 	fs.StringVar(&imageQuality, "image-quality", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
@@ -88,9 +121,6 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.Var(&noImagesFlag, "no-images", "")
 
 	normalizedArgs := normalizeFlagArgs(args)
-	if countReferenceImageFlags(normalizedArgs) > 1 {
-		return GenerateJob{}, fmt.Errorf("only one --reference-image is supported")
-	}
 	if err := fs.Parse(normalizedArgs); err != nil {
 		return GenerateJob{}, err
 	}
@@ -202,9 +232,18 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if ratioSpecified && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--ratio is only supported for img generation")
 	}
-	referenceImage = strings.TrimSpace(referenceImage)
-	if referenceImage != "" && documentType != engine.DocumentTypeIMG {
+	referenceImageList := referenceImages.Slice()
+	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img generation")
+	}
+	finalImageSize := strings.TrimSpace(imageSize)
+	if finalImageSize != "" && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("--size is only supported for img generation")
+	}
+	if finalImageSize != "" {
+		if _, _, err := parseImageSize(finalImageSize); err != nil {
+			return GenerateJob{}, err
+		}
 	}
 	imageQualitySpecified := strings.TrimSpace(imageQuality) != ""
 	finalImageQuality := strings.ToLower(strings.TrimSpace(imageQuality))
@@ -269,8 +308,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		Audience:             strings.TrimSpace(audience),
 		EnableImages:         enableImages,
 		ImageQuality:         finalImageQuality,
-		ImageRatio:           imageRatio,
-		ReferenceImageSource: referenceImage,
+		ImageRatio:            imageRatio,
+		ImageSize:             finalImageSize,
+		ReferenceImageSources: referenceImageList,
 		LocalPreview:         localPreview,
 		OutputDir:            finalOutputDir,
 		Publish:              publishEnabled,
@@ -287,7 +327,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--image-quality", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--size", "--image-quality", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -310,6 +350,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--file=") ||
 				strings.HasPrefix(current, "--ratio=") ||
 				strings.HasPrefix(current, "--reference-image=") ||
+				strings.HasPrefix(current, "--size=") ||
 				strings.HasPrefix(current, "--image-quality=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
@@ -336,6 +377,26 @@ func countReferenceImageFlags(args []string) int {
 		}
 	}
 	return count
+}
+
+func parseImageSize(value string) (int, int, error) {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return 0, 0, nil
+	}
+	parts := strings.SplitN(value, "x", 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("--size must be in WxH form (e.g. 1280x768): %s", value)
+	}
+	w, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil || w <= 0 {
+		return 0, 0, fmt.Errorf("--size width is invalid: %s", value)
+	}
+	h, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil || h <= 0 {
+		return 0, 0, fmt.Errorf("--size height is invalid: %s", value)
+	}
+	return w, h, nil
 }
 
 func normalizeImageQuality(value string) string {

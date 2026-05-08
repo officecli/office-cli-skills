@@ -78,12 +78,14 @@ type ImageRequest struct {
 	Model           string                  `json:"model"`
 	Prompt          string                  `json:"prompt"`
 	AspectRatio     float64                 `json:"aspect_ratio"`
+	Size            string                  `json:"size,omitempty"`
 	FingerprintHash string                  `json:"fingerprint_hash,omitempty"`
 	UserID          uint64                  `json:"user_id,omitempty"`
 	APIKey          string                  `json:"api_key,omitempty"`
 	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
 	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
 	ReferenceImage  *ImageReference         `json:"reference_image,omitempty"`
+	ReferenceImages []ImageReference        `json:"reference_images,omitempty"`
 }
 
 type ImageReference struct {
@@ -215,7 +217,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	payload := map[string]any{
 		"model":           modelName,
 		"prompt":          req.Prompt,
-		"size":            pickImageSize(req.AspectRatio),
+		"size":            effectiveImageSize(req),
 		"response_format": "b64_json",
 	}
 	body, usage, err := s.postImageRequest(ctx, modelName, req, payload)
@@ -274,7 +276,7 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 	payload := map[string]any{
 		"model":           modelName,
 		"prompt":          req.Prompt,
-		"size":            pickImageSize(req.AspectRatio),
+		"size":            effectiveImageSize(req),
 		"response_format": "b64_json",
 	}
 	body, _, err := s.postImageRequest(ctx, modelName, req, payload)
@@ -360,21 +362,21 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any) 
 }
 
 func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any) ([]byte, usageSummary, error) {
-	if req.ReferenceImage == nil || strings.TrimSpace(req.ReferenceImage.Data) == "" {
+	refs := effectiveReferenceImages(req)
+	if len(refs) == 0 {
 		return s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
 	}
 	fields := map[string]string{
 		"model":  modelName,
 		"prompt": req.Prompt,
-		"size":   pickImageSize(req.AspectRatio),
+		"size":   effectiveImageSize(req),
 	}
-	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, *req.ReferenceImage)
+	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, refs)
 }
 
-func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, ref ImageReference) ([]byte, usageSummary, error) {
-	imageData, err := base64.StdEncoding.DecodeString(ref.Data)
-	if err != nil {
-		return nil, usageSummary{}, fmt.Errorf("decode reference image: %w", err)
+func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, refs []ImageReference) ([]byte, usageSummary, error) {
+	if len(refs) == 0 {
+		return nil, usageSummary{}, fmt.Errorf("at least one reference image is required")
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -383,16 +385,22 @@ func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[s
 			return nil, usageSummary{}, err
 		}
 	}
-	filename := strings.TrimSpace(ref.Filename)
-	if filename == "" {
-		filename = "reference.png"
-	}
-	part, err := createImageEditPart(writer, filename, ref.MIME)
-	if err != nil {
-		return nil, usageSummary{}, err
-	}
-	if _, err := part.Write(imageData); err != nil {
-		return nil, usageSummary{}, err
+	for i, ref := range refs {
+		imageData, err := base64.StdEncoding.DecodeString(ref.Data)
+		if err != nil {
+			return nil, usageSummary{}, fmt.Errorf("decode reference image %d: %w", i, err)
+		}
+		filename := strings.TrimSpace(ref.Filename)
+		if filename == "" {
+			filename = fmt.Sprintf("reference-%d.png", i)
+		}
+		part, err := createImageEditPart(writer, filename, ref.MIME)
+		if err != nil {
+			return nil, usageSummary{}, err
+		}
+		if _, err := part.Write(imageData); err != nil {
+			return nil, usageSummary{}, err
+		}
 	}
 	if err := writer.Close(); err != nil {
 		return nil, usageSummary{}, err
@@ -593,6 +601,27 @@ func pickImageSize(aspectRatio float64) string {
 	default:
 		return "1024x1024"
 	}
+}
+
+func effectiveImageSize(req ImageRequest) string {
+	if size := strings.TrimSpace(req.Size); size != "" {
+		return size
+	}
+	return pickImageSize(req.AspectRatio)
+}
+
+func effectiveReferenceImages(req ImageRequest) []ImageReference {
+	out := make([]ImageReference, 0, len(req.ReferenceImages)+1)
+	if req.ReferenceImage != nil && strings.TrimSpace(req.ReferenceImage.Data) != "" {
+		out = append(out, *req.ReferenceImage)
+	}
+	for _, ref := range req.ReferenceImages {
+		if strings.TrimSpace(ref.Data) == "" {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out
 }
 
 func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey) {
