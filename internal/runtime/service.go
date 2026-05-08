@@ -2880,17 +2880,17 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	out := []officegen.Slide{
 		cover,
 		{
-			Title:         "Current Status",
-			Layout:        "content",
-			Variant:       "bullets-callout",
+			Title:         "Status Snapshot",
+			Layout:        "comparison",
+			Variant:       "comparison-spotlight",
 			NarrativeRole: "summary",
 			SectionTitle:  "Readiness",
-			Subtitle:      "Near ready; three checks remain.",
-			Points: []string{
-				"Scope sign-off pending.",
-				"GTM owner review.",
-				"Support routing drill.",
-			},
+			Subtitle:      "One remaining check per non-product lane.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "Near Ready", Detail: "Scope frozen; notes drafted"},
+				{Heading: "GTM", Detail: "Owner review"},
+				{Heading: "Support", Detail: "Routing drill"},
+			}, 3),
 		},
 		{
 			Title:         "Gate Scorecard",
@@ -2899,13 +2899,12 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "summary",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "One pass/fail scorecard keeps the decision fast.",
+			Subtitle:      "Pass/fail status should dominate the read.",
 			Metrics: []officegen.MetricCard{
-				{Label: "Scope", Value: "PASS", Note: "100% frozen"},
-				{Label: "Teams", Value: "READY", Note: "90%+ assets"},
-				{Label: "Blockers", Value: "ZERO", Note: "0 critical open"},
+				{Label: "Scope", Value: "PASS", Note: "Frozen"},
+				{Label: "Teams", Value: "READY", Note: "Assets"},
+				{Label: "Blockers", Value: "ZERO", Note: "Critical"},
 			},
-			Points: []string{"All gates must pass."},
 		},
 		{
 			Title:         "Workstream Ownership",
@@ -2922,17 +2921,17 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			}, 3),
 		},
 		{
-			Title:         "Milestones and Escalation",
+			Title:         "Milestone Gates",
 			Layout:        "timeline",
 			Variant:       "timeline-zigzag",
 			NarrativeRole: "action",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Each phase has one gate and one escalation rule.",
+			Subtitle:      "Three phase breaks; red items escalate within 24 hours.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "T-8 to T-6", Detail: "Lock scope and owners"},
-				{Heading: "T-5 to T-3", Detail: "Finish QA and enablement"},
-				{Heading: "T-2 to Launch", Detail: "Confirm rollback owner"},
+				{Heading: "T-8 to T-6", Detail: "Scope lock"},
+				{Heading: "T-5 to T-3", Detail: "QA done"},
+				{Heading: "T-2 to Launch", Detail: "Rollback named"},
 			}, 3),
 		},
 		{
