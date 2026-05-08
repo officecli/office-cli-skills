@@ -1327,8 +1327,8 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 10 {
-		t.Fatalf("slide count = %d, want 10", got)
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 8 {
+		t.Fatalf("slide count = %d, want 8", got)
 	}
 	for _, needle := range []string{"Contents", "Launch Outcomes", "Readiness Scorecard", "Workstream Ownership", "Milestones and Gates", "Decision Request"} {
 		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {

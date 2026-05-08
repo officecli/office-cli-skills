@@ -1168,6 +1168,9 @@ func applyCoverImageDefaults(slides []officegen.Slide, deckTitle string, enableI
 		if strings.TrimSpace(slides[0].Variant) == "" || strings.Contains(strings.TrimSpace(slides[0].Variant), "center") {
 			slides[0].Variant = "title-split"
 		}
+	} else if strings.TrimSpace(slides[0].ImagePos) == "right" || strings.TrimSpace(slides[0].Variant) == "title-split" {
+		slides[0].ImagePos = "right"
+		slides[0].Variant = "title-split"
 	} else {
 		slides[0].ImagePos = "background"
 	}
@@ -2864,10 +2867,9 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	cover.IsTitle = true
 	cover.NarrativeRole = "cover"
 	cover.Role = "cover"
-	cover.Variant = normalizeSlideVariant(cover)
-	if strings.TrimSpace(cover.Subtitle) == "" {
-		cover.Subtitle = "Align scope, readiness, owners, gates, and risk controls in one operating plan"
-	}
+	cover.Variant = "title-split"
+	cover.ImagePos = "right"
+	cover.Subtitle = "Decision needed this week: approve launch scope, owners, gates, and readiness criteria."
 	cover.Points = nil
 	cover.Sections = nil
 	cover.Metrics = nil
@@ -2892,22 +2894,13 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			}, 4),
 		},
 		{
-			Title:         "Readiness",
-			Layout:        "chapter",
-			Variant:       "chapter",
-			NarrativeRole: "chapter",
-			SectionIndex:  1,
-			SectionTitle:  "Readiness",
-			Subtitle:      "Move from intent to measurable launch conditions.",
-		},
-		{
 			Title:         "Launch Outcomes",
 			Layout:        "content",
 			Variant:       "sections-grid-3up",
 			NarrativeRole: "summary",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "Success is date confidence, complete teams, and controlled quality.",
+			Subtitle:      "Approve only when date, team readiness, and blocker risk are controlled.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "Scope Freeze", Detail: "Lock launch scope two weeks before go-live"},
 				{Heading: "Team Ready", Detail: "GTM and support finish assets and training"},
@@ -2921,7 +2914,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "evidence",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "The launch gate should track readiness by workstream, not opinion.",
+			Subtitle:      "The go/no-go gate is metric based, not opinion based.",
 			Metrics: normalizeMetrics([]officegen.MetricCard{
 				{Label: "Scope", Value: "100%", Note: "Freeze signed"},
 				{Label: "GTM", Value: "90%+", Note: "Assets ready"},
@@ -2930,22 +2923,13 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			}, 4),
 		},
 		{
-			Title:         "Execution System",
-			Layout:        "chapter",
-			Variant:       "chapter",
-			NarrativeRole: "chapter",
-			SectionIndex:  2,
-			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Translate readiness into owners, gates, and controls.",
-		},
-		{
 			Title:         "Workstream Ownership",
 			Layout:        "comparison",
 			Variant:       "comparison-columns",
 			NarrativeRole: "analysis",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Single-accountable owners reduce handoff ambiguity.",
+			Subtitle:      "One accountable DRI per lane prevents late handoff misses.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "Product and Eng", Detail: "Own scope, defects, notes, launch quality"},
 				{Heading: "GTM", Detail: "Own messaging, assets, enablement handoff"},
@@ -2959,7 +2943,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "action",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Each phase ends with a decision gate.",
+			Subtitle:      "Each phase ends with an explicit approval or escalation gate.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "T-8 to T-6", Detail: "Lock scope, owners, and success criteria"},
 				{Heading: "T-5 to T-3", Detail: "Finish QA, messaging, enablement"},
@@ -2973,7 +2957,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "analysis",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Manage launch risk through triggers and rehearsed responses.",
+			Subtitle:      "Escalate early; delay or phase launch if quality is not green.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "Trigger", Detail: "Escalate red scope, quality, or readiness"},
 				{Heading: "Response", Detail: "Assign one DRI and a 24-hour mitigation plan"},
@@ -2987,7 +2971,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "closing",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Approve the operating model so every function works from one launch plan.",
+			Subtitle:      "Approve the operating model now or delay execution until ownership is clear.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "Decision", Detail: "Approve goals, cadence, owners, milestone gates"},
 				{Heading: "Owner", Detail: "Launch lead publishes tracker and criteria"},
@@ -3815,7 +3799,7 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
 - The final action cluster must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeProject:
-		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> launch outcomes -> readiness scorecard -> chapter -> ownership matrix -> milestones and decision gates -> risk controls -> decision request, but adapt the exact slide count to the prompt.
+		return `- For this topic, a strong storyline is usually cover -> toc -> launch outcomes -> readiness scorecard -> ownership matrix -> milestones and decision gates -> risk controls -> decision request, but adapt the exact slide count to the prompt.
 - Do not repeat "Executive Summary" across multiple slides. Each slide title must name the specific operating question it answers.
 - Readiness, ownership, milestones, and risks should use sections, dashboard metrics, timeline, or comparison layouts instead of long bullets.
 - Every execution slide should include at least two of owner, timing, decision gate, acceptance criterion, or risk trigger. Do not add images beyond the cover for this topic.`
