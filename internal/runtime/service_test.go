@@ -1327,10 +1327,10 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSON: %v", err)
 	}
-	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 6 {
-		t.Fatalf("slide count = %d, want 6", got)
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 7 {
+		t.Fatalf("slide count = %d, want 7", got)
 	}
-	for _, needle := range []string{"Status Snapshot", "Gate Scorecard", "Workstream Ownership", "Milestone Gates", "Leadership Action"} {
+	for _, needle := range []string{"Decision Snapshot", "Gate Scorecard", "Workstream Ownership", "Milestone Gates", "Risk Controls", "Leadership Action"} {
 		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
 			t.Fatalf("project deck missing %q", needle)
 		}
@@ -1339,7 +1339,7 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 		t.Fatalf("project deck should replace repeated executive-summary fragments")
 	}
 	preview := string(previewJSON)
-	for _, needle := range []string{`"stylePreset": "project-forest"`, `"variant": "comparison-spotlight"`, `"variant": "kpi-band"`, `"variant": "comparison-columns"`, `"variant": "timeline-zigzag"`, `"variant": "closing-decision-banner"`} {
+	for _, needle := range []string{`"stylePreset": "tech-contrast"`, `"variant": "comparison-spotlight"`, `"variant": "kpi-band"`, `"variant": "comparison-columns"`, `"variant": "timeline-steps"`, `"variant": "closing-decision-banner"`} {
 		if !strings.Contains(preview, needle) {
 			t.Fatalf("preview json missing %q:\n%s", needle, preview)
 		}

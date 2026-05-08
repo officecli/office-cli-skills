@@ -2514,7 +2514,7 @@ func suggestStylePreset(style string, archetype pptxArchetype, topic string) str
 	case strings.Contains(topicText, "项目方案"), strings.Contains(topicText, "实施方案"), strings.Contains(topicText, "里程碑"), strings.Contains(topicText, "resource plan"), strings.Contains(topicText, "project implementation"):
 		return officegen.StylePresetProjectForest
 	case strings.Contains(topicText, "launch plan"), strings.Contains(topicText, "release plan"), strings.Contains(topicText, "rollout plan"), strings.Contains(topicText, "上线计划"), strings.Contains(topicText, "发布计划"):
-		return officegen.StylePresetProjectForest
+		return officegen.StylePresetTechContrast
 	case strings.Contains(topicText, "培训"), strings.Contains(topicText, "入职"), strings.Contains(topicText, "新员工"), strings.Contains(topicText, "onboarding"), strings.Contains(topicText, "tutorial"):
 		return officegen.StylePresetTrainingManual
 	case strings.Contains(topicText, "复盘"), strings.Contains(topicText, "经营"), strings.Contains(topicText, "quarterly review"), strings.Contains(topicText, "business review"), strings.Contains(topicText, "board update"):
@@ -2860,7 +2860,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	if len(slides) == 0 {
 		return slides
 	}
-	title := firstNonEmpty(cleanVisibleText(deckTitle), cleanVisibleText(slides[0].Title), "Project Launch Plan")
+	title := conciseProjectDeckTitle(firstNonEmpty(cleanVisibleText(deckTitle), cleanVisibleText(slides[0].Title), "Project Launch Plan"))
 	cover := slides[0]
 	cover.Title = title
 	cover.Layout = "title"
@@ -2869,7 +2869,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	cover.Role = "cover"
 	cover.Variant = "title-split"
 	cover.ImagePos = "right"
-	cover.Subtitle = "A leadership-ready operating plan for scope, owners, gates, and launch readiness."
+	cover.Subtitle = "Decision, owners, gates, risks."
 	cover.Points = nil
 	cover.Sections = nil
 	cover.Metrics = nil
@@ -2880,16 +2880,16 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	out := []officegen.Slide{
 		cover,
 		{
-			Title:         "Status Snapshot",
+			Title:         "Decision Snapshot",
 			Layout:        "comparison",
 			Variant:       "comparison-spotlight",
 			NarrativeRole: "summary",
 			SectionTitle:  "Readiness",
-			Subtitle:      "One remaining check per non-product lane.",
+			Subtitle:      "One recommended path; two watched lanes.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Near Ready", Detail: "Scope frozen; notes drafted"},
-				{Heading: "GTM", Detail: "Owner review"},
-				{Heading: "Support", Detail: "Routing drill"},
+				{Heading: "GO", Detail: "Launch path is open"},
+				{Heading: "Watch", Detail: "GTM owner review"},
+				{Heading: "Watch", Detail: "Support drill"},
 			}, 3),
 		},
 		{
@@ -2899,11 +2899,17 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "summary",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "Pass/fail status should dominate the read.",
+			Subtitle:      "Status beats commentary.",
 			Metrics: []officegen.MetricCard{
 				{Label: "Scope", Value: "PASS", Note: "Frozen"},
-				{Label: "Teams", Value: "READY", Note: "Assets"},
+				{Label: "Teams", Value: "READY", Note: "DRIs named"},
 				{Label: "Blockers", Value: "ZERO", Note: "Critical"},
+			},
+			Chart: &officegen.ChartData{
+				Type:       "bar",
+				Title:      "Gate Readiness",
+				Categories: []string{"Scope", "GTM", "Support"},
+				Values:     []float64{100, 85, 82},
 			},
 		},
 		{
@@ -2913,26 +2919,40 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "analysis",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Each lane has one DRI.",
+			Subtitle:      "Three lanes, one DRI each.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Product and Eng", Detail: "Scope, defects, release notes"},
-				{Heading: "GTM", Detail: "Messaging and enablement"},
-				{Heading: "Support and Ops", Detail: "Runbooks and routing"},
+				{Heading: "Product", Detail: "Scope and defects"},
+				{Heading: "GTM", Detail: "Message and enablement"},
+				{Heading: "Ops", Detail: "Runbook and routing"},
 			}, 3),
 		},
 		{
 			Title:         "Milestone Gates",
 			Layout:        "timeline",
-			Variant:       "timeline-zigzag",
+			Variant:       "timeline-steps",
 			NarrativeRole: "action",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Three phase breaks; red items escalate within 24 hours.",
+			Subtitle:      "Three gates; red escalates in 24h.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "T-8 to T-6", Detail: "Scope lock"},
 				{Heading: "T-5 to T-3", Detail: "QA done"},
 				{Heading: "T-2 to Launch", Detail: "Rollback named"},
 			}, 3),
+		},
+		{
+			Title:         "Risk Controls",
+			Layout:        "dashboard",
+			Variant:       "kpi-band",
+			NarrativeRole: "action",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Every risk has a trigger and owner.",
+			Metrics: []officegen.MetricCard{
+				{Label: "Quality", Value: "WATCH", Note: "Defect burn"},
+				{Label: "Enablement", Value: "READY", Note: "Assets live"},
+				{Label: "Rollback", Value: "NAMED", Note: "Owner set"},
+			},
 		},
 		{
 			Title:         "Leadership Action",
@@ -2941,15 +2961,30 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "closing",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Select the path and owner before execution starts.",
+			Subtitle:      "Approve path, owner, and timing.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Path", Detail: "Choose go, hold, or phase"},
+				{Heading: "Approve GO", Detail: "Proceed with watched lanes"},
 				{Heading: "Owner", Detail: "Launch lead owns tracker"},
-				{Heading: "Timing", Detail: "Confirm within 48 hours"},
+				{Heading: "Timing", Detail: "Confirm in 48h"},
 			}, 3),
 		},
 	}
 	return reduceAdjacentVariantRepetition(out)
+}
+
+func conciseProjectDeckTitle(title string) string {
+	text := strings.TrimSpace(title)
+	if text == "" {
+		return "Launch Readiness Plan"
+	}
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "launch") || strings.Contains(lower, "release") || strings.Contains(lower, "rollout") {
+		return "Launch Readiness Plan"
+	}
+	if utf8.RuneCountInString(text) > 34 {
+		return "Project Readiness Plan"
+	}
+	return text
 }
 
 func sectionTitlesForArchetype(archetype pptxArchetype) []string {
