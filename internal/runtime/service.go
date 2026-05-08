@@ -2869,7 +2869,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	cover.Role = "cover"
 	cover.Variant = "title-split"
 	cover.ImagePos = "right"
-	cover.Subtitle = "Decision needed this week: approve launch scope, owners, gates, and readiness criteria."
+	cover.Subtitle = "A leadership-ready operating plan for scope, owners, gates, and launch readiness."
 	cover.Points = nil
 	cover.Sections = nil
 	cover.Metrics = nil
@@ -2880,44 +2880,45 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	out := []officegen.Slide{
 		cover,
 		{
-			Title:         "Decision at Stake",
+			Title:         "Leadership Choice",
 			Layout:        "content",
-			Variant:       "sections-grid-band",
+			Variant:       "bullets-callout",
 			NarrativeRole: "summary",
 			SectionTitle:  "Readiness",
-			Subtitle:      "Approval determines whether this release moves into execution.",
-			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Approve", Detail: "Scope, DRIs, gates, and readiness criteria"},
-				{Heading: "Risk", Detail: "Late approval creates scope drift and launch churn"},
-				{Heading: "Delay Trigger", Detail: "Hold launch if ownership or quality is unclear"},
-			}, 3),
+			Subtitle:      "The deck supports one choice: green-light a scoped launch, hold, or phase the release.",
+			Points: []string{
+				"Green-light only if scope, DRIs, and gate criteria are signed.",
+				"Hold if launch quality or support readiness is still ambiguous.",
+				"Phase the rollout if risk is contained but not yet fully green.",
+			},
 		},
 		{
 			Title:         "Launch Outcomes",
-			Layout:        "content",
-			Variant:       "sections-grid-3up",
+			Layout:        "dashboard",
+			Variant:       "kpi-band",
 			NarrativeRole: "summary",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "Approve only when launch risk is green.",
-			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Scope Freeze", Detail: "Lock launch scope two weeks before go-live"},
-				{Heading: "Team Ready", Detail: "GTM and support finish assets"},
-				{Heading: "Quality Bar", Detail: "No critical blocker remains open at launch"},
-			}, 3),
+			Subtitle:      "Three gates decide whether the launch is ready for execution.",
+			Metrics: []officegen.MetricCard{
+				{Label: "Scope Freeze", Value: "100%", Note: "Signed before final sprint"},
+				{Label: "Team Readiness", Value: "90%+", Note: "GTM, support, and ops assets ready"},
+				{Label: "Critical Blockers", Value: "0", Note: "No launch-blocking defect open"},
+			},
+			Points: []string{"Launch risk is green only when all gates pass."},
 		},
 		{
-			Title:         "Readiness Scorecard",
-			Layout:        "content",
-			Variant:       "sections-grid-3up",
+			Title:         "Readiness Gate",
+			Layout:        "comparison",
+			Variant:       "comparison-spotlight",
 			NarrativeRole: "evidence",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "Use pass/fail gates so the launch call is instantly clear.",
+			Subtitle:      "Make the launch call by comparing what is green, blocked, and escalated.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "PASS Scope 100%", Detail: "Freeze signed before final sprint"},
-				{Heading: "PASS Readiness 90%+", Detail: "GTM, support, and ops assets ready"},
-				{Heading: "PASS Quality 0", Detail: "No critical blocker open at launch"},
+				{Heading: "Go", Detail: "Scope is frozen, owners are named, and support motion is ready"},
+				{Heading: "Hold", Detail: "Quality or enablement gaps would create avoidable launch churn"},
+				{Heading: "Escalate", Detail: "A blocker needs a DRI, mitigation plan, and deadline today"},
 			}, 3),
 		},
 		{
@@ -2937,7 +2938,7 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 		{
 			Title:         "Milestones and Gates",
 			Layout:        "timeline",
-			Variant:       "timeline-axis",
+			Variant:       "timeline-zigzag",
 			NarrativeRole: "action",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
@@ -2951,16 +2952,16 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 		{
 			Title:         "Risk Controls",
 			Layout:        "content",
-			Variant:       "sections-grid-band",
+			Variant:       "bullets-band",
 			NarrativeRole: "analysis",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
 			Subtitle:      "Escalate early; delay or phase launch if quality is not green.",
-			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Trigger", Detail: "Escalate red scope, quality, or readiness"},
-				{Heading: "Response", Detail: "Assign one DRI and a 24-hour mitigation plan"},
-				{Heading: "Fallback", Detail: "Use rollback or phased release if not green"},
-			}, 3),
+			Points: []string{
+				"Trigger: escalate red scope, quality, or readiness.",
+				"Response: assign one DRI and a 24-hour mitigation plan.",
+				"Fallback: use rollback or phased release if not green.",
+			},
 		},
 		{
 			Title:         "Decision Request",
@@ -2969,10 +2970,10 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "closing",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "Approve the operating model now or delay execution until ownership is clear.",
+			Subtitle:      "Select the launch path and name the accountable owner before execution starts.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Decision", Detail: "Approve goals, cadence, DRIs, gates"},
-				{Heading: "Owner", Detail: "Launch lead owns tracker and criteria"},
+				{Heading: "Path", Detail: "Green-light, hold, or phase the launch"},
+				{Heading: "Owner", Detail: "Launch lead owns tracker and readiness criteria"},
 				{Heading: "Timing", Detail: "Confirm the model within 48 hours"},
 			}, 3),
 		},
