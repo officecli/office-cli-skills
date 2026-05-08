@@ -404,6 +404,7 @@ const (
 	pptxArchetypeCompany   pptxArchetype = "company"
 	pptxArchetypeMarket    pptxArchetype = "market"
 	pptxArchetypeOps       pptxArchetype = "ops"
+	pptxArchetypeProject   pptxArchetype = "project"
 	pptxArchetypeTraining  pptxArchetype = "training"
 	pptxArchetypeExplainer pptxArchetype = "explainer"
 )
@@ -954,10 +955,15 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		}
 
 		slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
-		slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
-		slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
-		slides = diversifyBusinessLayouts(slides, archetype)
-		slides = reduceAdjacentVariantRepetition(slides)
+		if archetype == pptxArchetypeProject {
+			slides = buildProjectPlanDeck(slides, payload.Title)
+			slidesTrimmed = false
+		} else {
+			slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
+			slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
+			slides = diversifyBusinessLayouts(slides, archetype)
+			slides = reduceAdjacentVariantRepetition(slides)
+		}
 		if len(slides) > maxSlides {
 			slidesTrimmed = true
 			slides = slides[:maxSlides]
@@ -2504,6 +2510,8 @@ func suggestStylePreset(style string, archetype pptxArchetype, topic string) str
 		return officegen.StylePresetSlateSerif
 	case strings.Contains(topicText, "项目方案"), strings.Contains(topicText, "实施方案"), strings.Contains(topicText, "里程碑"), strings.Contains(topicText, "resource plan"), strings.Contains(topicText, "project implementation"):
 		return officegen.StylePresetProjectForest
+	case strings.Contains(topicText, "launch plan"), strings.Contains(topicText, "release plan"), strings.Contains(topicText, "rollout plan"), strings.Contains(topicText, "上线计划"), strings.Contains(topicText, "发布计划"):
+		return officegen.StylePresetProjectForest
 	case strings.Contains(topicText, "培训"), strings.Contains(topicText, "入职"), strings.Contains(topicText, "新员工"), strings.Contains(topicText, "onboarding"), strings.Contains(topicText, "tutorial"):
 		return officegen.StylePresetTrainingManual
 	case strings.Contains(topicText, "复盘"), strings.Contains(topicText, "经营"), strings.Contains(topicText, "quarterly review"), strings.Contains(topicText, "business review"), strings.Contains(topicText, "board update"):
@@ -2514,6 +2522,8 @@ func suggestStylePreset(style string, archetype pptxArchetype, topic string) str
 		return officegen.StylePresetSlateSerif
 	case pptxArchetypeOps:
 		return officegen.StylePresetReviewCopper
+	case pptxArchetypeProject:
+		return officegen.StylePresetProjectForest
 	case pptxArchetypeMarket:
 		return officegen.StylePresetInvestorWarm
 	case pptxArchetypeTraining:
@@ -2843,6 +2853,151 @@ func buildChapterSlide(idx int, title string) officegen.Slide {
 	}
 }
 
+func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officegen.Slide {
+	if len(slides) == 0 {
+		return slides
+	}
+	title := firstNonEmpty(cleanVisibleText(deckTitle), cleanVisibleText(slides[0].Title), "Project Launch Plan")
+	cover := slides[0]
+	cover.Title = title
+	cover.Layout = "title"
+	cover.IsTitle = true
+	cover.NarrativeRole = "cover"
+	cover.Role = "cover"
+	cover.Variant = normalizeSlideVariant(cover)
+	if strings.TrimSpace(cover.Subtitle) == "" {
+		cover.Subtitle = "Align scope, readiness, owners, gates, and risk controls in one operating plan"
+	}
+	cover.Points = nil
+	cover.Sections = nil
+	cover.Metrics = nil
+	cover.Chart = nil
+	cover.Content = ""
+	cover.Visuals = nil
+
+	out := []officegen.Slide{
+		cover,
+		{
+			Title:         "Contents",
+			Layout:        "toc",
+			Variant:       "toc",
+			NarrativeRole: "toc",
+			SectionTitle:  "Agenda",
+			Subtitle:      "Review the operating path before the workstream detail.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "01", Detail: "Launch outcomes and success criteria"},
+				{Heading: "02", Detail: "Readiness scorecard"},
+				{Heading: "03", Detail: "Ownership and milestone gates"},
+				{Heading: "04", Detail: "Risk controls and decision request"},
+			}, 4),
+		},
+		{
+			Title:         "Readiness",
+			Layout:        "chapter",
+			Variant:       "chapter",
+			NarrativeRole: "chapter",
+			SectionIndex:  1,
+			SectionTitle:  "Readiness",
+			Subtitle:      "Move from intent to measurable launch conditions.",
+		},
+		{
+			Title:         "Launch Outcomes",
+			Layout:        "content",
+			Variant:       "sections-grid-3up",
+			NarrativeRole: "summary",
+			SectionIndex:  1,
+			SectionTitle:  "Readiness",
+			Subtitle:      "Success is date confidence, complete teams, and controlled quality.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "Scope Freeze", Detail: "Lock launch scope two weeks before go-live"},
+				{Heading: "Team Ready", Detail: "GTM and support finish assets and training"},
+				{Heading: "Quality Bar", Detail: "No critical blocker remains open at launch"},
+			}, 3),
+		},
+		{
+			Title:         "Readiness Scorecard",
+			Layout:        "dashboard",
+			Variant:       "kpi-band",
+			NarrativeRole: "evidence",
+			SectionIndex:  1,
+			SectionTitle:  "Readiness",
+			Subtitle:      "The launch gate should track readiness by workstream, not opinion.",
+			Metrics: normalizeMetrics([]officegen.MetricCard{
+				{Label: "Scope", Value: "100%", Note: "Freeze signed"},
+				{Label: "GTM", Value: "90%+", Note: "Assets ready"},
+				{Label: "Support", Value: "95%+", Note: "Training done"},
+				{Label: "Quality", Value: "0", Note: "Critical blockers"},
+			}, 4),
+		},
+		{
+			Title:         "Execution System",
+			Layout:        "chapter",
+			Variant:       "chapter",
+			NarrativeRole: "chapter",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Translate readiness into owners, gates, and controls.",
+		},
+		{
+			Title:         "Workstream Ownership",
+			Layout:        "comparison",
+			Variant:       "comparison-columns",
+			NarrativeRole: "analysis",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Single-accountable owners reduce handoff ambiguity.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "Product and Eng", Detail: "Own scope, defects, notes, launch quality"},
+				{Heading: "GTM", Detail: "Own messaging, assets, enablement handoff"},
+				{Heading: "Support and Ops", Detail: "Own training, comms, runbooks, and issue routing"},
+			}, 3),
+		},
+		{
+			Title:         "Milestones and Gates",
+			Layout:        "timeline",
+			Variant:       "timeline-axis",
+			NarrativeRole: "action",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Each phase ends with a decision gate.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "T-8 to T-6", Detail: "Lock scope, owners, and success criteria"},
+				{Heading: "T-5 to T-3", Detail: "Finish QA, messaging, enablement"},
+				{Heading: "T-2 to Launch", Detail: "Approve readiness and rollback path"},
+			}, 3),
+		},
+		{
+			Title:         "Risk Controls",
+			Layout:        "content",
+			Variant:       "sections-grid-band",
+			NarrativeRole: "analysis",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Manage launch risk through triggers and rehearsed responses.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "Trigger", Detail: "Escalate red scope, quality, or readiness"},
+				{Heading: "Response", Detail: "Assign one DRI and a 24-hour mitigation plan"},
+				{Heading: "Fallback", Detail: "Use rollback or phased release if not green"},
+			}, 3),
+		},
+		{
+			Title:         "Decision Request",
+			Layout:        "closing",
+			Variant:       "closing-decision-banner",
+			NarrativeRole: "closing",
+			SectionIndex:  2,
+			SectionTitle:  "Execution and Decisions",
+			Subtitle:      "Approve the operating model so every function works from one launch plan.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "Decision", Detail: "Approve goals, cadence, owners, milestone gates"},
+				{Heading: "Owner", Detail: "Launch lead publishes tracker and criteria"},
+				{Heading: "Timing", Detail: "Confirm the model within 48 hours"},
+			}, 3),
+		},
+	}
+	return reduceAdjacentVariantRepetition(out)
+}
+
 func sectionTitlesForArchetype(archetype pptxArchetype) []string {
 	switch archetype {
 	case pptxArchetypeCompany:
@@ -2851,6 +3006,8 @@ func sectionTitlesForArchetype(archetype pptxArchetype) []string {
 		return []string{"Market Read", "Decision and Entry"}
 	case pptxArchetypeOps:
 		return []string{"Business Readout", "Priorities and Actions"}
+	case pptxArchetypeProject:
+		return []string{"Readiness", "Execution and Decisions"}
 	case pptxArchetypeTraining:
 		return []string{"Setup and Commands", "Practice and Guardrails"}
 	default:
@@ -2900,6 +3057,8 @@ func summaryTitleForArchetype(archetype pptxArchetype) string {
 		return "Key Takeaways"
 	case pptxArchetypeOps:
 		return "Business Takeaways"
+	case pptxArchetypeProject:
+		return "Launch Outcomes"
 	case pptxArchetypeTraining:
 		return "Learning Goals"
 	default:
@@ -2915,6 +3074,8 @@ func summarySubtitleForArchetype(archetype pptxArchetype) string {
 		return "Start with the market call, then support it with evidence"
 	case pptxArchetypeOps:
 		return "Start with the operating conclusion, then show what is driving it"
+	case pptxArchetypeProject:
+		return "Align scope, owners, gates, and readiness before execution"
 	case pptxArchetypeTraining:
 		return "Clarify what the audience should learn before stepping into detail"
 	default:
@@ -2930,6 +3091,8 @@ func actionTitleForArchetype(archetype pptxArchetype) string {
 		return "Entry Recommendations"
 	case pptxArchetypeOps:
 		return "Board Recommendation"
+	case pptxArchetypeProject:
+		return "Decision Request"
 	case pptxArchetypeTraining:
 		return "Next Practice Steps"
 	default:
@@ -2945,6 +3108,8 @@ func actionSubtitleForArchetype(archetype pptxArchetype) string {
 		return "Close with the market sequence, owner, and validation window"
 	case pptxArchetypeOps:
 		return "Close with one decision ask and the metric or proof point needed to validate it"
+	case pptxArchetypeProject:
+		return "Close with the decision, owner, timing, and validation gate"
 	case pptxArchetypeTraining:
 		return "Close with the next commands, practice loop, and caution points"
 	default:
@@ -3535,7 +3700,7 @@ func chooseClosingVariant(slide officegen.Slide, archetype pptxArchetype) string
 
 func isBusinessLikeArchetype(archetype pptxArchetype) bool {
 	switch archetype {
-	case pptxArchetypeCompany, pptxArchetypeMarket, pptxArchetypeOps, pptxArchetypeTraining:
+	case pptxArchetypeCompany, pptxArchetypeMarket, pptxArchetypeOps, pptxArchetypeProject, pptxArchetypeTraining:
 		return true
 	default:
 		return false
@@ -3616,6 +3781,10 @@ func detectPPTXArchetype(description, title string) pptxArchetype {
 		strings.Contains(text, "board review") || strings.Contains(text, "qbr") ||
 		strings.Contains(text, "经营复盘") || strings.Contains(text, "季度经营") || strings.Contains(text, "月度经营") || strings.Contains(text, "管理层经营") || strings.Contains(text, "董事会复盘"):
 		return pptxArchetypeOps
+	case strings.Contains(text, "launch plan") || strings.Contains(text, "release plan") || strings.Contains(text, "implementation plan") || strings.Contains(text, "rollout plan") ||
+		strings.Contains(text, "project implementation") || strings.Contains(text, "cross-functional launch") || strings.Contains(text, "go-to-market launch") ||
+		strings.Contains(text, "项目实施") || strings.Contains(text, "实施方案") || strings.Contains(text, "上线计划") || strings.Contains(text, "发布计划") || strings.Contains(text, "里程碑计划"):
+		return pptxArchetypeProject
 	case strings.Contains(text, "onboarding training") || strings.Contains(text, "new hire") || strings.Contains(text, "tutorial") || strings.Contains(text, "getting started guide") ||
 		strings.Contains(text, "培训课件") || strings.Contains(text, "入职培训") || strings.Contains(text, "新员工培训") || strings.Contains(text, "培训"):
 		return pptxArchetypeTraining
@@ -3645,6 +3814,11 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - Slide 3 must use a chart and clearly state the data framing or comparison period.
 - Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
 - The final action cluster must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
+	case pptxArchetypeProject:
+		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> launch outcomes -> readiness scorecard -> chapter -> ownership matrix -> milestones and decision gates -> risk controls -> decision request, but adapt the exact slide count to the prompt.
+- Do not repeat "Executive Summary" across multiple slides. Each slide title must name the specific operating question it answers.
+- Readiness, ownership, milestones, and risks should use sections, dashboard metrics, timeline, or comparison layouts instead of long bullets.
+- Every execution slide should include at least two of owner, timing, decision gate, acceptance criterion, or risk trigger. Do not add images beyond the cover for this topic.`
 	case pptxArchetypeTraining:
 		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions, but adapt the exact slide count to the prompt.
 - Setup/command slides should prefer sections organized by step, command, and result.
@@ -4108,6 +4282,41 @@ func fitTextForLayout(value string, maxRunes int) string {
 	return finishLayoutPhrase(strings.TrimSpace(string(runes[:maxRunes])))
 }
 
+func shortenLayoutText(value string, maxRunes int) string {
+	value = strings.TrimSpace(value)
+	if value == "" || maxRunes <= 0 || utf8.RuneCountInString(value) <= maxRunes {
+		return value
+	}
+	for _, sep := range []string{".", ";", ",", ":", "("} {
+		parts := strings.SplitN(value, sep, 2)
+		if len(parts) == 0 {
+			continue
+		}
+		prefix := strings.TrimSpace(parts[0])
+		if prefix == "" {
+			continue
+		}
+		size := utf8.RuneCountInString(prefix)
+		if size <= maxRunes && size >= maxRunes/2 {
+			return finishLayoutPhrase(prefix)
+		}
+	}
+	runes := []rune(value)
+	start := maxRunes
+	if start > len(runes) {
+		start = len(runes)
+	}
+	for idx := start; idx > 0; idx-- {
+		if unicode.IsSpace(runes[idx-1]) {
+			candidate := strings.TrimSpace(string(runes[:idx-1]))
+			if candidate != "" {
+				return finishLayoutPhrase(candidate)
+			}
+		}
+	}
+	return finishLayoutPhrase(strings.TrimSpace(string(runes[:maxRunes])))
+}
+
 func finishLayoutPhrase(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimRight(value, " ,;:，；：")
@@ -4211,7 +4420,7 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Sections[idx].Detail) > 44 {
-				next := fitTextForLayout(slide.Sections[idx].Detail, 44)
+				next := shortenLayoutText(slide.Sections[idx].Detail, 44)
 				if next != slide.Sections[idx].Detail {
 					slide.Sections[idx].Detail = next
 					changed = true
@@ -4221,7 +4430,7 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Sections[idx].Heading) > 20 {
-				next := fitTextForLayout(slide.Sections[idx].Heading, 20)
+				next := shortenLayoutText(slide.Sections[idx].Heading, 20)
 				if next != slide.Sections[idx].Heading {
 					slide.Sections[idx].Heading = next
 					changed = true
@@ -4233,7 +4442,7 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Points[idx]) > 28 {
-				next := fitTextForLayout(slide.Points[idx], 28)
+				next := shortenLayoutText(slide.Points[idx], 28)
 				if next != slide.Points[idx] {
 					slide.Points[idx] = next
 					changed = true
@@ -4245,7 +4454,7 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				break
 			}
 			if utf8.RuneCountInString(slide.Metrics[idx].Note) > 32 {
-				next := fitTextForLayout(slide.Metrics[idx].Note, 32)
+				next := shortenLayoutText(slide.Metrics[idx].Note, 32)
 				if next != slide.Metrics[idx].Note {
 					slide.Metrics[idx].Note = next
 					changed = true
@@ -4261,7 +4470,7 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 			changed = true
 		}
 		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Subtitle) > 58 {
-			next := fitTextForLayout(slide.Subtitle, 58)
+			next := shortenLayoutText(slide.Subtitle, 58)
 			if next != slide.Subtitle {
 				slide.Subtitle = next
 				changed = true

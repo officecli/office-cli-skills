@@ -1306,6 +1306,46 @@ func TestDetectPPTXArchetype_RecognizesBoardReview(t *testing.T) {
 	}
 }
 
+func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
+	content := `{
+		"title":"Cross-Functional Launch Plan",
+		"slides":[
+			{"role":"cover","layout":"title","headline":"Cross-Functional Launch Plan","takeaway":"A clear operating model will align teams and reduce launch risk"},
+			{"role":"summary","layout":"content","headline":"Executive Summary","takeaway":"The launch team should align on four measurable goals.","blocks":[{"type":"sections","sections":[
+				{"heading":"Goals","detail":"Lock scope, hit launch date, achieve readiness across GTM and support, and stabilize quality before release"},
+				{"heading":"Operating Model","detail":"Use weekly decision forums."},
+				{"heading":"Decision Need","detail":"Approve owners."}
+			]}]},
+			{"role":"action","layout":"timeline","headline":"Milestones and Decision Gates","takeaway":"A milestone-driven path creates clear handoffs.","blocks":[{"type":"timeline","sections":[
+				{"heading":"T-8 to T-6 Weeks","detail":"Finalize goals, scope, owners, and timeline."},
+				{"heading":"T-5 to T-3 Weeks","detail":"Complete QA, messaging, enablement, and support prep."}
+			]}]}
+		]
+	}`
+
+	fileBytes, _, _, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "OfficeCLI New Release Plan", "", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 10 {
+		t.Fatalf("slide count = %d, want 10", got)
+	}
+	for _, needle := range []string{"Contents", "Launch Outcomes", "Readiness Scorecard", "Workstream Ownership", "Milestones and Gates", "Decision Request"} {
+		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
+			t.Fatalf("project deck missing %q", needle)
+		}
+	}
+	if archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Executive Summary") {
+		t.Fatalf("project deck should replace repeated executive-summary fragments")
+	}
+	preview := string(previewJSON)
+	for _, needle := range []string{`"stylePreset": "project-forest"`, `"variant": "toc"`, `"variant": "timeline-axis"`, `"variant": "closing-decision-banner"`} {
+		if !strings.Contains(preview, needle) {
+			t.Fatalf("preview json missing %q:\n%s", needle, preview)
+		}
+	}
+}
+
 func TestNormalizePPTXPayload_AutoThemeOverridesLLMThemeWhenStyleIsImplicit(t *testing.T) {
 	payload := &pptxPayload{
 		Title:       "企业协作平台采购建议与价值解读",
