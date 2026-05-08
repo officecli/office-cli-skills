@@ -1330,7 +1330,7 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 7 {
 		t.Fatalf("slide count = %d, want 7", got)
 	}
-	for _, needle := range []string{"Decision Snapshot", "Gate Scorecard", "Workstream Ownership", "Milestone Gates", "Risk Controls", "Leadership Action"} {
+	for _, needle := range []string{"Decision Snapshot: GO", "Gate Scorecard: Proceed", "Workstream Ownership", "Milestone Gates", "Risk Controls: Covered", "Decision Request: Approve GO"} {
 		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
 			t.Fatalf("project deck missing %q", needle)
 		}
