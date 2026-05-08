@@ -7,8 +7,9 @@ const roadmapPhases = [
     background: 'bg-surface-low',
     items: [
       'Generate PPTX, DOCX, XLSX, and workbook-backed REPORT files from natural-language prompts.',
+      'Generate standalone IMG visuals with `new img`, including ratio, explicit size, and one or more reference images.',
       'Review and score local PPTX files, with optional visual review when `soffice` is available.',
-      'Publish optional online previews when preview publishing is configured.',
+      'Publish optional online previews when preview publishing is configured; standalone images publish by default.',
     ],
   },
   {

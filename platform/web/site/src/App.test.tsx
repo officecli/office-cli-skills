@@ -22,7 +22,7 @@ describe('marketing site shell', () => {
 
     expect(screen.getAllByText('OfficeCLI').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('heading', { name: /Generate PPTX.*DOCX, XLSX, and REPORT Outputs From One AI CLI/i, level: 1 }),
+      screen.getByRole('heading', { name: /Generate PPTX.*DOCX, XLSX, REPORT, and IMG Outputs From One AI CLI/i, level: 1 }),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^ROADMAP$/i, level: 2 })).toBeInTheDocument()
     expect(
@@ -156,7 +156,7 @@ describe('site metadata and assets', () => {
   it('defines marketing metadata in index.html', () => {
     const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8')
 
-    expect(html).toContain('AI PPTX, DOCX, XLSX, and REPORT Generator')
+    expect(html).toContain('AI PPTX, DOCX, XLSX, REPORT, and IMG Generator')
     expect(html).toContain('name="description"')
     expect(html).toContain('rel="canonical" href="https://officecli.io/"')
     expect(html).toContain('name="robots" content="index,follow"')
@@ -202,7 +202,7 @@ describe('site metadata and assets', () => {
     const html = renderRouteApp('/')
 
     expect(html).toContain('<main')
-    expect(html).toContain('REPORT Outputs From One AI CLI')
+    expect(html).toContain('REPORT, and IMG Outputs From One AI CLI')
     expect(html).toContain('id="faq"')
   })
 

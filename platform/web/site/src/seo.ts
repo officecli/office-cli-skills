@@ -36,22 +36,26 @@ const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
 const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
 
-const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, and REPORT Generator for Terminal Workflows'
+const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, REPORT, and IMG Generator for Terminal Workflows'
 const homeDescription =
-  'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, and REPORT outputs. Generate files from the terminal with your own LLM endpoint, without a backend stack or cluster.'
+  'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs. Generate files and visuals from the terminal with your own LLM endpoint, without a backend stack or cluster.'
 
 export const homeFAQs: FAQEntry[] = [
   {
     q: 'Is OfficeCLI only for generating files?',
-    a: 'No. Generation is the primary focus right now, but the product direction is broader document operations: conversion, content modification, summarization, extraction, and layout handling.',
+    a: 'No. Generation is the primary focus right now, but the product direction is broader document operations: standalone image generation, conversion, content modification, summarization, extraction, and layout handling.',
   },
   {
     q: 'Do I need Docker, Kubernetes, or a backend?',
-    a: 'Not for the core local workflow. OfficeCLI is designed to stay lightweight: one binary plus your LLM endpoint. Platform features are optional, not a requirement for basic local use.',
+    a: 'Not for the core local workflow. OfficeCLI is designed to stay lightweight: one binary plus your LLM endpoint. Platform features are optional, not a requirement for basic local use. Standalone IMG generation does call the OfficeCLI image service for license-aware quota.',
   },
   {
     q: 'What document types work today?',
-    a: 'The current public release generates PPTX, DOCX, XLSX, and workbook-backed REPORT outputs. It can also score and review local PPTX files.',
+    a: 'The current public release generates PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals via `new img`. It can also score and review local PPTX files.',
+  },
+  {
+    q: 'How does standalone image generation work?',
+    a: '`officecli new img` calls the OfficeCLI image service, supports `--ratio square|landscape|portrait`, an explicit `--size <WxH>`, and one or more `--reference-image` inputs. A separate free image bucket of 3 images per user per day is tracked independently from the document bucket, and successful images publish online previews by default when publishing is configured.',
   },
   {
     q: 'Do I need LibreOffice or Microsoft Office installed?',
@@ -63,7 +67,7 @@ export const homeFAQs: FAQEntry[] = [
   },
   {
     q: 'When do I need platform.officecli.io?',
-    a: 'Use the platform when you need paid access management, billing, API-key workflows, or optional online preview publishing.',
+    a: 'Use the platform when you need paid access management, billing, API-key workflows, image-quota monitoring, or optional online preview publishing.',
   },
 ]
 
@@ -258,13 +262,13 @@ export const routeSEO: Record<string, RouteSEO> = {
   ...agentSkillsRouteSEO,
   '/docs': buildRouteSEO(
     '/docs',
-    'OfficeCLI Docs | PPTX, DOCX, XLSX, and REPORT capabilities',
-    'Review OfficeCLI capabilities, supported PPTX, DOCX, XLSX, and REPORT outputs, and understand which document automation workflows are available today.',
+    'OfficeCLI Docs | PPTX, DOCX, XLSX, REPORT, and IMG capabilities',
+    'Review OfficeCLI capabilities, supported PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs, and understand which document automation workflows are available today.',
   ),
   '/download': buildRouteSEO(
     '/download',
     'Install OfficeCLI | AI document generation CLI for macOS and Linux',
-    'Install OfficeCLI with Homebrew, npm, the official script, or manual binaries for macOS and Linux, then generate PPTX, DOCX, XLSX, and REPORT outputs from the terminal.',
+    'Install OfficeCLI with Homebrew, npm, the official script, or manual binaries for macOS and Linux, then generate PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs from the terminal.',
   ),
   '/pricing': buildRouteSEO(
     '/pricing',

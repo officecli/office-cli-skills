@@ -100,7 +100,7 @@ export const agentSkillsRoutes: AgentSkillsRoute[] = [
 export const agentSkillsSubpages = agentSkillsRoutes.filter((route) => route.path !== agentSkillsHubPath)
 export const agentSkillsPrerenderRoutes = [agentSkillsHubPath, ...agentSkillsSubpages.map((route) => route.path), legacyAgentSkillsPath]
 
-export const keywordChips = ['officecli-skills', 'Claude Code', 'Codex', 'OpenClaw', 'PPTX', 'DOCX', 'XLSX', 'Report']
+export const keywordChips = ['officecli-skills', 'Claude Code', 'Codex', 'OpenClaw', 'PPTX', 'DOCX', 'XLSX', 'Report', 'IMG']
 
 export const workflowCards: WorkflowCard[] = [
   {

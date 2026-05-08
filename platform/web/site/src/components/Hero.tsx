@@ -6,13 +6,14 @@ import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
 import heroReportPreview from '../assets/hero-report-preview.svg'
 import { platformAppURL } from '../siteData'
 
-type HeroFormatTab = 'pptx' | 'docx' | 'xlsx' | 'report'
+type HeroFormatTab = 'pptx' | 'docx' | 'xlsx' | 'report' | 'img'
 
 const HERO_TERMINAL_TABS: Array<{ id: HeroFormatTab; label: string }> = [
   { id: 'pptx', label: 'PPTX' },
   { id: 'docx', label: 'DOCX' },
   { id: 'xlsx', label: 'XLSX' },
   { id: 'report', label: 'REPORT' },
+  { id: 'img', label: 'IMG' },
 ]
 
 function DocPageMock() {
@@ -56,6 +57,22 @@ function SpreadsheetMock() {
             />
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function ImageMock() {
+  return (
+    <div className="w-full h-full rounded-sm shadow-sm relative overflow-hidden opacity-80 group-hover:opacity-100 transition-all bg-gradient-to-br from-[#1d3557] via-[#2a6f97] to-[#013a63]">
+      <div className="absolute inset-0">
+        <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-tertiary/40 blur-[2px]" />
+        <div className="absolute bottom-2 right-2 w-9 h-9 rounded-full bg-primary/30 blur-md" />
+        <div className="absolute top-1/2 left-1/3 w-10 h-0.5 bg-white/40 rounded-full rotate-12" />
+      </div>
+      <div className="relative z-10 h-full w-full flex flex-col items-center justify-center gap-1">
+        <div className="w-8 h-1 bg-white/70 rounded-full" />
+        <div className="w-12 h-0.5 bg-white/40 rounded-full" />
       </div>
     </div>
   )
@@ -149,7 +166,7 @@ function HighlightedCommand({ command }: { command: string }) {
       {parts.map((part, i) => {
         if (part === 'officecli') return <span key={i} className="text-[#27c93f] mr-1.5">{part}</span>
         if (part === 'new' || part === 'config' || part === 'set-generation') return <span key={i} className="text-[#8af3f7] mr-1.5">{part}</span>
-        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
+        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report' || part === 'img') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
         if (part.startsWith('"') || part.startsWith("'")) return <span key={i} className="text-[#ff5f56] mr-1.5">{part}</span>
         if (part.startsWith('--')) return <span key={i} className="text-outline-variant mr-1.5">{part}</span>
         return <span key={i} className="text-white mr-1.5">{part}</span>
@@ -290,6 +307,37 @@ export default function Hero() {
         </div>
       ),
     },
+    img: {
+      command: 'officecli new img "Launch Visual" --prompt "Polished product launch hero image" --ratio landscape --reference-image ./brand.png',
+      logLines: [
+        'Generation completed. Saved to output/LAUNCH_VISUAL.PNG',
+      ],
+      output: (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="text-white">
+              Preview URL: <a href="https://officecli.io/p/img-xyz" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/img-xyz</a>; password: abcdef
+            </div>
+            <div className="text-outline-variant">
+              Access: paid mode; 24 image generations remaining; free bucket 3/day
+            </div>
+          </div>
+          <div className="text-[10px] font-headline uppercase tracking-[0.25em] text-tertiary">
+            IMG output (landscape, 1 reference)
+          </div>
+          <HeroOutputFileCard
+            filename="LAUNCH_VISUAL.PNG"
+            size="612 KB"
+            elapsed="4.7s"
+            preview={
+              <div className="h-full w-full p-1.5 flex items-center justify-center group">
+                <ImageMock />
+              </div>
+            }
+          />
+        </div>
+      ),
+    },
   }
 
   const current = terminalByTab[activeTab]
@@ -308,10 +356,10 @@ export default function Hero() {
             Local-first AI document generation CLI
           </span>
           <h1 className="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
-            Generate <span className="text-primary italic">PPTX</span>, DOCX, XLSX, and REPORT Outputs From One AI CLI
+            Generate <span className="text-primary italic">PPTX</span>, DOCX, XLSX, REPORT, and IMG Outputs From One AI CLI
           </h1>
           <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, and workbook-backed REPORT outputs with your own LLM endpoint, without a backend stack or cluster, then review presentations and expand into broader document automation.
+            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals with your own LLM endpoint or the OfficeCLI image service, without a backend stack or cluster, then review decks and expand into broader document automation.
           </p>
           <div className="flex flex-wrap gap-4">
             <motion.a

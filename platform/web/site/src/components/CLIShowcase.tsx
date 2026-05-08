@@ -9,7 +9,7 @@ function HighlightedCommand({ command }: { command: string }) {
       {parts.map((part, i) => {
         if (part === 'officecli' || part === 'brew' || part === 'npm') return <span key={i} className="text-[#27c93f] mr-1.5">{part}</span>
         if (part === 'new' || part === 'config' || part === 'install' || part === 'set-generation') return <span key={i} className="text-[#8af3f7] mr-1.5">{part}</span>
-        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report' || part === '-g') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
+        if (part === 'pptx' || part === 'docx' || part === 'xlsx' || part === 'report' || part === 'img' || part === '-g') return <span key={i} className="text-[#ffbd2e] mr-1.5">{part}</span>
         if (part.startsWith('"') || part.startsWith("'")) return <span key={i} className="text-[#ff5f56] mr-1.5">{part}</span>
         if (part.startsWith('--')) return <span key={i} className="text-outline-variant mr-1.5">{part}</span>
         return <span key={i} className="text-white mr-1.5">{part}</span>
@@ -63,8 +63,8 @@ export default function CLIShowcase() {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
         >
-          <h2 className="font-headline text-4xl font-bold text-white mb-6">Generate PPTX, DOCX, XLSX, and REPORT Outputs</h2>
-          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal and run AI document automation from one local-first CLI. Install once, connect your LLM, and generate PPTX, DOCX, XLSX, and REPORT outputs without standing up extra infrastructure.</p>
+          <h2 className="font-headline text-4xl font-bold text-white mb-6">Generate PPTX, DOCX, XLSX, REPORT, and IMG Outputs</h2>
+          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal and run AI document automation from one local-first CLI. Install once, connect your LLM, and generate PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs without standing up extra infrastructure.</p>
           <ul className="space-y-6">
             <li className="flex items-start gap-4">
               <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
@@ -77,7 +77,14 @@ export default function CLIShowcase() {
               <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
               <div>
                 <h5 className="font-bold text-white">Current release surface is explicit</h5>
-                <p className="text-sm text-outline-variant">Use `new`, `score`, and `review` today for presentations, documents, spreadsheets, and REPORT outputs while broader conversion and editing workflows land next.</p>
+                <p className="text-sm text-outline-variant">Use `new`, `score`, and `review` today for presentations, documents, spreadsheets, REPORT outputs, and standalone IMG visuals while broader conversion and editing workflows land next.</p>
+              </div>
+            </li>
+            <li className="flex items-start gap-4">
+              <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
+              <div>
+                <h5 className="font-bold text-white">Standalone images are first-class</h5>
+                <p className="text-sm text-outline-variant">`new img` ships with `--ratio`, `--size`, and repeatable `--reference-image` flags, publishes online previews by default, and uses a separate free image bucket.</p>
               </div>
             </li>
           </ul>

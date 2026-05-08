@@ -26,7 +26,7 @@ export interface CommandGroup {
 
 export interface PromptExample {
   title: string
-  format: 'pptx' | 'docx' | 'xlsx' | 'report'
+  format: 'pptx' | 'docx' | 'xlsx' | 'report' | 'img'
   directCommand: string
   fileCommand: string
   promptFileName: string
@@ -77,6 +77,7 @@ export const quickstartChecklist: DocsChecklist[] = [
     items: [
       'Use `officecli new pptx|docx|xlsx|report ...` for file generation.',
       'For `pptx`, images are enabled by default when the plan benefits from visuals; add `--no-images` for a text-only deck.',
+      'Use `officecli new img <title> --prompt ...` for standalone image generation. `set-license` is required and `set-publish` is required for online image previews.',
     ],
   },
 ]
@@ -159,12 +160,13 @@ export const commandGroups: CommandGroup[] = [
   },
   {
     title: 'Generate new files',
-    command: 'officecli new <pptx|docx|xlsx|report> <topic> [brief]',
-    summary: 'Create a new PPTX, DOCX, XLSX, or workbook-backed HTML report from a direct prompt or a prompt file.',
+    command: 'officecli new <pptx|docx|xlsx|report|img> <topic> [brief]',
+    summary: 'Create a new PPTX, DOCX, XLSX, workbook-backed HTML report, or standalone IMG output from a direct prompt or a prompt file.',
     notes: [
       '`--prompt` takes highest precedence when you want to provide the full brief directly in the command.',
       '`--prompt-file` is the best fit for longer structured prompts or reusable prompt templates.',
       '`report` requires `--file <xlsx-path>` because the workbook is the source of truth for the report output.',
+      '`img` always calls the OfficeCLI image service. It uses the license-tracked image quota, supports `--ratio`, an explicit `--size <WxH>`, and one or more `--reference-image` inputs, and publishes online previews by default when publishing is configured.',
     ],
     examples: [
       {
@@ -186,6 +188,11 @@ export const commandGroups: CommandGroup[] = [
         label: 'Workbook-backed report',
         command: 'officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts, efficiency signals, and the board-level decisions this workbook implies."',
         detail: 'Produces a local HTML report based on workbook data.',
+      },
+      {
+        label: 'Standalone image',
+        command: 'officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png',
+        detail: 'Saves one local PNG. Add `--no-publish` for local-only output, repeat `--reference-image` for multiple references, or use `--size <WxH>` to override the ratio mapping.',
       },
     ],
   },
@@ -254,6 +261,10 @@ export const promptingTips: TipGroup[] = [
     title: 'Turn images off when clarity matters more than visuals',
     detail: 'For executive text-only decks, compliance decks, or environments without a configured image model, add `--no-images` to keep the output deterministic.',
   },
+  {
+    title: 'Anchor standalone IMG prompts with subject, mood, and constraints',
+    detail: 'For `officecli new img`, lead with subject, scene, mood, and palette, and explicitly state aspect ratio or `--size`. Use repeated `--reference-image` flags to ground style instead of relying on prose alone.',
+  },
 ]
 
 export const promptExamples: PromptExample[] = [
@@ -313,6 +324,14 @@ export const promptExamples: PromptExample[] = [
     promptFileName: 'docs/report-board-prompt.txt',
     prompt: `Generate a workbook-backed business review report:\n\n- Use the workbook as the source of truth\n- Summarize the most important regional changes, efficiency signals, and decision points\n- Keep the narrative suitable for board or investor review\n- Every section should connect findings to an action or decision`,
   },
+  {
+    title: 'IMG: launch hero visual',
+    format: 'img',
+    directCommand: 'officecli new img "Launch Visual" --prompt "A polished product launch hero image for an enterprise collaboration platform" --ratio landscape --reference-image ./brand-keyframe.png',
+    fileCommand: 'officecli new img "Launch Visual" --prompt-file ./docs/img-launch-prompt.txt --size 1280x720 --reference-image ./brand-keyframe.png --reference-image ./brand-mark.png',
+    promptFileName: 'docs/img-launch-prompt.txt',
+    prompt: `Create a launch hero image for an enterprise collaboration platform:\n\n- Aspect: landscape, 16:9\n- Mood: confident, modern, slightly cinematic\n- Subject: abstract collaboration motif with a soft horizon glow\n- Palette: deep navy and aqua highlights to match the brand reference\n- Avoid embedded text or hard logos so the image can be reused as a hero plate`,
+  },
 ]
 
 export const agentSkillHighlights: DocsChecklist[] = [
@@ -340,16 +359,20 @@ export const usageRules: UsageRule[] = [
     detail: 'Free access is tracked by machine fingerprint and works without a paid API key.',
   },
   {
+    title: 'Documents and standalone images use separate buckets',
+    detail: 'Free document generation has a 10-document-per-day bucket. Standalone `new img` has its own 3-image-per-day free bucket and always calls the OfficeCLI image service.',
+  },
+  {
     title: 'Paid usage is API-key based',
-    detail: 'Paid users consume purchased document-generation quota through API keys managed by the platform.',
+    detail: 'Paid users consume purchased document-generation quota through API keys managed by the platform. A successful image consumes one image generation count from the same license.',
   },
   {
     title: 'Quota is consumed only after successful generation',
-    detail: 'Availability is checked before generation, but quota is spent only after the document is generated successfully.',
+    detail: 'Availability is checked before generation, but quota is spent only after the document or image is generated successfully.',
   },
   {
     title: 'Platform and CLI surfaces reflect quota status',
-    detail: 'The CLI, app, and admin surfaces are expected to show the current free or paid quota state.',
+    detail: 'The CLI, app, and admin surfaces are expected to show the current free or paid quota state for both documents and standalone images.',
   },
   {
     title: 'Invite rewards are available with current limits',
@@ -417,8 +440,16 @@ export const troubleshootingTips: TipGroup[] = [
     detail: 'Run `officecli config set-generation` and verify the image model URL, credentials, and model name. Use `--no-images` when a text-only deck is intentional.',
   },
   {
+    title: 'Standalone `new img` fails or skips quota',
+    detail: 'Standalone images always go through the OfficeCLI server and require `officecli config set-license`. They ignore `config set-generation` image settings. The free bucket is 3 images per user per day; paid usage consumes the license image quota.',
+  },
+  {
+    title: 'No image preview link returned',
+    detail: 'Online image previews need `officecli config set-publish`. Standalone images publish by default once publishing is configured; pass `--no-publish` if you want local-only output.',
+  },
+  {
     title: 'Publish link did not appear',
-    detail: 'Online preview publishing is optional. Run `officecli config set-publish` if you want published previews, or use `--no-publish` for fully local output.',
+    detail: 'Online preview publishing is optional for documents. Run `officecli config set-publish` if you want published previews, or use `--no-publish` for fully local output.',
   },
   {
     title: 'Report generation failed immediately',
