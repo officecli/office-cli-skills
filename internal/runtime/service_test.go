@@ -1330,7 +1330,7 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 8 {
 		t.Fatalf("slide count = %d, want 8", got)
 	}
-	for _, needle := range []string{"Contents", "Launch Outcomes", "Readiness Scorecard", "Workstream Ownership", "Milestones and Gates", "Decision Request"} {
+	for _, needle := range []string{"Decision at Stake", "Launch Outcomes", "Readiness Scorecard", "Workstream Ownership", "Milestones and Gates", "Decision Request"} {
 		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
 			t.Fatalf("project deck missing %q", needle)
 		}
@@ -1339,7 +1339,7 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 		t.Fatalf("project deck should replace repeated executive-summary fragments")
 	}
 	preview := string(previewJSON)
-	for _, needle := range []string{`"stylePreset": "project-forest"`, `"variant": "toc"`, `"variant": "timeline-axis"`, `"variant": "closing-decision-banner"`} {
+	for _, needle := range []string{`"stylePreset": "project-forest"`, `"variant": "sections-grid-band"`, `"variant": "timeline-axis"`, `"variant": "closing-decision-banner"`} {
 		if !strings.Contains(preview, needle) {
 			t.Fatalf("preview json missing %q:\n%s", needle, preview)
 		}

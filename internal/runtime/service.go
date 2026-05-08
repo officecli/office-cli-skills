@@ -2880,18 +2880,17 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 	out := []officegen.Slide{
 		cover,
 		{
-			Title:         "Contents",
-			Layout:        "toc",
-			Variant:       "toc",
-			NarrativeRole: "toc",
-			SectionTitle:  "Agenda",
-			Subtitle:      "Review the operating path before the workstream detail.",
+			Title:         "Decision at Stake",
+			Layout:        "content",
+			Variant:       "sections-grid-band",
+			NarrativeRole: "summary",
+			SectionTitle:  "Readiness",
+			Subtitle:      "Approval determines whether this release moves into execution.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "01", Detail: "Launch outcomes and success criteria"},
-				{Heading: "02", Detail: "Readiness scorecard"},
-				{Heading: "03", Detail: "Ownership and milestone gates"},
-				{Heading: "04", Detail: "Risk controls and decision request"},
-			}, 4),
+				{Heading: "Approve", Detail: "Scope, DRIs, gates, and readiness criteria"},
+				{Heading: "Risk", Detail: "Late approval creates scope drift and launch churn"},
+				{Heading: "Delay Trigger", Detail: "Hold launch if ownership or quality is unclear"},
+			}, 3),
 		},
 		{
 			Title:         "Launch Outcomes",
@@ -2900,27 +2899,26 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "summary",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "Approve only when date, team readiness, and blocker risk are controlled.",
+			Subtitle:      "Approve only when launch risk is green.",
 			Sections: normalizeSections([]officegen.SlideSection{
 				{Heading: "Scope Freeze", Detail: "Lock launch scope two weeks before go-live"},
-				{Heading: "Team Ready", Detail: "GTM and support finish assets and training"},
+				{Heading: "Team Ready", Detail: "GTM and support finish assets"},
 				{Heading: "Quality Bar", Detail: "No critical blocker remains open at launch"},
 			}, 3),
 		},
 		{
 			Title:         "Readiness Scorecard",
-			Layout:        "dashboard",
-			Variant:       "kpi-band",
+			Layout:        "content",
+			Variant:       "sections-grid-3up",
 			NarrativeRole: "evidence",
 			SectionIndex:  1,
 			SectionTitle:  "Readiness",
-			Subtitle:      "The go/no-go gate is metric based, not opinion based.",
-			Metrics: normalizeMetrics([]officegen.MetricCard{
-				{Label: "Scope", Value: "100%", Note: "Freeze signed"},
-				{Label: "GTM", Value: "90%+", Note: "Assets ready"},
-				{Label: "Support", Value: "95%+", Note: "Training done"},
-				{Label: "Quality", Value: "0", Note: "Critical blockers"},
-			}, 4),
+			Subtitle:      "Use pass/fail gates so the launch call is instantly clear.",
+			Sections: normalizeSections([]officegen.SlideSection{
+				{Heading: "PASS Scope 100%", Detail: "Freeze signed before final sprint"},
+				{Heading: "PASS Readiness 90%+", Detail: "GTM, support, and ops assets ready"},
+				{Heading: "PASS Quality 0", Detail: "No critical blocker open at launch"},
+			}, 3),
 		},
 		{
 			Title:         "Workstream Ownership",
@@ -2929,11 +2927,11 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			NarrativeRole: "analysis",
 			SectionIndex:  2,
 			SectionTitle:  "Execution and Decisions",
-			Subtitle:      "One accountable DRI per lane prevents late handoff misses.",
+			Subtitle:      "Each lane has one DRI.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Product and Eng", Detail: "Own scope, defects, notes, launch quality"},
-				{Heading: "GTM", Detail: "Own messaging, assets, enablement handoff"},
-				{Heading: "Support and Ops", Detail: "Own training, comms, runbooks, and issue routing"},
+				{Heading: "Product and Eng", Detail: "Scope, defects, notes, launch quality"},
+				{Heading: "GTM", Detail: "Messaging, assets, enablement"},
+				{Heading: "Support and Ops", Detail: "Training, runbooks, issue routing"},
 			}, 3),
 		},
 		{
@@ -2973,8 +2971,8 @@ func buildProjectPlanDeck(slides []officegen.Slide, deckTitle string) []officege
 			SectionTitle:  "Execution and Decisions",
 			Subtitle:      "Approve the operating model now or delay execution until ownership is clear.",
 			Sections: normalizeSections([]officegen.SlideSection{
-				{Heading: "Decision", Detail: "Approve goals, cadence, owners, milestone gates"},
-				{Heading: "Owner", Detail: "Launch lead publishes tracker and criteria"},
+				{Heading: "Decision", Detail: "Approve goals, cadence, DRIs, gates"},
+				{Heading: "Owner", Detail: "Launch lead owns tracker and criteria"},
 				{Heading: "Timing", Detail: "Confirm the model within 48 hours"},
 			}, 3),
 		},
@@ -3799,9 +3797,9 @@ func buildArchetypePromptRules(archetype pptxArchetype) string {
 - Slide 4 should use sections to break issues down by dimensions such as acquisition, delivery, and collections instead of long bullets.
 - The final action cluster must close the loop with at least two of phase, owner, deadline, or validation criteria. Do not add images by default for this topic.`
 	case pptxArchetypeProject:
-		return `- For this topic, a strong storyline is usually cover -> toc -> launch outcomes -> readiness scorecard -> ownership matrix -> milestones and decision gates -> risk controls -> decision request, but adapt the exact slide count to the prompt.
+		return `- For this topic, a strong storyline is usually cover -> decision at stake -> launch outcomes -> readiness scorecard -> ownership matrix -> milestones and decision gates -> risk controls -> decision request, but adapt the exact slide count to the prompt.
 - Do not repeat "Executive Summary" across multiple slides. Each slide title must name the specific operating question it answers.
-- Readiness, ownership, milestones, and risks should use sections, dashboard metrics, timeline, or comparison layouts instead of long bullets.
+- Readiness, ownership, milestones, and risks should use sections, status gates, timeline, or comparison layouts instead of long bullets.
 - Every execution slide should include at least two of owner, timing, decision gate, acceptance criterion, or risk trigger. Do not add images beyond the cover for this topic.`
 	case pptxArchetypeTraining:
 		return `- For this topic, a strong storyline is usually cover -> toc -> chapter -> learning goals -> installation and setup -> common commands -> example workflow -> chapter -> cautions, but adapt the exact slide count to the prompt.
