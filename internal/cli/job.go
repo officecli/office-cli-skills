@@ -60,6 +60,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var sourceFile string
 	var ratio string
 	var referenceImage string
+	var imageQuality string
 	var jsonOutput bool
 	var localPreview bool
 	var debug bool
@@ -78,6 +79,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&sourceFile, "file", "", "")
 	fs.StringVar(&ratio, "ratio", "", "")
 	fs.StringVar(&referenceImage, "reference-image", "", "")
+	fs.StringVar(&imageQuality, "image-quality", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.BoolVar(&debug, "debug", false, "")
@@ -204,6 +206,19 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if referenceImage != "" && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img generation")
 	}
+	imageQualitySpecified := strings.TrimSpace(imageQuality) != ""
+	finalImageQuality := strings.ToLower(strings.TrimSpace(imageQuality))
+	if finalImageQuality == "" {
+		finalImageQuality = ImageQualityStandard
+	}
+	switch finalImageQuality {
+	case ImageQualityStandard, ImageQualityPremium:
+	default:
+		return GenerateJob{}, fmt.Errorf("unsupported image quality: %s", imageQuality)
+	}
+	if imageQualitySpecified && documentType != engine.DocumentTypePPTX {
+		return GenerateJob{}, fmt.Errorf("--image-quality is only supported for pptx generation")
+	}
 	imageRatio := strings.ToLower(strings.TrimSpace(ratio))
 	if imageRatio == "" {
 		imageRatio = "square"
@@ -253,6 +268,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		StyleSpecified:       styleSpecified,
 		Audience:             strings.TrimSpace(audience),
 		EnableImages:         enableImages,
+		ImageQuality:         finalImageQuality,
 		ImageRatio:           imageRatio,
 		ReferenceImageSource: referenceImage,
 		LocalPreview:         localPreview,
@@ -271,7 +287,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--image-quality", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -294,6 +310,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--file=") ||
 				strings.HasPrefix(current, "--ratio=") ||
 				strings.HasPrefix(current, "--reference-image=") ||
+				strings.HasPrefix(current, "--image-quality=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
@@ -319,6 +336,15 @@ func countReferenceImageFlags(args []string) int {
 		}
 	}
 	return count
+}
+
+func normalizeImageQuality(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ImageQualityPremium:
+		return ImageQualityPremium
+	default:
+		return ImageQualityStandard
+	}
 }
 
 func parseDocumentType(value string) (engine.DocumentType, error) {

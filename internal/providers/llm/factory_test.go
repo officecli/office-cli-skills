@@ -261,6 +261,9 @@ func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 	t.Parallel()
 
 	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	client := &openAIClient{
+		client: &http.Client{Timeout: timeoutFor(0)},
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/gemini-2.5-flash-image:generateContent" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -272,14 +275,102 @@ func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 	}))
 	defer server.Close()
 
+	image, err := client.generateGoogleImage(context.Background(), server.URL, "google-key", "gemini-2.5-flash-image", engine.ImageGenerationRequest{
+		Prompt: "Generate an illustration of a blue folder",
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+	if image.MIME != "image/png" {
+		t.Fatalf("unexpected mime: %q", image.MIME)
+	}
+}
+
+func TestOpenAIClient_GenerateImageUsesOpenAIEndpointForCompatibleGateway(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if _, ok := payload["response_format"]; ok {
+			t.Fatalf("compatible image request should not send legacy response_format: %#v", payload["response_format"])
+		}
+		if strings.Contains(r.URL.Path, ":generateContent") {
+			t.Fatalf("should not route compatible gateway by model prefix: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer image-key" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer server.Close()
+
 	client, err := NewClient(Config{
 		Provider:     "openai",
 		BaseURL:      "https://unused.example.com/v1",
 		APIKey:       "openai-key",
 		Model:        "gpt-test",
-		ImageBaseURL: server.URL,
-		ImageAPIKey:  "google-key",
-		ImageModel:   "gemini-2.5-flash-image",
+		ImageBaseURL: server.URL + "/v1",
+		ImageAPIKey:  "image-key",
+		ImageModel:   "gemini-3.1-flash-image-preview",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt:            "Generate an illustration of a blue folder",
+		TargetAspectRatio: 16.0 / 9.0,
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+}
+
+func TestOpenAIClient_GenerateImageFetchesURLResult(t *testing.T) {
+	t.Parallel()
+
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/generated/image.jpeg" {
+			t.Fatalf("unexpected image path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = fmt.Fprint(w, "jpeg-bytes")
+	}))
+	defer imageServer.Close()
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"url": imageServer.URL + "/generated/image.jpeg"},
+			},
+		})
+	}))
+	defer apiServer.Close()
+
+	client, err := NewClient(Config{
+		Provider:     "openai",
+		BaseURL:      "https://unused.example.com/v1",
+		APIKey:       "openai-key",
+		Model:        "gpt-test",
+		ImageBaseURL: apiServer.URL + "/v1",
+		ImageAPIKey:  "image-key",
+		ImageModel:   "grok-4.2-image",
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -291,11 +382,59 @@ func TestOpenAIClient_GenerateImageSupportsGoogleEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateImage: %v", err)
 	}
-	if string(image.Data) != "png-bytes" {
+	if string(image.Data) != "jpeg-bytes" {
 		t.Fatalf("unexpected image data: %q", string(image.Data))
 	}
-	if image.MIME != "image/png" {
+	if image.MIME != "image/jpeg" {
 		t.Fatalf("unexpected mime: %q", image.MIME)
+	}
+}
+
+func TestOpenAIClient_GenerateImageFallsBackToResponsesImageGeneration(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var sawImages bool
+	var sawResponses bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			sawImages = true
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"image endpoint unsupported for this model"}}`)
+		case "/v1/responses":
+			sawResponses = true
+			_, _ = fmt.Fprintf(w, `{"output":[{"type":"image_generation_call","result":"%s"}]}`, imageData)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider:     "openai",
+		BaseURL:      "https://unused.example.com/v1",
+		APIKey:       "openai-key",
+		Model:        "gpt-test",
+		ImageBaseURL: server.URL + "/v1",
+		ImageAPIKey:  "image-key",
+		ImageModel:   "grok-4-image",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt: "Generate an illustration of a blue folder",
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if !sawImages || !sawResponses {
+		t.Fatalf("expected images endpoint then responses fallback, saw images=%t responses=%t", sawImages, sawResponses)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
 	}
 }
 

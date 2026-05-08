@@ -179,11 +179,18 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 	if len(req.ReferenceImages) > 0 {
 		return c.generateOpenAIImageEdit(ctx, imageBaseURL, imageAPIKey, model, req)
 	}
+	image, err := c.generateOpenAIImageGeneration(ctx, imageBaseURL, imageAPIKey, model, req)
+	if err == nil {
+		return image, nil
+	}
+	return c.generateOpenAIResponsesImage(ctx, imageBaseURL, imageAPIKey, model, req)
+}
+
+func (c *openAIClient) generateOpenAIImageGeneration(ctx context.Context, imageBaseURL, imageAPIKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
 	payload := map[string]any{
-		"model":           model,
-		"prompt":          req.Prompt,
-		"size":            pickImageSize(req.TargetAspectRatio),
-		"response_format": "b64_json",
+		"model":  model,
+		"prompt": req.Prompt,
+		"size":   pickImageSize(req.TargetAspectRatio),
 	}
 	body, err := c.postWithAPIKey(ctx, imageBaseURL+"/images/generations", imageAPIKey, payload)
 	if err != nil {
@@ -192,12 +199,19 @@ func (c *openAIClient) GenerateImage(ctx context.Context, req engine.ImageGenera
 	var resp struct {
 		Data []struct {
 			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decode image response: %w", err)
 	}
-	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image response is empty")
+	}
+	if url := strings.TrimSpace(resp.Data[0].URL); url != "" {
+		return c.fetchImageURL(ctx, url)
+	}
+	if strings.TrimSpace(resp.Data[0].B64JSON) == "" {
 		return nil, fmt.Errorf("image response is empty")
 	}
 	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
@@ -239,10 +253,63 @@ func (c *openAIClient) generateOpenAIImageEdit(ctx context.Context, baseURL, api
 
 func isGoogleImageEndpoint(baseURL, model string) bool {
 	baseURL = strings.ToLower(strings.TrimSpace(baseURL))
-	model = strings.ToLower(strings.TrimSpace(model))
-	return strings.Contains(baseURL, "generativelanguage.googleapis.com") ||
-		strings.HasPrefix(model, "gemini-") ||
-		strings.HasPrefix(model, "imagen-")
+	return strings.Contains(baseURL, "generativelanguage.googleapis.com")
+}
+
+func (c *openAIClient) generateOpenAIResponsesImage(ctx context.Context, imageBaseURL, imageAPIKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	payload := map[string]any{
+		"model": model,
+		"input": req.Prompt,
+		"tools": []map[string]any{{"type": "image_generation"}},
+	}
+	body, err := c.postWithAPIKey(ctx, imageBaseURL+"/responses", imageAPIKey, payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Output []struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode responses image response: %w", err)
+	}
+	for _, item := range resp.Output {
+		if item.Type != "image_generation_call" || strings.TrimSpace(item.Result) == "" {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(item.Result)
+		if err != nil {
+			return nil, fmt.Errorf("decode responses image data: %w", err)
+		}
+		return &engine.ImageGenerationResult{Data: data, MIME: "image/png"}, nil
+	}
+	return nil, fmt.Errorf("responses image response is empty")
+}
+
+func (c *openAIClient) fetchImageURL(ctx context.Context, rawURL string) (*engine.ImageGenerationResult, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("fetch image failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	mime := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if mime == "" {
+		mime = "image/png"
+	}
+	return &engine.ImageGenerationResult{Data: body, MIME: mime}, nil
 }
 
 func (c *openAIClient) generateGoogleImage(ctx context.Context, baseURL, apiKey, model string, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {

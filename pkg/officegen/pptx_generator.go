@@ -201,6 +201,9 @@ func requestedImagePos(slide Slide) string {
 	switch resolvedLayout(slide) {
 	case "title":
 		pos := normalizeImagePos(slide.ImagePos)
+		if strings.HasPrefix(strings.TrimSpace(slide.Variant), "title-split") && (pos == "right" || pos == "left") {
+			return pos
+		}
 		if pos == "background" || pos == "center" {
 			return pos
 		}
@@ -289,6 +292,10 @@ func imageFrameForSlide(slide Slide) (imageFrame, bool) {
 			return imageFrame{x: 0, y: 0, cx: 12192000, cy: 6858000}, true
 		case "center":
 			return imageFrame{x: 2460000, y: 1550000, cx: 7272000, cy: 3200000}, true
+		case "right":
+			return imageFrame{x: 6500000, y: 900000, cx: 4800000, cy: 5000000}, true
+		case "left":
+			return imageFrame{x: 700000, y: 900000, cx: 4800000, cy: 5000000}, true
 		default:
 			return imageFrame{}, false
 		}
@@ -632,12 +639,47 @@ func isDarkColor(hexColor string) bool {
 
 // colorLuminance computes the relative luminance of a color on a 0-255 scale.
 func colorLuminance(hexColor string) float64 {
+	hexColor = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(hexColor)), "#")
 	if len(hexColor) != 6 {
 		return 128 // Unknown colors fall back to mid luminance.
 	}
 	r, g, b := 0, 0, 0
 	fmt.Sscanf(hexColor, "%02x%02x%02x", &r, &g, &b)
 	return 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+}
+
+func contrastRatio(foreground, background string) float64 {
+	fgLum, fgOK := relativeLuminance(foreground)
+	bgLum, bgOK := relativeLuminance(background)
+	if !fgOK || !bgOK {
+		return 21
+	}
+	lighter := fgLum
+	darker := bgLum
+	if darker > lighter {
+		lighter, darker = darker, lighter
+	}
+	return (lighter + 0.05) / (darker + 0.05)
+}
+
+func relativeLuminance(hexColor string) (float64, bool) {
+	hexColor = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(hexColor)), "#")
+	if len(hexColor) != 6 {
+		return 0, false
+	}
+	r, g, b := 0, 0, 0
+	if _, err := fmt.Sscanf(hexColor, "%02x%02x%02x", &r, &g, &b); err != nil {
+		return 0, false
+	}
+	return 0.2126*linearizedSRGB(r) + 0.7152*linearizedSRGB(g) + 0.0722*linearizedSRGB(b), true
+}
+
+func linearizedSRGB(value int) float64 {
+	channel := float64(value) / 255.0
+	if channel <= 0.03928 {
+		return channel / 12.92
+	}
+	return math.Pow((channel+0.055)/1.055, 2.4)
 }
 
 // blendColor mixes two colors by ratio: 0 keeps color1 and 1 keeps color2.
@@ -693,6 +735,9 @@ func sanitizeGradient(bgColor1, bgColor2 string) (string, string) {
 
 // getTextColor returns the default body text color for the theme.
 func getTextColor(theme *SlideTheme) string {
+	if theme != nil && strings.TrimSpace(theme.TextColor) != "" {
+		return strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(theme.TextColor)), "#")
+	}
 	if isDarkTheme(theme) {
 		return "EEEEEE"
 	}
@@ -742,6 +787,9 @@ func isSimilarHue(hexColor1, hexColor2 string) bool {
 // getTitleColor returns the title color for the theme and falls back when the
 // primary color is too close to the background.
 func getTitleColor(theme *SlideTheme) string {
+	if theme != nil && strings.TrimSpace(theme.TitleTextColor) != "" {
+		return strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(theme.TitleTextColor)), "#")
+	}
 	if isDarkTheme(theme) {
 		return "FFFFFF"
 	}
@@ -789,16 +837,20 @@ func getEffectiveBgColor(slide Slide, theme *SlideTheme) string {
 
 // getSafeTextColorForBg ensures that text color has enough contrast against the background.
 func getSafeTextColorForBg(textColor string, bgColor string) string {
-	if bgColor == "" {
+	textColor = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(textColor)), "#")
+	bgColor = strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(bgColor)), "#")
+	if bgColor == "" || len(bgColor) != 6 || len(textColor) != 6 {
 		return textColor
 	}
-	if isSimilarHue(textColor, bgColor) {
-		if isDarkColor(bgColor) {
-			return "FFFFFF"
-		}
-		return "333333"
+	if contrastRatio(textColor, bgColor) >= 4.5 {
+		return textColor
 	}
-	return textColor
+	dark := "0F172A"
+	light := "FFFFFF"
+	if contrastRatio(light, bgColor) > contrastRatio(dark, bgColor) {
+		return light
+	}
+	return dark
 }
 
 // generateBackgroundXML builds the slide background XML from the theme.
@@ -907,7 +959,7 @@ func generateSubtitleXML(subtitle string, shapeID int, y int, theme *SlideTheme)
 	if subtitle == "" {
 		return ""
 	}
-	textColor := getTextColor(theme)
+	textColor := getSafeTextColorForBg(getTextColor(theme), theme.BgColor1)
 	fontFamily := theme.FontFamily
 	eaFontFamily := theme.EAFontFamily
 	boxHeight := estimatedSubtitleHeight(subtitle)
@@ -1083,7 +1135,7 @@ func metricCardTypography(metrics []MetricCard, count int) (labelFont, valueFont
 // generateFooterXML builds footer XML for the bottom of the slide.
 // It currently renders the data source only and starts shape ids from baseID.
 func generateFooterXML(source string, slideNum, totalSlides, baseID int, theme *SlideTheme, stylePreset PPTXStylePreset) string {
-	textColor := getTextColor(theme)
+	textColor := getSafeTextColorForBg(getTextColor(theme), theme.BgColor1)
 	lineColor := strings.TrimSpace(stylePreset.FooterLineColor)
 	if lineColor == "" {
 		lineColor = theme.AccentColor
@@ -1353,8 +1405,13 @@ func (g *PPTXGenerator) createTitleSlideXML(slide Slide, theme *SlideTheme, styl
 			decorY = 4700000
 			imageXML = createImagePictureXML(90, "CenterImage", assets.PrimaryImageRel, 2460000, 1550000, 7272000, 3200000, slide.ImageData)
 		}
+	} else if imagePos == "right" {
+		imageXML = createImagePictureXML(90, "TitleSideImage", assets.PrimaryImageRel, 6500000, 900000, 4800000, 5000000, slide.ImageData)
+	} else if imagePos == "left" {
+		imageXML = createImagePictureXML(90, "TitleSideImage", assets.PrimaryImageRel, 700000, 900000, 4800000, 5000000, slide.ImageData)
+		titleX, subtitleX, decorX = 6400000, 6400000, 6400000
 	} else {
-		if !isMinimal {
+		if !isMinimal && isDarkTheme(theme) && stylePreset.ID == StylePresetExecutiveDark {
 			titlePanelXML = createFramedPanelXML(92, "TitlePanel", stylePreset.BackgroundOverlay, panelAlpha, theme.AccentColor, panelLineAlpha, titleX-250000, titleY-450000, titleCX+500000, 2500000)
 		}
 	}

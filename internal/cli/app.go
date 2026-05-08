@@ -301,6 +301,7 @@ Common options:
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
   --reference-image <path-or-url>
                           Provide one reference image for img generation
+  --image-quality <value> Set PPT image quality: standard or premium (pptx only)
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
@@ -389,6 +390,7 @@ Common options:
   --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
   --reference-image <path-or-url>
                           Provide one reference image for img generation
+  --image-quality <value> Set PPT image quality: standard or premium (pptx only)
   --local-preview         Generate local HTML/JSON preview sidecars
   --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
@@ -398,6 +400,7 @@ Common options:
 
 Description:
   - ` + "`pptx`" + ` generation tries to add images and embed them in the final file by default
+  - ` + "`pptx --image-quality premium`" + ` uses the hosted image route for PPT visual assets and consumes hosted image credits only for successful image assets
   - For a text-only PPT, pass ` + "`--no-images`" + `
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
   - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data

@@ -53,6 +53,14 @@ func hostedTimeoutSec(configured int, job GenerateJob) int {
 	return configured
 }
 
+func newHostedImageLLMClient(cfg LicenseConfig) (GeneratorLLMClient, error) {
+	return newHostedLLMClient(cfg, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "fast",
+	})
+}
+
 func hostedModelName(job GenerateJob) string {
 	profile := "docx-xlsx"
 	switch job.DocumentType {

@@ -36,6 +36,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		Style:           job.Style,
 		Audience:        job.Audience,
 		EnableImages:    job.EnableImages,
+		ImageQuality:    job.ImageQuality,
 		ImageRatio:      job.ImageRatio,
 		ReferenceImages: append([]engine.ImageReference(nil), job.ReferenceImages...),
 		LocalPreview:    job.LocalPreview,
@@ -91,6 +92,10 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		result.RewardRemaining = artifact.RewardRemaining
 		result.PaidQuotaRemaining = artifact.PaidQuotaRemaining
 	}
+	if artifact.HostedCreditBalance != nil {
+		result.HostedEnabled = true
+		result.CreditBalance = *artifact.HostedCreditBalance
+	}
 
 	if e.license != nil && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted && strings.TrimSpace(job.LicenseCheck.CommitToken.RequestID) != "" {
 		consumeResult, err := e.license.Consume(ctx, job.LicenseCheck.CommitToken)
@@ -139,6 +144,10 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		}
 	} else if job.LicenseCheck != nil && job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: hosted. %d credits remaining.", job.LicenseCheck.CreditBalance))
+	}
+	if artifact.HostedCreditBalance != nil {
+		result.HostedEnabled = true
+		result.CreditBalance = *artifact.HostedCreditBalance
 	}
 
 	emitProgress(ctx, e.progress, progressStepWriteFile, "running", "Writing local files")

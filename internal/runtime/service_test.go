@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/officecli/officecli/engine"
 	generateengine "github.com/officecli/officecli/engine/generate"
@@ -87,6 +88,15 @@ func (f *fakeLLMClient) GenerateImage(_ context.Context, req engine.ImageGenerat
 
 type runtimeProgressCollector struct {
 	events []engine.ProgressEvent
+}
+
+func containsIssueCode(items []engine.GenerateIssue, code string) bool {
+	for _, item := range items {
+		if item.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9sAAAAASUVORK5CYII="
@@ -490,11 +500,11 @@ func TestServiceGenerateReportWithFakeLLM(t *testing.T) {
 func TestBuildPPTXPrompt_ImagesEnabledIncludesImageGuidance(t *testing.T) {
 	prompt := BuildPPTXPrompt("Introduce product capabilities", generateengine.PromptTarget{}, true)
 	for _, needle := range []string{
-		`"visuals": [`,
+		`"visual": {"kind": "image"`,
 		`"prompt": "A concrete visual prompt that can be sent directly to an image model"`,
 		"Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide",
 		"Do not add images to chart, dashboard, toc, or closing layouts",
-		"On gallery slides, use visuals with 2-4 concrete prompts",
+		"For gallery slides, use a visual image for the page theme",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
@@ -507,7 +517,7 @@ func TestBuildPPTXPrompt_ImagesDisabledForbidsImageFields(t *testing.T) {
 	if strings.Contains(prompt, `"hasImage": true`) {
 		t.Fatalf("prompt should not include image schema when disabled:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "Do not output the image fields hasImage, imagePrompt, or imagePos.") {
+	if !strings.Contains(prompt, "Do not output visual objects or image fields.") {
 		t.Fatalf("prompt should forbid image fields when disabled:\n%s", prompt)
 	}
 }
@@ -521,13 +531,29 @@ func TestBuildPPTXPrompt_IncludesQualityConstraints(t *testing.T) {
 	for _, needle := range []string{
 		"Keep the deck to 6-10 slides, usually 7-9.",
 		"slide 2 should usually be a toc page",
-		"subtitle must be a takeaway sentence",
+		"takeaway must be a slide-level conclusion sentence",
 		"Use at most 3 sections, at most 4 dashboard metrics",
 		"Do not use charts for priorities, milestones, strategy, risks, or process flows",
 		"Only use rollout-style endings when the request explicitly asks for rollout",
 	} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
+		}
+	}
+}
+
+func TestBuildPPTXPrompt_RequestsSemanticDeckSpec(t *testing.T) {
+	prompt := BuildPPTXPrompt("Introduce product capabilities", generateengine.PromptTarget{}, true)
+	for _, needle := range []string{
+		`"headline": "Cover Title"`,
+		`"takeaway": "One-sentence takeaway"`,
+		`"blocks": [`,
+		`{"type": "sections"`,
+		`"visual": {"kind": "image"`,
+		"Use role/headline/takeaway/blocks/visual as the preferred semantic schema",
+	} {
+		if !strings.Contains(prompt, needle) {
+			t.Fatalf("prompt missing semantic schema marker %q:\n%s", needle, prompt)
 		}
 	}
 }
@@ -574,6 +600,39 @@ func TestFitTextForLayout_PrefersWholeClause(t *testing.T) {
 	}
 	if len(got) == 0 {
 		t.Fatal("fitTextForLayout() should return non-empty text")
+	}
+}
+
+func TestFitTextForLayout_TruncatesLongSpacedText(t *testing.T) {
+	input := "This sentence has many words and no punctuation before the maximum layout boundary"
+	got := fitTextForLayout(input, 32)
+	if utf8.RuneCountInString(got) > 32 {
+		t.Fatalf("fitTextForLayout() length = %d, want <= 32: %q", utf8.RuneCountInString(got), got)
+	}
+	if got != "This sentence has many words" {
+		t.Fatalf("fitTextForLayout() = %q", got)
+	}
+}
+
+func TestNormalizePointsAndSections_ControlTextDensity(t *testing.T) {
+	points := normalizePoints([]string{
+		"This point is intentionally much too long for a slide bullet and needs to be shortened before rendering",
+	}, 4, 32)
+	if len(points) != 1 || utf8.RuneCountInString(points[0]) > 32 {
+		t.Fatalf("points = %#v, want one shortened point", points)
+	}
+
+	sections := normalizeSections([]officegen.SlideSection{
+		{
+			Heading: "A very long section heading that should not consume the whole card",
+			Detail:  "A very long section detail that would otherwise create dense unreadable card copy in the generated slide layout",
+		},
+	}, 3)
+	if len(sections) != 1 {
+		t.Fatalf("sections = %#v, want one section", sections)
+	}
+	if utf8.RuneCountInString(sections[0].Heading) > 28 || utf8.RuneCountInString(sections[0].Detail) > 64 {
+		t.Fatalf("section was not shortened enough: %#v", sections[0])
 	}
 }
 
@@ -737,7 +796,7 @@ func TestNormalizePPTXSlide_BusinessClosingUsesDecisionBannerAndDropsBackgroundI
 	}
 }
 
-func TestNormalizePPTXSlide_ExplainerClosingUsesStarterGuidanceAndCanKeepShortBackgroundImage(t *testing.T) {
+func TestNormalizePPTXSlide_ExplainerClosingUsesStarterGuidanceAndDropsBackgroundImage(t *testing.T) {
 	coverBudget := 0
 	closingBudget := 1
 	imageBudget := 0
@@ -761,21 +820,55 @@ func TestNormalizePPTXSlide_ExplainerClosingUsesStarterGuidanceAndCanKeepShortBa
 	if slide.Variant != "closing-starter-guidance" {
 		t.Fatalf("variant = %q, want closing-starter-guidance", slide.Variant)
 	}
-	if !slide.HasImage || !imageKept {
-		t.Fatalf("short explainer closing should be allowed to keep a background image: %+v kept=%v", slide, imageKept)
+	if slide.HasImage || imageKept {
+		t.Fatalf("closing slides should not keep background image: %+v kept=%v", slide, imageKept)
 	}
 }
 
-func TestDefaultActionSlide_GeneralAvoidsLegacyNextStepsTemplate(t *testing.T) {
-	slide := defaultActionSlide(pptxArchetypeGeneral, "OfficeCLI")
+func TestDefaultActionSlide_GeneralAvoidsLegacyNextStepsTemplateAndMetaCopy(t *testing.T) {
+	slide := defaultActionSlide(pptxArchetypeGeneral, "AI PPT 生成架构升级")
 	if slide.Title == "Next Steps" {
 		t.Fatalf("general fallback should no longer use legacy title: %+v", slide)
 	}
 	if slide.Subtitle == "Close with a small set of actions, owners, and validation points" {
 		t.Fatalf("general fallback should no longer use legacy subtitle: %+v", slide)
 	}
+	text := strings.ToLower(slide.Title + " " + slide.Subtitle)
+	for _, section := range slide.Sections {
+		text += " " + strings.ToLower(section.Heading+" "+section.Detail)
+	}
+	for _, forbidden := range []string{"close with", "proof point", "proof points needed", "highest-friction document workflow"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("generic closing should not expose scaffold copy %q: %+v", forbidden, slide)
+		}
+	}
 	if slide.Variant != "closing-decision-banner" {
 		t.Fatalf("variant = %q, want closing-decision-banner", slide.Variant)
+	}
+	if len(slide.Sections) != 3 {
+		t.Fatalf("sections = %#v, want 3 concrete closing items", slide.Sections)
+	}
+}
+
+func TestNormalizePPTXPayload_DoesNotBackfillClosingImage(t *testing.T) {
+	payload := &pptxPayload{
+		Title: "AI PPT 生成架构升级",
+		Slides: []officegen.Slide{
+			{Title: "AI PPT 生成架构升级", Layout: "title", IsTitle: true},
+			{Title: "Core Architecture", Layout: "content", Sections: []officegen.SlideSection{{Heading: "Spec", Detail: "Use semantic slides"}, {Heading: "Renderer", Detail: "Own layout and contrast"}}},
+			{Title: "Recommendation", Layout: "closing", Variant: "closing-decision-banner", Sections: []officegen.SlideSection{{Heading: "Decision", Detail: "Run a scoped pilot."}}},
+		},
+	}
+	normalizePPTXPayload(payload, "AI PPT 生成架构升级", "", true)
+	if len(payload.Slides) == 0 {
+		t.Fatal("slides should not be empty")
+	}
+	last := payload.Slides[len(payload.Slides)-1]
+	if last.Layout != "closing" {
+		t.Fatalf("last slide should remain closing: %+v", last)
+	}
+	if last.HasImage || strings.TrimSpace(last.ImagePrompt) != "" || strings.TrimSpace(last.ImagePos) != "" {
+		t.Fatalf("closing slide should not be backfilled with image: %+v", last)
 	}
 }
 
@@ -803,8 +896,8 @@ func TestServiceGeneratePPTX_GeneratesImagesWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if llm.imageCalls != 3 {
-		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
+	if llm.imageCalls != 2 {
+		t.Fatalf("imageCalls = %d, want 2", llm.imageCalls)
 	}
 	if !archiveContainsEntryWithSubstring(t, doc.Bytes, "ppt/slides/_rels/", ".rels", `relationships/image`) {
 		t.Fatalf("deck rels missing image relationship")
@@ -870,8 +963,8 @@ func TestServiceGeneratePPTX_DegradesGracefullyWhenImageGenerationFails(t *testi
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	if llm.imageCalls != 3 {
-		t.Fatalf("imageCalls = %d, want 3", llm.imageCalls)
+	if llm.imageCalls != 2 {
+		t.Fatalf("imageCalls = %d, want 2", llm.imageCalls)
 	}
 	if len(doc.Warnings) == 0 {
 		t.Fatalf("warnings = %#v, want degradation warning", doc.Warnings)
@@ -917,6 +1010,179 @@ func TestBuildPPTXFromJSON_GeneratesGalleryVisuals(t *testing.T) {
 	}
 }
 
+func TestBuildPPTXFromJSON_AcceptsSemanticPayload(t *testing.T) {
+	content := `{
+		"title":"Enterprise Collaboration Platform",
+		"subtitle":"Board-ready narrative",
+		"stylePreset":"executive-dark",
+		"slides":[
+			{"role":"cover","headline":"Enterprise Collaboration Platform","takeaway":"A concise board-ready story"},
+			{"role":"summary","headline":"Readiness Snapshot","takeaway":"The platform is ready when value, governance, and rollout are aligned.","blocks":[{"type":"sections","sections":[
+				{"heading":"Value","detail":"Teams reduce coordination drag through one shared workspace."},
+				{"heading":"Governance","detail":"Permissions and audit trails keep enterprise controls visible."},
+				{"heading":"Rollout","detail":"Start with a focused department before broad expansion."}
+			]}]},
+			{"role":"evidence","headline":"Adoption Evidence","takeaway":"The strongest signal is cross-team activation, not isolated usage.","blocks":[{"type":"chart","chart":{"title":"Activation Index","type":"bar","categories":["Pilot","Expansion","Scaled"],"values":[32,58,81]},"items":["Expansion cohorts show higher activation.","Scaled teams sustain the highest usage."]}]},
+			{"role":"action","headline":"Decision Path","takeaway":"Approve a staged rollout with explicit owners and acceptance criteria.","blocks":[{"type":"actions","items":["Confirm pilot owner this month","Measure activation and governance readiness","Expand only after two validation cycles"]}]},
+			{"role":"closing","headline":"Closing Decision","takeaway":"Move forward with a controlled rollout, not a broad-bang launch.","blocks":[{"type":"sections","sections":[
+				{"heading":"Ask","detail":"Approve the pilot-to-scale path."},
+				{"heading":"Guardrail","detail":"Review adoption and control metrics before expansion."}
+			]}]}
+		]
+	}`
+
+	fileBytes, _, _, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "Enterprise Collaboration Platform", "", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	for _, needle := range []string{"Readiness Snapshot", "Adoption Evidence", "Decision Path", "Closing Decision"} {
+		if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", needle) {
+			t.Fatalf("semantic deck should preserve headline %q", needle)
+		}
+		if !strings.Contains(string(previewJSON), needle) {
+			t.Fatalf("preview json missing semantic headline %q:\n%s", needle, string(previewJSON))
+		}
+	}
+	if !strings.Contains(string(previewJSON), `"layout": "chart"`) {
+		t.Fatalf("semantic evidence block should map to chart layout:\n%s", string(previewJSON))
+	}
+	if !strings.Contains(string(previewJSON), `"layout": "closing"`) {
+		t.Fatalf("semantic action or closing role should map to closing layout:\n%s", string(previewJSON))
+	}
+}
+
+func TestBuildPPTXFromJSON_SemanticPayloadUsesControlledDesignSystem(t *testing.T) {
+	content := `{
+		"title":"Controlled Design Demo",
+		"stylePreset":"executive-dark",
+		"theme":{"preset":"executive","primaryColor":"F8FAFC","accentColor":"F9FAFB","backgroundColor":"F8FAFC","surfaceColor":"F9FAFB","textColor":"F8FAFC","titleColor":"F8FAFC"},
+		"slides":[
+			{"role":"cover","headline":"Controlled Design Demo","takeaway":"Low-level visual tokens from the model must not control the deck.","bgColor":"101010","bgColor2":"111111"},
+			{"role":"summary","headline":"Readable Summary","takeaway":"The renderer owns contrast and surface choices.","bgColor":"F9FAFB","blocks":[{"type":"sections","sections":[
+				{"heading":"Theme","detail":"Unsafe colors are ignored for semantic payloads."},
+				{"heading":"Layout","detail":"Slides use controlled layout variants."}
+			]}]},
+			{"role":"closing","headline":"Decision","takeaway":"Keep editable slides while avoiding invisible text.","blocks":[{"type":"actions","items":["Use semantic content only","Render with controlled design tokens"]}]}
+		]
+	}`
+
+	fileBytes, _, _, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "Controlled Design Demo", "", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	var preview struct {
+		Theme struct {
+			PrimaryColor   string `json:"primaryColor"`
+			AccentColor    string `json:"accentColor"`
+			BgColor1       string `json:"bgColor1"`
+			TextColor      string `json:"textColor"`
+			TitleTextColor string `json:"titleTextColor"`
+		} `json:"theme"`
+		Slides []officegen.Slide `json:"slides"`
+	}
+	if err := json.Unmarshal(previewJSON, &preview); err != nil {
+		t.Fatalf("unmarshal preview json: %v\n%s", err, string(previewJSON))
+	}
+	for _, unsafe := range []string{"F8FAFC", "F9FAFB"} {
+		if preview.Theme.TextColor == unsafe || preview.Theme.TitleTextColor == unsafe || preview.Theme.PrimaryColor == unsafe || preview.Theme.AccentColor == unsafe {
+			t.Fatalf("semantic payload leaked unsafe model theme into preview: %+v", preview.Theme)
+		}
+	}
+	for idx, slide := range preview.Slides {
+		if slide.BgColor != "" || slide.BgColor2 != "" {
+			t.Fatalf("slide %d kept model-controlled background overrides: %+v", idx+1, slide)
+		}
+	}
+	for _, unsafe := range []string{"101010", "111111", "F9FAFB"} {
+		if archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", unsafe) {
+			t.Fatalf("pptx XML should not contain model-controlled unsafe color %s", unsafe)
+		}
+	}
+}
+
+func TestBuildPPTXFromJSON_SemanticGalleryVisualGeneratesAsset(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Product Scenes",
+		"slides":[
+			{"role":"cover","headline":"Product Scenes","takeaway":"Show the usage context"},
+			{"role":"analysis","layout":"gallery","variant":"gallery","headline":"Workspace Scene","takeaway":"A visual page should keep the generated asset editable as an image object.","blocks":[{"type":"bullets","items":["Review workflow","Shared comments"]}],"visual":{"kind":"image","position":"right","prompt":"A modern product workspace with document comments and review panels, no text overlay"}}
+		]
+	}`
+
+	fileBytes, _, warnings, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Product Scenes", "", true, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if llm.imageCalls == 0 {
+		t.Fatalf("imageCalls = %d, want semantic visual image generation", llm.imageCalls)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", warnings)
+	}
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got == 0 {
+		t.Fatalf("image count = %d, want generated visual asset", got)
+	}
+	if !strings.Contains(string(previewJSON), `"layout": "gallery"`) {
+		t.Fatalf("semantic visual should remain a gallery slide:\n%s", string(previewJSON))
+	}
+}
+
+func TestBuildPPTXFromJSON_ReducesAdjacentVariantRepetition(t *testing.T) {
+	content := `{
+		"title":"Operating Review",
+		"slides":[
+			{"title":"Operating Review","layout":"title","subtitle":"A concise review"},
+			{"title":"Summary","layout":"content","variant":"sections-grid","sections":[{"heading":"A","detail":"Alpha"},{"heading":"B","detail":"Beta"},{"heading":"C","detail":"Gamma"}]},
+			{"title":"Customer Value","layout":"content","variant":"sections-grid","sections":[{"heading":"A","detail":"Alpha"},{"heading":"B","detail":"Beta"},{"heading":"C","detail":"Gamma"}]},
+			{"title":"Operating Model","layout":"content","variant":"sections-grid","sections":[{"heading":"A","detail":"Alpha"},{"heading":"B","detail":"Beta"},{"heading":"C","detail":"Gamma"}]},
+			{"title":"Execution Path","layout":"content","variant":"sections-grid","sections":[{"heading":"A","detail":"Alpha"},{"heading":"B","detail":"Beta"},{"heading":"C","detail":"Gamma"}]},
+			{"title":"Risk Controls","layout":"content","variant":"sections-grid","sections":[{"heading":"A","detail":"Alpha"},{"heading":"B","detail":"Beta"},{"heading":"C","detail":"Gamma"}]},
+			{"title":"Next Decision","layout":"closing","variant":"closing","sections":[{"heading":"Ask","detail":"Approve the next stage"},{"heading":"Guardrail","detail":"Review adoption before scale"}]}
+		]
+	}`
+
+	_, _, _, _, previewJSON, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, nil, content, "Operating Review", "", false, true)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	var preview struct {
+		Slides []struct {
+			Title   string `json:"title"`
+			Layout  string `json:"layout"`
+			Variant string `json:"variant"`
+		} `json:"slides"`
+	}
+	if err := json.Unmarshal(previewJSON, &preview); err != nil {
+		t.Fatalf("unmarshal preview json: %v\n%s", err, string(previewJSON))
+	}
+	if len(preview.Slides) < 6 {
+		t.Fatalf("slide count = %d, want at least 6", len(preview.Slides))
+	}
+	for idx := 2; idx < len(preview.Slides); idx++ {
+		prev := preview.Slides[idx-1]
+		cur := preview.Slides[idx]
+		if prev.Layout == "content" && cur.Layout == "content" && prev.Variant != "" && prev.Variant == cur.Variant {
+			t.Fatalf("adjacent content slides %d and %d reuse variant %q:\n%s", idx, idx+1, cur.Variant, string(previewJSON))
+		}
+	}
+}
+
+func TestBuildPPTXFromJSON_ReducesRenderedBulletVariantRepetition(t *testing.T) {
+	slides := reduceAdjacentVariantRepetition([]officegen.Slide{
+		{Title: "Operating Model", Layout: "content", Variant: "bullets", Points: []string{"Clarify owners", "Ship in phases", "Measure quality"}},
+		{Title: "Delivery Model", Layout: "content", Variant: "bullets-plain", Points: []string{"Separate semantic spec", "Control rendering", "Review output"}},
+	})
+	if len(slides) != 2 {
+		t.Fatalf("slides = %#v", slides)
+	}
+	if renderedVariantRhythmKey(slides[0]) == renderedVariantRhythmKey(slides[1]) {
+		t.Fatalf("render-equivalent bullet variants should be diversified: %#v", slides)
+	}
+}
+
 func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	llm := &fakeLLMClient{
 		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
@@ -950,7 +1216,7 @@ func TestBuildPPTXFromJSON_NormalizesQualityConstraints(t *testing.T) {
 	if strings.Contains(slide1, "●") {
 		t.Fatalf("title slide should not render bullet content: %s", slide1)
 	}
-	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "It should be split into multip") {
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "It should be split") {
 		t.Fatalf("content slide should be normalized into readable points")
 	}
 	for idx := 1; idx <= countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); idx++ {
@@ -999,7 +1265,7 @@ func TestBuildPPTXFromJSON_ExplainerUsesMixedLayoutsAndSkipsScaffold(t *testing.
 	if !strings.Contains(string(previewJSON), `"stylePreset": "explainer-voxel-light"`) {
 		t.Fatalf("preview json = %s", string(previewJSON))
 	}
-	for _, needle := range []string{`"variant": "bullets-plain"`, `"variant": "timeline-axis"`, `"variant": "comparison-columns"`, `"variant": "sections-grid-3up"`, `"variant": "timeline-steps"`} {
+	for _, needle := range []string{`"variant": "bullets-band"`, `"variant": "timeline-axis"`, `"variant": "comparison-columns"`, `"variant": "sections-grid-3up"`, `"variant": "timeline-steps"`} {
 		if !strings.Contains(string(previewJSON), needle) {
 			t.Fatalf("preview json missing %q:\n%s", needle, string(previewJSON))
 		}
@@ -1059,8 +1325,47 @@ func TestNormalizePPTXPayload_AutoThemeOverridesLLMThemeWhenStyleIsImplicit(t *t
 	if payload.StylePreset != officegen.StylePresetSlateSerif {
 		t.Fatalf("style preset = %q, want %q", payload.StylePreset, officegen.StylePresetSlateSerif)
 	}
-	if payload.Theme == nil || payload.Theme.AccentColor != "0F766E" || payload.Theme.BgColor1 != "EDF5F4" {
+	if payload.Theme == nil || payload.Theme.AccentColor != "2563EB" || payload.Theme.BgColor1 != "F6F8FB" || payload.Theme.TextColor != "1E293B" {
 		t.Fatalf("theme = %+v, want collaboration-slate preset theme", payload.Theme)
+	}
+}
+
+func TestNormalizePPTXPayload_CompactsSlideTextDensity(t *testing.T) {
+	payload := &pptxPayload{
+		Title:       "生成方案升级",
+		StylePreset: "tech-contrast",
+		Slides: []officegen.Slide{
+			{Title: "生成方案升级", Layout: "title", Subtitle: "管理层摘要"},
+			{
+				Title:         "落地路径：先立中间层，再逐步替换直出链路",
+				Layout:        "timeline",
+				Variant:       "timeline",
+				NarrativeRole: "action",
+				Subtitle:      "建议用三阶段实施，先把质量闸门建起来，再扩模板与场景，避免一次性重构风险过高。",
+				Sections: []officegen.SlideSection{
+					{Heading: "阶段一：建立 Spec 与校验基线（4周）", Detail: "Owner：平台工程 + 产品；产出统一 JSON schema、失败类型字典、基础对比度与溢出校验；验收：标准 8 页汇报无人工重排。"},
+					{Heading: "阶段二：接入受控设计系统（4-6周）", Detail: "Owner：文档生成工程；把主题、颜色、字号和布局槽位全部收敛到 renderer，禁止模型输出低层样式。"},
+					{Heading: "阶段三：扩大模板覆盖（持续迭代）", Detail: "Owner：产品与质量评估；按业务汇报、培训、市场分析等场景扩展布局，同时沉淀可量化质量指标。"},
+				},
+			},
+		},
+	}
+
+	normalizePPTXPayload(payload, "生成方案升级", "", false)
+	if len(payload.Slides) < 2 {
+		t.Fatalf("slides = %#v", payload.Slides)
+	}
+	for idx, slide := range payload.Slides {
+		total := utf8.RuneCountInString(slide.Title) + utf8.RuneCountInString(slide.Subtitle)
+		for _, point := range slide.Points {
+			total += utf8.RuneCountInString(point)
+		}
+		for _, section := range slide.Sections {
+			total += utf8.RuneCountInString(section.Heading) + utf8.RuneCountInString(section.Detail)
+		}
+		if total > 240 {
+			t.Fatalf("slide %d text density = %d, want <= 240: %+v", idx+1, total, slide)
+		}
 	}
 }
 
@@ -1105,8 +1410,8 @@ func TestBuildPPTXFromJSON_ExplainerImagesUseHeroAndGameplayVisuals(t *testing.T
 	if got := countZipEntries(fileBytes, "ppt/slides/slide", ".xml"); got != 7 {
 		t.Fatalf("slide count = %d, want 7", got)
 	}
-	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 4 {
-		t.Fatalf("image count = %d, want 4", got)
+	if got := countZipEntries(fileBytes, "ppt/media/", ".png"); got != 3 {
+		t.Fatalf("image count = %d, want 3", got)
 	}
 	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/slide", ".xml", "Example / Gameplay Visual") {
 		t.Fatalf("deck should contain the visual example slide")
@@ -1174,6 +1479,82 @@ func TestBuildPPTXFromJSON_ExplainerNoVisualSuccessFallsBackToTextPage(t *testin
 	}
 	if len(warnings) == 0 || !strings.Contains(warnings[len(warnings)-1].Message, "text-only version") {
 		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_ImageFailureWarningIncludesReason(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageErr: errors.New("llm request failed: status=429 body=upstream saturated"),
+	}
+	content := `{
+		"title":"Product Launch",
+		"slides":[
+			{"title":"Product Launch","layout":"title","subtitle":"Go-to-market overview","hasImage":true,"imagePrompt":"A polished product launch visual","imagePos":"background"},
+			{"title":"Market Signal","layout":"content","points":["Demand is rising","Pipeline is qualified","Launch window is clear"]}
+		]
+	}`
+
+	_, _, warnings, _, _, err := BuildPPTXFromJSON(context.Background(), llm, nil, content, "Product Launch", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Fatalf("warnings = %#v, want image degradation warning", warnings)
+	}
+	if got := warnings[len(warnings)-1].Message; !strings.Contains(got, "status=429") || !strings.Contains(got, "upstream saturated") {
+		t.Fatalf("warning should include image failure reason, got: %q", got)
+	}
+}
+
+func TestBuildPPTXFromJSON_PremiumImagePromptAndCoverUseSafeLayout(t *testing.T) {
+	balance := 9
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png", CreditBalance: &balance},
+	}
+	content := `{
+		"title":"Product Launch",
+		"slides":[
+			{"title":"Product Launch","layout":"title","subtitle":"Go-to-market overview","hasImage":true,"imagePrompt":"A polished product launch poster with dashboard text","imagePos":"background"},
+			{"title":"Market Signal","layout":"content","points":["Demand is rising","Pipeline is qualified","Launch window is clear"],"hasImage":true,"imagePrompt":"A market dashboard visual","imagePos":"right"},
+			{"title":"Decision","layout":"closing","narrativeRole":"closing","sections":[{"heading":"Ask","detail":"Approve the launch window"}],"hasImage":true,"imagePrompt":"A bright closing background","imagePos":"background"}
+		]
+	}`
+
+	fileBytes, _, warnings, _, previewJSON, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "Product Launch", "", true, true, PPTXBuildOptions{
+		ImageQuality: "premium",
+	})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if llm.imageCalls == 0 {
+		t.Fatalf("premium build should request at least one image")
+	}
+	if got := llm.lastImageRequest.Prompt; !strings.Contains(got, "no text, no letters, no words, no UI labels, no charts with labels, no typography") {
+		t.Fatalf("premium image prompt missing no-text constraints: %q", got)
+	}
+	if !containsIssueCode(warnings, "INFO_PPT_HOSTED_IMAGE_CREDITS") {
+		t.Fatalf("warnings should expose premium image credit balance: %#v", warnings)
+	}
+	var preview struct {
+		Slides []officegen.Slide `json:"slides"`
+	}
+	if err := json.Unmarshal(previewJSON, &preview); err != nil {
+		t.Fatalf("unmarshal preview json: %v\n%s", err, string(previewJSON))
+	}
+	if len(preview.Slides) < 2 {
+		t.Fatalf("preview slides = %#v", preview.Slides)
+	}
+	cover := preview.Slides[0]
+	if cover.ImagePos == "background" {
+		t.Fatalf("premium cover image should not be full-slide background: %+v", cover)
+	}
+	slideXML := readZipEntry(t, fileBytes, "ppt/slides/slide1.xml")
+	if !strings.Contains(slideXML, `name="TitleSideImage"`) || strings.Contains(slideXML, `name="BackgroundImage"`) {
+		t.Fatalf("premium cover should render a side image, not a background image:\n%s", slideXML)
+	}
+	closing := preview.Slides[len(preview.Slides)-1]
+	if closing.HasImage || strings.TrimSpace(closing.ImagePrompt) != "" || strings.TrimSpace(closing.ImagePos) != "" {
+		t.Fatalf("premium closing slide should not keep images: %+v", closing)
 	}
 }
 

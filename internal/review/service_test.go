@@ -184,6 +184,52 @@ func TestLintPPTX_FlagsAdjacentRepeatedVariants(t *testing.T) {
 	}
 }
 
+func TestLintPPTX_DashboardWithSupportBulletsKeepsDashboardVariant(t *testing.T) {
+	deck := buildTestDeck(t, []officegen.Slide{
+		{Title: "Cover", IsTitle: true, Subtitle: "Demo"},
+		{Title: "Architecture", Layout: "content", Variant: "bullets-plain", Points: []string{"可测", "可调", "可复用"}},
+		{Title: "Quality Gate", Layout: "dashboard", Variant: "kpi-band", Metrics: []officegen.MetricCard{
+			{Label: "版式成功率", Value: ">95%", Note: "首轮无需重排"},
+			{Label: "文本溢出率", Value: "<1%", Note: "按页元素计"},
+		}, Points: []string{"覆盖可读、可编辑、品牌一致性", "指标先于模板扩张"}},
+	})
+
+	report, err := lintPPTX("demo.pptx", deck)
+	if err != nil {
+		t.Fatalf("lintPPTX: %v", err)
+	}
+	for _, issue := range report.Issues {
+		if issue.Code == "VARIANT_REPETITION_ADJACENT" {
+			t.Fatalf("dashboard with support bullets should not be inferred as adjacent bullets-plain: %#v", report.Issues)
+		}
+	}
+}
+
+func TestLintPPTX_UsesNumericSlideOrderForAdjacentVariants(t *testing.T) {
+	deck := buildTestDeck(t, []officegen.Slide{
+		{Title: "Cover", IsTitle: true, Subtitle: "Demo"},
+		{Title: "Two", Layout: "content", Variant: "bullets-plain", Points: []string{"A", "B"}},
+		{Title: "Three", Layout: "timeline", Variant: "timeline-axis", Sections: []officegen.SlideSection{{Heading: "A", Detail: "One"}, {Heading: "B", Detail: "Two"}}},
+		{Title: "Four", Layout: "comparison", Variant: "comparison-columns", Sections: []officegen.SlideSection{{Heading: "A", Detail: "One"}, {Heading: "B", Detail: "Two"}}},
+		{Title: "Five", Layout: "content", Variant: "sections-grid-band", Sections: []officegen.SlideSection{{Heading: "A", Detail: "One"}, {Heading: "B", Detail: "Two"}}},
+		{Title: "Six", Layout: "closing", Variant: "closing-checklist", Sections: []officegen.SlideSection{{Heading: "A", Detail: "One"}, {Heading: "B", Detail: "Two"}}},
+		{Title: "Seven", Layout: "content", Variant: "bullets-band", Points: []string{"A", "B"}},
+		{Title: "Eight", Layout: "dashboard", Variant: "kpi-band", Metrics: []officegen.MetricCard{{Label: "A", Value: "90%", Note: "One"}, {Label: "B", Value: "80%", Note: "Two"}}},
+		{Title: "Nine", Layout: "timeline", Variant: "timeline-zigzag", Sections: []officegen.SlideSection{{Heading: "A", Detail: "One"}, {Heading: "B", Detail: "Two"}}},
+		{Title: "Ten", Layout: "content", Variant: "bullets-plain", Points: []string{"A", "B"}},
+	})
+
+	report, err := lintPPTX("demo.pptx", deck)
+	if err != nil {
+		t.Fatalf("lintPPTX: %v", err)
+	}
+	for _, issue := range report.Issues {
+		if issue.Code == "VARIANT_REPETITION_ADJACENT" {
+			t.Fatalf("non-adjacent slide2/slide10 variants should not be compared as adjacent: %#v", report.Issues)
+		}
+	}
+}
+
 func TestServiceReview_UsesVisualResultWhenAvailable(t *testing.T) {
 	deckPath := writeDeckFile(t, buildTestDeck(t, []officegen.Slide{
 		{Title: "Cover", IsTitle: true, Subtitle: "Demo"},

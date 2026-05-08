@@ -26,12 +26,21 @@ func (a *App) executeRenderJob(ctx context.Context, cfg Config, job GenerateJob,
 
 	var imageLLM GeneratorLLMClient
 	if job.DocumentType == engine.DocumentTypePPTX && job.EnableImages {
-		if missing := missingLLMConfig(cfg); missing != "" {
-			return GenerateResult{}, fmt.Errorf("generation service is not fully configured: missing %s. Run `officecli config set-generation` to finish setup", missing)
-		}
-		imageLLM, err = a.newLLMClient(cfg.LLM)
-		if err != nil {
-			return GenerateResult{}, err
+		if normalizeImageQuality(job.ImageQuality) == ImageQualityPremium {
+			var imageWarnings []engine.GenerateIssue
+			imageLLM, imageWarnings, err = a.pptxImageClient(ctx, cfg, job)
+			if err != nil {
+				return GenerateResult{}, err
+			}
+			job.Warnings = append(job.Warnings, imageWarnings...)
+		} else {
+			if missing := missingLLMConfig(cfg); missing != "" {
+				return GenerateResult{}, fmt.Errorf("generation service is not fully configured: missing %s. Run `officecli config set-generation` to finish setup", missing)
+			}
+			imageLLM, err = a.newLLMClient(cfg.LLM)
+			if err != nil {
+				return GenerateResult{}, err
+			}
 		}
 	}
 
@@ -48,17 +57,22 @@ func (a *App) executeRenderJob(ctx context.Context, cfg Config, job GenerateJob,
 		return GenerateResult{}, err
 	}
 	service := runtime.NewService(imageLLM, progress)
+	if normalizeImageQuality(job.ImageQuality) == ImageQualityPremium {
+		service.WithImageLLM(imageLLM)
+	}
 	artifact, err := service.Render(ctx, GenerateParams{
-		DocumentType:   job.DocumentType,
-		Topic:          job.Topic,
-		Prompt:         job.Prompt,
-		SourceFilePath: job.SourceFilePath,
-		Mode:           job.Mode,
-		Language:       job.Language,
-		Style:          job.Style,
-		Audience:       job.Audience,
-		EnableImages:   job.EnableImages,
-		LocalPreview:   job.LocalPreview,
+		DocumentType:    job.DocumentType,
+		Topic:           job.Topic,
+		Prompt:          job.Prompt,
+		SourceFilePath:  job.SourceFilePath,
+		Mode:            job.Mode,
+		Language:        job.Language,
+		Style:           job.Style,
+		Audience:        job.Audience,
+		EnableImages:    job.EnableImages,
+		ImageQuality:    job.ImageQuality,
+		ReferenceImages: append([]engine.ImageReference(nil), job.ReferenceImages...),
+		LocalPreview:    job.LocalPreview,
 	}, payload)
 	if err != nil {
 		emitProgress(ctx, progress, progressStepGenerate, "failed", "Document assembly failed")
@@ -124,6 +138,18 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 	if req.Args.EnableImages != nil {
 		enableImages = *req.Args.EnableImages
 	}
+	imageQualitySpecified := strings.TrimSpace(req.Args.ImageQuality) != ""
+	imageQuality := normalizeImageQuality(req.Args.ImageQuality)
+	if imageQualitySpecified {
+		switch strings.ToLower(strings.TrimSpace(req.Args.ImageQuality)) {
+		case ImageQualityStandard, ImageQualityPremium:
+		default:
+			return GenerateJob{}, nil, fmt.Errorf("unsupported image_quality: %s", req.Args.ImageQuality)
+		}
+		if documentType != engine.DocumentTypePPTX {
+			return GenerateJob{}, nil, fmt.Errorf("image_quality is only supported for pptx generation")
+		}
+	}
 	style := strings.TrimSpace(req.Args.Style)
 	styleSpecified := style != ""
 	if style == "" && documentType == engine.DocumentTypePPTX {
@@ -143,6 +169,7 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 		StyleSpecified: styleSpecified,
 		Audience:       strings.TrimSpace(req.Args.Audience),
 		EnableImages:   enableImages,
+		ImageQuality:   imageQuality,
 		LocalPreview:   false,
 		OutputDir:      outputDir,
 		Publish:        publish,

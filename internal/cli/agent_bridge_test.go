@@ -159,6 +159,13 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if imageSupport["config_command"] != "officecli config set-generation" {
 		t.Fatalf("unexpected config_command: %#v", imageSupport["config_command"])
 	}
+	if imageSupport["quality_field"] != "image_quality" {
+		t.Fatalf("unexpected quality_field: %#v", imageSupport["quality_field"])
+	}
+	qualityValues, ok := imageSupport["quality_values"].([]any)
+	if !ok || len(qualityValues) != 2 || qualityValues[0] != "standard" || qualityValues[1] != "premium" {
+		t.Fatalf("unexpected quality_values: %#v", imageSupport["quality_values"])
+	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
 	sessionMsg := readRPC(t, outReader)
@@ -514,6 +521,38 @@ func TestAgentBridgeRenderRejectsIMG(t *testing.T) {
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "office.render does not support img generation") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildGenerateJobFromRequest_PPTXImageQuality(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	job, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+		Tool: "office.generate",
+		Args: bridgeInvokeArgs{
+			DocumentType: "pptx",
+			Topic:        "Enterprise Collaboration Platform",
+			Prompt:       "Explain the business value",
+			ImageQuality: "premium",
+			EnableImages: boolPtr(true),
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildGenerateJobFromRequest: %v", err)
+	}
+	if job.ImageQuality != "premium" {
+		t.Fatalf("image quality = %q", job.ImageQuality)
+	}
+
+	_, err = app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+		Tool: "office.generate",
+		Args: bridgeInvokeArgs{
+			DocumentType: "img",
+			Topic:        "Launch Visual",
+			ImageQuality: "premium",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "image_quality is only supported for pptx generation") {
 		t.Fatalf("err = %v", err)
 	}
 }

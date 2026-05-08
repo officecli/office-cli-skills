@@ -24,9 +24,15 @@ type GenerateParams struct {
 	Style           string
 	Audience        string
 	EnableImages    bool
+	ImageQuality    string
 	ImageRatio      string
 	ReferenceImages []engine.ImageReference
 	LocalPreview    bool
+}
+
+type PPTXBuildOptions struct {
+	ImageQuality      string
+	CreditBalanceSink func(int)
 }
 
 type GeneratedArtifact struct {
@@ -47,6 +53,7 @@ type GeneratedArtifact struct {
 
 type Service struct {
 	llm      engine.LLMClient
+	imageLLM engine.LLMClient
 	progress engine.ProgressEmitter
 }
 
@@ -56,6 +63,13 @@ func NewService(llm engine.LLMClient, progress any) *Service {
 		service.progress = emitter
 	}
 	return service
+}
+
+func (s *Service) WithImageLLM(llm engine.LLMClient) *Service {
+	if s != nil {
+		s.imageLLM = llm
+	}
+	return s
 }
 
 func (s *Service) Generate(ctx context.Context, params GenerateParams) (*GeneratedArtifact, error) {
@@ -89,7 +103,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypeReport:
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
-		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
+		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ImageQuality)
 	case engine.DocumentTypeIMG:
 		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
 	default:
@@ -268,7 +282,7 @@ func imageExtensionFromMIME(mime string) string {
 	}
 }
 
-func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool) (*GeneratedArtifact, error) {
+func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool, imageQuality string) (*GeneratedArtifact, error) {
 	basePrompt := BuildPPTXPrompt(prompt, target, enableImages)
 	fallback := fallbackDescription(topic, prompt)
 	messages := []engine.LLMMessage{{Role: "user", Content: basePrompt}}
@@ -280,7 +294,19 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 	}
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX structure output")
 
-	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, target.Style, enableImages, localPreview)
+	imageLLM := s.llm
+	if normalizePPTXImageQuality(imageQuality) == "premium" {
+		imageLLM = s.imageLLM
+	}
+	var hostedCreditBalance *int
+	buildOptions := PPTXBuildOptions{
+		ImageQuality: imageQuality,
+		CreditBalanceSink: func(balance int) {
+			value := balance
+			hostedCreditBalance = &value
+		},
+	}
+	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 	if err != nil {
 		if !shouldRetryPPTXAssembly(err) {
 			return nil, err
@@ -292,18 +318,20 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 			return nil, fmt.Errorf("content generation failed: %w", err)
 		}
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX output after structured repair")
-		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSON(ctx, s.llm, s.progress, response, fallback, target.Style, enableImages, localPreview)
+		hostedCreditBalance = nil
+		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return &GeneratedArtifact{
-		DocumentName: fileName,
-		DocumentType: string(engine.DocumentTypePPTX),
-		Bytes:        fileBytes,
-		Warnings:     append(convertIssues(meta), warnings...),
-		PreviewHTML:  previewHTML,
-		PreviewJSON:  previewJSON,
+		DocumentName:        fileName,
+		DocumentType:        string(engine.DocumentTypePPTX),
+		Bytes:               fileBytes,
+		Warnings:            append(convertIssues(meta), warnings...),
+		PreviewHTML:         previewHTML,
+		PreviewJSON:         previewJSON,
+		HostedCreditBalance: hostedCreditBalance,
 	}, nil
 }
 
@@ -313,6 +341,7 @@ func shouldRetryPPTXAssembly(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "parse llm response") ||
+		strings.Contains(msg, "parse pptx deck spec") ||
 		strings.Contains(msg, "unexpected end of JSON input") ||
 		strings.Contains(msg, "slides cannot be empty")
 }
@@ -540,36 +569,41 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 	archetype := detectPPTXArchetype(description, "")
 	presetHint := suggestStylePreset(target.Style, archetype, description)
 	slideExample := `    {
-      "title": "Section Title",
+      "role": "summary",
       "layout": "content",
-      "variant": "bullets",
-      "narrativeRole": "analysis",
-      "sectionIndex": 1,
-      "sectionTitle": "Core Storyline",
-      "subtitle": "One-sentence takeaway",
-      "points": ["Point 1", "Point 2", "Point 3"],
-      "source": "Optional data source"
-    }`
-	imageRules := "- Do not output the image fields hasImage, imagePrompt, or imagePos."
-	if enableImages {
-		slideExample = `    {
-      "title": "Section Title",
-      "layout": "gallery",
-      "variant": "gallery",
-      "narrativeRole": "analysis",
-      "sectionIndex": 1,
-      "sectionTitle": "Core Storyline",
-      "subtitle": "One-sentence takeaway",
-      "points": ["Point 1", "Point 2"],
-      "visuals": [
-        {"label": "Hero visual", "prompt": "A concrete visual prompt that can be sent directly to an image model", "caption": "Short caption"}
+      "variant": "sections-grid",
+      "headline": "Section Title",
+      "takeaway": "One-sentence takeaway",
+      "blocks": [
+        {"type": "sections", "sections": [
+          {"heading": "Point 1", "detail": "Concise supporting detail"},
+          {"heading": "Point 2", "detail": "Concise supporting detail"},
+          {"heading": "Point 3", "detail": "Concise supporting detail"}
+        ]}
       ],
       "source": "Optional data source"
     }`
+	imageRules := "- Do not output visual objects or image fields."
+	if enableImages {
+		slideExample = `    {
+      "role": "analysis",
+      "layout": "gallery",
+      "variant": "gallery",
+      "headline": "Section Title",
+      "takeaway": "One-sentence takeaway",
+      "blocks": [
+        {"type": "bullets", "items": ["Point 1", "Point 2"]},
+        {"type": "sections", "sections": [
+          {"heading": "Point 1", "detail": "Concise supporting detail"}
+        ]}
+      ],
+      "visual": {"kind": "image", "position": "right", "prompt": "A concrete visual prompt that can be sent directly to an image model"},
+      "source": "Optional data source"
+    }`
 		imageRules = `- Use images sparingly. Prefer at most one hero image slide plus at most one gallery slide in the whole deck.
-- On hero-image slides, only output hasImage, imagePrompt, and imagePos. imagePos must be one of right, left, background, center, top, bottom, or diagonal.
-- imagePrompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
-- On gallery slides, use visuals with 2-4 concrete prompts and short captions. Do not also set hasImage on the same slide.
+- On hero-image slides, use visual.kind=image with visual.prompt and visual.position. visual.position must be one of right, left, background, center, top, bottom, or diagonal.
+- visual.prompt must be a concrete visual description that can be sent directly to an image model. Avoid abstract wording.
+- For gallery slides, use a visual image for the page theme and keep blocks concise; the renderer may rebalance image placement.
 - Do not add images to chart, dashboard, toc, or closing layouts.
 - Prefer images for title-cover hero visuals, product UI, usage scenarios, or training steps. By default do not add images to executive-summary, market analysis, competitive landscape, business review, quantified evidence, or action recommendation slides.
 - On image slides, keep only 1-2 short points so text remains secondary to the visual.`
@@ -583,23 +617,16 @@ Request: %s
 Return JSON only. Do not add any extra commentary:
 {
   "title": "Presentation Title",
+  "subtitle": "Optional one-sentence deck framing",
   "stylePreset": "%s",
-  "theme": {
-    "primaryColor": "1A73E8",
-    "accentColor": "E8710A",
-    "backgroundType": "gradient",
-    "bgColor1": "F0F4FF",
-    "bgColor2": "FFFFFF",
-    "fontFamily": "Noto Sans CJK SC",
-    "eaFontFamily": "Noto Sans CJK SC"
-  },
   "slides": [
     {
-      "title": "Cover Title",
+      "role": "cover",
       "layout": "title",
       "variant": "title-center",
-      "subtitle": "Subtitle",
-      "isTitle": true
+      "headline": "Cover Title",
+      "takeaway": "One-sentence takeaway",
+      "blocks": []
     },
 %s
   ]
@@ -608,13 +635,17 @@ Return JSON only. Do not add any extra commentary:
 Requirements:
 	- Keep the deck to 6-10 slides, usually 7-9.
 	- stylePreset must be one of executive-dark, editorial-light, explainer-voxel-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
-	- The first slide must use the title layout.
+	- Use role/headline/takeaway/blocks/visual as the preferred semantic schema. The renderer will convert this into editable PPT text, shapes, charts, and image assets.
+	- Do not output theme, bgColor, bgColor2, font, text color, or shape color fields. The renderer owns design tokens, contrast, and layout geometry.
+	- The first slide must use role=cover and the title layout.
 	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline that fits the topic instead of reusing one generic scaffold.
 	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as recommendation, decision, or one clear next action. Only use rollout-style endings when the request explicitly asks for rollout, implementation cadence, or milestones.
 	- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
-	- Every slide must include variant and narrativeRole. Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
+	- Every slide must include role, headline, takeaway, blocks, layout, and variant. Use roles from this set only: cover, toc, chapter, summary, evidence, analysis, action, closing.
+	- Use layouts from this set only: title, content, chart, dashboard, toc, chapter, gallery, comparison, timeline, closing.
 	- title can only use title-center or title-split. toc should use toc. chapter should use chapter. gallery should use gallery. comparison should use comparison. timeline should use timeline. closing may use closing-decision-banner, closing-rollout-strip, closing-starter-guidance, closing-takeaway, closing-checklist, or closing-cards-light. For generic content prefer bullets, sections-grid, or image-right. Use chart-focus for chart and kpi-band for dashboard.
-	- Each slide should express only one core idea. Keep titles concise. subtitle must be a takeaway sentence for the slide.
+	- Each slide should express only one core idea. Keep headlines concise. takeaway must be a slide-level conclusion sentence.
+- Prefer blocks over flat prose. Use block.type=sections for grouped ideas, bullets/actions/next_steps for concise action lists, metrics/kpis for KPI cards, chart/evidence for objective chart data, and narrative/paragraph only for one short paragraph.
 - Prefer content layout for most slides, and use chart or dashboard only when needed.
 - toc slides should list 3-6 agenda items. chapter slides should be concise separators with minimal text.
 - comparison, timeline, and closing should rely on sections rather than long bullets.
@@ -635,19 +666,23 @@ Requirements:
 }
 
 func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
-	emitProgress(ctx, progress, progressStepAssemble, "running", "Parsing the PPTX structure and preparing assets")
-	content = generateengine.RepairUnescapedQuotes(generateengine.ExtractJSON(content))
+	return BuildPPTXFromJSONWithOptions(ctx, llm, progress, content, fallback, requestedStyle, enableImages, localPreview, PPTXBuildOptions{})
+}
 
-	var payload pptxPayload
-	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool, options PPTXBuildOptions) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
+	emitProgress(ctx, progress, progressStepAssemble, "running", "Parsing the PPTX structure and preparing assets")
+	payloadPtr, err := parsePPTXPayload(content, fallback, requestedStyle, enableImages)
+	if err != nil {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure parsing failed")
-		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: parse llm response: %w", err)
+		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: %w", err)
 	}
+	payload := *payloadPtr
 	if len(payload.Slides) == 0 {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure is empty")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: slides cannot be empty")
 	}
-	warnings := normalizePPTXPayload(&payload, fallback, requestedStyle, enableImages)
+	imageQuality := normalizePPTXImageQuality(options.ImageQuality)
+	warnings := normalizePPTXPayloadWithOptions(&payload, fallback, requestedStyle, enableImages, imageQuality)
 	if !enableImages {
 		for idx := range payload.Slides {
 			payload.Slides[idx].HasImage = false
@@ -669,22 +704,34 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 		}
 	}
 	imageIndex := 0
+	firstImageFailure := ""
+	var latestCreditBalance *int
 	for idx := range payload.Slides {
 		if payload.Slides[idx].HasImage && strings.TrimSpace(payload.Slides[idx].ImagePrompt) != "" && llm != nil {
 			imageIndex++
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
 			aspectRatio := officegen.TargetAspectRatioForSlide(payload.Slides[idx])
 			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
-				Prompt:            payload.Slides[idx].ImagePrompt,
+				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].ImagePrompt, imageQuality),
 				TargetAspectRatio: aspectRatio,
 			})
 			if err == nil && image != nil {
 				payload.Slides[idx].ImageData = image.Data
 				payload.Slides[idx].ImageMIME = image.MIME
+				if image.CreditBalance != nil {
+					value := *image.CreditBalance
+					latestCreditBalance = &value
+					if options.CreditBalanceSink != nil {
+						options.CreditBalanceSink(value)
+					}
+				}
 				continue
 			}
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			if firstImageFailure == "" && err != nil {
+				firstImageFailure = summarizeImageGenerationError(err)
+			}
 			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
@@ -700,16 +747,26 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			imageIndex++
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
 			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
-				Prompt:            payload.Slides[idx].Visuals[visualIdx].Prompt,
+				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].Visuals[visualIdx].Prompt, imageQuality),
 				TargetAspectRatio: 16.0 / 9.0,
 			})
 			if err == nil && image != nil {
 				payload.Slides[idx].Visuals[visualIdx].ImageData = image.Data
 				payload.Slides[idx].Visuals[visualIdx].ImageMIME = image.MIME
+				if image.CreditBalance != nil {
+					value := *image.CreditBalance
+					latestCreditBalance = &value
+					if options.CreditBalanceSink != nil {
+						options.CreditBalanceSink(value)
+					}
+				}
 				continue
 			}
 			payload.Slides[idx].Visuals[visualIdx].ImageData = nil
 			payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
+			if firstImageFailure == "" && err != nil {
+				firstImageFailure = summarizeImageGenerationError(err)
+			}
 			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
 					Code:    "WARN_PPT_IMAGE_DEGRADED",
@@ -719,7 +776,14 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 			}
 		}
 	}
-	warnings = finalizePPTImageResults(&payload, fallback, warnings)
+	warnings = finalizePPTImageResults(&payload, fallback, warnings, firstImageFailure, imageQuality)
+	if imageQuality == "premium" && latestCreditBalance != nil {
+		warnings = upsertWarning(warnings, engine.GenerateIssue{
+			Code:    "INFO_PPT_HOSTED_IMAGE_CREDITS",
+			Message: fmt.Sprintf("Premium PPT images used hosted image generation. %d credits remaining.", *latestCreditBalance),
+			Field:   "image_quality",
+		})
+	}
 
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Packaging the PPTX file")
 	fileBytes, err := officegen.NewPPTXGenerator().Generate(payload.Slides, officegen.PPTXOptions{
@@ -760,9 +824,14 @@ func DecodeBase64Image(data string) ([]byte, error) {
 }
 
 func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string, enableImages bool) []engine.GenerateIssue {
+	return normalizePPTXPayloadWithOptions(payload, fallback, requestedStyle, enableImages, "standard")
+}
+
+func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedStyle string, enableImages bool, imageQuality string) []engine.GenerateIssue {
 	if payload == nil {
 		return nil
 	}
+	imageQuality = normalizePPTXImageQuality(imageQuality)
 
 	const maxSlides = 10
 	warnings := make([]engine.GenerateIssue, 0, 3)
@@ -797,6 +866,13 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		closingImageBudget = 1
 		imageBudget = 0
 		visualBudget = 2
+	}
+	if imageQuality == "premium" {
+		coverImageBudget = 1
+		closingImageBudget = 0
+		imageBudget = 1
+		galleryBudget = 0
+		visualBudget = 1
 	}
 	slidesTrimmed := false
 	imagesAdjusted := false
@@ -849,7 +925,12 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		}
 		if enableImages {
 			slides[0].HasImage = true
-			slides[0].ImagePos = "background"
+			if imageQuality == "premium" {
+				slides[0].ImagePos = "right"
+				slides[0].Variant = "title-split"
+			} else {
+				slides[0].ImagePos = "background"
+			}
 			slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(firstNonEmpty(slides[0].ImagePrompt, buildFallbackImagePrompt(slides[0], payload.Title))), 240)
 		} else {
 			slides[0].HasImage = false
@@ -876,12 +957,15 @@ func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string,
 		slides = rebalanceNarrativeSlides(slides, payload.Title, archetype, maxSlides)
 		slides = applyNarrativeScaffold(slides, payload.Title, archetype, maxSlides)
 		slides = diversifyBusinessLayouts(slides, archetype)
+		slides = reduceAdjacentVariantRepetition(slides)
 		if len(slides) > maxSlides {
 			slidesTrimmed = true
 			slides = slides[:maxSlides]
 		}
 	}
-	slides = applyCoverAndClosingImageDefaults(slides, payload.Title, enableImages)
+	slides = applyCoverImageDefaults(slides, payload.Title, enableImages, imageQuality)
+	slides = compactDeckTextDensity(slides, 230)
+	slides = reduceAdjacentVariantRepetition(slides)
 
 	payload.Slides = slides
 
@@ -911,7 +995,7 @@ func hasWarningCode(items []engine.GenerateIssue, code string) bool {
 	return false
 }
 
-func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []engine.GenerateIssue) []engine.GenerateIssue {
+func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []engine.GenerateIssue, firstFailure, imageQuality string) []engine.GenerateIssue {
 	if payload == nil {
 		return warnings
 	}
@@ -958,11 +1042,32 @@ func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []e
 	if succeeded > 0 {
 		message = "Some images failed to generate, but successfully generated visuals were kept in the deck. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name."
 	}
+	if normalizePPTXImageQuality(imageQuality) == "premium" {
+		message = "Premium PPT images failed to generate through the hosted image route, so the deck was generated without premium images. Check that hosted image generation is enabled for this key and that hosted credits are sufficient, or run `officecli config set-license` / purchase hosted credits. For a text-only deck, use `--no-images`."
+		if succeeded > 0 {
+			message = "Some premium PPT images failed through the hosted image route, but successfully generated visuals were kept in the deck. Check that hosted image generation is enabled for this key and that hosted credits are sufficient."
+		}
+	}
+	if firstFailure != "" {
+		message += " First image error: " + firstFailure
+	}
 	return upsertWarning(warnings, engine.GenerateIssue{
 		Code:    "WARN_PPT_IMAGE_DEGRADED",
 		Message: message,
 		Field:   "slides",
 	})
+}
+
+func summarizeImageGenerationError(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.Join(strings.Fields(err.Error()), " ")
+	const maxLen = 260
+	if len(message) > maxLen {
+		message = message[:maxLen-3] + "..."
+	}
+	return message
 }
 
 func applyExplainerImageOutcome(payload *pptxPayload) {
@@ -1047,27 +1152,48 @@ func upsertWarning(items []engine.GenerateIssue, warning engine.GenerateIssue) [
 	return append(items, warning)
 }
 
-func applyCoverAndClosingImageDefaults(slides []officegen.Slide, deckTitle string, enableImages bool) []officegen.Slide {
+func applyCoverImageDefaults(slides []officegen.Slide, deckTitle string, enableImages bool, imageQuality string) []officegen.Slide {
 	if len(slides) == 0 || !enableImages {
 		return slides
 	}
 	slides[0].HasImage = true
-	slides[0].ImagePos = "background"
+	if normalizePPTXImageQuality(imageQuality) == "premium" {
+		slides[0].ImagePos = "right"
+		if strings.TrimSpace(slides[0].Variant) == "" || strings.Contains(strings.TrimSpace(slides[0].Variant), "center") {
+			slides[0].Variant = "title-split"
+		}
+	} else {
+		slides[0].ImagePos = "background"
+	}
 	if strings.TrimSpace(slides[0].ImagePrompt) == "" {
 		slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(slides[0], deckTitle)), 240)
 	}
-	lastIdx := len(slides) - 1
-	if lastIdx <= 0 {
-		return slides
-	}
-	last := slides[lastIdx]
-	last.HasImage = true
-	last.ImagePos = "background"
-	if strings.TrimSpace(last.ImagePrompt) == "" {
-		last.ImagePrompt = fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(last, deckTitle)), 240)
-	}
-	slides[lastIdx] = last
 	return slides
+}
+
+func normalizePPTXImageQuality(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "premium":
+		return "premium"
+	default:
+		return "standard"
+	}
+}
+
+func buildPPTXImagePrompt(prompt, imageQuality string) string {
+	prompt = strings.TrimSpace(prompt)
+	if normalizePPTXImageQuality(imageQuality) != "premium" {
+		return prompt
+	}
+	const noTextConstraint = "no text, no letters, no words, no UI labels, no charts with labels, no typography"
+	lower := strings.ToLower(prompt)
+	if strings.Contains(lower, noTextConstraint) {
+		return prompt
+	}
+	if prompt == "" {
+		return noTextConstraint
+	}
+	return prompt + ". Hard constraint: " + noTextConstraint + "."
 }
 
 func firstNonEmptySlice(primary, fallback []string) []string {
@@ -1081,7 +1207,7 @@ func firstNonEmptySlice(primary, fallback []string) []string {
 
 func normalizePPTXSlide(slide officegen.Slide, idx int, deckTitle string, archetype pptxArchetype, enableImages bool, coverImageBudget, closingImageBudget, imageBudget, galleryBudget, visualBudget *int) (officegen.Slide, bool, int) {
 	slide.Title = cleanVisibleText(firstNonEmpty(slide.Title, deckTitle))
-	slide.Subtitle = cleanVisibleText(strings.TrimSpace(slide.Subtitle))
+	slide.Subtitle = fitTextForLayout(cleanVisibleText(strings.TrimSpace(slide.Subtitle)), 86)
 	slide.SectionTitle = cleanVisibleText(strings.TrimSpace(slide.SectionTitle))
 	slide.Source = fitTextForLayout(strings.TrimSpace(slide.Source), 48)
 	slide.Content = strings.TrimSpace(slide.Content)
@@ -1284,8 +1410,10 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 	out := make([]string, 0, len(points))
 	seen := map[string]struct{}{}
 	for _, point := range points {
-		_ = maxRunes
 		point = cleanVisibleText(point)
+		if maxRunes > 0 {
+			point = fitTextForLayout(point, maxRunes)
+		}
 		if point == "" {
 			continue
 		}
@@ -1304,8 +1432,8 @@ func normalizePoints(points []string, limit, maxRunes int) []string {
 func normalizeSections(sections []officegen.SlideSection, limit int) []officegen.SlideSection {
 	out := make([]officegen.SlideSection, 0, len(sections))
 	for _, section := range sections {
-		heading := cleanVisibleText(section.Heading)
-		detail := cleanVisibleText(section.Detail)
+		heading := fitTextForLayout(cleanVisibleText(section.Heading), 28)
+		detail := fitTextForLayout(cleanVisibleText(section.Detail), 64)
 		if heading == "" && detail == "" {
 			continue
 		}
@@ -2507,11 +2635,11 @@ func defaultActionSlide(archetype pptxArchetype, deckTitle string) officegen.Sli
 		Title:    "Recommendation",
 		Layout:   "closing",
 		Variant:  "closing-decision-banner",
-		Subtitle: "Close with one clear recommendation and only the proof points needed to support it.",
+		Subtitle: "Approve one focused validation cycle before scaling the approach.",
 		Sections: []officegen.SlideSection{
-			{Heading: "Recommendation", Detail: "Approve one focused pilot around the highest-friction document workflow."},
-			{Heading: "Why Now", Detail: "Validate reliability, privacy, and operator control before broader rollout."},
-			{Heading: "Proof Point", Detail: "Use one short cycle to confirm quality, review speed, and adoption."},
+			{Heading: "Decision", Detail: "Run a scoped pilot against the most important deck workflow."},
+			{Heading: "Quality Gate", Detail: "Require editable output, layout diversity, and contrast checks."},
+			{Heading: "Next Step", Detail: "Compare generated decks with a manual baseline before rollout."},
 		},
 	}
 	slide.Variant = normalizeSlideVariant(slide)
@@ -2860,10 +2988,10 @@ func isReplaceableNarrativeSlide(slide officegen.Slide) bool {
 
 func shouldInsertOverviewSlide(slide officegen.Slide) bool {
 	switch slideLayoutName(slide) {
-	case "chart", "dashboard":
+	case "chart", "dashboard", "gallery":
 		return true
 	}
-	if slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "" {
+	if slide.HasImage || strings.TrimSpace(slide.ImagePrompt) != "" || len(slide.Visuals) > 0 {
 		return true
 	}
 	text := strings.ToLower(strings.TrimSpace(slide.Title + " " + slide.Subtitle))
@@ -3415,17 +3543,7 @@ func isBusinessLikeArchetype(archetype pptxArchetype) bool {
 }
 
 func allowClosingPrimaryImage(slide officegen.Slide, archetype pptxArchetype) bool {
-	if archetype != pptxArchetypeExplainer {
-		return false
-	}
-	if strings.TrimSpace(slide.ImagePos) != "" && strings.ToLower(strings.TrimSpace(slide.ImagePos)) != "background" {
-		return false
-	}
-	if len(slide.Sections) > 2 || longestSectionDetailRunes(slide.Sections) > 42 {
-		return false
-	}
-	variant := chooseClosingVariant(slide, archetype)
-	return variant == "closing-starter-guidance" || variant == "closing-takeaway"
+	return false
 }
 
 func looksLikeRolloutClosingSlide(slide officegen.Slide) bool {
@@ -4013,6 +4131,158 @@ func diversifyBusinessLayouts(slides []officegen.Slide, archetype pptxArchetype)
 		slides[lastIdx-1] = diversifyClosingNeighbor(slides[lastIdx-1])
 	}
 	return slides
+}
+
+func reduceAdjacentVariantRepetition(slides []officegen.Slide) []officegen.Slide {
+	if len(slides) < 2 {
+		return slides
+	}
+	for idx := 1; idx < len(slides); idx++ {
+		prevVariant := renderedVariantRhythmKey(slides[idx-1])
+		curVariant := renderedVariantRhythmKey(slides[idx])
+		if prevVariant == "" || curVariant == "" || prevVariant != curVariant {
+			continue
+		}
+		if slideLayoutName(slides[idx-1]) != slideLayoutName(slides[idx]) {
+			continue
+		}
+		slides[idx] = chooseAlternateVariant(slides[idx], prevVariant, idx)
+	}
+	return slides
+}
+
+func renderedVariantRhythmKey(slide officegen.Slide) string {
+	variant := normalizeSlideVariant(slide)
+	switch variant {
+	case "bullets", "bullets-plain":
+		return "bullets-plain"
+	case "sections-grid":
+		return "sections-grid-3up"
+	case "timeline":
+		return "timeline-axis"
+	case "gallery":
+		return "gallery-duo"
+	case "closing":
+		return "closing-cards-light"
+	default:
+		return variant
+	}
+}
+
+func compactDeckTextDensity(slides []officegen.Slide, maxRunes int) []officegen.Slide {
+	if maxRunes <= 0 {
+		return slides
+	}
+	for idx := range slides {
+		slides[idx] = compactSlideTextDensity(slides[idx], maxRunes)
+	}
+	return slides
+}
+
+func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slide {
+	for textDensityRunes(slide) > maxRunes {
+		changed := false
+		for idx := range slide.Sections {
+			if textDensityRunes(slide) <= maxRunes {
+				break
+			}
+			if utf8.RuneCountInString(slide.Sections[idx].Detail) > 44 {
+				slide.Sections[idx].Detail = fitTextForLayout(slide.Sections[idx].Detail, 44)
+				changed = true
+			}
+			if textDensityRunes(slide) <= maxRunes {
+				break
+			}
+			if utf8.RuneCountInString(slide.Sections[idx].Heading) > 20 {
+				slide.Sections[idx].Heading = fitTextForLayout(slide.Sections[idx].Heading, 20)
+				changed = true
+			}
+		}
+		for idx := range slide.Points {
+			if textDensityRunes(slide) <= maxRunes {
+				break
+			}
+			if utf8.RuneCountInString(slide.Points[idx]) > 28 {
+				slide.Points[idx] = fitTextForLayout(slide.Points[idx], 28)
+				changed = true
+			}
+		}
+		for idx := range slide.Metrics {
+			if textDensityRunes(slide) <= maxRunes {
+				break
+			}
+			if utf8.RuneCountInString(slide.Metrics[idx].Note) > 32 {
+				slide.Metrics[idx].Note = fitTextForLayout(slide.Metrics[idx].Note, 32)
+				changed = true
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && len(slide.Metrics) > 0 && len(slide.Points) > 2 {
+			slide.Points = slide.Points[:2]
+			changed = true
+		}
+		if textDensityRunes(slide) > maxRunes && len(slide.Metrics) > 0 && strings.TrimSpace(slide.Source) != "" {
+			slide.Source = ""
+			changed = true
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Subtitle) > 58 {
+			slide.Subtitle = fitTextForLayout(slide.Subtitle, 58)
+			changed = true
+		}
+		if !changed {
+			break
+		}
+	}
+	return slide
+}
+
+func textDensityRunes(slide officegen.Slide) int {
+	total := utf8.RuneCountInString(slide.Title) + utf8.RuneCountInString(slide.Subtitle) + utf8.RuneCountInString(slide.Content) + utf8.RuneCountInString(slide.Source)
+	for _, point := range slide.Points {
+		total += utf8.RuneCountInString(point)
+	}
+	for _, section := range slide.Sections {
+		total += utf8.RuneCountInString(section.Heading) + utf8.RuneCountInString(section.Detail)
+	}
+	for _, metric := range slide.Metrics {
+		total += utf8.RuneCountInString(metric.Label) + utf8.RuneCountInString(metric.Value) + utf8.RuneCountInString(metric.Note)
+	}
+	return total
+}
+
+func chooseAlternateVariant(slide officegen.Slide, previous string, idx int) officegen.Slide {
+	switch slideLayoutName(slide) {
+	case "content":
+		if len(slide.Sections) > 0 {
+			options := []string{"sections-grid-3up", "sections-grid-staggered", "sections-grid-band", "sections-grid-persona"}
+			slide.Variant = firstDifferentVariant(options, previous, idx)
+			return slide
+		}
+		options := []string{"bullets-band", "bullets-callout"}
+		slide.Variant = firstDifferentVariant(options, previous, idx)
+	case "comparison":
+		slide.Variant = firstDifferentVariant([]string{"comparison-vs-band", "comparison-spotlight", "comparison-columns"}, previous, idx)
+	case "timeline":
+		slide.Variant = firstDifferentVariant([]string{"timeline-axis", "timeline-zigzag", "timeline-steps"}, previous, idx)
+	case "gallery":
+		slide.Variant = firstDifferentVariant([]string{"gallery-duo", "gallery-filmstrip", "gallery-focus"}, previous, idx)
+	case "closing":
+		slide.Variant = firstDifferentVariant([]string{"closing-decision-banner", "closing-checklist", "closing-cards-light", "closing-takeaway"}, previous, idx)
+	}
+	return slide
+}
+
+func firstDifferentVariant(options []string, previous string, idx int) string {
+	if len(options) == 0 {
+		return previous
+	}
+	start := idx % len(options)
+	for offset := 0; offset < len(options); offset++ {
+		candidate := options[(start+offset)%len(options)]
+		if candidate != previous {
+			return candidate
+		}
+	}
+	return options[0]
 }
 
 func convertSectionsGridToBullets(slide officegen.Slide) officegen.Slide {

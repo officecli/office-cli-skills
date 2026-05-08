@@ -46,6 +46,11 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 			return GenerateResult{}, err
 		}
 	}
+	imageLLMClient, imageWarnings, err := a.pptxImageClient(ctx, cfg, job)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	job.Warnings = append(job.Warnings, imageWarnings...)
 
 	job, err = a.preparePPTPrompt(ctx, llmClient, job, progress)
 	if err != nil {
@@ -82,9 +87,38 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 	if err != nil {
 		return GenerateResult{}, err
 	}
-	executor := NewExecutor(runtime.NewService(llmClient, progress), publisher, manager)
+	service := runtime.NewService(llmClient, progress)
+	if imageLLMClient != nil {
+		service.WithImageLLM(imageLLMClient)
+	}
+	executor := NewExecutor(service, publisher, manager)
 	executor.progress = progress
 	return executor.Run(ctx, job)
+}
+
+func (a *App) pptxImageClient(_ context.Context, cfg Config, job GenerateJob) (GeneratorLLMClient, []engine.GenerateIssue, error) {
+	if job.DocumentType != engine.DocumentTypePPTX || !job.EnableImages {
+		return nil, nil, nil
+	}
+	if normalizeImageQuality(job.ImageQuality) != ImageQualityPremium {
+		return nil, nil, nil
+	}
+	if missing := missingHostedConfig(cfg); missing != "" {
+		return nil, []engine.GenerateIssue{{
+			Code:    "WARN_PPT_PREMIUM_IMAGE_DEGRADED",
+			Message: fmt.Sprintf("Premium PPT images require hosted image credits, but platform service is not fully configured: missing %s. The deck will be generated without premium images. Run `officecli config set-license` or purchase/configure hosted credits.", missing),
+			Field:   "image_quality",
+		}}, nil
+	}
+	llm, err := newHostedImageLLMClient(cfg.License)
+	if err != nil {
+		return nil, []engine.GenerateIssue{{
+			Code:    "WARN_PPT_PREMIUM_IMAGE_DEGRADED",
+			Message: fmt.Sprintf("Premium PPT images are unavailable: %v. The deck will be generated without premium images. Run `officecli config set-license` or purchase/configure hosted credits.", err),
+			Field:   "image_quality",
+		}}, nil
+	}
+	return llm, nil, nil
 }
 
 func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job GenerateJob, progress progressController) (GenerateResult, error) {
@@ -205,6 +239,18 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if req.Args.EnableImages != nil {
 		enableImages = *req.Args.EnableImages
 	}
+	imageQualitySpecified := strings.TrimSpace(req.Args.ImageQuality) != ""
+	imageQuality := normalizeImageQuality(req.Args.ImageQuality)
+	if imageQualitySpecified {
+		switch strings.ToLower(strings.TrimSpace(req.Args.ImageQuality)) {
+		case ImageQualityStandard, ImageQualityPremium:
+		default:
+			return GenerateJob{}, fmt.Errorf("unsupported image_quality: %s", req.Args.ImageQuality)
+		}
+		if documentType != engine.DocumentTypePPTX {
+			return GenerateJob{}, fmt.Errorf("image_quality is only supported for pptx generation")
+		}
+	}
 
 	prompt := strings.TrimSpace(req.Args.Prompt)
 	if prompt == "" {
@@ -260,6 +306,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		StyleSpecified:       styleSpecified,
 		Audience:             strings.TrimSpace(req.Args.Audience),
 		EnableImages:         enableImages,
+		ImageQuality:         imageQuality,
 		ImageRatio:           imageRatio,
 		ReferenceImageSource: referenceImage,
 		LocalPreview:         false,

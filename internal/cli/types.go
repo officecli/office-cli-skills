@@ -38,6 +38,11 @@ type RuntimeConfig struct {
 	DefaultDocumentProfile string      `json:"default_document_profile,omitempty"`
 }
 
+const (
+	ImageQualityStandard = "standard"
+	ImageQualityPremium  = "premium"
+)
+
 func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
 	if cfg.Runtime.Mode != "" {
 		return cfg.Runtime.Mode
@@ -77,6 +82,7 @@ type GenerateJob struct {
 	StyleSpecified       bool
 	Audience             string
 	EnableImages         bool
+	ImageQuality         string
 	ImageRatio           string
 	ReferenceImageSource string
 	ReferenceImages      []engine.ImageReference

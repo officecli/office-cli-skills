@@ -126,11 +126,11 @@ func ResolveStylePreset(value string) PPTXStylePreset {
 			ID:                StylePresetSlateSerif,
 			TitleAlign:        "l",
 			TitleAccentShape:  "rect",
-			ContentCardFill:   "F6FAFB",
+			ContentCardFill:   "FFFFFF",
 			ContentCardAlpha:  98500,
-			SectionBadgeFill:  "0F766E",
-			FooterLineColor:   "D5E2E1",
-			BackgroundOverlay: "EDF5F4",
+			SectionBadgeFill:  "2563EB",
+			FooterLineColor:   "D6DEE8",
+			BackgroundOverlay: "F6F8FB",
 		}
 	case StylePresetTrainingManual:
 		return PPTXStylePreset{
@@ -239,13 +239,13 @@ func DefaultThemeForPreset(preset string) *SlideTheme {
 		}
 	case StylePresetSlateSerif:
 		return &SlideTheme{
-			PrimaryColor:   "1F2937",
-			AccentColor:    "0F766E",
-			HighlightColor: "C06A2B",
+			PrimaryColor:   "111827",
+			AccentColor:    "2563EB",
+			HighlightColor: "C2410C",
 			BackgroundType: "solid",
-			BgColor1:       "EDF5F4",
-			BgColor2:       "EDF5F4",
-			TextColor:      "1F2937",
+			BgColor1:       "F6F8FB",
+			BgColor2:       "F6F8FB",
+			TextColor:      "1E293B",
 			TitleTextColor: "0F172A",
 			FontFamily:     "Aptos",
 			EAFontFamily:   "Noto Sans CJK SC",

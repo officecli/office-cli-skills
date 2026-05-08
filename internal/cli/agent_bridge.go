@@ -128,6 +128,7 @@ type bridgeInvokeArgs struct {
 	OutputDir      string          `json:"out,omitempty"`
 	Ratio          string          `json:"ratio,omitempty"`
 	ReferenceImage string          `json:"reference_image,omitempty"`
+	ImageQuality   string          `json:"image_quality,omitempty"`
 	Publish        *bool           `json:"publish,omitempty"`
 	EnableImages   *bool           `json:"enable_images,omitempty"`
 	EnableVisual   *bool           `json:"enable_visual,omitempty"`
@@ -444,6 +445,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"out":           "string",
 					"publish":       "boolean",
 					"enable_images": "boolean",
+					"image_quality": "standard|premium (pptx only)",
 				},
 			},
 			{
@@ -457,6 +459,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"runtime_mode":    "external|hosted",
 					"ratio":           "square|landscape|portrait (img only)",
 					"reference_image": "local path or http/https URL (img only)",
+					"image_quality":   "standard|premium (pptx only)",
 					"publish":         "boolean",
 				},
 			},
@@ -558,6 +561,8 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 			"default_enabled": true,
 			"disable_flag":    "--no-images",
 			"invoke_field":    "enable_images",
+			"quality_field":   "image_quality",
+			"quality_values":  []string{"standard", "premium"},
 			"config_command":  "officecli config set-generation",
 			"config_fields":   []string{"image_base_url", "image_api_key", "image_model"},
 			"notes": []string{

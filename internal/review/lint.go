@@ -32,7 +32,9 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 	for path := range contentXMLs {
 		paths = append(paths, path)
 	}
-	sort.Strings(paths)
+	sort.Slice(paths, func(i, j int) bool {
+		return extractSlideNumber(paths[i]) < extractSlideNumber(paths[j])
+	})
 
 	issues := make([]Issue, 0)
 	strengths := make([]string, 0, 4)
@@ -302,6 +304,10 @@ func structurePenalty(code string) int {
 
 func inferSlideLayoutAndVariant(xmlContent string) (string, string, int) {
 	switch {
+	case strings.Contains(xmlContent, "MetricBg") || strings.Contains(xmlContent, "MetricText"):
+		return "dashboard", "kpi-band", 0
+	case strings.Contains(xmlContent, "ChartPanel"):
+		return "chart", "chart-focus", 0
 	case strings.Contains(xmlContent, "BulletsBandPanel"):
 		return "bullets", "bullets-band", 0
 	case strings.Contains(xmlContent, "BulletsCalloutPanel"):

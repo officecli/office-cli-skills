@@ -95,11 +95,9 @@ func isSemanticPPTXPayload(raw map[string]json.RawMessage) bool {
 
 func convertSemanticDeckToPayload(deck semanticPPTXDeck, fallback, requestedStyle string, enableImages bool) pptxPayload {
 	stylePreset := firstNonEmpty(strings.TrimSpace(deck.StylePreset), strings.TrimSpace(requestedStyle))
-	resolvedTheme := officegen.ResolveDocumentTheme(stylePreset, deck.Theme)
 	payload := pptxPayload{
 		Title:       strings.TrimSpace(deck.Title),
 		StylePreset: stylePreset,
-		Theme:       officegen.DocumentThemeToSlideTheme(resolvedTheme),
 		Slides:      make([]officegen.Slide, 0, len(deck.Slides)),
 	}
 	for idx, slide := range deck.Slides {
@@ -112,25 +110,38 @@ func convertSemanticDeckToPayload(deck semanticPPTXDeck, fallback, requestedStyl
 }
 
 func convertSemanticSlide(deck semanticPPTXDeck, slide semanticPPTXSlide, idx int, enableImages bool) officegen.Slide {
+	role := normalizeNarrativeRole(firstNonEmpty(strings.TrimSpace(slide.Role), "analysis"))
 	result := officegen.Slide{
-		Role:     strings.ToLower(strings.TrimSpace(slide.Role)),
-		Title:    strings.TrimSpace(slide.Headline),
-		Subtitle: strings.TrimSpace(slide.Takeaway),
-		Layout:   strings.ToLower(strings.TrimSpace(slide.Layout)),
-		Variant:  strings.ToLower(strings.TrimSpace(slide.Variant)),
-		Source:   strings.TrimSpace(slide.Source),
-		BgColor:  strings.TrimSpace(slide.BgColor),
-		BgColor2: strings.TrimSpace(slide.BgColor2),
+		Role:          role,
+		NarrativeRole: role,
+		Title:         strings.TrimSpace(slide.Headline),
+		Subtitle:      strings.TrimSpace(slide.Takeaway),
+		Layout:        strings.ToLower(strings.TrimSpace(slide.Layout)),
+		Variant:       strings.ToLower(strings.TrimSpace(slide.Variant)),
+		Source:        strings.TrimSpace(slide.Source),
+	}
+	if role == "" {
+		result.Role = strings.ToLower(strings.TrimSpace(slide.Role))
+		result.NarrativeRole = ""
 	}
 	if result.Layout == "" {
-		if idx == 0 || strings.EqualFold(strings.TrimSpace(slide.Role), "cover") {
+		switch role {
+		case "cover":
 			result.Layout = "title"
-		} else {
+		case "toc":
+			result.Layout = "toc"
+		case "chapter":
+			result.Layout = "chapter"
+		case "closing", "action":
+			result.Layout = "closing"
+		default:
 			result.Layout = "content"
 		}
 	}
-	if idx == 0 || strings.EqualFold(strings.TrimSpace(slide.Role), "cover") {
+	if idx == 0 || role == "cover" {
 		result.IsTitle = true
+		result.Layout = "title"
+		result.NarrativeRole = "cover"
 		if result.Subtitle == "" {
 			result.Subtitle = firstNonEmpty(strings.TrimSpace(deck.Subtitle), strings.TrimSpace(slide.Takeaway))
 		}
@@ -139,9 +150,21 @@ func convertSemanticSlide(deck semanticPPTXDeck, slide semanticPPTXSlide, idx in
 		applySemanticBlock(&result, block)
 	}
 	if enableImages && slide.Visual != nil && strings.EqualFold(strings.TrimSpace(slide.Visual.Kind), "image") {
-		result.HasImage = true
-		result.ImagePrompt = strings.TrimSpace(slide.Visual.Prompt)
-		result.ImagePos = strings.TrimSpace(slide.Visual.Position)
+		prompt := strings.TrimSpace(slide.Visual.Prompt)
+		if result.Layout == "gallery" {
+			result.Visuals = append(result.Visuals, officegen.SlideVisual{
+				Label:   strings.TrimSpace(result.Title),
+				Prompt:  prompt,
+				Caption: strings.TrimSpace(result.Subtitle),
+			})
+		} else {
+			result.HasImage = true
+			result.ImagePrompt = prompt
+			result.ImagePos = strings.TrimSpace(slide.Visual.Position)
+		}
+	}
+	if result.Layout == "closing" && len(result.Sections) == 0 && len(result.Points) > 0 {
+		result = normalizeActionSlide(result)
 	}
 	return result
 }

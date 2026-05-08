@@ -264,6 +264,15 @@ func containsWarning(warnings []string, needle string) bool {
 	return false
 }
 
+func mustTinyPNGForCLI(t *testing.T) []byte {
+	t.Helper()
+	data, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
+	if err != nil {
+		t.Fatalf("decode tiny png: %v", err)
+	}
+	return data
+}
+
 type fakeBestModeLLMClient struct {
 	structuredResponses []string
 	structuredErrors    []error
@@ -1001,6 +1010,31 @@ func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_PPTXImageQualityDefaultsAndPremium(t *testing.T) {
+	defaultJob, err := BuildGenerateJob([]string{
+		"pptx",
+		"Enterprise Collaboration Platform Overview",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob default: %v", err)
+	}
+	if defaultJob.ImageQuality != "standard" {
+		t.Fatalf("default image quality = %q, want standard", defaultJob.ImageQuality)
+	}
+
+	premiumJob, err := BuildGenerateJob([]string{
+		"pptx",
+		"Enterprise Collaboration Platform Overview",
+		"--image-quality", "premium",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob premium: %v", err)
+	}
+	if premiumJob.ImageQuality != "premium" {
+		t.Fatalf("premium image quality = %q", premiumJob.ImageQuality)
+	}
+}
+
 func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
 	cfg := Config{Defaults: DefaultsConfig{Publish: false, Mode: "best"}}
 
@@ -1071,6 +1105,7 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 		{name: "file", args: []string{"img", "Demo", "--file", "input.xlsx"}, want: "--file is not supported for img generation"},
 		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
 		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
+		{name: "image quality", args: []string{"img", "Demo", "--image-quality", "premium"}, want: "--image-quality is only supported for pptx generation"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1479,6 +1514,121 @@ func TestExecuteGenerateJob_IMGForcesLicenseCheckWhenAccessChecksDisabled(t *tes
 	}
 	if result.AccessMode != "paid" || result.Remaining != 8 {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestExecuteGenerateJob_PPTXPremiumUsesHostedImageClientOnlyForImages(t *testing.T) {
+	imageBytes := mustTinyPNGForCLI(t)
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer hosted-key" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":11}`, base64.StdEncoding.EncodeToString(imageBytes))
+	}))
+	defer server.Close()
+
+	contentLLM := &sequencedAppLLMClient{
+		structuredResponses: []string{
+			`{"prompt":"Explain the launch plan as a concise professional product launch deck with native editable text, one safe cover visual, and no readable text inside generated images.","assumptions":[]}`,
+		},
+		jsonResponses: []string{
+			`{"title":"Product Launch","slides":[{"title":"Product Launch","layout":"title","subtitle":"Go-to-market overview","isTitle":true,"hasImage":true,"imagePrompt":"A polished product launch visual","imagePos":"background"},{"title":"Market Signal","layout":"content","points":["Demand is rising","Pipeline is qualified","Launch window is clear"]}]}`,
+		},
+	}
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return contentLLM, nil
+	}
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		LLM:     LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License: LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
+		Publish: disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType:   engine.DocumentTypePPTX,
+		Topic:          "Product Launch",
+		Prompt:         "Explain the launch plan",
+		RuntimeMode:    RuntimeModeExternal,
+		Mode:           "fast",
+		EnableImages:   true,
+		ImageQuality:   "premium",
+		OutputDir:      t.TempDir(),
+		LocalPreview:   true,
+		Style:          "executive",
+		StyleSpecified: true,
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if contentLLM.jsonCalls != 1 {
+		t.Fatalf("content json calls = %d, want 1", contentLLM.jsonCalls)
+	}
+	if gotPayload == nil {
+		t.Fatalf("hosted image request was not sent")
+	}
+	if gotPayload["model"] != "hosted/img" {
+		t.Fatalf("model = %#v", gotPayload["model"])
+	}
+	if gotPayload["aspect_ratio"] == nil {
+		t.Fatalf("aspect_ratio missing: %#v", gotPayload)
+	}
+	if !strings.Contains(fmt.Sprint(gotPayload["prompt"]), "no text, no letters, no words") {
+		t.Fatalf("prompt missing no-text constraint: %#v", gotPayload["prompt"])
+	}
+	if result.CreditBalance != 11 || !containsWarning(result.Warnings, "11 credits remaining") {
+		t.Fatalf("hosted credit metadata not surfaced: %+v", result)
+	}
+}
+
+func TestExecuteGenerateJob_PPTXPremiumMissingHostedConfigDegrades(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	llm := &sequencedAppLLMClient{
+		structuredResponses: []string{
+			`{"prompt":"Explain the launch plan as a concise professional product launch deck with native text and a cover visual when available.","assumptions":[]}`,
+		},
+		jsonResponses: []string{
+			`{"title":"Product Launch","slides":[{"title":"Product Launch","layout":"title","subtitle":"Overview","hasImage":true,"imagePrompt":"A launch image","imagePos":"background"}]}`,
+		},
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return llm, nil
+	}
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		LLM:     LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
+		License: LicenseConfig{Enabled: true},
+		Publish: disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "Product Launch",
+		Prompt:       "Explain the launch plan",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "fast",
+		EnableImages: true,
+		ImageQuality: "premium",
+		OutputDir:    t.TempDir(),
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if !containsWarning(result.Warnings, "Premium PPT images require hosted image credits") {
+		t.Fatalf("warnings = %#v", result.Warnings)
+	}
+	if result.CreditBalance != 0 {
+		t.Fatalf("credit balance = %d, want no hosted image call", result.CreditBalance)
 	}
 }
 

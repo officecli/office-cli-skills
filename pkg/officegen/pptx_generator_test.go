@@ -42,6 +42,43 @@ func samplePNGWithSize(t *testing.T, width, height int) []byte {
 	return buf.Bytes()
 }
 
+func TestTitleSlideUsesCleanControlledLightLayout(t *testing.T) {
+	theme := MergeThemeWithPreset(nil, StylePresetTechContrast)
+	xml := NewPPTXGenerator().createTitleSlideXML(Slide{
+		Title:    "Controlled Light Title",
+		Subtitle: "Readable subtitle on a clean native slide",
+		Layout:   "title",
+		Variant:  "title-center",
+		IsTitle:  true,
+	}, theme, ResolveStylePreset(StylePresetTechContrast), 1, 3, slideRenderAssets{})
+
+	if strings.Contains(xml, `name="TitlePanel"`) {
+		t.Fatalf("controlled light title slide should not render a semi-transparent title panel:\n%s", xml)
+	}
+	if strings.Contains(xml, `<a:prstGeom prst="roundRect"`) {
+		t.Fatalf("controlled title slide should not use card geometry behind the title:\n%s", xml)
+	}
+}
+
+func TestSafeTextColorUsesContrastRatio(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		text string
+		bg   string
+	}{
+		{name: "orange accent on light background", text: "F97316", bg: "F8FAFC"},
+		{name: "near white text on white background", text: "F8FAFC", bg: "FFFFFF"},
+		{name: "dark muted text on dark background", text: "111827", bg: "0F172A"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getSafeTextColorForBg(tc.text, tc.bg)
+			if contrastRatio(got, tc.bg) < 4.5 {
+				t.Fatalf("getSafeTextColorForBg(%q, %q) = %q, contrast %.2f; want >= 4.5", tc.text, tc.bg, got, contrastRatio(got, tc.bg))
+			}
+		})
+	}
+}
+
 func TestPPTXWithChart(t *testing.T) {
 	slides := []Slide{
 		{
@@ -216,6 +253,20 @@ func TestPPTXImageLayoutsRenderPicture(t *testing.T) {
 				ImageData: samplePNG,
 			},
 			contains: []string{`<p:pic>`, `name="BackgroundImage"`, `name="ImageOverlay"`},
+		},
+		{
+			name: "title split right",
+			slide: Slide{
+				Title:     "Cover",
+				Layout:    "title",
+				Variant:   "title-split",
+				Subtitle:  "Native text stays in a safe left column",
+				HasImage:  true,
+				ImagePos:  "right",
+				ImageData: samplePNG,
+			},
+			contains:  []string{`<p:pic>`, `name="TitleSideImage"`, `<a:off x="6500000" y="900000"/>`, `<a:off x="1000000" y="1850000"/>`},
+			notExists: []string{`name="BackgroundImage"`, `name="ImageOverlay"`, `name="CenterImage"`},
 		},
 		{
 			name: "content left",
@@ -702,6 +753,27 @@ func TestPPTXNarrativeLayouts_RenderDedicatedComparisonTimelineAndClosing(t *tes
 	}
 	if !strings.Contains(files["ppt/slides/slide3.xml"], "ClosingCard") {
 		t.Fatalf("closing slide should render dedicated closing cards:\n%s", files["ppt/slides/slide3.xml"])
+	}
+}
+
+func TestPPTXClosingDecisionBannerAvoidsDecorativeWhiteChips(t *testing.T) {
+	slides := []Slide{
+		{Title: "Recommendation", Layout: "closing", Variant: "closing-decision-banner", Subtitle: "Approve one focused pilot.", Sections: []SlideSection{{Heading: "Decision", Detail: "Approve the pilot scope this week."}, {Heading: "Guardrail", Detail: "Keep phase one limited."}, {Heading: "Signal", Detail: "Review quality and adoption."}}},
+	}
+
+	gen := NewPPTXGenerator()
+	data, err := gen.Generate(slides, PPTXOptions{Title: "Closing Decision Test", Creator: "Test"})
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+
+	files := openZipFiles(t, data)
+	slideXML := files["ppt/slides/slide1.xml"]
+	if !strings.Contains(slideXML, "ClosingDecisionBanner") {
+		t.Fatalf("closing decision slide should keep the primary decision banner:\n%s", slideXML)
+	}
+	if strings.Contains(slideXML, "ClosingDecisionChip") {
+		t.Fatalf("closing decision slide should not render decorative white chips:\n%s", slideXML)
 	}
 }
 

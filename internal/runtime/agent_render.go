@@ -308,17 +308,29 @@ func (s *Service) Render(ctx context.Context, params GenerateParams, payload jso
 		}, nil
 	case engine.DocumentTypePPTX:
 		requestedStyle := strings.TrimSpace(params.Style)
-		fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSON(ctx, s.llm, s.progress, content, fallback, requestedStyle, params.EnableImages, params.LocalPreview)
+		var hostedCreditBalance *int
+		imageLLM := s.llm
+		if normalizePPTXImageQuality(params.ImageQuality) == "premium" {
+			imageLLM = s.imageLLM
+		}
+		fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, content, fallback, requestedStyle, params.EnableImages, params.LocalPreview, PPTXBuildOptions{
+			ImageQuality: params.ImageQuality,
+			CreditBalanceSink: func(balance int) {
+				value := balance
+				hostedCreditBalance = &value
+			},
+		})
 		if err != nil {
 			return nil, err
 		}
 		return &GeneratedArtifact{
-			DocumentName: fileName,
-			DocumentType: string(engine.DocumentTypePPTX),
-			Bytes:        fileBytes,
-			Warnings:     warnings,
-			PreviewHTML:  previewHTML,
-			PreviewJSON:  previewJSON,
+			DocumentName:        fileName,
+			DocumentType:        string(engine.DocumentTypePPTX),
+			Bytes:               fileBytes,
+			Warnings:            warnings,
+			PreviewHTML:         previewHTML,
+			PreviewJSON:         previewJSON,
+			HostedCreditBalance: hostedCreditBalance,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", params.DocumentType)
