@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { Bolt, LaptopMinimal, Sparkles, ScanSearch, Terminal, Bot, Plug, ArrowRight } from 'lucide-react'
+import { Bolt, LaptopMinimal, Share2, ScanSearch, Terminal, Bot, Plug, ArrowRight, Link2, Lock } from 'lucide-react'
 
 export default function Features() {
   return (
@@ -124,30 +124,66 @@ export default function Features() {
           </p>
         </motion.div>
 
-        {/* Bento Box 4: Wide Feature */}
-        <motion.div 
+        {/* Bento Box 4: Wide Feature - One-Command Online Publish (differentiator) */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.4 }}
-          className="md:col-span-3 bg-surface-low p-10 rounded-3xl flex flex-col md:flex-row items-center gap-12 group hover:bg-surface-high transition-all border border-white/5 relative overflow-hidden"
+          className="md:col-span-3 bg-surface-low p-10 rounded-3xl flex flex-col md:flex-row items-center gap-12 group hover:bg-surface-high transition-all border border-primary/15 relative overflow-hidden"
         >
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-32 bg-primary/5 rounded-full blur-3xl transition-opacity group-hover:opacity-100 opacity-50 pointer-events-none"></div>
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-32 bg-primary/10 rounded-full blur-3xl transition-opacity group-hover:opacity-100 opacity-60 pointer-events-none"></div>
           <div className="flex-1 relative z-10">
-            <Sparkles className="text-primary w-10 h-10 mb-6" />
-            <h3 className="font-headline text-3xl font-bold text-white mb-4">Built for Broader Document Operations</h3>
-            <p className="text-outline-variant max-w-2xl text-lg">
-              OfficeCLI starts with creation and PPT review, then expands into conversion, modification, summarization, and richer document formatting workflows.
-            </p>
-          </div>
-          <div className="hidden lg:flex w-64 h-32 bg-surface-high rounded-xl border border-outline-variant/10 items-center justify-center relative z-10 shadow-inner">
-            <div className="flex gap-3 items-end">
-              <motion.div animate={{ height: [24, 48, 24] }} transition={{ repeat: Infinity, duration: 2 }} className="w-3 rounded-t-sm bg-tertiary h-10"></motion.div>
-              <motion.div animate={{ height: [36, 72, 36] }} transition={{ repeat: Infinity, duration: 2.5 }} className="w-3 rounded-t-sm bg-tertiary h-14"></motion.div>
-              <motion.div animate={{ height: [18, 36, 18] }} transition={{ repeat: Infinity, duration: 1.8 }} className="w-3 rounded-t-sm bg-tertiary h-8"></motion.div>
-              <motion.div animate={{ height: [30, 60, 30] }} transition={{ repeat: Infinity, duration: 2.2 }} className="w-3 rounded-t-sm bg-tertiary h-12"></motion.div>
-              <motion.div animate={{ height: [40, 80, 40] }} transition={{ repeat: Infinity, duration: 2.7 }} className="w-3 rounded-t-sm bg-tertiary h-16"></motion.div>
+            <div className="flex items-center gap-3 mb-6">
+              <Share2 className="text-primary w-10 h-10" />
+              <span className="text-[10px] font-headline uppercase tracking-[0.25em] text-primary border border-primary/30 bg-primary/10 px-2.5 py-1 rounded-full">Differentiator</span>
             </div>
+            <h3 className="font-headline text-3xl font-bold text-white mb-4">One-Command Online Publish</h3>
+            <p className="text-outline-variant max-w-2xl text-lg leading-relaxed mb-5">
+              Most AI document CLIs stop at a local file. OfficeCLI ships an end-to-end publish path: every successful generation can become a password-protected online preview link in the same command. Share the URL with reviewers without uploading, hosting, or wiring extra services.
+            </p>
+            <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm text-outline-variant max-w-2xl">
+              <li className="flex items-start gap-2">
+                <Link2 className="text-primary w-4 h-4 mt-0.5 shrink-0" />
+                <span>Returns a shareable <span className="text-white font-medium">officecli.io/p/&lt;id&gt;</span> URL on success.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Lock className="text-primary w-4 h-4 mt-0.5 shrink-0" />
+                <span>Auto-generated <span className="text-white font-medium">access password</span> protects each preview by default.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Terminal className="text-primary w-4 h-4 mt-0.5 shrink-0" />
+                <span>Toggle per command with <span className="text-white font-medium">--no-publish</span> or globally via <span className="text-white font-medium">config set-publish</span>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <Bolt className="text-primary w-4 h-4 mt-0.5 shrink-0" />
+                <span>Standalone <span className="text-white font-medium">new img</span> publishes by default — instant share for launch visuals.</span>
+              </li>
+            </ul>
+          </div>
+          <div className="hidden lg:flex w-80 shrink-0 flex-col gap-2 bg-surface-high rounded-xl border border-outline-variant/15 p-4 relative z-10 shadow-inner font-mono">
+            <div className="flex items-center gap-1.5 mb-2">
+              <div className="w-2 h-2 rounded-full bg-[#ff5f56]"></div>
+              <div className="w-2 h-2 rounded-full bg-[#ffbd2e]"></div>
+              <div className="w-2 h-2 rounded-full bg-[#27c93f]"></div>
+              <span className="ml-2 text-[9px] font-headline text-outline uppercase tracking-[0.2em]">share_preview</span>
+            </div>
+            <div className="text-[11px]">
+              <span className="text-tertiary">$</span> <span className="text-[#27c93f]">officecli</span> <span className="text-[#8af3f7]">new</span> <span className="text-[#ffbd2e]">pptx</span> <span className="text-outline-variant">--prompt-file ./brief.md</span>
+            </div>
+            <div className="text-[10px] text-white">Generation completed.</div>
+            <div className="text-[10px] text-white leading-relaxed">
+              Preview URL: <span className="text-primary">officecli.io/p/xyz123</span>
+            </div>
+            <div className="text-[10px] text-outline-variant">password: abcdef</div>
+            <motion.div
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="mt-1 inline-flex items-center gap-1 text-[9px] font-headline uppercase tracking-[0.2em] text-tertiary"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+              link ready to share
+            </motion.div>
           </div>
         </motion.div>
       </div>

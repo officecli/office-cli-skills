@@ -33,7 +33,7 @@ export default function UseCases() {
         <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
           <div className="max-w-2xl">
             <h2 className="font-headline text-4xl font-bold text-white mb-4">Where AI Document Automation Actually Matters</h2>
-            <p className="text-outline-variant">OfficeCLI is built for teams that want AI document workflows in the terminal first, then optional platform features when platform access, billing, or preview publishing matters.</p>
+            <p className="text-outline-variant">OfficeCLI is built for teams that want AI document workflows in the terminal first, then a one-command online publish step that hands stakeholders a password-protected preview link — a share path other AI document CLIs do not ship out of the box.</p>
           </div>
           <Link className="text-primary font-bold hover:underline flex items-center gap-2" to="/claude-code-codex-office-skills">
             Explore agent skills <ArrowRight className="w-5 h-5" />

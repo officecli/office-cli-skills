@@ -36,11 +36,19 @@ const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
 const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
 
-const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, REPORT, and IMG Generator for Terminal Workflows'
+const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, REPORT, and IMG Generator with One-Command Online Publish'
 const homeDescription =
-  'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs. Generate files and visuals from the terminal with your own LLM endpoint, without a backend stack or cluster.'
+  'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs. Generate from your terminal with your own LLM endpoint, then publish a password-protected online preview link in one command — a share path other AI document CLIs do not ship out of the box.'
 
 export const homeFAQs: FAQEntry[] = [
+  {
+    q: 'What makes OfficeCLI different from other AI document CLIs?',
+    a: 'OfficeCLI ships an end-to-end publish path. Every successful PPTX, DOCX, XLSX, REPORT, or standalone IMG generation can be turned into a password-protected online preview link with one command — no extra hosting, gateway, or upload step. Toggle per command with `--no-publish` or globally via `officecli config set-publish`. Other terminal-first AI document generators stop at a local file.',
+  },
+  {
+    q: 'How does one-command online publish work?',
+    a: 'After a successful generation, OfficeCLI calls the OfficeCLI publish service, returns a shareable `officecli.io/p/<id>` URL, and prints an auto-generated access password protecting the preview. Run `officecli config set-publish` once to enable the channel; subsequent `officecli new ...` runs publish by default for documents and standalone images. Add `--no-publish` to keep any single run fully local. Set `OFFICE_CLI_DEFAULT_PUBLISH=false` to flip the default for batch jobs.',
+  },
   {
     q: 'Is OfficeCLI only for generating files?',
     a: 'No. Generation is the primary focus right now, but the product direction is broader document operations: standalone image generation, conversion, content modification, summarization, extraction, and layout handling.',
@@ -51,7 +59,7 @@ export const homeFAQs: FAQEntry[] = [
   },
   {
     q: 'What document types work today?',
-    a: 'The current public release generates PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals via `new img`. It can also score and review local PPTX files.',
+    a: 'The current public release generates PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals via `new img`. It can also score and review local PPTX files, and publish any of those outputs as a password-protected online preview link with one command.',
   },
   {
     q: 'How does standalone image generation work?',
@@ -67,7 +75,7 @@ export const homeFAQs: FAQEntry[] = [
   },
   {
     q: 'When do I need platform.officecli.io?',
-    a: 'Use the platform when you need paid access management, billing, API-key workflows, image-quota monitoring, or optional online preview publishing.',
+    a: 'Use the platform when you need paid access management, billing, API-key workflows, image-quota monitoring, or to inspect, revoke, and manage published online previews from a UI.',
   },
 ]
 
@@ -262,8 +270,8 @@ export const routeSEO: Record<string, RouteSEO> = {
   ...agentSkillsRouteSEO,
   '/docs': buildRouteSEO(
     '/docs',
-    'OfficeCLI Docs | PPTX, DOCX, XLSX, REPORT, and IMG capabilities',
-    'Review OfficeCLI capabilities, supported PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs, and understand which document automation workflows are available today.',
+    'OfficeCLI Docs | PPTX, DOCX, XLSX, REPORT, IMG, and one-command online publish',
+    'Review OfficeCLI capabilities, supported PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs, and the one-command online publish flow that returns a password-protected preview URL after every successful generation.',
   ),
   '/download': buildRouteSEO(
     '/download',

@@ -6,10 +6,10 @@ const roadmapPhases = [
     border: 'border-outline-variant/10',
     background: 'bg-surface-low',
     items: [
+      'Publish a password-protected online preview link with one command — a differentiator other AI document CLIs do not ship out of the box. Toggle per command with `--no-publish` or globally via `officecli config set-publish`.',
       'Generate PPTX, DOCX, XLSX, and workbook-backed REPORT files from natural-language prompts.',
-      'Generate standalone IMG visuals with `new img`, including ratio, explicit size, and one or more reference images.',
+      'Generate standalone IMG visuals with `new img`, including ratio, explicit size, and one or more reference images. Successful images publish online previews by default once publishing is configured.',
       'Review and score local PPTX files, with optional visual review when `soffice` is available.',
-      'Publish optional online previews when preview publishing is configured; standalone images publish by default.',
     ],
   },
   {

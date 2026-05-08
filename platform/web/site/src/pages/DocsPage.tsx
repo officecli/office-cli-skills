@@ -14,6 +14,7 @@ import {
   docsSections,
   promptExamples,
   promptingTips,
+  publishGuide,
   quickstartChecklist,
   troubleshootingTips,
   uninstallMethods,
@@ -223,6 +224,64 @@ export default function DocsPage() {
                       ))}
                     </div>
                   ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <div className="h-px bg-outline-variant/10 w-full" />
+
+          <section>
+            <SectionHeading
+              id="online-publish"
+              title="Online Publish"
+              description="One-command online publish is the differentiating share path of OfficeCLI. After every successful generation, the CLI returns a password-protected `officecli.io/p/<id>` preview URL — no extra hosting, gateway, or upload step. Other terminal-first AI document CLIs stop at a local file."
+            />
+            <p className="text-outline-variant leading-relaxed max-w-3xl mb-8">{publishGuide.intro}</p>
+
+            <div className="grid gap-6 md:grid-cols-2 mb-12">
+              {publishGuide.highlights.map((tip) => (
+                <article key={tip.title} className="rounded-2xl border border-primary/15 bg-surface-low p-6">
+                  <h3 className="font-headline text-xl font-bold text-white mb-3">{tip.title}</h3>
+                  <p className="text-outline-variant leading-relaxed text-sm">{tip.detail}</p>
+                </article>
+              ))}
+            </div>
+
+            <h3 className="font-headline text-2xl font-bold text-white mb-6">Configure publish</h3>
+            <div className="grid gap-6 lg:grid-cols-2 mb-12">
+              {publishGuide.configCommands.map((item) => (
+                <div key={item.command}>
+                  <CodeBlock command={item.command} label={item.label} />
+                  <p className="mt-3 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+
+            <h3 className="font-headline text-2xl font-bold text-white mb-4">Expected output</h3>
+            <p className="text-outline-variant leading-relaxed mb-4 max-w-3xl">
+              When publish is enabled, every successful run prints a Preview URL and an auto-generated access password right after the local file path. Treat the URL plus password as a single share unit:
+            </p>
+            <div className="rounded-2xl border border-outline-variant/10 bg-surface-low overflow-hidden mb-12">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-outline-variant/10 bg-surface">
+                <div className="text-xs font-headline uppercase tracking-widest text-tertiary">terminal output</div>
+              </div>
+              <div className="px-5 py-4">
+                <pre className="whitespace-pre-wrap text-sm leading-relaxed text-outline-variant font-mono">{publishGuide.outputShape.join('\n')}</pre>
+              </div>
+            </div>
+
+            <h3 className="font-headline text-2xl font-bold text-white mb-4">Environment variables</h3>
+            <p className="text-outline-variant leading-relaxed mb-6 max-w-3xl">
+              Use these to flip publish behavior in CI, batch runs, or self-hosted publish gateways without rerunning <code>set-publish</code>.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {publishGuide.envVars.map((item) => (
+                <article key={item.name} className="rounded-2xl border border-outline-variant/10 bg-surface-low p-5">
+                  <code className="text-primary font-mono text-sm font-bold">{item.name}</code>
+                  <p className="mt-2 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
                 </article>
               ))}
             </div>

@@ -353,13 +353,13 @@ export default function Hero() {
         >
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0d4c54]/40 text-[#8af3f7] text-xs font-headline uppercase tracking-widest mb-6 border border-[#0d4c54]/60">
             <span className="w-2 h-2 rounded-full bg-tertiary terminal-pulse shadow-[0_0_8px_#00dce5]"></span>
-            Local-first AI document generation CLI
+            Local-first AI document CLI · One-command online publish
           </span>
           <h1 className="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
             Generate <span className="text-primary italic">PPTX</span>, DOCX, XLSX, REPORT, and IMG Outputs From One AI CLI
           </h1>
           <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals with your own LLM endpoint or the OfficeCLI image service, without a backend stack or cluster, then review decks and expand into broader document automation.
+            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals with your own LLM endpoint or the OfficeCLI image service, then publish a password-protected online preview link with a single command — no other CLI generator ships this end-to-end share path out of the box.
           </p>
           <div className="flex flex-wrap gap-4">
             <motion.a

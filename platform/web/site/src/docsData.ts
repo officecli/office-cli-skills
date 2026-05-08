@@ -47,6 +47,7 @@ export const docsSections: DocsSectionLink[] = [
   { id: 'quickstart', label: 'Quickstart' },
   { id: 'install-update-uninstall', label: 'Install / Update / Uninstall' },
   { id: 'command-reference', label: 'Command Reference' },
+  { id: 'online-publish', label: 'Online Publish' },
   { id: 'prompting-tips', label: 'Prompting Tips' },
   { id: 'prompt-cookbook', label: 'Prompt Cookbook' },
   { id: 'agents', label: 'Use With Agents' },
@@ -69,7 +70,7 @@ export const quickstartChecklist: DocsChecklist[] = [
     items: [
       'Run `officecli config set-generation` to configure your LLM endpoint.',
       'Run `officecli config set-license` to enable free or paid access checks.',
-      'Run `officecli config set-publish` only if you want online preview publishing.',
+      'Run `officecli config set-publish` to turn on one-command online publish — every successful generation will return a password-protected preview URL you can share without uploading or hosting anything else.',
     ],
   },
   {
@@ -78,6 +79,7 @@ export const quickstartChecklist: DocsChecklist[] = [
       'Use `officecli new pptx|docx|xlsx|report ...` for file generation.',
       'For `pptx`, images are enabled by default when the plan benefits from visuals; add `--no-images` for a text-only deck.',
       'Use `officecli new img <title> --prompt ...` for standalone image generation. `set-license` is required and `set-publish` is required for online image previews.',
+      'Once `set-publish` is configured, every successful generation prints a `Preview URL` plus an auto-generated access password — share that line with stakeholders. Add `--no-publish` to any single run for fully local output.',
     ],
   },
 ]
@@ -436,6 +438,10 @@ export const inviteRewardChecklists: DocsChecklist[] = [
 
 export const troubleshootingTips: TipGroup[] = [
   {
+    title: 'Online preview publishing',
+    detail: 'Online preview publishing is what lets stakeholders open the generated file from a shareable, password-protected URL — without you uploading or hosting anything else. It is the differentiating share path that other terminal-first AI document CLIs do not ship out of the box.',
+  },
+  {
     title: 'PPT generated without images',
     detail: 'Run `officecli config set-generation` and verify the image model URL, credentials, and model name. Use `--no-images` when a text-only deck is intentional.',
   },
@@ -449,7 +455,7 @@ export const troubleshootingTips: TipGroup[] = [
   },
   {
     title: 'Publish link did not appear',
-    detail: 'Online preview publishing is optional for documents. Run `officecli config set-publish` if you want published previews, or use `--no-publish` for fully local output.',
+    detail: 'Run `officecli config set-publish` to turn on one-command online publish, or set `OFFICE_CLI_DEFAULT_PUBLISH=true`. If publishing is configured but the URL is missing, run `officecli config status` to verify the publish endpoint and license API key, and confirm the run did not include `--no-publish` and did not set `OFFICE_CLI_DEFAULT_PUBLISH=false`.',
   },
   {
     title: 'Report generation failed immediately',
@@ -460,6 +466,91 @@ export const troubleshootingTips: TipGroup[] = [
     detail: 'Run `officecli auth status` and confirm whether the machine is in free mode or using a paid API key. If you expect paid usage, save the correct key with `officecli auth set-key`.',
   },
 ]
+
+export interface PublishGuide {
+  intro: string
+  highlights: TipGroup[]
+  configCommands: CommandExample[]
+  envVars: Array<{ name: string; detail: string }>
+  outputShape: string[]
+}
+
+export const publishGuide: PublishGuide = {
+  intro:
+    'One-command online publish is the differentiating share path of OfficeCLI. After every successful generation, OfficeCLI calls the OfficeCLI publish service, returns a shareable `officecli.io/p/<id>` URL, and prints an auto-generated access password protecting the preview — no extra hosting, gateway, or upload step. Other terminal-first AI document CLIs stop at a local file.',
+  highlights: [
+    {
+      title: 'On by default once configured',
+      detail: 'After `officecli config set-publish`, every `officecli new` run for documents and standalone images publishes by default. The default can be flipped per machine by editing `set-defaults` or by setting `OFFICE_CLI_DEFAULT_PUBLISH=false`.',
+    },
+    {
+      title: 'Per-command override',
+      detail: 'Add `--no-publish` to any single command to keep that run fully local. The flag wins over the configured default and over `OFFICE_CLI_DEFAULT_PUBLISH`.',
+    },
+    {
+      title: 'License-aware credential reuse',
+      detail: 'If `set-publish` is enabled but no dedicated publish API key is set, OfficeCLI reuses the license API key configured by `officecli config set-license`, so most users only have to authenticate once.',
+    },
+    {
+      title: 'Password-protected by default',
+      detail: 'Every preview returns an auto-generated access password printed alongside the Preview URL. Treat the URL plus password as a single share unit — that is the package you hand to a reviewer.',
+    },
+    {
+      title: 'Works for documents and standalone images',
+      detail: 'PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs all flow through the same publish path. Standalone `new img` publishes by default whenever publishing is configured.',
+    },
+  ],
+  configCommands: [
+    {
+      label: 'Turn publish on for this machine',
+      command: 'officecli config set-publish',
+      detail: 'Configures the publish endpoint and credential. Subsequent `officecli new ...` runs will publish by default.',
+    },
+    {
+      label: 'Inspect current publish state',
+      command: 'officecli config status',
+      detail: 'Shows whether publish is enabled, the publish base URL, and whether a publish API key or license key will be used to authenticate.',
+    },
+    {
+      label: 'Generate and skip publish for one run',
+      command: 'officecli new pptx "Internal Draft" --prompt-file ./brief.md --no-publish',
+      detail: 'Use `--no-publish` for sensitive drafts or strict offline workflows; this run will only write the local file.',
+    },
+    {
+      label: 'Generate and force publish on a single run',
+      command: 'officecli new docx "Customer Proposal" --prompt-file ./proposal.md --publish',
+      detail: 'Use `--publish` when the machine default is off but you want this specific run to produce a shareable preview URL.',
+    },
+  ],
+  envVars: [
+    {
+      name: 'OFFICE_CLI_PUBLISH_ENABLED',
+      detail: 'Force-enable or disable the publish channel without rerunning `set-publish`. Useful in CI images.',
+    },
+    {
+      name: 'OFFICE_CLI_DEFAULT_PUBLISH',
+      detail: 'Flip the default publish behavior of `officecli new` for documents. `--publish` and `--no-publish` still override per command.',
+    },
+    {
+      name: 'OFFICE_CLI_PUBLISH_BASE_URL',
+      detail: 'Override the publish service base URL when running against a staging or self-hosted publish gateway.',
+    },
+    {
+      name: 'OFFICE_CLI_PUBLISH_API_KEY',
+      detail: 'Use a dedicated publish API key. If unset, OfficeCLI falls back to the license API key configured by `set-license`.',
+    },
+    {
+      name: 'OFFICE_CLI_PUBLISH_TIMEOUT_SEC',
+      detail: 'Raise the publish HTTP timeout for large outputs or slower networks.',
+    },
+  ],
+  outputShape: [
+    '$ officecli new pptx "Q3 Business Review" --prompt-file ./brief.md',
+    'Generation completed. Saved to output/Q3_BUSINESS_REVIEW.PPTX',
+    'Preview URL: https://officecli.io/p/xyz123; password: abcdef',
+    'Access: paid mode; 109 generations remaining; trial 10',
+  ],
+}
 
 export const docsLinks = {
   platformAppURL,

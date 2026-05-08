@@ -63,9 +63,16 @@ export default function CLIShowcase() {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
         >
-          <h2 className="font-headline text-4xl font-bold text-white mb-6">Generate PPTX, DOCX, XLSX, REPORT, and IMG Outputs</h2>
-          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal and run AI document automation from one local-first CLI. Install once, connect your LLM, and generate PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs without standing up extra infrastructure.</p>
+          <h2 className="font-headline text-4xl font-bold text-white mb-6">Generate, Review, and Publish From One CLI</h2>
+          <p className="text-outline-variant text-lg mb-8 leading-relaxed">Stay in the terminal and run AI document automation from one local-first CLI. Install once, connect your LLM, generate PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs, then publish a password-protected online preview link in the same command — no extra hosting, gateway, or upload step.</p>
           <ul className="space-y-6">
+            <li className="flex items-start gap-4">
+              <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
+              <div>
+                <h5 className="font-bold text-white">Built-in online publish</h5>
+                <p className="text-sm text-outline-variant">Every generation can return a shareable, password-protected preview URL — a differentiator other AI document CLIs do not ship out of the box. Use `--no-publish` for fully local output.</p>
+              </div>
+            </li>
             <li className="flex items-start gap-4">
               <CheckCircle2 className="text-tertiary w-6 h-6 mt-1" />
               <div>
