@@ -1347,6 +1347,18 @@ func TestBuildPPTXFromJSON_ProjectPlanUsesStructuredLaunchArc(t *testing.T) {
 	if got := strings.Count(preview, `"variant": "sections-grid`); got > 1 {
 		t.Fatalf("project deck repeats sections-grid variants %d times; preview:\n%s", got, preview)
 	}
+	for idx, bad := range map[int][]string{
+		2: {"Hold if launch quality."},
+		3: {"Launch risk is green only."},
+		4: {"Quality or enablement gaps would create.", "A blocker needs a DRI, mitigation plan."},
+	} {
+		slideXML := readZipEntry(t, fileBytes, fmt.Sprintf("ppt/slides/slide%d.xml", idx))
+		for _, fragment := range bad {
+			if strings.Contains(slideXML, fragment) {
+				t.Fatalf("slide %d renders incomplete fragment %q:\n%s", idx, fragment, slideXML)
+			}
+		}
+	}
 }
 
 func TestNormalizePPTXPayload_AutoThemeOverridesLLMThemeWhenStyleIsImplicit(t *testing.T) {
