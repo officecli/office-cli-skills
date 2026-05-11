@@ -29,9 +29,11 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - `officecli` supports `pptx`, `docx`, `xlsx`, `report`, and standalone `img` generation flows
 - `pptx` enables auto-generated images by default when the content and layout are a good fit
 - `--no-images` disables image generation for `pptx`
-- standalone `img` generation always goes through the OfficeCLI server and requires `officecli config set-license`
+- standalone `img` generation always goes through the OfficeCLI server and requires platform/license config
 - standalone `img` does not use local `llm.image_base_url`, `llm.image_api_key`, or `llm.image_model` settings
-- standalone `img` supports `ratio=square|landscape|portrait`; server-side charging happens only after a successful image response
+- standalone `img` supports `ratio=square|landscape|portrait` and one `reference_image` / `--reference-image <path-or-url>`; one image generation count is consumed only after a successful image response
+- free standalone `img` usage has a separate 3-per-day bucket from the 10-per-day free document bucket
+- standalone `img` publishes online by default when publishing is configured; pass `publish=false` or `--no-publish` for local-only output
 - when using `agent-bridge`, agents should treat `capabilities/get -> document_generation.pptx.image_support` as the authoritative machine-readable contract for PPT image behavior
 - when using `agent-bridge`, agents should treat `capabilities/get -> image_generation` as the authoritative machine-readable contract for standalone `img` behavior
 - when using `agent-bridge`, agents should treat `capabilities/get -> update` as the authoritative machine-readable contract for binary update availability
@@ -39,6 +41,8 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - installing the public skill can also attempt to install the `officecli` binary when it is missing
 - for agent-oriented integrations, `officecli agent-bridge` now exposes a structured `JSON-RPC 2.0 over stdio` protocol
 - persistent configuration is handled through `officecli config ...`, not through an `init` wizard
+- default runtime mode is visible through `officecli config runtime` and can be changed with `officecli config set-runtime external|hosted`
+- hosted runtime mode uses the OfficeCLI platform service and requires a platform OfficeCLI API key with hosted credits; users should not configure or handle aigateway keys directly
 
 ## Capability Check
 
@@ -114,6 +118,9 @@ When the task is about setting up or fixing `officecli`, prefer the explicit con
 - `./fix-officecli-env.sh`
 - `./uninstall-officecli.sh`
 - `officecli config status`
+- `officecli config runtime`
+- `officecli config set-runtime hosted`
+- `officecli config set-runtime external`
 - `officecli config set-generation`
 - `officecli config set-license`
 - `officecli config set-publish`
@@ -178,9 +185,11 @@ For all agent clients, use the following image-handling rules:
 - read `capabilities/get -> document_generation.<type>.payload_schema`
 - read `capabilities/get -> update`
 - assume `pptx` default image behavior from `default_enabled`, not from hard-coded client assumptions
-- for standalone `img`, use `office.generate`, set `ratio` when needed, and do not use local provider configuration
+- for standalone `img`, use `office.generate`, set `ratio` and `reference_image` when needed, and do not use local provider configuration
+- for standalone `img`, keep publishing enabled by default when the user wants online access; pass `publish=false` only for local-only output
 - for standalone `img`, surface server-returned balance or quota metadata when present
 - never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
+- to make hosted the default for human CLI generation, run `officecli config set-runtime hosted`; to return to local/external generation, run `officecli config set-runtime external`
 - for `report`, call `office.prepare` first and keep the final narrative grounded in `workbook_summary` and `base_report_json`
 - if the user explicitly wants a text-only PPT, pass `enable_images=false` and mention `disable_flag` when helpful
 - if the user asks why a generated PPT has no images, point them to `config_command`

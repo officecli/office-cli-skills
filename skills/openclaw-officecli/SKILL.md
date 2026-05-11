@@ -86,6 +86,13 @@ Primary event types:
 14. On `task.failed`, convert the error into a user-friendly message.
 15. On user cancel, send `task/cancel`.
 
+## Runtime Mode Rules
+
+- use `officecli config runtime` to inspect the local default runtime mode when the host asks how OfficeCLI is configured
+- use `officecli config set-runtime hosted` when the host explicitly wants platform-managed hosted generation by default
+- use `officecli config set-runtime external` when the host wants local/external generation by default
+- hosted mode requires a platform OfficeCLI API key with hosted credits; do not ask users for aigateway keys because those are created and stored by the platform
+
 ## PPT Image Rules
 
 For all OpenClaw agents using this skill:
@@ -107,8 +114,11 @@ For standalone `img` requests:
 - inspect top-level `image_generation` during capability discovery
 - use `office.generate` with `document_type=img`
 - pass `ratio=square|landscape|portrait` when the user asks for a shape; default to `square`
+- pass one `reference_image` local path or `http/https` URL when the user provides a reference image
 - require platform/license config and let the OfficeCLI server control the image provider
-- do not use `office.render`, local `config set-generation` image settings, `mode=best`, source files, preview publishing, or local preview
+- treat quota as generation counts: one successful standalone image consumes one count, and free image usage has a separate 3-per-day bucket from free document generation
+- keep preview publishing enabled by default when publishing is configured; pass `publish=false` only for local-only output
+- do not use `office.render`, local `config set-generation` image settings, `mode=best`, source files, or local preview
 - include returned quota or credit balance metadata in the chat message when present
 
 ## Environment Repair Rules

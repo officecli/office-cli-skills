@@ -318,6 +318,12 @@ run_set_publish() {
   printf 'yes\n%s\n%s\n' "$base_url" "$api_key" | run_officecli_no_preflight "${officecli_bin}" config set-publish >/dev/null
 }
 
+run_set_runtime() {
+  local officecli_bin="$1"
+  local runtime_mode="$2"
+  run_officecli_no_preflight "${officecli_bin}" config set-runtime "${runtime_mode}" >/dev/null
+}
+
 should_configure_publish() {
   truthy "${OFFICECLI_SKIP_PUBLISH_SETUP:-0}" && return 1
   return 0

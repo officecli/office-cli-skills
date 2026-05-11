@@ -28,6 +28,8 @@ This skill works as follows:
    - read local files
    - send file attachments back to the current channel
 
+Hosted generation can be made the default with `officecli config set-runtime hosted`; switch back with `officecli config set-runtime external`. Hosted mode requires a platform OfficeCLI API key with hosted credits, not an aigateway key.
+
 ## Installation
 
 Use the repository install script:
@@ -126,7 +128,7 @@ For all agents that use this skill, the following bridge rules are recommended:
 
 ## Standalone Image Rules
 
-For `document_type=img`, use `office.generate` rather than `office.render`. Pass `ratio=square|landscape|portrait` when requested, default to `square`, and do not use local `config set-generation` image provider fields. Publishing and local preview are not supported for standalone images; the generated file should be returned as a local attachment.
+For `document_type=img`, use `office.generate` rather than `office.render`. Pass `ratio=square|landscape|portrait` when requested, default to `square`, pass one `reference_image` when the user provides a reference image, and do not use local `config set-generation` image provider fields. Standalone images publish online by default when publishing is configured; pass `publish=false` or `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
 
 ## Debugging
 

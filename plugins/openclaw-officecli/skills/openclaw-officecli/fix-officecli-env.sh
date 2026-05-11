@@ -106,6 +106,19 @@ if should_configure_publish && [[ "${publish_ready}" != true ]]; then
   fi
 fi
 
+if [[ -n "${OFFICECLI_SETUP_RUNTIME_MODE:-}" ]]; then
+  case "${OFFICECLI_SETUP_RUNTIME_MODE}" in
+    external|hosted)
+      if ! run_set_runtime "${officecli_path}" "${OFFICECLI_SETUP_RUNTIME_MODE}"; then
+        fail_fix "failed to update runtime mode"
+      fi
+      ;;
+    *)
+      fail_fix "unsupported OFFICECLI_SETUP_RUNTIME_MODE: ${OFFICECLI_SETUP_RUNTIME_MODE}"
+      ;;
+  esac
+fi
+
 config_file="${OPENCLAW_SKILL_CONFIG:-${SCRIPT_DIR}/config.yaml}"
 mkdir -p "$(dirname "${config_file}")"
 default_mode="fast"
