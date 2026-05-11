@@ -163,13 +163,17 @@ func New() (*Application, error) {
 		},
 	)
 	hostedLLMSvc := hostedllm.NewService(dbStore, hostedllm.Config{
-		BaseURL:    cfg.HostedLLMBaseURL,
-		APIKey:     cfg.HostedLLMAPIKey,
-		TextModel:  cfg.HostedLLMTextModel,
-		ImageModel: cfg.HostedLLMImageModel,
-		Provider:   cfg.HostedLLMProvider,
-		HashSalt:   cfg.APIKeyHashSalt,
-		TimeoutSec: cfg.HostedLLMTimeoutSec,
+		BaseURL:                cfg.HostedLLMBaseURL,
+		APIKey:                 cfg.HostedLLMAPIKey,
+		TextModel:              cfg.HostedLLMTextModel,
+		ImageModel:             cfg.HostedLLMImageModel,
+		Provider:               cfg.HostedLLMProvider,
+		HashSalt:               cfg.APIKeyHashSalt,
+		TimeoutSec:             cfg.HostedLLMTimeoutSec,
+		AIGatewayAdminBaseURL:  cfg.AIGatewayAdminBaseURL,
+		AIGatewayAdminAPIKey:   cfg.AIGatewayAdminAPIKey,
+		AIGatewayCreateKeyPath: cfg.AIGatewayCreateAPIKeyPath,
+		AIGatewayKeyCipher:     apiKeyCipher,
 	}, lic)
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)

@@ -293,3 +293,63 @@ func TestReserveCreditsByHashRejectsDisabledOwner(t *testing.T) {
 	require.NoError(t, db.First(&saved, key.ID).Error)
 	require.Equal(t, 0, saved.CreditReserved)
 }
+
+func TestUserAIGatewayAPIKeyLifecycleIsUniquePerUser(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:user_aigateway_api_key_lifecycle?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UserAIGatewayAPIKey{}))
+
+	store := NewWithDB(db)
+	ctx := context.Background()
+
+	creating, err := store.ClaimUserAIGatewayAPIKeyCreation(ctx, 42, "officecli-user-42")
+	require.NoError(t, err)
+	require.Equal(t, uint64(42), creating.UserID)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusCreating, creating.Status)
+	require.Equal(t, "officecli-user-42", creating.UpstreamName)
+	require.True(t, creating.CreationClaimed)
+
+	duplicate, err := store.ClaimUserAIGatewayAPIKeyCreation(ctx, 42, "officecli-user-42")
+	require.NoError(t, err)
+	require.Equal(t, creating.ID, duplicate.ID)
+	require.False(t, duplicate.CreationClaimed)
+
+	active, err := store.ActivateUserAIGatewayAPIKey(ctx, 42, "ciphertext-value", "sk-user", "upstream-123", "officecli-user-42")
+	require.NoError(t, err)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusActive, active.Status)
+	require.Equal(t, "ciphertext-value", active.KeyCiphertext)
+	require.Equal(t, "sk-user", active.KeyPrefix)
+	require.Equal(t, "upstream-123", active.UpstreamID)
+	require.Empty(t, active.LastError)
+
+	found, err := store.FindUserAIGatewayAPIKeyByUserID(ctx, 42)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	require.Equal(t, active.ID, found.ID)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusActive, found.Status)
+	require.Equal(t, "ciphertext-value", found.KeyCiphertext)
+}
+
+func TestUserAIGatewayAPIKeyCreationErrorCanBeRetried(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:user_aigateway_api_key_error_retry?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UserAIGatewayAPIKey{}))
+
+	store := NewWithDB(db)
+	ctx := context.Background()
+
+	_, err = store.ClaimUserAIGatewayAPIKeyCreation(ctx, 42, "officecli-user-42")
+	require.NoError(t, err)
+
+	failed, err := store.MarkUserAIGatewayAPIKeyCreationError(ctx, 42, "officecli-user-42", "gateway unavailable")
+	require.NoError(t, err)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusError, failed.Status)
+	require.Equal(t, "gateway unavailable", failed.LastError)
+
+	retry, err := store.ClaimUserAIGatewayAPIKeyCreation(ctx, 42, "officecli-user-42")
+	require.NoError(t, err)
+	require.Equal(t, failed.ID, retry.ID)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusCreating, retry.Status)
+	require.True(t, retry.CreationClaimed)
+	require.Empty(t, retry.LastError)
+}

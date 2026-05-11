@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/officecli/officecli/platform/internal/apikey"
 	licensesvc "github.com/officecli/officecli/platform/internal/license"
 	"github.com/officecli/officecli/platform/internal/model"
 )
@@ -26,6 +27,10 @@ type APIKeyStore interface {
 	ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error)
 	SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error)
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
+	FindUserAIGatewayAPIKeyByUserID(ctx context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error)
+	ClaimUserAIGatewayAPIKeyCreation(ctx context.Context, userID uint64, upstreamName string) (*model.UserAIGatewayAPIKey, error)
+	ActivateUserAIGatewayAPIKey(ctx context.Context, userID uint64, ciphertext, prefix, upstreamID, upstreamName string) (*model.UserAIGatewayAPIKey, error)
+	MarkUserAIGatewayAPIKeyCreationError(ctx context.Context, userID uint64, upstreamName, message string) (*model.UserAIGatewayAPIKey, error)
 }
 
 type GenerationQuotaManager interface {
@@ -34,22 +39,28 @@ type GenerationQuotaManager interface {
 }
 
 type Config struct {
-	BaseURL    string
-	APIKey     string
-	TextModel  string
-	ImageModel string
-	Provider   string
-	HashSalt   string
-	Rules      []model.HostedPricingRule
-	TimeoutSec int
+	BaseURL                string
+	APIKey                 string
+	TextModel              string
+	ImageModel             string
+	Provider               string
+	HashSalt               string
+	Rules                  []model.HostedPricingRule
+	TimeoutSec             int
+	AIGatewayAdminBaseURL  string
+	AIGatewayAdminAPIKey   string
+	AIGatewayCreateKeyPath string
+	AIGatewayKeyCipher     *apikey.Cipher
+	AIGatewayAdminClient   AIGatewayAdminClient
 }
 
 type Service struct {
-	store  APIKeyStore
-	quota  GenerationQuotaManager
-	cfg    Config
-	mu     sync.RWMutex
-	client *http.Client
+	store          APIKeyStore
+	quota          GenerationQuotaManager
+	cfg            Config
+	mu             sync.RWMutex
+	createKeyLocks sync.Map
+	client         *http.Client
 }
 
 type CompletionRequest struct {
@@ -132,6 +143,10 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if err != nil {
 		return nil, err
 	}
+	upstreamAPIKey, err := s.upstreamAPIKeyForOfficeKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 	reservation := s.reserveCreditsForModel(req.Model, false)
 	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
 	if err != nil {
@@ -162,7 +177,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 		}
 	}
 
-	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload)
+	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
 		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
@@ -208,6 +223,10 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if err != nil {
 		return nil, err
 	}
+	upstreamAPIKey, err := s.upstreamAPIKeyForOfficeKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 	reservation := s.reserveCreditsForModel(req.Model, true)
 	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
 	if err != nil {
@@ -220,7 +239,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		"size":            effectiveImageSize(req),
 		"response_format": "b64_json",
 	}
-	body, usage, err := s.postImageRequest(ctx, modelName, req, payload)
+	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
 		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
@@ -279,7 +298,7 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 		"size":            effectiveImageSize(req),
 		"response_format": "b64_json",
 	}
-	body, _, err := s.postImageRequest(ctx, modelName, req, payload)
+	body, _, err := s.postImageRequest(ctx, modelName, req, payload, strings.TrimSpace(s.cfg.APIKey))
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +340,7 @@ type usageSummary struct {
 	ImageCount       int
 }
 
-func (s *Service) post(ctx context.Context, url string, payload map[string]any) ([]byte, usageSummary, error) {
+func (s *Service) post(ctx context.Context, url string, payload map[string]any, upstreamAPIKey string) ([]byte, usageSummary, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, usageSummary{}, err
@@ -331,8 +350,8 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any) 
 		return nil, usageSummary{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if strings.TrimSpace(s.cfg.APIKey) != "" {
-		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(s.cfg.APIKey))
+	if strings.TrimSpace(upstreamAPIKey) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(upstreamAPIKey))
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -361,20 +380,20 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any) 
 	}, nil
 }
 
-func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any) ([]byte, usageSummary, error) {
+func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any, upstreamAPIKey string) ([]byte, usageSummary, error) {
 	refs := effectiveReferenceImages(req)
 	if len(refs) == 0 {
-		return s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload)
+		return s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload, upstreamAPIKey)
 	}
 	fields := map[string]string{
 		"model":  modelName,
 		"prompt": req.Prompt,
 		"size":   effectiveImageSize(req),
 	}
-	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, refs)
+	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, refs, upstreamAPIKey)
 }
 
-func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, refs []ImageReference) ([]byte, usageSummary, error) {
+func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, refs []ImageReference, upstreamAPIKey string) ([]byte, usageSummary, error) {
 	if len(refs) == 0 {
 		return nil, usageSummary{}, fmt.Errorf("at least one reference image is required")
 	}
@@ -410,8 +429,8 @@ func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[s
 		return nil, usageSummary{}, err
 	}
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-	if strings.TrimSpace(s.cfg.APIKey) != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(s.cfg.APIKey))
+	if strings.TrimSpace(upstreamAPIKey) != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(upstreamAPIKey))
 	}
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
@@ -469,8 +488,105 @@ func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, 
 		return nil, "", fmt.Errorf("api key is disabled")
 	case !key.SupportsHosted():
 		return nil, "", fmt.Errorf("hosted mode is not enabled for this key")
+	case key.OwnerUserID == nil || *key.OwnerUserID == 0:
+		return nil, "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
 	return key, hash, nil
+}
+
+func (s *Service) upstreamAPIKeyForOfficeKey(ctx context.Context, key *model.APIKey) (string, error) {
+	if key == nil || key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		return "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+	}
+	userID := *key.OwnerUserID
+	if existing, err := s.store.FindUserAIGatewayAPIKeyByUserID(ctx, userID); err != nil {
+		return "", err
+	} else if existing != nil && existing.Status == model.UserAIGatewayAPIKeyStatusActive && strings.TrimSpace(existing.KeyCiphertext) != "" {
+		return s.decryptUserAIGatewayAPIKey(existing)
+	}
+
+	lockValue, _ := s.createKeyLocks.LoadOrStore(userID, &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if existing, err := s.store.FindUserAIGatewayAPIKeyByUserID(ctx, userID); err != nil {
+		return "", err
+	} else if existing != nil && existing.Status == model.UserAIGatewayAPIKeyStatusActive && strings.TrimSpace(existing.KeyCiphertext) != "" {
+		return s.decryptUserAIGatewayAPIKey(existing)
+	}
+
+	upstreamName := fmt.Sprintf("officecli-user-%d", userID)
+	claimed, err := s.store.ClaimUserAIGatewayAPIKeyCreation(ctx, userID, upstreamName)
+	if err != nil {
+		return "", err
+	}
+	if claimed != nil && claimed.Status == model.UserAIGatewayAPIKeyStatusActive && strings.TrimSpace(claimed.KeyCiphertext) != "" {
+		return s.decryptUserAIGatewayAPIKey(claimed)
+	}
+	if claimed == nil || !claimed.CreationClaimed {
+		return "", fmt.Errorf("aigateway api key creation is already in progress for user_id=%d", userID)
+	}
+	created, err := s.aigatewayAdminClient().CreateAPIKey(ctx, CreateAIGatewayAPIKeyRequest{Name: upstreamName})
+	if err != nil {
+		_, _ = s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, err.Error())
+		return "", err
+	}
+	plain := strings.TrimSpace(created.PlaintextKey)
+	if plain == "" {
+		err := fmt.Errorf("aigateway api key creation response did not include an api key")
+		_, _ = s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, err.Error())
+		return "", err
+	}
+	cipher := s.cfg.AIGatewayKeyCipher
+	if cipher == nil {
+		err := fmt.Errorf("aigateway api key cipher is not configured")
+		_, _ = s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, err.Error())
+		return "", err
+	}
+	ciphertext, err := cipher.Encrypt(plain)
+	if err != nil {
+		_, _ = s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, err.Error())
+		return "", err
+	}
+	name := strings.TrimSpace(created.Name)
+	if name == "" {
+		name = upstreamName
+	}
+	if _, err := s.store.ActivateUserAIGatewayAPIKey(ctx, userID, ciphertext, apiKeyPrefix(plain), created.UpstreamID, name); err != nil {
+		return "", err
+	}
+	return plain, nil
+}
+
+func (s *Service) decryptUserAIGatewayAPIKey(key *model.UserAIGatewayAPIKey) (string, error) {
+	cipher := s.cfg.AIGatewayKeyCipher
+	if cipher == nil {
+		return "", fmt.Errorf("aigateway api key cipher is not configured")
+	}
+	plain, err := cipher.Decrypt(key.KeyCiphertext)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(plain) == "" {
+		return "", fmt.Errorf("stored aigateway api key is empty")
+	}
+	return strings.TrimSpace(plain), nil
+}
+
+func (s *Service) aigatewayAdminClient() AIGatewayAdminClient {
+	if s.cfg.AIGatewayAdminClient != nil {
+		return s.cfg.AIGatewayAdminClient
+	}
+	return newHTTPAIGatewayAdminClient(s.client, s.cfg)
+}
+
+func apiKeyPrefix(key string) string {
+	trimmed := strings.TrimSpace(key)
+	if len(trimmed) <= 12 {
+		return trimmed
+	}
+	return trimmed[:12]
 }
 
 func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequest {

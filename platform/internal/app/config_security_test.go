@@ -48,6 +48,27 @@ func TestLoadConfigDefaultsLicenseProofTTLToFifteenMinutes(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsAIGatewayAdminSettings(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("AIGATEWAY_ADMIN_BASE_URL", "http://aigateway.local")
+	t.Setenv("AIGATEWAY_ADMIN_API_KEY", "admin-token")
+	t.Setenv("AIGATEWAY_CREATE_API_KEY_PATH", "/custom/api-keys")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.AIGatewayAdminBaseURL != "http://aigateway.local" {
+		t.Fatalf("AIGatewayAdminBaseURL = %q", cfg.AIGatewayAdminBaseURL)
+	}
+	if cfg.AIGatewayAdminAPIKey != "admin-token" {
+		t.Fatalf("AIGatewayAdminAPIKey = %q", cfg.AIGatewayAdminAPIKey)
+	}
+	if cfg.AIGatewayCreateAPIKeyPath != "/custom/api-keys" {
+		t.Fatalf("AIGatewayCreateAPIKeyPath = %q", cfg.AIGatewayCreateAPIKeyPath)
+	}
+}
+
 func TestLoadConfigProductionRejectsDefaultAdminPassword(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	setRequiredProductionEnv(t)

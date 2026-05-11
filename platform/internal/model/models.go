@@ -3,6 +3,7 @@ package model
 import "time"
 
 type APIKeyStatus string
+type UserAIGatewayAPIKeyStatus string
 type UserStatus string
 type OrderStatus string
 type BillingEventStatus string
@@ -16,6 +17,10 @@ type PackKind string
 const (
 	APIKeyStatusActive   APIKeyStatus = "active"
 	APIKeyStatusDisabled APIKeyStatus = "disabled"
+
+	UserAIGatewayAPIKeyStatusCreating UserAIGatewayAPIKeyStatus = "creating"
+	UserAIGatewayAPIKeyStatusActive   UserAIGatewayAPIKeyStatus = "active"
+	UserAIGatewayAPIKeyStatusError    UserAIGatewayAPIKeyStatus = "error"
 
 	UserStatusActive   UserStatus = "active"
 	UserStatusDisabled UserStatus = "disabled"
@@ -138,6 +143,22 @@ func (k APIKey) AvailableCredits() int {
 func (k APIKey) HasStoredPlaintext() bool {
 	return k.KeyCiphertext != nil && *k.KeyCiphertext != ""
 }
+
+type UserAIGatewayAPIKey struct {
+	ID              uint64                    `gorm:"primaryKey" json:"id"`
+	UserID          uint64                    `gorm:"column:user_id;uniqueIndex;not null" json:"user_id"`
+	KeyCiphertext   string                    `gorm:"column:key_ciphertext;type:text;not null" json:"-"`
+	KeyPrefix       string                    `gorm:"column:key_prefix;size:32;not null" json:"key_prefix"`
+	Status          UserAIGatewayAPIKeyStatus `gorm:"column:status;size:16;index;not null" json:"status"`
+	UpstreamID      string                    `gorm:"column:upstream_id;size:128;not null" json:"upstream_id,omitempty"`
+	UpstreamName    string                    `gorm:"column:upstream_name;size:191;not null" json:"upstream_name"`
+	LastError       string                    `gorm:"column:last_error;type:text;not null" json:"last_error,omitempty"`
+	CreationClaimed bool                      `gorm:"-" json:"-"`
+	CreatedAt       time.Time                 `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time                 `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (UserAIGatewayAPIKey) TableName() string { return "user_aigateway_api_keys" }
 
 type FreeQuota struct {
 	ID              uint64    `gorm:"primaryKey" json:"id"`

@@ -159,6 +159,108 @@ func (s *Store) TouchAPIKeyLastUsedAt(ctx context.Context, id uint64, usedAt tim
 	return s.db.WithContext(ctx).Model(&model.APIKey{}).Where("id = ?", id).Update("last_used_at", usedAt).Error
 }
 
+func (s *Store) FindUserAIGatewayAPIKeyByUserID(ctx context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error) {
+	var key model.UserAIGatewayAPIKey
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&key).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (s *Store) ClaimUserAIGatewayAPIKeyCreation(ctx context.Context, userID uint64, upstreamName string) (*model.UserAIGatewayAPIKey, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	upstreamName = strings.TrimSpace(upstreamName)
+	if upstreamName == "" {
+		return nil, fmt.Errorf("upstream_name is required")
+	}
+	var key model.UserAIGatewayAPIKey
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&key).Error
+	if err == nil {
+		if key.Status == model.UserAIGatewayAPIKeyStatusError {
+			updates := map[string]any{
+				"status":        model.UserAIGatewayAPIKeyStatusCreating,
+				"upstream_name": upstreamName,
+				"last_error":    "",
+			}
+			if err := s.db.WithContext(ctx).Model(&model.UserAIGatewayAPIKey{}).Where("id = ?", key.ID).Updates(updates).Error; err != nil {
+				return nil, err
+			}
+			claimed, err := s.FindUserAIGatewayAPIKeyByUserID(ctx, userID)
+			if claimed != nil {
+				claimed.CreationClaimed = true
+			}
+			return claimed, err
+		}
+		return &key, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	key = model.UserAIGatewayAPIKey{
+		UserID:       userID,
+		Status:       model.UserAIGatewayAPIKeyStatusCreating,
+		UpstreamName: upstreamName,
+	}
+	if err := s.db.WithContext(ctx).Create(&key).Error; err != nil {
+		if IsDuplicateError(err) {
+			return s.ClaimUserAIGatewayAPIKeyCreation(ctx, userID, upstreamName)
+		}
+		return nil, err
+	}
+	key.CreationClaimed = true
+	return &key, nil
+}
+
+func (s *Store) ActivateUserAIGatewayAPIKey(ctx context.Context, userID uint64, ciphertext, prefix, upstreamID, upstreamName string) (*model.UserAIGatewayAPIKey, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	updates := map[string]any{
+		"status":         model.UserAIGatewayAPIKeyStatusActive,
+		"key_ciphertext": strings.TrimSpace(ciphertext),
+		"key_prefix":     strings.TrimSpace(prefix),
+		"upstream_id":    strings.TrimSpace(upstreamID),
+		"upstream_name":  strings.TrimSpace(upstreamName),
+		"last_error":     "",
+	}
+	if updates["key_ciphertext"] == "" {
+		return nil, fmt.Errorf("key_ciphertext is required")
+	}
+	if updates["key_prefix"] == "" {
+		return nil, fmt.Errorf("key_prefix is required")
+	}
+	if updates["upstream_name"] == "" {
+		return nil, fmt.Errorf("upstream_name is required")
+	}
+	if err := s.db.WithContext(ctx).Model(&model.UserAIGatewayAPIKey{}).Where("user_id = ?", userID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return s.FindUserAIGatewayAPIKeyByUserID(ctx, userID)
+}
+
+func (s *Store) MarkUserAIGatewayAPIKeyCreationError(ctx context.Context, userID uint64, upstreamName, message string) (*model.UserAIGatewayAPIKey, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	updates := map[string]any{
+		"status":        model.UserAIGatewayAPIKeyStatusError,
+		"upstream_name": strings.TrimSpace(upstreamName),
+		"last_error":    strings.TrimSpace(message),
+	}
+	if updates["upstream_name"] == "" {
+		return nil, fmt.Errorf("upstream_name is required")
+	}
+	if err := s.db.WithContext(ctx).Model(&model.UserAIGatewayAPIKey{}).Where("user_id = ?", userID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return s.FindUserAIGatewayAPIKeyByUserID(ctx, userID)
+}
+
 func (s *Store) GetOrCreateFreeQuota(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
 	var quota model.FreeQuota
 	err := s.db.WithContext(ctx).Where("fingerprint_hash = ?", fingerprint).First(&quota).Error
