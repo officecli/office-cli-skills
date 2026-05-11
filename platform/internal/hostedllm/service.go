@@ -27,6 +27,8 @@ type APIKeyStore interface {
 	ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error)
 	SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error)
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
+	HostedPricingSettings(ctx context.Context) (*model.HostedPricingSetting, error)
+	ListHostedPricingRules(ctx context.Context, enabledOnly bool) ([]model.HostedPricingRule, error)
 	FindUserAIGatewayAPIKeyByUserID(ctx context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error)
 	ClaimUserAIGatewayAPIKeyCreation(ctx context.Context, userID uint64, upstreamName string) (*model.UserAIGatewayAPIKey, error)
 	ActivateUserAIGatewayAPIKey(ctx context.Context, userID uint64, ciphertext, prefix, upstreamID, upstreamName string) (*model.UserAIGatewayAPIKey, error)
@@ -45,6 +47,7 @@ type Config struct {
 	ImageModel             string
 	Provider               string
 	HashSalt               string
+	MarkupBPS              int
 	Rules                  []model.HostedPricingRule
 	TimeoutSec             int
 	AIGatewayAdminBaseURL  string
@@ -147,7 +150,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if err != nil {
 		return nil, err
 	}
-	reservation := s.reserveCreditsForModel(req.Model, false)
+	reservation := s.reserveCreditsForModel(ctx, req.Model, false)
 	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
 	if err != nil {
 		return nil, err
@@ -180,7 +183,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, err
 	}
 	var resp struct {
@@ -192,23 +195,25 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, fmt.Errorf("decode hosted completion: %w", err)
 	}
 	if len(resp.Choices) == 0 {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, fmt.Errorf("hosted completion is empty")
 	}
-	settled := s.settleCredits(req.Model, usage, false)
+	pricing := s.priceUsage(ctx, req.Model, usage, false)
+	settled := pricing.ChargeCredits
 	if settled > reservation {
 		settled = reservation
+		pricing.CapApplied = true
 	}
 	updatedKey, err := s.store.SettleReservedCredits(ctx, key.ID, reservation, settled)
 	if err != nil {
 		return nil, err
 	}
-	s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey)
+	s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey, pricing)
 	return &CompletionResponse{
 		Content:       resp.Choices[0].Message.Content,
 		CreditBalance: creditBalance(updatedKey),
@@ -227,7 +232,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if err != nil {
 		return nil, err
 	}
-	reservation := s.reserveCreditsForModel(req.Model, true)
+	reservation := s.reserveCreditsForModel(ctx, req.Model, true)
 	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
 	if err != nil {
 		return nil, err
@@ -242,7 +247,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, err
 	}
 	var resp struct {
@@ -252,30 +257,32 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("decode hosted image: %w", err)
 	}
 	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("hosted image is empty")
 	}
 	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey)
+		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("decode hosted image data: %w", err)
 	}
 	usage.ImageCount = 1
-	settled := s.settleCredits(req.Model, usage, true)
+	pricing := s.priceUsage(ctx, req.Model, usage, true)
+	settled := pricing.ChargeCredits
 	if settled > reservation {
 		settled = reservation
+		pricing.CapApplied = true
 	}
 	updatedKey, err := s.store.SettleReservedCredits(ctx, key.ID, reservation, settled)
 	if err != nil {
 		return nil, err
 	}
-	s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey)
+	s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey, pricing)
 	return &ImageResponse{
 		Data:          data,
 		MIME:          "image/png",
@@ -636,8 +643,8 @@ func (s *Service) normalizeModel(value string, image bool) string {
 	return model
 }
 
-func (s *Service) reserveCreditsForModel(modelName string, image bool) int {
-	if rule, ok := s.matchRule(modelName); ok && rule.ReservationCredits > 0 {
+func (s *Service) reserveCreditsForModel(ctx context.Context, modelName string, image bool) int {
+	if rule, ok := s.matchRule(ctx, modelName); ok && rule.ReservationCredits > 0 {
 		return rule.ReservationCredits
 	}
 	switch {
@@ -652,42 +659,126 @@ func (s *Service) reserveCreditsForModel(modelName string, image bool) int {
 	}
 }
 
-func (s *Service) settleCredits(modelName string, usage usageSummary, image bool) int {
-	if rule, ok := s.matchRule(modelName); ok {
-		charge := 0
-		charge += creditsByPer1K(usage.PromptTokens, rule.PromptPer1KCredits)
-		charge += creditsByPer1K(usage.CompletionTokens, rule.OutputPer1KCredits)
-		charge += creditsByPer1K(usage.ReasoningTokens, rule.ReasoningPer1KCredits)
-		charge += usage.ImageCount * rule.ImagePerAssetCredits
+type hostedPriceSnapshot struct {
+	RuleID                uint64
+	MarkupBPS             int
+	UpstreamCostMicrousd  int64
+	ChargeCredits         int
+	UncappedChargeCredits int
+	ProfitMicrousd        int64
+	CapApplied            bool
+}
+
+func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) hostedPriceSnapshot {
+	if rule, ok := s.matchRule(ctx, modelName); ok {
+		markupBPS := s.effectiveMarkupBPS(ctx, rule)
+		cost := hostedUsageCostMicrousd(rule, usage)
+		charge := creditsFromCostMicrousd(cost, markupBPS)
 		if charge < rule.MinimumChargeCredits {
 			charge = rule.MinimumChargeCredits
 		}
 		if charge > 0 {
-			return charge
+			return hostedPriceSnapshot{
+				RuleID:                rule.ID,
+				MarkupBPS:             markupBPS,
+				UpstreamCostMicrousd:  cost,
+				ChargeCredits:         charge,
+				UncappedChargeCredits: charge,
+				ProfitMicrousd:        int64(charge)*10000 - cost,
+			}
 		}
 	}
 	if image {
-		return 24 + usage.ImageCount*8
+		charge := 24 + usage.ImageCount*8
+		return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: int64(charge) * 10000}
 	}
 	totalTokens := usage.PromptTokens + usage.CompletionTokens + usage.ReasoningTokens
 	if totalTokens == 0 {
 		totalTokens = 200
 	}
-	return int(math.Max(1, math.Ceil(float64(totalTokens)/120.0)))
+	charge := int(math.Max(1, math.Ceil(float64(totalTokens)/120.0)))
+	return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: int64(charge) * 10000}
 }
 
-func creditsByPer1K(tokens int, creditsPer1K int) int {
-	if tokens <= 0 || creditsPer1K <= 0 {
+func hostedUsageCostMicrousd(rule model.HostedPricingRule, usage usageSummary) int64 {
+	var cost int64
+	cost += costByPer1K(usage.PromptTokens, firstPositiveInt64(rule.PromptPer1KCostMicrousd, int64(rule.PromptPer1KCredits)*10000))
+	cost += costByPer1K(usage.CompletionTokens, firstPositiveInt64(rule.OutputPer1KCostMicrousd, int64(rule.OutputPer1KCredits)*10000))
+	cost += costByPer1K(usage.ReasoningTokens, firstPositiveInt64(rule.ReasoningPer1KCostMicrousd, int64(rule.ReasoningPer1KCredits)*10000))
+	cost += int64(usage.ImageCount) * firstPositiveInt64(rule.ImagePerAssetCostMicrousd, int64(rule.ImagePerAssetCredits)*10000)
+	return cost
+}
+
+func firstPositiveInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func costByPer1K(tokens int, microusdPer1K int64) int64 {
+	if tokens <= 0 || microusdPer1K <= 0 {
 		return 0
 	}
-	return int(math.Ceil(float64(tokens) / 1000.0 * float64(creditsPer1K)))
+	return int64(tokens)*microusdPer1K/1000 + ceilRemainder(int64(tokens)*microusdPer1K, 1000)
 }
 
-func (s *Service) matchRule(modelName string) (model.HostedPricingRule, bool) {
+func ceilRemainder(value, divisor int64) int64 {
+	if value <= 0 || divisor <= 0 || value%divisor == 0 {
+		return 0
+	}
+	return 1
+}
+
+func creditsFromCostMicrousd(cost int64, markupBPS int) int {
+	if cost <= 0 {
+		return 0
+	}
+	numerator := cost * int64(10000+markupBPS)
+	denominator := int64(10000 * 10000)
+	credits := numerator / denominator
+	if numerator%denominator != 0 {
+		credits++
+	}
+	if credits < 0 {
+		return 0
+	}
+	return int(credits)
+}
+
+func (s *Service) effectiveMarkupBPS(ctx context.Context, rule model.HostedPricingRule) int {
+	if rule.MarkupBPS != nil {
+		return *rule.MarkupBPS
+	}
+	if s.store != nil {
+		if settings, err := s.store.HostedPricingSettings(ctx); err == nil && settings != nil {
+			return settings.MarkupBPS
+		}
+	}
+	if s.cfg.MarkupBPS != 0 {
+		return s.cfg.MarkupBPS
+	}
+	return 3000
+}
+
+func (s *Service) matchRule(ctx context.Context, modelName string) (model.HostedPricingRule, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	cfgRules := make([]model.HostedPricingRule, len(s.cfg.Rules))
+	copy(cfgRules, s.cfg.Rules)
+	s.mu.RUnlock()
+	rules := cfgRules
+	if s.store != nil {
+		if dbRules, err := s.store.ListHostedPricingRules(ctx, true); err == nil && len(dbRules) > 0 {
+			rules = dbRules
+		}
+	}
 	profile := normalizeProfile(modelName)
-	for _, rule := range s.cfg.Rules {
+	for _, rule := range rules {
+		if !rule.Enabled && rule.ID != 0 {
+			continue
+		}
 		if rule.DocumentProfile == profile {
 			return rule, true
 		}
@@ -740,38 +831,44 @@ func effectiveReferenceImages(req ImageRequest) []ImageReference {
 	return out
 }
 
-func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey) {
+func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey, pricing hostedPriceSnapshot) {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
 		provider = "openai"
 	}
 	event := &model.UsageEvent{
-		RequestID:        stringPtr(req.RequestID),
-		FingerprintHash:  "hosted",
-		Mode:             model.UsageModeHosted,
-		Action:           model.UsageActionGenerate,
-		APIKeyID:         &apiKeyID,
-		Result:           model.UsageResultAllowed,
-		Charged:          settled > 0,
-		BilledUnits:      settled,
-		UnitType:         "credit",
-		RuntimeMode:      &runtimeMode,
-		Provider:         &provider,
-		ModelName:        &modelName,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		ReasoningTokens:  usage.ReasoningTokens,
-		ImageCount:       usage.ImageCount,
-		ReservedCredits:  reserved,
-		SettledCredits:   settled,
-		RefundCredits:    refund,
+		RequestID:             stringPtr(req.RequestID),
+		FingerprintHash:       "hosted",
+		Mode:                  model.UsageModeHosted,
+		Action:                model.UsageActionGenerate,
+		APIKeyID:              &apiKeyID,
+		Result:                model.UsageResultAllowed,
+		Charged:               settled > 0,
+		BilledUnits:           settled,
+		UnitType:              "credit",
+		RuntimeMode:           &runtimeMode,
+		Provider:              &provider,
+		ModelName:             &modelName,
+		PromptTokens:          usage.PromptTokens,
+		CompletionTokens:      usage.CompletionTokens,
+		ReasoningTokens:       usage.ReasoningTokens,
+		ImageCount:            usage.ImageCount,
+		ReservedCredits:       reserved,
+		SettledCredits:        settled,
+		RefundCredits:         refund,
+		HostedPricingRuleID:   pricing.RuleID,
+		MarkupBPS:             pricing.MarkupBPS,
+		UpstreamCostMicrousd:  pricing.UpstreamCostMicrousd,
+		UncappedChargeCredits: pricing.UncappedChargeCredits,
+		ProfitMicrousd:        int64(settled)*10000 - pricing.UpstreamCostMicrousd,
+		CapApplied:            pricing.CapApplied,
 	}
 	_ = s.store.CreateUsageEvent(ctx, event)
 	_ = updatedKey
 }
 
-func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey) {
+func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey, pricing hostedPriceSnapshot) {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -779,23 +876,29 @@ func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req Ima
 	}
 	documentType := "img"
 	event := &model.UsageEvent{
-		RequestID:       stringPtr(req.RequestID),
-		FingerprintHash: "hosted",
-		Mode:            model.UsageModeHosted,
-		Action:          model.UsageActionGenerate,
-		APIKeyID:        &apiKeyID,
-		Result:          model.UsageResultAllowed,
-		DocumentType:    &documentType,
-		Charged:         settled > 0,
-		BilledUnits:     settled,
-		UnitType:        "credit",
-		RuntimeMode:     &runtimeMode,
-		Provider:        &provider,
-		ModelName:       &modelName,
-		ImageCount:      usage.ImageCount,
-		ReservedCredits: reserved,
-		SettledCredits:  settled,
-		RefundCredits:   refund,
+		RequestID:             stringPtr(req.RequestID),
+		FingerprintHash:       "hosted",
+		Mode:                  model.UsageModeHosted,
+		Action:                model.UsageActionGenerate,
+		APIKeyID:              &apiKeyID,
+		Result:                model.UsageResultAllowed,
+		DocumentType:          &documentType,
+		Charged:               settled > 0,
+		BilledUnits:           settled,
+		UnitType:              "credit",
+		RuntimeMode:           &runtimeMode,
+		Provider:              &provider,
+		ModelName:             &modelName,
+		ImageCount:            usage.ImageCount,
+		ReservedCredits:       reserved,
+		SettledCredits:        settled,
+		RefundCredits:         refund,
+		HostedPricingRuleID:   pricing.RuleID,
+		MarkupBPS:             pricing.MarkupBPS,
+		UpstreamCostMicrousd:  pricing.UpstreamCostMicrousd,
+		UncappedChargeCredits: pricing.UncappedChargeCredits,
+		ProfitMicrousd:        int64(settled)*10000 - pricing.UpstreamCostMicrousd,
+		CapApplied:            pricing.CapApplied,
 	}
 	_ = s.store.CreateUsageEvent(ctx, event)
 	_ = updatedKey

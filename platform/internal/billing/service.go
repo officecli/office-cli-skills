@@ -69,6 +69,7 @@ type Store interface {
 	ListOrdersByUser(ctx context.Context, userID uint64) ([]model.Order, error)
 	ListOrders(ctx context.Context) ([]model.Order, error)
 	ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error)
+	ListHostedCreditPacks(ctx context.Context, enabledOnly bool) ([]model.HostedCreditPack, error)
 	CreateAuditLog(ctx context.Context, action, targetType, targetID string, payload string) error
 }
 
@@ -109,7 +110,16 @@ func (s *Service) Pricing() []model.PricingPack {
 	defer s.mu.RUnlock()
 	result := make([]model.PricingPack, 0, len(s.packs))
 	for _, pack := range s.packs {
-		result = append(result, pack)
+		if pack.PackKind != string(model.PackKindHostedCredits) {
+			result = append(result, pack)
+		}
+	}
+	if s.store != nil {
+		if hostedPacks, err := s.store.ListHostedCreditPacks(context.Background(), true); err == nil {
+			for _, pack := range hostedPacks {
+				result = append(result, pack.PricingPack())
+			}
+		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].AmountTotal < result[j].AmountTotal })
 	return result
@@ -131,10 +141,8 @@ func (s *Service) UpdatePricing(ctx context.Context, packs []model.PricingPack) 
 }
 
 func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*model.Order, string, error) {
-	s.mu.RLock()
-	pack, ok := s.packs[req.PackCode]
-	s.mu.RUnlock()
-	if !ok || pack.PackKind != string(model.PackKindExternalGeneration) {
+	pack, ok := s.pricingPack(ctx, req.PackCode)
+	if !ok || (pack.PackKind != string(model.PackKindExternalGeneration) && pack.PackKind != string(model.PackKindHostedCredits)) {
 		return nil, "", fmt.Errorf("unknown pack_code")
 	}
 	targetKey, err := s.store.FindAPIKeyByID(ctx, req.TargetAPIKeyID)
@@ -196,6 +204,28 @@ func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*mod
 		return nil, "", err
 	}
 	return order, session.URL, nil
+}
+
+func (s *Service) pricingPack(ctx context.Context, code string) (model.PricingPack, bool) {
+	s.mu.RLock()
+	pack, ok := s.packs[code]
+	s.mu.RUnlock()
+	if ok && pack.PackKind != string(model.PackKindHostedCredits) {
+		return pack, true
+	}
+	if s.store != nil {
+		if hostedPacks, err := s.store.ListHostedCreditPacks(ctx, true); err == nil {
+			for _, hostedPack := range hostedPacks {
+				if hostedPack.Code == code {
+					return hostedPack.PricingPack(), true
+				}
+			}
+		}
+	}
+	if ok {
+		return pack, true
+	}
+	return model.PricingPack{}, false
 }
 
 func (s *Service) HandleWebhook(ctx context.Context, payload []byte, signature string) error {

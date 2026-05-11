@@ -13,12 +13,13 @@ export default function UsagePage() {
         <SkeletonDataTable columns={6} rows={5} />
       ) : events.length ? (
         <DataTable
-          headers={['Mode', 'Action', 'Result', 'Fingerprint', 'Reason', 'Timestamp']}
+          headers={['Mode', 'Action', 'Result', 'Charge', 'Model', 'Reason', 'Timestamp']}
           rows={events.map((event) => [
             <span key="mode" className="text-white">{event.mode}</span>,
             <span key="action" className="text-white">{event.action}</span>,
             <StatusPill key="result" value={event.result} />,
-            <code key="fingerprint" className="font-mono text-xs text-outline">{event.fingerprint_hash}</code>,
+            <span key="charge" className="text-white">{event.mode === 'hosted' ? `${event.settled_credits ?? 0} credits` : '--'}</span>,
+            <span key="model" className="text-outline">{event.model_name || '--'}</span>,
             <span key="reason">{event.reason_code || '--'}</span>,
             <span key="created">{formatDate(event.created_at)}</span>,
           ])}

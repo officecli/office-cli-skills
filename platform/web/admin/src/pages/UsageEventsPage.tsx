@@ -47,6 +47,7 @@ export default function UsageEventsPage() {
               <option value="free">free</option>
               <option value="reward">reward</option>
               <option value="paid">paid</option>
+              <option value="hosted">hosted</option>
             </select>
           </label>
           <label className="text-sm text-outline">Result
@@ -72,13 +73,15 @@ export default function UsageEventsPage() {
         </form>
         {data.length ? (
           <DataTable
-            headers={['Mode', 'Action', 'Result', 'Fingerprint', 'Reason', 'Timestamp']}
+            headers={['Mode', 'Action', 'Result', 'Model', 'Charge', 'Cost', 'Profit', 'Timestamp']}
             rows={data.map((event) => [
               <span key="mode" className="text-white">{event.mode}</span>,
               <span key="action" className="text-white">{event.action}</span>,
               <StatusPill key="result" value={event.result} />,
-              <code key="fingerprint" className="font-mono text-xs text-outline">{event.fingerprint_hash}</code>,
-              <span key="reason">{event.reason_code || '--'}</span>,
+              <span key="model" className="text-outline">{event.model_name || event.reason_code || '--'}</span>,
+              <span key="charge" className="text-white">{event.mode === 'hosted' ? `${event.settled_credits ?? 0} credits` : `${event.billed_units ?? 0} ${event.unit_type ?? ''}`}</span>,
+              <span key="cost">{event.mode === 'hosted' ? moneyFromMicrousd(event.upstream_cost_microusd) : '--'}</span>,
+              <span key="profit" className={event.cap_applied ? 'text-amber-200' : 'text-outline'}>{event.mode === 'hosted' ? `${moneyFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}` : '--'}</span>,
               <span key="created">{formatDate(event.created_at)}</span>,
             ])}
           />
@@ -88,4 +91,8 @@ export default function UsageEventsPage() {
       </Panel>
     </div>
   )
+}
+
+function moneyFromMicrousd(value?: number) {
+  return `$${((value ?? 0) / 1_000_000).toFixed(4)}`
 }

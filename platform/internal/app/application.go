@@ -86,6 +86,12 @@ type adminRouteService interface {
 	Growth(ctx context.Context) (*admin.GrowthSnapshot, error)
 	QuotaSources(ctx context.Context, filter admin.QuotaSourcesFilter) (*admin.QuotaSources, error)
 	HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error)
+	HostedBillingConfig(ctx context.Context) (*admin.HostedBillingConfig, error)
+	UpdateHostedPricingSettings(ctx context.Context, req admin.UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error)
+	CreateHostedPricingRule(ctx context.Context, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error)
+	UpdateHostedPricingRule(ctx context.Context, id uint64, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error)
+	CreateHostedCreditPack(ctx context.Context, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error)
+	UpdateHostedCreditPack(ctx context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error)
 }
 
 type stripeRouteService interface {
@@ -169,6 +175,7 @@ func New() (*Application, error) {
 		ImageModel:             cfg.HostedLLMImageModel,
 		Provider:               cfg.HostedLLMProvider,
 		HashSalt:               cfg.APIKeyHashSalt,
+		Rules:                  cfg.HostedPricingRules,
 		TimeoutSec:             cfg.HostedLLMTimeoutSec,
 		AIGatewayAdminBaseURL:  cfg.AIGatewayAdminBaseURL,
 		AIGatewayAdminAPIKey:   cfg.AIGatewayAdminAPIKey,
@@ -225,22 +232,11 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerPublishRoutes(api, cfg, publishService)
 	registerAuthRoutes(api, cfg, authSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
-	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing())) })
+	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc)
 	registerStripeRoutes(api, billingSvc)
 	registerPreviewRoutes(r, cfg, authSvc, previewShares, sdkHandler, sdkProvider)
 	registerStatic(r.Engine, cfg)
-}
-
-func appuserExternalPricing(packs []model.PricingPack) []model.PricingPack {
-	result := make([]model.PricingPack, 0, len(packs))
-	for _, pack := range packs {
-		if pack.PackKind != string(model.PackKindExternalGeneration) {
-			continue
-		}
-		result = append(result, pack)
-	}
-	return result
 }
 
 type publishRouteService interface {
@@ -820,6 +816,81 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+	protected.GET("/hosted-billing", func(c *gin.Context) {
+		data, err := adminSvc.HostedBillingConfig(c.Request.Context())
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/hosted-pricing-settings", func(c *gin.Context) {
+		var req admin.UpdateHostedPricingSettingsRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateHostedPricingSettings(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/hosted-pricing-rules", func(c *gin.Context) {
+		var req admin.UpsertHostedPricingRuleRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateHostedPricingRule(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/hosted-pricing-rules/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var req admin.UpsertHostedPricingRuleRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateHostedPricingRule(c.Request.Context(), id, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/hosted-credit-packs", func(c *gin.Context) {
+		var req admin.UpsertHostedCreditPackRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateHostedCreditPack(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/hosted-credit-packs/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var req admin.UpsertHostedCreditPackRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateHostedCreditPack(c.Request.Context(), id, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
 }
 
 func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
@@ -1312,7 +1383,7 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 		}
 	})
 	protected.GET("/pricing", func(c *gin.Context) {
-		httpapi.JSON(c, http.StatusOK, appuserExternalPricing(billingSvc.Pricing()))
+		httpapi.JSON(c, http.StatusOK, billingSvc.Pricing())
 	})
 	protected.POST("/checkout", func(c *gin.Context) {
 		var req billing.CheckoutRequest

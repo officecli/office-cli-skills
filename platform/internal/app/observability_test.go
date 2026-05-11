@@ -99,6 +99,24 @@ func (fakeAdminRouteFailureService) QuotaSources(_ context.Context, filter admin
 func (fakeAdminRouteFailureService) HostedPricingRules(_ context.Context) ([]model.HostedPricingRule, error) {
 	return nil, nil
 }
+func (fakeAdminRouteFailureService) HostedBillingConfig(_ context.Context) (*admin.HostedBillingConfig, error) {
+	return &admin.HostedBillingConfig{}, nil
+}
+func (fakeAdminRouteFailureService) UpdateHostedPricingSettings(_ context.Context, req admin.UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error) {
+	return &model.HostedPricingSetting{}, nil
+}
+func (fakeAdminRouteFailureService) CreateHostedPricingRule(_ context.Context, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	return &model.HostedPricingRule{}, nil
+}
+func (fakeAdminRouteFailureService) UpdateHostedPricingRule(_ context.Context, id uint64, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	return &model.HostedPricingRule{}, nil
+}
+func (fakeAdminRouteFailureService) CreateHostedCreditPack(_ context.Context, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	return &model.HostedCreditPack{}, nil
+}
+func (fakeAdminRouteFailureService) UpdateHostedCreditPack(_ context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	return &model.HostedCreditPack{}, nil
+}
 
 func TestRateLimitMiddlewareLogsBlockedRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)

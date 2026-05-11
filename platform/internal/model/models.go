@@ -201,31 +201,37 @@ func (d DailyFreeQuota) Remaining() int {
 }
 
 type UsageEvent struct {
-	ID               uint64      `gorm:"primaryKey" json:"id"`
-	RequestID        *string     `gorm:"column:request_id;size:128;uniqueIndex" json:"request_id,omitempty"`
-	FingerprintHash  string      `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
-	Mode             UsageMode   `gorm:"column:mode;size:16;index;not null" json:"mode"`
-	Action           UsageAction `gorm:"column:action;size:16;index;not null" json:"action"`
-	APIKeyID         *uint64     `gorm:"column:api_key_id;index" json:"api_key_id,omitempty"`
-	Result           UsageResult `gorm:"column:result;size:16;index;not null" json:"result"`
-	ReasonCode       *string     `gorm:"column:reason_code;size:64;index" json:"reason_code,omitempty"`
-	CLIVersion       *string     `gorm:"column:cli_version;size:64" json:"cli_version,omitempty"`
-	DocumentType     *string     `gorm:"column:document_type;size:32" json:"document_type,omitempty"`
-	RuntimeMode      *string     `gorm:"column:runtime_mode;size:16;index" json:"runtime_mode,omitempty"`
-	UserID           *uint64     `gorm:"column:user_id;index" json:"user_id,omitempty"`
-	BilledUnits      int         `gorm:"column:billed_units;not null;default:0" json:"billed_units"`
-	UnitType         string      `gorm:"column:unit_type;size:32;not null;default:document" json:"unit_type"`
-	Charged          bool        `gorm:"column:charged;not null;default:false" json:"charged"`
-	Provider         *string     `gorm:"column:provider;size:64" json:"provider,omitempty"`
-	ModelName        *string     `gorm:"column:model_name;size:128" json:"model_name,omitempty"`
-	PromptTokens     int         `gorm:"column:prompt_tokens;not null;default:0" json:"prompt_tokens"`
-	CompletionTokens int         `gorm:"column:completion_tokens;not null;default:0" json:"completion_tokens"`
-	ReasoningTokens  int         `gorm:"column:reasoning_tokens;not null;default:0" json:"reasoning_tokens"`
-	ImageCount       int         `gorm:"column:image_count;not null;default:0" json:"image_count"`
-	ReservedCredits  int         `gorm:"column:reserved_credits;not null;default:0" json:"reserved_credits"`
-	SettledCredits   int         `gorm:"column:settled_credits;not null;default:0" json:"settled_credits"`
-	RefundCredits    int         `gorm:"column:refund_credits;not null;default:0" json:"refund_credits"`
-	CreatedAt        time.Time   `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	ID                    uint64      `gorm:"primaryKey" json:"id"`
+	RequestID             *string     `gorm:"column:request_id;size:128;uniqueIndex" json:"request_id,omitempty"`
+	FingerprintHash       string      `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
+	Mode                  UsageMode   `gorm:"column:mode;size:16;index;not null" json:"mode"`
+	Action                UsageAction `gorm:"column:action;size:16;index;not null" json:"action"`
+	APIKeyID              *uint64     `gorm:"column:api_key_id;index" json:"api_key_id,omitempty"`
+	Result                UsageResult `gorm:"column:result;size:16;index;not null" json:"result"`
+	ReasonCode            *string     `gorm:"column:reason_code;size:64;index" json:"reason_code,omitempty"`
+	CLIVersion            *string     `gorm:"column:cli_version;size:64" json:"cli_version,omitempty"`
+	DocumentType          *string     `gorm:"column:document_type;size:32" json:"document_type,omitempty"`
+	RuntimeMode           *string     `gorm:"column:runtime_mode;size:16;index" json:"runtime_mode,omitempty"`
+	UserID                *uint64     `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	BilledUnits           int         `gorm:"column:billed_units;not null;default:0" json:"billed_units"`
+	UnitType              string      `gorm:"column:unit_type;size:32;not null;default:document" json:"unit_type"`
+	Charged               bool        `gorm:"column:charged;not null;default:false" json:"charged"`
+	Provider              *string     `gorm:"column:provider;size:64" json:"provider,omitempty"`
+	ModelName             *string     `gorm:"column:model_name;size:128" json:"model_name,omitempty"`
+	PromptTokens          int         `gorm:"column:prompt_tokens;not null;default:0" json:"prompt_tokens"`
+	CompletionTokens      int         `gorm:"column:completion_tokens;not null;default:0" json:"completion_tokens"`
+	ReasoningTokens       int         `gorm:"column:reasoning_tokens;not null;default:0" json:"reasoning_tokens"`
+	ImageCount            int         `gorm:"column:image_count;not null;default:0" json:"image_count"`
+	ReservedCredits       int         `gorm:"column:reserved_credits;not null;default:0" json:"reserved_credits"`
+	SettledCredits        int         `gorm:"column:settled_credits;not null;default:0" json:"settled_credits"`
+	RefundCredits         int         `gorm:"column:refund_credits;not null;default:0" json:"refund_credits"`
+	HostedPricingRuleID   uint64      `gorm:"column:hosted_pricing_rule_id;not null;default:0" json:"hosted_pricing_rule_id,omitempty"`
+	MarkupBPS             int         `gorm:"column:markup_bps;not null;default:0" json:"markup_bps"`
+	UpstreamCostMicrousd  int64       `gorm:"column:upstream_cost_microusd;not null;default:0" json:"upstream_cost_microusd"`
+	UncappedChargeCredits int         `gorm:"column:uncapped_charge_credits;not null;default:0" json:"uncapped_charge_credits"`
+	ProfitMicrousd        int64       `gorm:"column:profit_microusd;not null;default:0" json:"profit_microusd"`
+	CapApplied            bool        `gorm:"column:cap_applied;not null;default:false" json:"cap_applied"`
+	CreatedAt             time.Time   `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
 
 func (UsageEvent) TableName() string { return "usage_events" }
@@ -350,15 +356,63 @@ type PricingPack struct {
 }
 
 type HostedPricingRule struct {
-	DocumentProfile       string `json:"document_profile"`
-	Provider              string `json:"provider"`
-	Model                 string `json:"model"`
-	PromptPer1KCredits    int    `json:"prompt_per_1k_credits"`
-	OutputPer1KCredits    int    `json:"output_per_1k_credits"`
-	ReasoningPer1KCredits int    `json:"reasoning_per_1k_credits"`
-	ImagePerAssetCredits  int    `json:"image_per_asset_credits"`
-	ReservationCredits    int    `json:"reservation_credits"`
-	MinimumChargeCredits  int    `json:"minimum_charge_credits"`
+	ID                         uint64    `gorm:"primaryKey" json:"id,omitempty"`
+	DocumentProfile            string    `gorm:"column:document_profile;size:64;index;not null" json:"document_profile"`
+	Provider                   string    `gorm:"column:provider;size:64;not null" json:"provider"`
+	Model                      string    `gorm:"column:model;size:128;not null" json:"model"`
+	PromptPer1KCredits         int       `gorm:"-" json:"prompt_per_1k_credits,omitempty"`
+	OutputPer1KCredits         int       `gorm:"-" json:"output_per_1k_credits,omitempty"`
+	ReasoningPer1KCredits      int       `gorm:"-" json:"reasoning_per_1k_credits,omitempty"`
+	ImagePerAssetCredits       int       `gorm:"-" json:"image_per_asset_credits,omitempty"`
+	PromptPer1KCostMicrousd    int64     `gorm:"column:prompt_per_1k_cost_microusd;not null;default:0" json:"prompt_per_1k_cost_microusd"`
+	OutputPer1KCostMicrousd    int64     `gorm:"column:output_per_1k_cost_microusd;not null;default:0" json:"output_per_1k_cost_microusd"`
+	ReasoningPer1KCostMicrousd int64     `gorm:"column:reasoning_per_1k_cost_microusd;not null;default:0" json:"reasoning_per_1k_cost_microusd"`
+	ImagePerAssetCostMicrousd  int64     `gorm:"column:image_per_asset_cost_microusd;not null;default:0" json:"image_per_asset_cost_microusd"`
+	ReservationCredits         int       `gorm:"column:reservation_credits;not null;default:0" json:"reservation_credits"`
+	MinimumChargeCredits       int       `gorm:"column:minimum_charge_credits;not null;default:0" json:"minimum_charge_credits"`
+	MarkupBPS                  *int      `gorm:"column:markup_bps" json:"markup_bps,omitempty"`
+	Enabled                    bool      `gorm:"column:enabled;not null;default:true" json:"enabled"`
+	CreatedAt                  time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt                  time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (HostedPricingRule) TableName() string { return "hosted_pricing_rules" }
+
+type HostedPricingSetting struct {
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	MarkupBPS int       `gorm:"column:markup_bps;not null;default:3000" json:"markup_bps"`
+	Currency  string    `gorm:"column:currency;size:8;not null;default:usd" json:"currency"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (HostedPricingSetting) TableName() string { return "hosted_pricing_settings" }
+
+type HostedCreditPack struct {
+	ID           uint64    `gorm:"primaryKey" json:"id"`
+	Code         string    `gorm:"column:code;size:64;uniqueIndex;not null" json:"code"`
+	Name         string    `gorm:"column:name;size:128;not null" json:"name"`
+	Description  string    `gorm:"column:description;size:512;not null" json:"description"`
+	Currency     string    `gorm:"column:currency;size:8;not null;default:usd" json:"currency"`
+	AmountTotal  int64     `gorm:"column:amount_total;not null" json:"amount_total"`
+	CreditAmount int       `gorm:"column:credit_amount;not null" json:"credit_amount"`
+	Enabled      bool      `gorm:"column:enabled;not null;default:true" json:"enabled"`
+	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (HostedCreditPack) TableName() string { return "hosted_credit_packs" }
+
+func (p HostedCreditPack) PricingPack() PricingPack {
+	return PricingPack{
+		Code:         p.Code,
+		Name:         p.Name,
+		Description:  p.Description,
+		Currency:     p.Currency,
+		AmountTotal:  p.AmountTotal,
+		CreditAmount: p.CreditAmount,
+		PackKind:     string(PackKindHostedCredits),
+	}
 }
 
 type OverviewStats struct {

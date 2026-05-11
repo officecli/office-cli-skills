@@ -133,6 +133,26 @@ describe('platform app shell', () => {
     expect(await screen.findByText(/No usage events recorded/i)).toBeInTheDocument()
   })
 
+  it('renders hosted usage charges without exposing cost or profit', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/auth/me') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
+      }
+      if (url === '/api/app/usage-events') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 1, mode: 'hosted', action: 'generate', result: 'allowed', fingerprint_hash: 'hosted', model_name: 'gpt-4.1', settled_credits: 7, upstream_cost_microusd: 20000, profit_microusd: 50000, created_at: '2026-04-03T00:00:00Z' }] }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderApp('/usage')
+
+    expect(await screen.findByText('7 credits')).toBeInTheDocument()
+    expect(screen.getByText('gpt-4.1')).toBeInTheDocument()
+    expect(screen.queryByText(/\$0\.0200/)).not.toBeInTheDocument()
+  })
+
   it('renders the quota page with reward and paid account quota only', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)

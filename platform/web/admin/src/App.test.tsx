@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -97,6 +97,51 @@ describe('platform admin shell', () => {
     expect(await screen.findByRole('heading', { name: /Recent usage events/i })).toBeInTheDocument()
     expect(document.title).toBe('OfficeCLI Admin | Usage Events')
     expect(screen.getByRole('option', { name: 'reward' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'hosted' })).toBeInTheDocument()
+  })
+
+  it('renders hosted billing controls from the DB-backed admin API', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/hosted-billing') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              settings: { id: 1, markup_bps: 3500, currency: 'usd' },
+              rules: [{ id: 9, document_profile: 'docx-xlsx', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
+              packs: [{ id: 3, code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, credit_amount: 300, enabled: true }],
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/hosted-pricing']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /Hosted pricing controls/i })).toBeInTheDocument()
+    expect(await screen.findByText(/docx-xlsx \/ gpt-4\.1/i)).toBeInTheDocument()
+    expect(await screen.findByText(/hosted-300/i)).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Save hosted pricing rule 9/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Save hosted credit pack 3/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-pricing-rules/9', expect.objectContaining({ method: 'PATCH' }))
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-credit-packs/3', expect.objectContaining({ method: 'PATCH' }))
+    })
   })
 
   it('renders the growth ledger route from the real growth API', async () => {

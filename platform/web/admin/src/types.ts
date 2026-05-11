@@ -57,10 +57,18 @@ export interface UsageEvent {
   runtime_mode?: string
   provider?: string
   model_name?: string
+  billed_units?: number
+  unit_type?: string
   prompt_tokens?: number
   completion_tokens?: number
+  reasoning_tokens?: number
   image_count?: number
+  markup_bps?: number
+  upstream_cost_microusd?: number
+  uncapped_charge_credits?: number
   settled_credits?: number
+  profit_microusd?: number
+  cap_applied?: boolean
 }
 
 export interface User {
@@ -81,6 +89,8 @@ export interface Order {
   pack_code: string
   pack_name: string
   quota_amount: number
+  credit_amount?: number
+  pack_kind?: string
   target_api_key_id?: number
   created_at: string
   note?: string
@@ -104,15 +114,41 @@ export interface AdminGrowth {
 }
 
 export interface HostedPricingRule {
+  id?: number
   document_profile: string
   provider: string
   model: string
-  prompt_per_1k_credits: number
-  output_per_1k_credits: number
-  reasoning_per_1k_credits: number
-  image_per_asset_credits: number
+  prompt_per_1k_cost_microusd: number
+  output_per_1k_cost_microusd: number
+  reasoning_per_1k_cost_microusd: number
+  image_per_asset_cost_microusd: number
   reservation_credits: number
   minimum_charge_credits: number
+  markup_bps?: number
+  enabled: boolean
+}
+
+export interface HostedPricingSetting {
+  id: number
+  markup_bps: number
+  currency: string
+}
+
+export interface HostedCreditPack {
+  id?: number
+  code: string
+  name: string
+  description: string
+  currency: string
+  amount_total: number
+  credit_amount: number
+  enabled: boolean
+}
+
+export interface HostedBillingConfig {
+  settings: HostedPricingSetting
+  rules: HostedPricingRule[]
+  packs: HostedCreditPack[]
 }
 
 export interface RewardGrant {

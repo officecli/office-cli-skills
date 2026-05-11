@@ -72,6 +72,7 @@ type APIKeyView struct {
 	QuotaTotal         *int               `json:"quota_total,omitempty"`
 	QuotaUsed          int                `json:"quota_used"`
 	QuotaRemaining     int                `json:"quota_remaining"`
+	CreditBalance      int                `json:"credit_balance"`
 	CreatedAt          time.Time          `json:"created_at"`
 }
 
@@ -532,21 +533,12 @@ func inviteRemaining(count int) int {
 	return remaining
 }
 
-func externalPricingPacks(packs []model.PricingPack) []model.PricingPack {
-	result := make([]model.PricingPack, 0, len(packs))
-	for _, pack := range packs {
-		if pack.PackKind != string(model.PackKindExternalGeneration) {
-			continue
-		}
-		result = append(result, pack)
-	}
-	return result
-}
+func externalPricingPacks(packs []model.PricingPack) []model.PricingPack { return packs }
 
 func visibleOrders(orders []model.Order) []model.Order {
 	result := make([]model.Order, 0, len(orders))
 	for _, order := range orders {
-		if order.PackKind != model.PackKindExternalGeneration {
+		if order.PackKind != model.PackKindExternalGeneration && order.PackKind != model.PackKindHostedCredits {
 			continue
 		}
 		result = append(result, order)
@@ -555,14 +547,7 @@ func visibleOrders(orders []model.Order) []model.Order {
 }
 
 func visibleUsageEvents(events []model.UsageEvent) []model.UsageEvent {
-	result := make([]model.UsageEvent, 0, len(events))
-	for _, event := range events {
-		if event.Mode == model.UsageModeHosted {
-			continue
-		}
-		result = append(result, event)
-	}
-	return result
+	return events
 }
 
 func newAPIKeyView(key model.APIKey) APIKeyView {
@@ -578,6 +563,7 @@ func newAPIKeyView(key model.APIKey) APIKeyView {
 		QuotaTotal:         key.QuotaTotal,
 		QuotaUsed:          key.QuotaUsed,
 		QuotaRemaining:     key.PaidQuotaRemaining(),
+		CreditBalance:      key.CreditBalance,
 		CreatedAt:          key.CreatedAt,
 	}
 }

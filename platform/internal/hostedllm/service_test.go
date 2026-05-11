@@ -23,6 +23,8 @@ type fakeAPIKeyStore struct {
 	key          *model.APIKey
 	keysByHash   map[string]*model.APIKey
 	userKeys     map[uint64]*model.UserAIGatewayAPIKey
+	settings     *model.HostedPricingSetting
+	rules        []model.HostedPricingRule
 	reservations []int
 	releases     []int
 	settlements  []int
@@ -75,6 +77,25 @@ func (f *fakeAPIKeyStore) SettleReservedCredits(_ context.Context, apiKeyID uint
 func (f *fakeAPIKeyStore) CreateUsageEvent(_ context.Context, event *model.UsageEvent) error {
 	f.events = append(f.events, event)
 	return nil
+}
+
+func (f *fakeAPIKeyStore) HostedPricingSettings(_ context.Context) (*model.HostedPricingSetting, error) {
+	if f.settings != nil {
+		cloned := *f.settings
+		return &cloned, nil
+	}
+	return &model.HostedPricingSetting{ID: 1, MarkupBPS: 3000, Currency: "usd"}, nil
+}
+
+func (f *fakeAPIKeyStore) ListHostedPricingRules(_ context.Context, enabledOnly bool) ([]model.HostedPricingRule, error) {
+	var out []model.HostedPricingRule
+	for _, rule := range f.rules {
+		if enabledOnly && !rule.Enabled {
+			continue
+		}
+		out = append(out, rule)
+	}
+	return out, nil
 }
 
 func (f *fakeAPIKeyStore) FindUserAIGatewayAPIKeyByUserID(_ context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error) {
@@ -473,6 +494,133 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, 1, store.events[0].ImageCount)
 	require.Equal(t, "gpt-image-test", upstreamPayload["model"])
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
+}
+
+func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *testing.T) {
+	var upstreamPayload map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/chat/completions", r.URL.Path)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&upstreamPayload))
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":1000,"completion_tokens":500,"reasoning_tokens":250}}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	ruleID := uint64(9)
+	markupOverride := 5000
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		Provider:   "aigateway",
+		MarkupBPS:  3000,
+		TimeoutSec: 5,
+		Rules: []model.HostedPricingRule{{
+			ID:                         ruleID,
+			DocumentProfile:            "docx-xlsx",
+			Provider:                   "aigateway",
+			Model:                      "gpt-test",
+			PromptPer1KCostMicrousd:    10000,
+			OutputPer1KCostMicrousd:    20000,
+			ReasoningPer1KCostMicrousd: 40000,
+			ReservationCredits:         20,
+			MinimumChargeCredits:       2,
+			MarkupBPS:                  &markupOverride,
+			Enabled:                    true,
+		}},
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/docx-xlsx",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Content)
+	require.Equal(t, "gpt-test", upstreamPayload["model"])
+	require.Equal(t, []int{20}, store.reservations)
+	require.Equal(t, []int{5}, store.settlements)
+	require.Len(t, store.events, 1)
+	event := store.events[0]
+	require.Equal(t, ruleID, event.HostedPricingRuleID)
+	require.Equal(t, 5000, event.MarkupBPS)
+	require.Equal(t, int64(30000), event.UpstreamCostMicrousd)
+	require.Equal(t, 5, event.UncappedChargeCredits)
+	require.Equal(t, 5, event.SettledCredits)
+	require.Equal(t, int64(20000), event.ProfitMicrousd)
+	require.False(t, event.CapApplied)
+}
+
+func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10000}}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd"},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		MarkupBPS:  0,
+		TimeoutSec: 5,
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:         "docx-xlsx",
+			Model:                   "gpt-test",
+			PromptPer1KCostMicrousd: 100000,
+			ReservationCredits:      5,
+			MinimumChargeCredits:    1,
+			Enabled:                 true,
+		}},
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/docx-xlsx",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []int{5}, store.reservations)
+	require.Equal(t, []int{5}, store.settlements)
+	require.Len(t, store.events, 1)
+	require.Equal(t, 100, store.events[0].UncappedChargeCredits)
+	require.Equal(t, 5, store.events[0].SettledCredits)
+	require.True(t, store.events[0].CapApplied)
 }
 
 func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {

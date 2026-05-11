@@ -70,7 +70,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Secure checkout" title="Buy quota for an API key" body="Select the key that should receive more document generations, then continue into secure Stripe Checkout from the same workspace." />
+        <SectionHeading eyebrow="Secure checkout" title="Buy quota for an API key" body="Select the key that should receive more document generations or hosted credits, then continue into secure Stripe Checkout from the same workspace." />
         <div className="billing-shell mb-6">
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
@@ -80,7 +80,7 @@ export default function BillingPage() {
             </select>
             <div className="mt-4 text-sm text-outline">
               {activeKey
-                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} document generations remaining.`
+                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} document generations and ${activeKey.credit_balance ?? 0} hosted credits remaining.`
                 : activeKeys.length
                   ? 'Pick an active production key before starting checkout.'
                   : 'No active API key is available for billing. Re-enable a key in API Keys first.'}
@@ -109,7 +109,7 @@ export default function BillingPage() {
                   <div className="mt-3 text-2xl font-bold text-white">{pack.name}</div>
                   <div className="mt-2 text-sm text-outline">{pack.description}</div>
                   <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
-                  <div className="mt-2 text-sm text-outline">{pack.quota_amount} document generations per purchase</div>
+                  <div className="mt-2 text-sm text-outline">{packUnitLabel(pack)}</div>
                 </div>
                 <button
                   type="button"
@@ -164,7 +164,7 @@ export default function BillingPage() {
                   <div className="mt-1 text-xs text-outline">Internal order #{order.id} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {order.quota_amount} document generations</div>
+                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {orderUnitLabel(order)}</div>
                   <StatusPill value={order.status} />
                 </div>
               </div>
@@ -180,6 +180,20 @@ export default function BillingPage() {
 
 function stripeOrderReference(order: Order) {
   return order.stripe_payment_intent_id || order.stripe_checkout_session_id || ''
+}
+
+function packUnitLabel(pack: { pack_kind?: string; quota_amount?: number; credit_amount?: number }) {
+  if (pack.pack_kind === 'hosted_credits') {
+    return `${pack.credit_amount ?? 0} hosted credits per purchase`
+  }
+  return `${pack.quota_amount ?? 0} document generations per purchase`
+}
+
+function orderUnitLabel(order: Order) {
+  if (order.pack_kind === 'hosted_credits') {
+    return `${order.credit_amount ?? 0} hosted credits`
+  }
+  return `${order.quota_amount} document generations`
 }
 
 function targetAPIKeyLabel(order: Order, keyByID: Map<number, ApiKey>) {

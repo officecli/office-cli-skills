@@ -228,8 +228,8 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 	require.Equal(t, 1, overview.ActivatedReferralCount)
 	require.True(t, overview.DiscordConnected)
 	require.True(t, overview.DiscordGuildMember)
-	require.Equal(t, 1, overview.RecentOrdersCount)
-	require.Len(t, overview.Pricing, 1)
+	require.Equal(t, 2, overview.RecentOrdersCount)
+	require.Len(t, overview.Pricing, 2)
 	require.Equal(t, "external-100", overview.Pricing[0].Code)
 }
 
@@ -264,7 +264,7 @@ func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
 	require.Equal(t, 40, keys[0].QuotaRemaining)
 }
 
-func TestListUsageEventsFiltersHostedEvents(t *testing.T) {
+func TestListUsageEventsIncludesHostedEventsWithoutCostDetails(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(&usageStore{
@@ -278,9 +278,10 @@ func TestListUsageEventsFiltersHostedEvents(t *testing.T) {
 
 	events, err := svc.ListUsageEvents(context.Background(), 42)
 	require.NoError(t, err)
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 	require.Equal(t, uint64(1), events[0].ID)
-	require.Equal(t, uint64(3), events[1].ID)
+	require.Equal(t, uint64(2), events[1].ID)
+	require.Equal(t, uint64(3), events[2].ID)
 }
 
 func TestGetAPIKeyPlaintextReturnsStoredValueForOwnedKey(t *testing.T) {

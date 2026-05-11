@@ -133,6 +133,24 @@ func (f *fakeAdminRouteService) QuotaSources(_ context.Context, filter admin.Quo
 func (f *fakeAdminRouteService) HostedPricingRules(_ context.Context) ([]model.HostedPricingRule, error) {
 	return nil, nil
 }
+func (f *fakeAdminRouteService) HostedBillingConfig(_ context.Context) (*admin.HostedBillingConfig, error) {
+	return &admin.HostedBillingConfig{}, nil
+}
+func (f *fakeAdminRouteService) UpdateHostedPricingSettings(_ context.Context, req admin.UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error) {
+	return &model.HostedPricingSetting{}, nil
+}
+func (f *fakeAdminRouteService) CreateHostedPricingRule(_ context.Context, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	return &model.HostedPricingRule{}, nil
+}
+func (f *fakeAdminRouteService) UpdateHostedPricingRule(_ context.Context, id uint64, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	return &model.HostedPricingRule{}, nil
+}
+func (f *fakeAdminRouteService) CreateHostedCreditPack(_ context.Context, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	return &model.HostedCreditPack{}, nil
+}
+func (f *fakeAdminRouteService) UpdateHostedCreditPack(_ context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	return &model.HostedCreditPack{}, nil
+}
 
 func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T) {
 	gin.SetMode(gin.TestMode)

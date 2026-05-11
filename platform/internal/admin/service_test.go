@@ -166,6 +166,66 @@ func TestUpdateAPIKeyPersistsHostedEntitlementFields(t *testing.T) {
 	require.Equal(t, 75, saved.CreditBalance)
 }
 
+func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:hosted_pricing_admin?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.HostedPricingSetting{},
+		&model.HostedPricingRule{},
+		&model.HostedCreditPack{},
+		&model.AdminAuditLog{},
+	))
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+
+	settings, err := svc.UpdateHostedPricingSettings(context.Background(), UpdateHostedPricingSettingsRequest{MarkupBPS: 3500})
+	require.NoError(t, err)
+	require.Equal(t, 3500, settings.MarkupBPS)
+	require.Equal(t, "usd", settings.Currency)
+
+	override := 5000
+	rule, err := svc.CreateHostedPricingRule(context.Background(), UpsertHostedPricingRuleRequest{
+		DocumentProfile:            "docx-xlsx",
+		Provider:                   "aigateway",
+		Model:                      "gpt-test",
+		PromptPer1KCostMicrousd:    10000,
+		OutputPer1KCostMicrousd:    20000,
+		ReasoningPer1KCostMicrousd: 40000,
+		ImagePerAssetCostMicrousd:  0,
+		ReservationCredits:         20,
+		MinimumChargeCredits:       2,
+		MarkupBPS:                  &override,
+		Enabled:                    true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), rule.ID)
+	require.NotNil(t, rule.MarkupBPS)
+	require.Equal(t, 5000, *rule.MarkupBPS)
+
+	pack, err := svc.CreateHostedCreditPack(context.Background(), UpsertHostedCreditPackRequest{
+		Code:         "hosted-300",
+		Name:         "Hosted 300",
+		Description:  "300 hosted credits",
+		Currency:     "usd",
+		AmountTotal:  300,
+		CreditAmount: 300,
+		Enabled:      true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "hosted-300", pack.Code)
+
+	payload, err := svc.HostedBillingConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 3500, payload.Settings.MarkupBPS)
+	require.Len(t, payload.Rules, 1)
+	require.Len(t, payload.Packs, 1)
+	require.True(t, payload.Packs[0].Enabled)
+
+	var auditCount int64
+	require.NoError(t, db.Model(&model.AdminAuditLog{}).Count(&auditCount).Error)
+	require.Equal(t, int64(3), auditCount)
+}
+
 func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:update_user_disables_owned_api_keys?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

@@ -78,7 +78,7 @@ describe('billing page', () => {
     expect(screen.getByText(/100 document generations per purchase/i)).toBeInTheDocument()
     expect(screen.getByText('pi_test_123')).toBeInTheDocument()
     expect(screen.getByText(/API key #7/i)).toBeInTheDocument()
-    expect(screen.queryByText(/hosted/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/hosted credits per purchase/i)).not.toBeInTheDocument()
   })
 
   it('posts checkout to the existing app endpoint and keeps Stripe copy explicit', async () => {
@@ -153,6 +153,37 @@ describe('billing page', () => {
       }))
     })
     expect(redirectSpy).toHaveBeenCalledWith('https://checkout.stripe.com/pay/test_session')
+  })
+
+  it('renders hosted credit packs and posts hosted checkout payloads', async () => {
+    const redirectSpy = vi.spyOn(navigation, 'redirectTo').mockImplementation(() => {})
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits for platform-managed generation.', currency: 'usd', amount_total: 300, credit_amount: 300, pack_kind: 'hosted_credits' }] }) }
+      }
+      if (url === '/api/app/api-keys') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 7, key_prefix: 'cop_hosted', status: 'active', plan_name: 'Hosted', quota_used: 0, quota_remaining: 0, credit_balance: 12, created_at: '2026-04-03T00:00:00Z' }] }) }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ id: 31, status: 'paid', currency: 'usd', amount_total: 300, pack_code: 'hosted-300', pack_name: 'Hosted 300', pack_kind: 'hosted_credits', quota_amount: 0, credit_amount: 300, target_api_key_id: 7, created_at: '2026-04-03T00:00:00Z' }] }) }
+      }
+      if (url === '/api/app/checkout') {
+        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300', target_api_key_id: 7 }))
+        return { ok: true, status: 200, json: async () => ({ data: { order: { id: 32, status: 'pending' }, checkout_url: 'https://checkout.stripe.com/pay/hosted' } }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect((await screen.findAllByText('Hosted 300')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/300 hosted credits/i).length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
+
+    await waitFor(() => expect(redirectSpy).toHaveBeenCalledWith('https://checkout.stripe.com/pay/hosted'))
   })
 
   it('shows checkout error details and request id when checkout fails', async () => {

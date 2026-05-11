@@ -603,6 +603,93 @@ func (s *Store) CreateUsageEvent(ctx context.Context, event *model.UsageEvent) e
 	return s.db.WithContext(ctx).Create(event).Error
 }
 
+func (s *Store) HostedPricingSettings(ctx context.Context) (*model.HostedPricingSetting, error) {
+	var settings model.HostedPricingSetting
+	err := s.db.WithContext(ctx).First(&settings, 1).Error
+	switch {
+	case err == nil:
+		return &settings, nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return nil, err
+	}
+	settings = model.HostedPricingSetting{ID: 1, MarkupBPS: 3000, Currency: "usd"}
+	if err := s.db.WithContext(ctx).Create(&settings).Error; err != nil {
+		if IsDuplicateError(err) {
+			return s.HostedPricingSettings(ctx)
+		}
+		return nil, err
+	}
+	return &settings, nil
+}
+
+func (s *Store) UpdateHostedPricingSettings(ctx context.Context, settings model.HostedPricingSetting) (*model.HostedPricingSetting, error) {
+	current, err := s.HostedPricingSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	updates := map[string]any{
+		"markup_bps": settings.MarkupBPS,
+		"currency":   strings.ToLower(strings.TrimSpace(settings.Currency)),
+	}
+	if updates["currency"] == "" {
+		updates["currency"] = current.Currency
+	}
+	if err := s.db.WithContext(ctx).Model(&model.HostedPricingSetting{}).Where("id = ?", current.ID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return s.HostedPricingSettings(ctx)
+}
+
+func (s *Store) ListHostedPricingRules(ctx context.Context, enabledOnly bool) ([]model.HostedPricingRule, error) {
+	query := s.db.WithContext(ctx).Model(&model.HostedPricingRule{})
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
+	}
+	var rules []model.HostedPricingRule
+	err := query.Order("document_profile asc, provider asc, model asc, id asc").Find(&rules).Error
+	return rules, err
+}
+
+func (s *Store) CreateHostedPricingRule(ctx context.Context, rule *model.HostedPricingRule) error {
+	return s.db.WithContext(ctx).Create(rule).Error
+}
+
+func (s *Store) UpdateHostedPricingRule(ctx context.Context, id uint64, values map[string]any) (*model.HostedPricingRule, error) {
+	if err := s.db.WithContext(ctx).Model(&model.HostedPricingRule{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	var rule model.HostedPricingRule
+	if err := s.db.WithContext(ctx).First(&rule, id).Error; err != nil {
+		return nil, err
+	}
+	return &rule, nil
+}
+
+func (s *Store) ListHostedCreditPacks(ctx context.Context, enabledOnly bool) ([]model.HostedCreditPack, error) {
+	query := s.db.WithContext(ctx).Model(&model.HostedCreditPack{})
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
+	}
+	var packs []model.HostedCreditPack
+	err := query.Order("amount_total asc, id asc").Find(&packs).Error
+	return packs, err
+}
+
+func (s *Store) CreateHostedCreditPack(ctx context.Context, pack *model.HostedCreditPack) error {
+	return s.db.WithContext(ctx).Create(pack).Error
+}
+
+func (s *Store) UpdateHostedCreditPack(ctx context.Context, id uint64, values map[string]any) (*model.HostedCreditPack, error) {
+	if err := s.db.WithContext(ctx).Model(&model.HostedCreditPack{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	var pack model.HostedCreditPack
+	if err := s.db.WithContext(ctx).First(&pack, id).Error; err != nil {
+		return nil, err
+	}
+	return &pack, nil
+}
+
 func (s *Store) FindUsageEventByRequestID(ctx context.Context, requestID string) (*model.UsageEvent, error) {
 	var event model.UsageEvent
 	if err := s.db.WithContext(ctx).Where("request_id = ?", requestID).First(&event).Error; err != nil {

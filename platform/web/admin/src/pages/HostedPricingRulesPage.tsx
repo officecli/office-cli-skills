@@ -1,52 +1,203 @@
-import { useQuery } from '@tanstack/react-query'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import { EmptyState, Panel, SectionHeading } from '../components/ui'
+import { EmptyState, Panel, SectionHeading, StatusPill, formatNumber } from '../components/ui'
+import type { HostedCreditPack, HostedPricingRule } from '../types'
+
+const blankRule: HostedPricingRule = {
+  document_profile: 'docx-xlsx',
+  provider: 'aigateway',
+  model: 'gpt-4.1',
+  prompt_per_1k_cost_microusd: 0,
+  output_per_1k_cost_microusd: 0,
+  reasoning_per_1k_cost_microusd: 0,
+  image_per_asset_cost_microusd: 0,
+  reservation_credits: 16,
+  minimum_charge_credits: 2,
+  enabled: true,
+}
+
+const blankPack: HostedCreditPack = {
+  code: 'hosted-300',
+  name: 'Hosted 300',
+  description: '300 hosted credits for platform-managed generation.',
+  currency: 'usd',
+  amount_total: 300,
+  credit_amount: 300,
+  enabled: true,
+}
 
 export default function HostedPricingRulesPage() {
-  const { data: rules = [] } = useQuery({ queryKey: ['admin-hosted-pricing-rules'], queryFn: api.hostedPricingRules })
+  const queryClient = useQueryClient()
+  const { data } = useQuery({ queryKey: ['admin-hosted-billing'], queryFn: api.hostedBilling })
+  const [markupBPS, setMarkupBPS] = useState('')
+  const [ruleDraft, setRuleDraft] = useState<HostedPricingRule>(blankRule)
+  const [packDraft, setPackDraft] = useState<HostedCreditPack>(blankPack)
+
+  const settingsMarkup = useMemo(() => markupBPS || String(data?.settings.markup_bps ?? 3000), [data?.settings.markup_bps, markupBPS])
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-hosted-billing'] })
+  const updateSettings = useMutation({ mutationFn: api.updateHostedPricingSettings, onSuccess: invalidate })
+  const createRule = useMutation({ mutationFn: api.createHostedPricingRule, onSuccess: async () => { setRuleDraft(blankRule); await invalidate() } })
+  const updateRule = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedPricingRule }) => api.updateHostedPricingRule(id, payload), onSuccess: invalidate })
+  const createPack = useMutation({ mutationFn: api.createHostedCreditPack, onSuccess: async () => { setPackDraft(blankPack); await invalidate() } })
+  const updatePack = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedCreditPack }) => api.updateHostedCreditPack(id, payload), onSuccess: invalidate })
 
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading
-          eyebrow="Hosted billing"
-          title="Hosted pricing rules"
-          body="Current hosted pricing is config-managed. Update `HOSTED_PRICING_RULES_JSON` or platform defaults, then restart the service to apply changes."
-        />
+        <SectionHeading eyebrow="Hosted billing" title="Hosted pricing controls" body="Configure aigateway base cost, margin, and prepaid credit packs without restarting the platform." />
+        <form className="panel-muted grid gap-4 p-5 md:grid-cols-[1fr_auto]" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          updateSettings.mutate({ markup_bps: Number(settingsMarkup), currency: data?.settings.currency || 'usd' })
+        }}>
+          <label className="text-sm text-outline">Global markup BPS
+            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkup} onChange={(event) => setMarkupBPS(event.target.value)} />
+          </label>
+          <button type="submit" className="tonal-button self-end" disabled={updateSettings.isPending}>Save markup</button>
+        </form>
+      </Panel>
 
-        <div className="panel-muted mb-6 p-5 text-sm text-outline">
-          Source of truth is server config, not the admin database. This page is intentionally read-only for now so operator changes do not vanish after a restart.
-        </div>
-
-        {rules.length ? (
-          <div className="space-y-4">
-            {rules.map((rule, index) => (
-              <div key={`${rule.document_profile}-${index}`} className="panel-muted grid gap-4 p-5 md:grid-cols-3">
-                <ReadField label="Document profile" value={rule.document_profile} />
-                <ReadField label="Provider" value={rule.provider} />
-                <ReadField label="Model" value={rule.model} />
-                <ReadField label="Prompt / 1K" value={rule.prompt_per_1k_credits} />
-                <ReadField label="Output / 1K" value={rule.output_per_1k_credits} />
-                <ReadField label="Reasoning / 1K" value={rule.reasoning_per_1k_credits} />
-                <ReadField label="Image / asset" value={rule.image_per_asset_credits} />
-                <ReadField label="Reservation" value={rule.reservation_credits} />
-                <ReadField label="Minimum charge" value={rule.minimum_charge_credits} />
-              </div>
+      <Panel>
+        <SectionHeading eyebrow="Aigateway cost" title="Pricing rules" body="Each rule snapshots the upstream cost and effective markup onto hosted usage records." />
+        <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          createRule.mutate(normalizeRule(ruleDraft))
+        }}>
+          <TextField label="Profile" value={ruleDraft.document_profile} onChange={(value) => setRuleDraft({ ...ruleDraft, document_profile: value })} />
+          <TextField label="Provider" value={ruleDraft.provider} onChange={(value) => setRuleDraft({ ...ruleDraft, provider: value })} />
+          <TextField label="Model" value={ruleDraft.model} onChange={(value) => setRuleDraft({ ...ruleDraft, model: value })} />
+          <NumberField label="Markup BPS override" value={ruleDraft.markup_bps ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : Number(value) })} />
+          <NumberField label="Prompt / 1K microUSD" value={ruleDraft.prompt_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, prompt_per_1k_cost_microusd: Number(value) })} />
+          <NumberField label="Output / 1K microUSD" value={ruleDraft.output_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, output_per_1k_cost_microusd: Number(value) })} />
+          <NumberField label="Reasoning / 1K microUSD" value={ruleDraft.reasoning_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, reasoning_per_1k_cost_microusd: Number(value) })} />
+          <NumberField label="Image microUSD" value={ruleDraft.image_per_asset_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, image_per_asset_cost_microusd: Number(value) })} />
+          <NumberField label="Reservation credits" value={ruleDraft.reservation_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, reservation_credits: Number(value) })} />
+          <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
+          <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
+          <button type="submit" className="tonal-button self-end" disabled={createRule.isPending}>Create rule</button>
+        </form>
+        {data?.rules.length ? (
+          <div className="space-y-3">
+            {data.rules.map((rule) => (
+              <RuleRow
+                key={rule.id}
+                rule={rule}
+                onSave={(payload) => rule.id && updateRule.mutate({ id: rule.id, payload })}
+                onToggle={() => rule.id && updateRule.mutate({ id: rule.id, payload: { ...rule, enabled: !rule.enabled } })}
+              />
             ))}
           </div>
-        ) : (
-          <EmptyState title="No hosted pricing rules" body="Add default hosted pricing rules in platform config before editing them here." />
-        )}
+        ) : <EmptyState title="No hosted pricing rules" body="Create a rule before enabling hosted public billing." />}
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Prepaid packs" title="Hosted credit packs" body="Enabled packs are visible to users and can be purchased through Stripe Checkout." />
+        <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          createPack.mutate(normalizePack(packDraft))
+        }}>
+          <TextField label="Code" value={packDraft.code} onChange={(value) => setPackDraft({ ...packDraft, code: value })} />
+          <TextField label="Name" value={packDraft.name} onChange={(value) => setPackDraft({ ...packDraft, name: value })} />
+          <NumberField label="Price cents" value={packDraft.amount_total} onChange={(value) => setPackDraft({ ...packDraft, amount_total: Number(value) })} />
+          <NumberField label="Credits" value={packDraft.credit_amount} onChange={(value) => setPackDraft({ ...packDraft, credit_amount: Number(value) })} />
+          <label className="md:col-span-3 text-sm text-outline">Description
+            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
+          </label>
+          <button type="submit" className="tonal-button self-end" disabled={createPack.isPending}>Create pack</button>
+        </form>
+        {data?.packs.length ? (
+          <div className="space-y-3">
+            {data.packs.map((pack) => (
+              <PackRow
+                key={pack.id}
+                pack={pack}
+                onSave={(payload) => pack.id && updatePack.mutate({ id: pack.id, payload })}
+                onToggle={() => pack.id && updatePack.mutate({ id: pack.id, payload: { ...pack, enabled: !pack.enabled } })}
+              />
+            ))}
+          </div>
+        ) : <EmptyState title="No hosted credit packs" body="Create an enabled pack to expose hosted billing to users." />}
       </Panel>
     </div>
   )
 }
 
-function ReadField({ label, value }: { label: string; value: string | number }) {
+function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: (payload: HostedPricingRule) => void; onToggle: () => void }) {
+  const [draft, setDraft] = useState(rule)
+
+  useEffect(() => {
+    setDraft(rule)
+  }, [rule])
+
   return (
-    <div className="text-sm text-outline">
-      {label}
-      <div className="surface-console mt-2 rounded-2xl border border-outline-variant/20 px-4 py-3 text-white">{value}</div>
+    <div className="panel-muted grid gap-4 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 text-white">{rule.document_profile} / {rule.model}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
+          <div className="mt-1 text-sm text-outline">Prompt {rule.prompt_per_1k_cost_microusd} / output {rule.output_per_1k_cost_microusd} / image {rule.image_per_asset_cost_microusd} microUSD; markup {rule.markup_bps ?? 'global'} bps</div>
+        </div>
+        <button type="button" className="ghost-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-4">
+        <TextField label={`Profile ${rule.id ?? rule.document_profile}`} value={draft.document_profile} onChange={(value) => setDraft({ ...draft, document_profile: value })} />
+        <TextField label={`Provider ${rule.id ?? rule.document_profile}`} value={draft.provider} onChange={(value) => setDraft({ ...draft, provider: value })} />
+        <TextField label={`Model ${rule.id ?? rule.document_profile}`} value={draft.model} onChange={(value) => setDraft({ ...draft, model: value })} />
+        <NumberField label={`Markup override ${rule.id ?? rule.document_profile}`} value={draft.markup_bps ?? ''} onChange={(value) => setDraft({ ...draft, markup_bps: value === '' ? undefined : Number(value) })} />
+        <NumberField label={`Prompt microUSD ${rule.id ?? rule.document_profile}`} value={draft.prompt_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, prompt_per_1k_cost_microusd: Number(value) })} />
+        <NumberField label={`Output microUSD ${rule.id ?? rule.document_profile}`} value={draft.output_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, output_per_1k_cost_microusd: Number(value) })} />
+        <NumberField label={`Reasoning microUSD ${rule.id ?? rule.document_profile}`} value={draft.reasoning_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, reasoning_per_1k_cost_microusd: Number(value) })} />
+        <NumberField label={`Image microUSD ${rule.id ?? rule.document_profile}`} value={draft.image_per_asset_cost_microusd} onChange={(value) => setDraft({ ...draft, image_per_asset_cost_microusd: Number(value) })} />
+        <NumberField label={`Reservation ${rule.id ?? rule.document_profile}`} value={draft.reservation_credits} onChange={(value) => setDraft({ ...draft, reservation_credits: Number(value) })} />
+        <NumberField label={`Minimum ${rule.id ?? rule.document_profile}`} value={draft.minimum_charge_credits} onChange={(value) => setDraft({ ...draft, minimum_charge_credits: Number(value) })} />
+        <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
+        <button type="button" className="tonal-button self-end" aria-label={`Save hosted pricing rule ${rule.id ?? rule.document_profile}`} onClick={() => onSave(normalizeRule(draft))}>Save rule</button>
+      </div>
     </div>
   )
+}
+
+function PackRow({ pack, onSave, onToggle }: { pack: HostedCreditPack; onSave: (payload: HostedCreditPack) => void; onToggle: () => void }) {
+  const [draft, setDraft] = useState(pack)
+
+  useEffect(() => {
+    setDraft(pack)
+  }, [pack])
+
+  return (
+    <div className="panel-muted grid gap-4 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="text-white">{pack.name}</div>
+          <div className="mt-1 text-sm text-outline">{pack.code} / ${(pack.amount_total / 100).toFixed(2)} / {formatNumber(pack.credit_amount)} credits</div>
+        </div>
+        <button type="button" className="ghost-button" onClick={onToggle}>{pack.enabled ? 'Disable' : 'Enable'}</button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-4">
+        <TextField label={`Pack code ${pack.id ?? pack.code}`} value={draft.code} onChange={(value) => setDraft({ ...draft, code: value })} />
+        <TextField label={`Pack name ${pack.id ?? pack.code}`} value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+        <NumberField label={`Pack price cents ${pack.id ?? pack.code}`} value={draft.amount_total} onChange={(value) => setDraft({ ...draft, amount_total: Number(value) })} />
+        <NumberField label={`Pack credits ${pack.id ?? pack.code}`} value={draft.credit_amount} onChange={(value) => setDraft({ ...draft, credit_amount: Number(value) })} />
+        <label className="md:col-span-3 text-sm text-outline">Pack description {pack.id ?? pack.code}
+          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+        </label>
+        <button type="button" className="tonal-button self-end" aria-label={`Save hosted credit pack ${pack.id ?? pack.code}`} onClick={() => onSave(normalizePack(draft))}>Save pack</button>
+      </div>
+    </div>
+  )
+}
+
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="text-sm text-outline">{label}<input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
+}
+
+function NumberField({ label, value, onChange }: { label: string; value: number | string; onChange: (value: string) => void }) {
+  return <label className="text-sm text-outline">{label}<input type="number" className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
+}
+
+function normalizeRule(rule: HostedPricingRule): HostedPricingRule {
+  return { ...rule, markup_bps: rule.markup_bps === undefined ? undefined : Number(rule.markup_bps) }
+}
+
+function normalizePack(pack: HostedCreditPack): HostedCreditPack {
+  return { ...pack, currency: pack.currency || 'usd', amount_total: Number(pack.amount_total), credit_amount: Number(pack.credit_amount) }
 }

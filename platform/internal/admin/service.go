@@ -509,11 +509,129 @@ func newDailyFreeQuotaView(quota model.DailyFreeQuota) DailyFreeQuotaView {
 	}
 }
 
-func (s *Service) HostedPricingRules(_ context.Context) ([]model.HostedPricingRule, error) {
-	if s.hostedPricing == nil {
-		return nil, nil
+func (s *Service) HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error) {
+	return s.store.ListHostedPricingRules(ctx, false)
+}
+
+func (s *Service) HostedBillingConfig(ctx context.Context) (*HostedBillingConfig, error) {
+	settings, err := s.store.HostedPricingSettings(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return s.hostedPricing.HostedPricingRules(), nil
+	rules, err := s.store.ListHostedPricingRules(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	packs, err := s.store.ListHostedCreditPacks(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	return &HostedBillingConfig{Settings: *settings, Rules: rules, Packs: packs}, nil
+}
+
+func (s *Service) UpdateHostedPricingSettings(ctx context.Context, req UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error) {
+	currency := strings.ToLower(strings.TrimSpace(req.Currency))
+	if currency == "" {
+		currency = "usd"
+	}
+	settings, err := s.store.UpdateHostedPricingSettings(ctx, model.HostedPricingSetting{MarkupBPS: req.MarkupBPS, Currency: currency})
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.settings.update", "hosted_pricing_settings", fmt.Sprintf("%d", settings.ID), sqlstore.JSONString(settings))
+	return settings, nil
+}
+
+func (s *Service) CreateHostedPricingRule(ctx context.Context, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	rule := hostedPricingRuleFromRequest(req)
+	if err := s.store.CreateHostedPricingRule(ctx, &rule); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.rule.create", "hosted_pricing_rule", fmt.Sprintf("%d", rule.ID), sqlstore.JSONString(rule))
+	return &rule, nil
+}
+
+func (s *Service) UpdateHostedPricingRule(ctx context.Context, id uint64, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	rule := hostedPricingRuleFromRequest(req)
+	values := map[string]any{
+		"document_profile":               rule.DocumentProfile,
+		"provider":                       rule.Provider,
+		"model":                          rule.Model,
+		"prompt_per_1k_cost_microusd":    rule.PromptPer1KCostMicrousd,
+		"output_per_1k_cost_microusd":    rule.OutputPer1KCostMicrousd,
+		"reasoning_per_1k_cost_microusd": rule.ReasoningPer1KCostMicrousd,
+		"image_per_asset_cost_microusd":  rule.ImagePerAssetCostMicrousd,
+		"reservation_credits":            rule.ReservationCredits,
+		"minimum_charge_credits":         rule.MinimumChargeCredits,
+		"markup_bps":                     rule.MarkupBPS,
+		"enabled":                        rule.Enabled,
+	}
+	updated, err := s.store.UpdateHostedPricingRule(ctx, id, values)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.rule.update", "hosted_pricing_rule", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	return updated, nil
+}
+
+func (s *Service) CreateHostedCreditPack(ctx context.Context, req UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	pack := hostedCreditPackFromRequest(req)
+	if err := s.store.CreateHostedCreditPack(ctx, &pack); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.pack.create", "hosted_credit_pack", fmt.Sprintf("%d", pack.ID), sqlstore.JSONString(pack))
+	return &pack, nil
+}
+
+func (s *Service) UpdateHostedCreditPack(ctx context.Context, id uint64, req UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
+	pack := hostedCreditPackFromRequest(req)
+	values := map[string]any{
+		"code":          pack.Code,
+		"name":          pack.Name,
+		"description":   pack.Description,
+		"currency":      pack.Currency,
+		"amount_total":  pack.AmountTotal,
+		"credit_amount": pack.CreditAmount,
+		"enabled":       pack.Enabled,
+	}
+	updated, err := s.store.UpdateHostedCreditPack(ctx, id, values)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.pack.update", "hosted_credit_pack", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	return updated, nil
+}
+
+func hostedPricingRuleFromRequest(req UpsertHostedPricingRuleRequest) model.HostedPricingRule {
+	return model.HostedPricingRule{
+		DocumentProfile:            strings.TrimSpace(req.DocumentProfile),
+		Provider:                   strings.TrimSpace(req.Provider),
+		Model:                      strings.TrimSpace(req.Model),
+		PromptPer1KCostMicrousd:    req.PromptPer1KCostMicrousd,
+		OutputPer1KCostMicrousd:    req.OutputPer1KCostMicrousd,
+		ReasoningPer1KCostMicrousd: req.ReasoningPer1KCostMicrousd,
+		ImagePerAssetCostMicrousd:  req.ImagePerAssetCostMicrousd,
+		ReservationCredits:         req.ReservationCredits,
+		MinimumChargeCredits:       req.MinimumChargeCredits,
+		MarkupBPS:                  req.MarkupBPS,
+		Enabled:                    req.Enabled,
+	}
+}
+
+func hostedCreditPackFromRequest(req UpsertHostedCreditPackRequest) model.HostedCreditPack {
+	currency := strings.ToLower(strings.TrimSpace(req.Currency))
+	if currency == "" {
+		currency = "usd"
+	}
+	return model.HostedCreditPack{
+		Code:         strings.TrimSpace(req.Code),
+		Name:         strings.TrimSpace(req.Name),
+		Description:  strings.TrimSpace(req.Description),
+		Currency:     currency,
+		AmountTotal:  req.AmountTotal,
+		CreditAmount: req.CreditAmount,
+		Enabled:      req.Enabled,
+	}
 }
 
 func generateAPIKey(salt string) (plain string, prefix string, hash string, err error) {

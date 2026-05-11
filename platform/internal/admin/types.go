@@ -1,6 +1,10 @@
 package admin
 
-import "time"
+import (
+	"time"
+
+	"github.com/officecli/officecli/platform/internal/model"
+)
 
 type LoginRequest struct {
 	Password string `json:"password"`
@@ -71,6 +75,41 @@ type UpdateOrderRequest struct {
 
 type UpdateUserRequest struct {
 	Status *string `json:"status,omitempty"`
+}
+
+type UpdateHostedPricingSettingsRequest struct {
+	MarkupBPS int    `json:"markup_bps"`
+	Currency  string `json:"currency,omitempty"`
+}
+
+type UpsertHostedPricingRuleRequest struct {
+	DocumentProfile            string `json:"document_profile"`
+	Provider                   string `json:"provider"`
+	Model                      string `json:"model"`
+	PromptPer1KCostMicrousd    int64  `json:"prompt_per_1k_cost_microusd"`
+	OutputPer1KCostMicrousd    int64  `json:"output_per_1k_cost_microusd"`
+	ReasoningPer1KCostMicrousd int64  `json:"reasoning_per_1k_cost_microusd"`
+	ImagePerAssetCostMicrousd  int64  `json:"image_per_asset_cost_microusd"`
+	ReservationCredits         int    `json:"reservation_credits"`
+	MinimumChargeCredits       int    `json:"minimum_charge_credits"`
+	MarkupBPS                  *int   `json:"markup_bps,omitempty"`
+	Enabled                    bool   `json:"enabled"`
+}
+
+type UpsertHostedCreditPackRequest struct {
+	Code         string `json:"code"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Currency     string `json:"currency"`
+	AmountTotal  int64  `json:"amount_total"`
+	CreditAmount int    `json:"credit_amount"`
+	Enabled      bool   `json:"enabled"`
+}
+
+type HostedBillingConfig struct {
+	Settings model.HostedPricingSetting `json:"settings"`
+	Rules    []model.HostedPricingRule  `json:"rules"`
+	Packs    []model.HostedCreditPack   `json:"packs"`
 }
 
 type CreateAPIKeyResponse struct {

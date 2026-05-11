@@ -67,6 +67,7 @@ type fakeStore struct {
 	apiKeys              map[uint64]*model.APIKey
 	orders               []*model.Order
 	billingEvents        map[string]*model.BillingEvent
+	hostedPacks          []model.HostedCreditPack
 	updateOrderCalls     int
 	stripeCustomer       *model.StripeCustomer
 	createdAuditCount    int
@@ -146,6 +147,15 @@ func (f *fakeStore) AddCreditBalanceToAPIKey(_ context.Context, apiKeyID uint64,
 		return nil, nil
 	}
 	key.CreditBalance += creditAmount
+	key.HostedEnabled = true
+	switch key.AllowedModes {
+	case "", "external_only":
+		key.AllowedModes = "hybrid"
+	}
+	if key.DefaultRuntimeMode == nil || *key.DefaultRuntimeMode == "" || *key.DefaultRuntimeMode == "external" {
+		defaultRuntimeMode := "hosted"
+		key.DefaultRuntimeMode = &defaultRuntimeMode
+	}
 	cloned := *key
 	return &cloned, nil
 }
@@ -222,6 +232,17 @@ func (f *fakeStore) ListOrders(_ context.Context) ([]model.Order, error) {
 
 func (f *fakeStore) ListBillingEvents(_ context.Context) ([]model.BillingEvent, error) {
 	return nil, nil
+}
+
+func (f *fakeStore) ListHostedCreditPacks(_ context.Context, enabledOnly bool) ([]model.HostedCreditPack, error) {
+	var out []model.HostedCreditPack
+	for _, pack := range f.hostedPacks {
+		if enabledOnly && !pack.Enabled {
+			continue
+		}
+		out = append(out, pack)
+	}
+	return out, nil
 }
 
 func (f *fakeStore) CreateAuditLog(_ context.Context, _, _, _, _ string) error {
@@ -422,6 +443,98 @@ func TestCreateCheckoutDoesNotRetryWithoutCustomerForOtherStripeErrors(t *testin
 	require.Nil(t, order)
 	require.Empty(t, checkoutURL)
 	require.Equal(t, []string{"cus_live_existing"}, gateway.customerIDs)
+}
+
+func TestCreateCheckoutAcceptsHostedCreditPack(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:            7,
+				OwnerUserID:   uint64Ptr(42),
+				Status:        model.APIKeyStatusActive,
+				PlanName:      "Hosted",
+				AllowedModes:  "external_only",
+				HostedEnabled: false,
+			},
+		},
+	}
+	gateway := &fakeGateway{}
+	svc := NewService(store, gateway, []model.PricingPack{{
+		Code:         "hosted-300",
+		Name:         "Hosted 300",
+		Currency:     "usd",
+		AmountTotal:  300,
+		CreditAmount: 300,
+		PackKind:     string(model.PackKindHostedCredits),
+	}})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
+		UserID:         42,
+		PackCode:       "hosted-300",
+		TargetAPIKeyID: 7,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.Equal(t, model.PackKindHostedCredits, order.PackKind)
+	require.Equal(t, 300, order.CreditAmount)
+	require.True(t, gateway.called)
+}
+
+func TestReconcileCheckoutSessionAddsHostedCredits(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_test_hosted"
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:            7,
+				OwnerUserID:   uint64Ptr(42),
+				Status:        model.APIKeyStatusActive,
+				PlanName:      "Hosted",
+				AllowedModes:  "external_only",
+				HostedEnabled: false,
+			},
+		},
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "hosted-300",
+			PackName:                "Hosted 300",
+			PackKind:                model.PackKindHostedCredits,
+			CreditAmount:            300,
+			TargetAPIKeyID:          uint64Ptr(7),
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		checkoutSession: &CheckoutSessionDetails{
+			ID:              sessionID,
+			PaymentStatus:   "paid",
+			PaymentIntentID: "pi_hosted_123",
+			CustomerID:      "cus_hosted_123",
+			Metadata:        map[string]string{"target_api_key_id": "7"},
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 300, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
+
+	order, err := svc.ReconcileCheckoutSession(context.Background(), ReconcileOrderRequest{
+		UserID:            42,
+		CheckoutSessionID: sessionID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.Equal(t, model.OrderStatusPaid, order.Status)
+	require.Equal(t, 300, store.apiKeys[7].CreditBalance)
+	require.True(t, store.apiKeys[7].HostedEnabled)
+	require.Equal(t, "hybrid", store.apiKeys[7].AllowedModes)
+	require.NotNil(t, store.apiKeys[7].DefaultRuntimeMode)
+	require.Equal(t, "hosted", *store.apiKeys[7].DefaultRuntimeMode)
 }
 
 func uint64Ptr(v uint64) *uint64 {
