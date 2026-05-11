@@ -19,12 +19,25 @@ formula_path="Formula/officecli.rb"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
+fetch_checksums() {
+  local attempt
+  for attempt in $(seq 1 12); do
+    if curl -fsSL "${release_base}/checksums.txt"; then
+      return 0
+    fi
+    echo "checksums.txt is not available yet for ${version}; retrying (${attempt}/12)" >&2
+    sleep 5
+  done
+  return 1
+}
+
 git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" "${tmpdir}/tap"
 cd "${tmpdir}/tap"
 git checkout "${TAP_DEFAULT_BRANCH}"
 
-darwin_amd64_sha="$(curl -fsSL "${release_base}/checksums.txt" | awk '/officecli_'"${version}"'_darwin_amd64.tar.gz$/ {print $1}')"
-darwin_arm64_sha="$(curl -fsSL "${release_base}/checksums.txt" | awk '/officecli_'"${version}"'_darwin_arm64.tar.gz$/ {print $1}')"
+checksums="$(fetch_checksums)"
+darwin_amd64_sha="$(awk '/officecli_'"${version}"'_darwin_amd64.tar.gz$/ {print $1}' <<<"${checksums}")"
+darwin_arm64_sha="$(awk '/officecli_'"${version}"'_darwin_arm64.tar.gz$/ {print $1}' <<<"${checksums}")"
 
 [[ -n "${darwin_amd64_sha}" && -n "${darwin_arm64_sha}" ]] || {
   echo "failed to resolve darwin archive checksums for ${version}" >&2
