@@ -632,6 +632,7 @@ func (a *App) runConfigSetLicense(cfg Config) error {
 		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the paid API key (optional; free quota will be used first)", cfg.License.APIKey); err != nil {
 			return err
 		}
+		syncPublishCredentialFromLicense(&cfg)
 	} else {
 		cfg.License.APIKey = ""
 	}
@@ -641,6 +642,28 @@ func (a *App) runConfigSetLicense(cfg Config) error {
 	}
 	_, err = fmt.Fprintf(a.Stdout, "Updated access config: %s\n", path)
 	return err
+}
+
+func syncPublishCredentialFromLicense(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	licenseKey := strings.TrimSpace(cfg.License.APIKey)
+	if licenseKey == "" {
+		return
+	}
+	defaultPublish := defaultInitConfig().Publish
+	publishBaseURL := strings.TrimSpace(cfg.Publish.BaseURL)
+	if publishBaseURL != "" && publishBaseURL != strings.TrimSpace(defaultPublish.BaseURL) {
+		return
+	}
+	if strings.TrimSpace(cfg.Publish.Provider) == "" {
+		cfg.Publish.Provider = defaultPublish.Provider
+	}
+	if publishBaseURL == "" {
+		cfg.Publish.BaseURL = defaultPublish.BaseURL
+	}
+	cfg.Publish.APIKey = licenseKey
 }
 
 func (a *App) runConfigSetPublish(cfg Config) error {

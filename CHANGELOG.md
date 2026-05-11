@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.52 - 2026-05-11
+
+### Fixed
+
+- `officecli config set-license` now syncs the platform publish credential when publishing uses the default OfficeCLI platform endpoint, preventing stale preview-publish keys after rotating a platform API key.
+
 ## 0.2.35 - 2026-05-07
 
 ### Added

@@ -2527,6 +2527,90 @@ func TestAppRun_ConfigSetLicenseUsesFixedPlatformURL(t *testing.T) {
 	}
 }
 
+func TestAppRun_ConfigSetLicenseSyncsPublishCredential(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "officecli.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:    "https://platform.officecli.io",
+			APIKey:     "old-license-key",
+			Enabled:    true,
+			TimeoutSec: 30,
+		},
+		Publish: publishprovider.Config{
+			Provider:   "http",
+			BaseURL:    "https://platform.officecli.io",
+			APIKey:     "old-publish-key",
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("yes\nnew-platform-key\n"))
+
+	if err := app.Run(t.Context(), []string{"config", "set-license"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.License.APIKey != "new-platform-key" {
+		t.Fatalf("license api key = %q", cfg.License.APIKey)
+	}
+	if cfg.Publish.APIKey != "new-platform-key" {
+		t.Fatalf("publish api key = %q", cfg.Publish.APIKey)
+	}
+}
+
+func TestAppRun_ConfigSetLicenseKeepsCustomPublishCredential(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "officecli.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:    "https://platform.officecli.io",
+			APIKey:     "old-license-key",
+			Enabled:    true,
+			TimeoutSec: 30,
+		},
+		Publish: publishprovider.Config{
+			Provider:   "http",
+			BaseURL:    "https://publish.example.com",
+			APIKey:     "custom-publish-key",
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("yes\nnew-platform-key\n"))
+
+	if err := app.Run(t.Context(), []string{"config", "set-license"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.License.APIKey != "new-platform-key" {
+		t.Fatalf("license api key = %q", cfg.License.APIKey)
+	}
+	if cfg.Publish.APIKey != "custom-publish-key" {
+		t.Fatalf("publish api key = %q", cfg.Publish.APIKey)
+	}
+}
+
 func TestAppRun_ConfigSetPublishWritesConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "officecli.json")
