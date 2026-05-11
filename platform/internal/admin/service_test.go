@@ -94,6 +94,78 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	require.Equal(t, 5, updated.DailyLimit)
 }
 
+func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:create_hosted_only_key?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+
+	allowedModes := "hosted_only"
+	hostedEnabled := true
+	defaultRuntimeMode := "hosted"
+	creditBalance := 120
+	result, key, err := svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		PlanName:           "Hosted",
+		AllowedModes:       &allowedModes,
+		HostedEnabled:      &hostedEnabled,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+		CreditBalance:      &creditBalance,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.PlaintextKey)
+
+	saved, err := store.FindAPIKeyByID(context.Background(), key.ID)
+	require.NoError(t, err)
+	require.Equal(t, "hosted_only", saved.AllowedModes)
+	require.True(t, saved.HostedEnabled)
+	require.NotNil(t, saved.DefaultRuntimeMode)
+	require.Equal(t, "hosted", *saved.DefaultRuntimeMode)
+	require.Equal(t, 120, saved.CreditBalance)
+	require.Nil(t, saved.QuotaTotal)
+}
+
+func TestUpdateAPIKeyPersistsHostedEntitlementFields(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:update_hosted_entitlement_fields?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+
+	defaultRuntimeMode := "external"
+	key := &model.APIKey{
+		KeyHash:            "hash-hosted-update",
+		KeyPrefix:          "cop_hosted_update",
+		Status:             model.APIKeyStatusActive,
+		PlanName:           "External",
+		AllowedModes:       "external_only",
+		HostedEnabled:      false,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	allowedModes := "hosted_only"
+	hostedEnabled := true
+	hostedRuntime := "hosted"
+	creditBalance := 75
+	require.NoError(t, svc.UpdateAPIKey(context.Background(), key.ID, UpdateAPIKeyRequest{
+		AllowedModes:       &allowedModes,
+		HostedEnabled:      &hostedEnabled,
+		DefaultRuntimeMode: &hostedRuntime,
+		CreditBalance:      &creditBalance,
+	}))
+
+	saved, err := store.FindAPIKeyByID(context.Background(), key.ID)
+	require.NoError(t, err)
+	require.Equal(t, "hosted_only", saved.AllowedModes)
+	require.True(t, saved.HostedEnabled)
+	require.NotNil(t, saved.DefaultRuntimeMode)
+	require.Equal(t, "hosted", *saved.DefaultRuntimeMode)
+	require.Equal(t, 75, saved.CreditBalance)
+}
+
 func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:update_user_disables_owned_api_keys?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

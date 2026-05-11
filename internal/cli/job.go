@@ -186,7 +186,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 
 	selectedRuntimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(runtimeMode)))
 	if documentType == engine.DocumentTypeIMG && selectedRuntimeMode == "" {
-		selectedRuntimeMode = RuntimeModeExternal
+		selectedRuntimeMode = cfg.Runtime.Mode
 	} else if selectedRuntimeMode == "" {
 		selectedRuntimeMode = cfg.Runtime.Mode
 	}
@@ -197,9 +197,6 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	case RuntimeModeExternal, RuntimeModeHosted:
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported runtime mode: %s", selectedRuntimeMode)
-	}
-	if documentType == engine.DocumentTypeIMG {
-		selectedRuntimeMode = RuntimeModeExternal
 	}
 
 	finalOutputDir := strings.TrimSpace(outDir)
@@ -294,29 +291,29 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 
 	return GenerateJob{
-		DocumentType:         documentType,
-		Topic:                topic,
-		Brief:                brief,
-		OriginalPrompt:       finalPrompt,
-		Prompt:               finalPrompt,
-		SourceFilePath:       sourceFile,
-		RuntimeMode:          selectedRuntimeMode,
-		Mode:                 strings.ToLower(finalMode),
-		Language:             strings.TrimSpace(lang),
-		Style:                finalStyle,
-		StyleSpecified:       styleSpecified,
-		Audience:             strings.TrimSpace(audience),
-		EnableImages:         enableImages,
-		ImageQuality:         finalImageQuality,
+		DocumentType:          documentType,
+		Topic:                 topic,
+		Brief:                 brief,
+		OriginalPrompt:        finalPrompt,
+		Prompt:                finalPrompt,
+		SourceFilePath:        sourceFile,
+		RuntimeMode:           selectedRuntimeMode,
+		Mode:                  strings.ToLower(finalMode),
+		Language:              strings.TrimSpace(lang),
+		Style:                 finalStyle,
+		StyleSpecified:        styleSpecified,
+		Audience:              strings.TrimSpace(audience),
+		EnableImages:          enableImages,
+		ImageQuality:          finalImageQuality,
 		ImageRatio:            imageRatio,
 		ImageSize:             finalImageSize,
 		ReferenceImageSources: referenceImageList,
-		LocalPreview:         localPreview,
-		OutputDir:            finalOutputDir,
-		Publish:              publishEnabled,
-		Debug:                debug,
-		JSONOutput:           jsonOutput,
-		Warnings:             warnings,
+		LocalPreview:          localPreview,
+		OutputDir:             finalOutputDir,
+		Publish:               publishEnabled,
+		Debug:                 debug,
+		JSONOutput:            jsonOutput,
+		Warnings:              warnings,
 	}, nil
 }
 

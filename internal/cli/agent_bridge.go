@@ -115,26 +115,26 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType   string          `json:"document_type"`
-	Topic          string          `json:"topic"`
-	Prompt         string          `json:"prompt,omitempty"`
-	FilePath       string          `json:"file_path,omitempty"`
-	Payload        json.RawMessage `json:"payload,omitempty"`
-	Mode           string          `json:"mode,omitempty"`
-	RuntimeMode    string          `json:"runtime_mode,omitempty"`
-	Language       string          `json:"lang,omitempty"`
-	Style          string          `json:"style,omitempty"`
-	Audience       string          `json:"audience,omitempty"`
-	OutputDir      string          `json:"out,omitempty"`
+	DocumentType    string          `json:"document_type"`
+	Topic           string          `json:"topic"`
+	Prompt          string          `json:"prompt,omitempty"`
+	FilePath        string          `json:"file_path,omitempty"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	Mode            string          `json:"mode,omitempty"`
+	RuntimeMode     string          `json:"runtime_mode,omitempty"`
+	Language        string          `json:"lang,omitempty"`
+	Style           string          `json:"style,omitempty"`
+	Audience        string          `json:"audience,omitempty"`
+	OutputDir       string          `json:"out,omitempty"`
 	Ratio           string          `json:"ratio,omitempty"`
 	Size            string          `json:"size,omitempty"`
 	ReferenceImage  string          `json:"reference_image,omitempty"`
 	ReferenceImages []string        `json:"reference_images,omitempty"`
 	ImageQuality    string          `json:"image_quality,omitempty"`
-	Publish        *bool           `json:"publish,omitempty"`
-	EnableImages   *bool           `json:"enable_images,omitempty"`
-	EnableVisual   *bool           `json:"enable_visual,omitempty"`
-	FailBelow      *int            `json:"fail_below,omitempty"`
+	Publish         *bool           `json:"publish,omitempty"`
+	EnableImages    *bool           `json:"enable_images,omitempty"`
+	EnableVisual    *bool           `json:"enable_visual,omitempty"`
+	FailBelow       *int            `json:"fail_below,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -410,11 +410,11 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"disable_flag":      "--no-publish",
 				"config_command":    "officecli config set-publish",
 				"reference_image": map[string]any{
-					"supported":    true,
-					"max_count":    8,
-					"invoke_field": "reference_image",
+					"supported":          true,
+					"max_count":          8,
+					"invoke_field":       "reference_image",
 					"invoke_field_array": "reference_images",
-					"input":        "local path or http/https URL; pass an array via reference_images for multiple",
+					"input":              "local path or http/https URL; pass an array via reference_images for multiple",
 				},
 				"size": map[string]any{
 					"supported":    true,
@@ -425,7 +425,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"notes": []string{
 					"Standalone image generation always goes through the OfficeCLI server.",
 					"Agent clients must not use local image provider configuration for document_type=img.",
-					"Successful standalone image generation consumes one generation count, not hosted credits.",
+					"Successful standalone image generation consumes one generation count in external runtime mode, or hosted credits in hosted runtime mode.",
 					"Standalone images publish online by default when publishing is configured; pass publish=false or --no-publish for local-only output.",
 				},
 			},

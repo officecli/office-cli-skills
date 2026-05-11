@@ -5,14 +5,92 @@ import { ApiError, api } from '../api'
 import type { ApiKey } from '../types'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
-const blankForm = { plan_name: '', owner_user_id: '', plan_code: '', allowed_modes: 'external_only', hosted_enabled: false, default_runtime_mode: 'external', expires_at: '', quota_total: '', credit_balance: '', note: '' }
+type KeyType = 'hosted_only' | 'external_only' | 'hybrid'
+
+type KeyForm = {
+  key_type: KeyType
+  plan_name: string
+  owner_user_id: string
+  plan_code: string
+  expires_at: string
+  quota_total: string
+  credit_balance: string
+  note: string
+}
+
+const blankForm: KeyForm = { key_type: 'hosted_only', plan_name: '', owner_user_id: '', plan_code: '', expires_at: '', quota_total: '', credit_balance: '', note: '' }
+const keyTypePresets: Record<KeyType, { planName: string; allowedModes: string; hostedEnabled: boolean; defaultRuntimeMode: string }> = {
+  hosted_only: { planName: 'Hosted Key', allowedModes: 'hosted_only', hostedEnabled: true, defaultRuntimeMode: 'hosted' },
+  external_only: { planName: 'External Key', allowedModes: 'external_only', hostedEnabled: false, defaultRuntimeMode: 'external' },
+  hybrid: { planName: 'Hybrid Key', allowedModes: 'hybrid', hostedEnabled: true, defaultRuntimeMode: 'hosted' },
+}
+
+function formForKeyType(form: KeyForm, keyType: KeyType): KeyForm {
+  if (keyType === 'external_only') {
+    return { ...form, key_type: keyType, credit_balance: '' }
+  }
+  if (keyType === 'hybrid') {
+    return { ...form, key_type: keyType }
+  }
+  return { ...form, key_type: keyType, quota_total: '' }
+}
+
+function keyTypeFromFields(key: Pick<ApiKey, 'allowed_modes' | 'hosted_enabled'>): KeyType {
+  if (key.allowed_modes === 'hybrid') return 'hybrid'
+  if (key.allowed_modes === 'hosted_only' && key.hosted_enabled) return 'hosted_only'
+  return 'external_only'
+}
+
+function buildCreatePayload(form: KeyForm) {
+  const preset = keyTypePresets[form.key_type]
+  const payload: Record<string, unknown> = {
+    plan_name: form.plan_name.trim() || preset.planName,
+    owner_user_id: form.owner_user_id ? Number(form.owner_user_id) : undefined,
+    plan_code: form.plan_code || undefined,
+    allowed_modes: preset.allowedModes,
+    hosted_enabled: preset.hostedEnabled,
+    default_runtime_mode: preset.defaultRuntimeMode,
+    expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : undefined,
+    note: form.note || undefined,
+  }
+  if (form.key_type !== 'hosted_only' && form.quota_total !== '') {
+    payload.quota_total = Number(form.quota_total)
+  }
+  if (form.key_type !== 'external_only' && form.credit_balance !== '') {
+    payload.credit_balance = Number(form.credit_balance)
+  }
+  return payload
+}
+
+function buildUpdatePayload(draft: KeyForm) {
+  const preset = keyTypePresets[draft.key_type]
+  const payload: Record<string, unknown> = {
+    plan_name: draft.plan_name.trim() || preset.planName,
+    owner_user_id: draft.owner_user_id ? Number(draft.owner_user_id) : undefined,
+    plan_code: draft.plan_code || undefined,
+    allowed_modes: preset.allowedModes,
+    hosted_enabled: preset.hostedEnabled,
+    default_runtime_mode: preset.defaultRuntimeMode,
+    expires_at: draft.expires_at ? new Date(draft.expires_at).toISOString() : undefined,
+    note: draft.note || undefined,
+  }
+  if (draft.key_type !== 'hosted_only' && draft.quota_total !== '') {
+    payload.quota_total = Number(draft.quota_total)
+  }
+  if (draft.key_type !== 'external_only' && draft.credit_balance !== '') {
+    payload.credit_balance = Number(draft.credit_balance)
+  }
+  return payload
+}
 
 export default function ApiKeysPage() {
   const queryClient = useQueryClient()
   const { data: keys = [] } = useQuery({ queryKey: ['admin-api-keys'], queryFn: api.apiKeys })
   const [showCreate, setShowCreate] = useState(false)
+  const [showCreateAdvanced, setShowCreateAdvanced] = useState(false)
   const [createForm, setCreateForm] = useState(blankForm)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [showEditAdvanced, setShowEditAdvanced] = useState<Record<number, boolean>>({})
   const [revealedKey, setRevealedKey] = useState<string | null>(null)
   const [copyingKeyID, setCopyingKeyID] = useState<number | null>(null)
   const [copiedKeyID, setCopiedKeyID] = useState<number | null>(null)
@@ -23,6 +101,7 @@ export default function ApiKeysPage() {
     onSuccess: async (result) => {
       setRevealedKey(result.plaintext_key)
       setCreateForm(blankForm)
+      setShowCreateAdvanced(false)
       setShowCreate(false)
       await queryClient.invalidateQueries({ queryKey: ['admin-api-keys'] })
     },
@@ -37,29 +116,23 @@ export default function ApiKeysPage() {
   })
 
   const initialForms = useMemo(() => Object.fromEntries(keys.map((key) => [key.id, {
+    key_type: keyTypeFromFields(key),
     plan_name: key.plan_name,
     owner_user_id: String(key.owner_user_id ?? ''),
     plan_code: key.plan_code ?? '',
-    allowed_modes: key.allowed_modes ?? 'external_only',
-    hosted_enabled: key.hosted_enabled ?? false,
-    default_runtime_mode: key.default_runtime_mode ?? 'external',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
     quota_total: String(key.quota_total ?? ''),
-    quota_used: String(key.quota_used ?? 0),
     credit_balance: String(key.credit_balance ?? 0),
     note: key.note ?? '',
   }])), [keys])
-  const [drafts, setDrafts] = useState<Record<number, { plan_name: string; owner_user_id: string; plan_code: string; allowed_modes: string; hosted_enabled: boolean; default_runtime_mode: string; expires_at: string; quota_total: string; quota_used: string; credit_balance: string; note: string }>>({})
+  const [drafts, setDrafts] = useState<Record<number, KeyForm>>({})
   const activeDraft = (key: ApiKey) => drafts[key.id] ?? initialForms[key.id] ?? {
+    key_type: keyTypeFromFields(key),
     plan_name: key.plan_name,
     owner_user_id: String(key.owner_user_id ?? ''),
     plan_code: key.plan_code ?? '',
-    allowed_modes: key.allowed_modes ?? 'external_only',
-    hosted_enabled: key.hosted_enabled ?? false,
-    default_runtime_mode: key.default_runtime_mode ?? 'external',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
     quota_total: String(key.quota_total ?? ''),
-    quota_used: String(key.quota_used ?? 0),
     credit_balance: String(key.credit_balance ?? 0),
     note: key.note ?? '',
   }
@@ -93,65 +166,61 @@ export default function ApiKeysPage() {
         {showCreate ? (
           <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
             event.preventDefault()
-            create.mutate({
-              plan_name: createForm.plan_name,
-              owner_user_id: createForm.owner_user_id ? Number(createForm.owner_user_id) : undefined,
-              plan_code: createForm.plan_code || undefined,
-              allowed_modes: createForm.allowed_modes || undefined,
-              hosted_enabled: createForm.hosted_enabled,
-              default_runtime_mode: createForm.default_runtime_mode || undefined,
-              expires_at: createForm.expires_at ? new Date(createForm.expires_at).toISOString() : undefined,
-              quota_total: createForm.quota_total ? Number(createForm.quota_total) : undefined,
-              credit_balance: createForm.credit_balance ? Number(createForm.credit_balance) : undefined,
-              note: createForm.note || undefined,
-            })
+            create.mutate(buildCreatePayload(createForm))
           }}>
             <label className="text-sm text-outline">
-              Plan name
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
-            </label>
-            <label className="text-sm text-outline">
-              Owner user ID
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={createForm.owner_user_id} onChange={(event) => setCreateForm((current) => ({ ...current, owner_user_id: event.target.value }))} />
-            </label>
-            <label className="text-sm text-outline">
-              Plan code
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_code} onChange={(event) => setCreateForm((current) => ({ ...current, plan_code: event.target.value }))} />
-            </label>
-            <label className="text-sm text-outline">
-              Quota total
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.quota_total} onChange={(event) => setCreateForm((current) => ({ ...current, quota_total: event.target.value }))} />
-            </label>
-            <label className="text-sm text-outline">
-              Hosted credits
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.credit_balance} onChange={(event) => setCreateForm((current) => ({ ...current, credit_balance: event.target.value }))} />
-            </label>
-            <label className="text-sm text-outline">
-              Allowed modes
-              <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.allowed_modes} onChange={(event) => setCreateForm((current) => ({ ...current, allowed_modes: event.target.value }))}>
-                <option value="external_only">external_only</option>
-                <option value="hosted_only">hosted_only</option>
-                <option value="hybrid">hybrid</option>
+              Key type
+              <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.key_type} onChange={(event) => setCreateForm((current) => formForKeyType(current, event.target.value as KeyType))}>
+                <option value="hosted_only">Hosted Only</option>
+                <option value="external_only">External Only</option>
+                <option value="hybrid">Hybrid</option>
               </select>
             </label>
-            <label className="text-sm text-outline">
-              Default runtime
-              <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.default_runtime_mode} onChange={(event) => setCreateForm((current) => ({ ...current, default_runtime_mode: event.target.value }))}>
-                <option value="external">external</option>
-                <option value="hosted">hosted</option>
-              </select>
-            </label>
-            <label className="text-sm text-outline md:col-span-3">
-              Expires at
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={createForm.expires_at} onChange={(event) => setCreateForm((current) => ({ ...current, expires_at: event.target.value }))} />
-            </label>
-            <label className="text-sm text-outline md:col-span-3">
-              Note
-              <textarea className="surface-console mt-2 min-h-28 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} />
-            </label>
+            {createForm.key_type !== 'hosted_only' ? (
+              <label className="text-sm text-outline">
+                External quota
+                <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.quota_total} onChange={(event) => setCreateForm((current) => ({ ...current, quota_total: event.target.value }))} />
+              </label>
+            ) : null}
+            {createForm.key_type !== 'external_only' ? (
+              <label className="text-sm text-outline">
+                Hosted credits
+                <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.credit_balance} onChange={(event) => setCreateForm((current) => ({ ...current, credit_balance: event.target.value }))} />
+              </label>
+            ) : null}
+            <div className="md:col-span-3">
+              <button type="button" className="ghost-button" onClick={() => setShowCreateAdvanced((value) => !value)}>{showCreateAdvanced ? 'Hide advanced' : 'Advanced'}</button>
+            </div>
+            {showCreateAdvanced ? (
+              <div className="md:col-span-3 grid gap-4 rounded-2xl border border-outline-variant/20 p-4 md:grid-cols-3">
+                <label className="text-sm text-outline">
+                  Plan name override
+                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} />
+                </label>
+                <label className="text-sm text-outline">
+                  Owner user ID
+                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={createForm.owner_user_id} onChange={(event) => setCreateForm((current) => ({ ...current, owner_user_id: event.target.value }))} />
+                </label>
+                <label className="text-sm text-outline">
+                  Plan code
+                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_code} onChange={(event) => setCreateForm((current) => ({ ...current, plan_code: event.target.value }))} />
+                </label>
+                <label className="text-sm text-outline">
+                  Expires at
+                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={createForm.expires_at} onChange={(event) => setCreateForm((current) => ({ ...current, expires_at: event.target.value }))} />
+                </label>
+                <label className="text-sm text-outline md:col-span-3">
+                  Note
+                  <textarea className="surface-console mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} />
+                </label>
+              </div>
+            ) : null}
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>
-              <button type="button" className="ghost-button" onClick={() => setShowCreate(false)}>Dismiss</button>
+              <button type="button" className="ghost-button" onClick={() => {
+                setShowCreate(false)
+                setShowCreateAdvanced(false)
+              }}>Dismiss</button>
             </div>
           </form>
         ) : null}
@@ -180,36 +249,71 @@ export default function ApiKeysPage() {
                     <StatusPill value={key.status} />
                   </div>
 
+                  <div className="mt-5 flex flex-wrap gap-2 text-xs text-outline">
+                    <span className="rounded-full border border-outline-variant/20 px-3 py-1 text-white">{key.allowed_modes || 'external_only'}</span>
+                    <span className="rounded-full border border-outline-variant/20 px-3 py-1">default {key.default_runtime_mode || 'external'}</span>
+                    <span className="rounded-full border border-outline-variant/20 px-3 py-1">{key.hosted_enabled ? 'hosted enabled' : 'hosted disabled'}</span>
+                  </div>
+
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Owner</div><div className="mt-2 text-white">{key.owner_user_id ?? '—'}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
+                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
+                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External quota</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">{formatNumber(key.credit_balance)}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan code</div><div className="mt-2 text-white">{key.plan_code || '—'}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Expires</div><div className="mt-2 text-white">{formatDate(key.expires_at)}</div></div>
                   </div>
-                  <div className="mt-3 text-xs text-outline">Modes: {key.allowed_modes || 'external_only'} / default {key.default_runtime_mode || 'external'} / hosted {key.hosted_enabled ? 'enabled' : 'disabled'}</div>
 
                   {editingId === key.id ? (
                     <div className="mt-5 grid gap-4">
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_name} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_name: event.target.value } }))} />
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={draft.owner_user_id} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, owner_user_id: event.target.value } }))} />
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_code} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_code: event.target.value } }))} />
-                      <select className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.allowed_modes} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, allowed_modes: event.target.value } }))}>
-                        <option value="external_only">external_only</option>
-                        <option value="hosted_only">hosted_only</option>
-                        <option value="hybrid">hybrid</option>
-                      </select>
-                      <select className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.default_runtime_mode} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, default_runtime_mode: event.target.value } }))}>
-                        <option value="external">external</option>
-                        <option value="hosted">hosted</option>
-                      </select>
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={draft.expires_at} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, expires_at: event.target.value } }))} />
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.quota_total} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, quota_total: event.target.value } }))} />
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.quota_used} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, quota_used: event.target.value } }))} />
-                      <input className="surface-console rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.credit_balance} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, credit_balance: event.target.value } }))} />
-                      <textarea className="surface-console min-h-24 rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
+                      <label className="text-sm text-outline">
+                        Edit key type
+                        <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.key_type} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: formForKeyType(draft, event.target.value as KeyType) }))}>
+                          <option value="hosted_only">Hosted Only</option>
+                          <option value="external_only">External Only</option>
+                          <option value="hybrid">Hybrid</option>
+                        </select>
+                      </label>
+                      {draft.key_type !== 'hosted_only' ? (
+                        <label className="text-sm text-outline">
+                          External quota
+                          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.quota_total} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, quota_total: event.target.value } }))} />
+                        </label>
+                      ) : null}
+                      {draft.key_type !== 'external_only' ? (
+                        <label className="text-sm text-outline">
+                          Hosted credits
+                          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.credit_balance} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, credit_balance: event.target.value } }))} />
+                        </label>
+                      ) : null}
+                      <div>
+                        <button type="button" className="ghost-button" onClick={() => setShowEditAdvanced((current) => ({ ...current, [key.id]: !current[key.id] }))}>{showEditAdvanced[key.id] ? 'Hide advanced' : 'Advanced'}</button>
+                      </div>
+                      {showEditAdvanced[key.id] ? (
+                        <div className="grid gap-4 rounded-2xl border border-outline-variant/20 p-4 md:grid-cols-2">
+                          <label className="text-sm text-outline">
+                            Plan name
+                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_name} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_name: event.target.value } }))} />
+                          </label>
+                          <label className="text-sm text-outline">
+                            Owner user ID
+                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={draft.owner_user_id} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, owner_user_id: event.target.value } }))} />
+                          </label>
+                          <label className="text-sm text-outline">
+                            Plan code
+                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_code} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_code: event.target.value } }))} />
+                          </label>
+                          <label className="text-sm text-outline">
+                            Expires at
+                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={draft.expires_at} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, expires_at: event.target.value } }))} />
+                          </label>
+                          <label className="text-sm text-outline md:col-span-2">
+                            Note
+                            <textarea className="surface-console mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
+                          </label>
+                        </div>
+                      ) : null}
                     </div>
                   ) : key.note ? <div className="mt-5 text-sm text-outline">{key.note}</div> : null}
 
@@ -223,22 +327,14 @@ export default function ApiKeysPage() {
                       {key.status === 'active' ? 'Disable key' : 'Enable key'}
                     </button>
                     {editingId === key.id ? (
-                      <button type="button" className="tonal-button" onClick={() => update.mutate({ id: key.id, payload: {
-                        plan_name: draft.plan_name,
-                        owner_user_id: draft.owner_user_id ? Number(draft.owner_user_id) : undefined,
-                        plan_code: draft.plan_code || undefined,
-                        allowed_modes: draft.allowed_modes || undefined,
-                        default_runtime_mode: draft.default_runtime_mode || undefined,
-                        expires_at: draft.expires_at ? new Date(draft.expires_at).toISOString() : undefined,
-                        quota_total: draft.quota_total ? Number(draft.quota_total) : undefined,
-                        quota_used: draft.quota_used ? Number(draft.quota_used) : undefined,
-                        credit_balance: draft.credit_balance ? Number(draft.credit_balance) : undefined,
-                        note: draft.note || undefined,
-                      } })}>
+                      <button type="button" className="tonal-button" onClick={() => update.mutate({ id: key.id, payload: buildUpdatePayload(draft) })}>
                         <Save size={16} /> Save changes
                       </button>
                     ) : (
-                      <button type="button" className="ghost-button" onClick={() => setEditingId(key.id)}>Edit metadata</button>
+                      <button type="button" className="ghost-button" onClick={() => {
+                        setEditingId(key.id)
+                        setShowEditAdvanced((current) => ({ ...current, [key.id]: false }))
+                      }}>Edit metadata</button>
                     )}
                   </div>
                   {!key.plaintext_available ? (

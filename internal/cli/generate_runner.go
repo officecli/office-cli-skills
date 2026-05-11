@@ -128,7 +128,9 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 	}
 	licenseCfg := cfg.License
 	licenseCfg.Enabled = true
-	job.RuntimeMode = RuntimeModeExternal
+	if job.RuntimeMode == "" {
+		job.RuntimeMode = RuntimeModeExternal
+	}
 	job.Mode = "fast"
 
 	licenseCheck, err := a.runLicenseCheck(ctx, licenseCfg, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
@@ -203,7 +205,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 
 	runtimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(req.Args.RuntimeMode)))
 	if documentType == engine.DocumentTypeIMG && runtimeMode == "" {
-		runtimeMode = RuntimeModeExternal
+		runtimeMode = cfg.Runtime.Mode
 	} else if runtimeMode == "" {
 		runtimeMode = cfg.Runtime.Mode
 	}
@@ -214,9 +216,6 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	case RuntimeModeExternal, RuntimeModeHosted:
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported runtime mode: %s", runtimeMode)
-	}
-	if documentType == engine.DocumentTypeIMG {
-		runtimeMode = RuntimeModeExternal
 	}
 
 	outputDir := strings.TrimSpace(req.Args.OutputDir)

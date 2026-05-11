@@ -22,7 +22,7 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	}
 	modelName := hostedModelName(job)
 	var imageAccess *llmprovider.InternalImageAccess
-	if job.DocumentType == engine.DocumentTypeIMG && job.LicenseCheck != nil {
+	if job.DocumentType == engine.DocumentTypeIMG && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
 		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
 		if err != nil {
 			return nil, fmt.Errorf("marshal image access token: %w", err)

@@ -1066,6 +1066,25 @@ func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_IMGUsesHostedRuntimeWhenConfigured(t *testing.T) {
+	cfg := Config{
+		Defaults: DefaultsConfig{Publish: false, Mode: "best"},
+		Runtime:  RuntimeConfig{Mode: RuntimeModeHosted},
+	}
+
+	job, err := BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--prompt", "A polished product launch hero image",
+	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.RuntimeMode != RuntimeModeHosted {
+		t.Fatalf("runtime mode = %q, want hosted", job.RuntimeMode)
+	}
+}
+
 func TestBuildGenerateJob_IMGNoPublishDisablesDefaultPublish(t *testing.T) {
 	job, err := BuildGenerateJob([]string{
 		"img",
@@ -1436,6 +1455,75 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	}
 	if strings.Join(licenseEvents, ",") != "check" {
 		t.Fatalf("license events = %#v, want check only because server consumes image quota", licenseEvents)
+	}
+}
+
+func TestExecuteGenerateJob_IMGHostedRuntimeUsesHostedCreditBilling(t *testing.T) {
+	imageBytes := []byte("hosted-server-png-bytes")
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer hosted-key" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":17}`, base64.StdEncoding.EncodeToString(imageBytes))
+	}))
+	defer server.Close()
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	var checkedRuntime RuntimeMode
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				checkedRuntime = RuntimeMode(req.RuntimeMode)
+				return &LicenseCheckResult{
+					Allowed:       true,
+					AccessMode:    LicenseAccessModeHosted,
+					HostedEnabled: true,
+					CreditBalance: 18,
+					CommitToken:   signTestCommitToken(req, LicenseAccessModeHosted, UsageCommitToken{}),
+				}, nil
+			},
+		}, nil
+	}
+
+	tmpDir := t.TempDir()
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false},
+		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
+		Publish:  disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch Visual",
+		Prompt:       "A polished product launch hero image",
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "fast",
+		OutputDir:    tmpDir,
+		ImageRatio:   "square",
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if checkedRuntime != RuntimeModeHosted {
+		t.Fatalf("license runtime = %q, want hosted", checkedRuntime)
+	}
+	if _, ok := gotPayload["commit_token"]; ok {
+		t.Fatalf("hosted image payload must not include commit_token: %#v", gotPayload)
+	}
+	if _, ok := gotPayload["access_mode"]; ok {
+		t.Fatalf("hosted image payload must not include quota access_mode: %#v", gotPayload)
+	}
+	if result.AccessMode != string(LicenseAccessModeHosted) || !result.HostedEnabled || result.CreditBalance != 17 {
+		t.Fatalf("hosted result = %+v", result)
+	}
+	if result.Remaining != 0 || result.PaidQuotaRemaining != 0 || result.FreeRemaining != 0 {
+		t.Fatalf("hosted result should not surface external quota fields: %+v", result)
 	}
 }
 
