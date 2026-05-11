@@ -355,13 +355,15 @@ Examples:
 func ConfigHelpText() string {
 	return `Usage:
   officecli config status
+  officecli config runtime
+  officecli config set-runtime <external|hosted>
   officecli config set-generation
   officecli config set-license
   officecli config set-publish
   officecli config set-defaults
 
 Description:
-  View the current configuration status, or update the document generation service, PPT image service, access checks, preview publishing, and defaults.
+  View the current configuration status, or update the runtime mode, document generation service, PPT image service, access checks, preview publishing, and defaults.
 `
 }
 
@@ -449,6 +451,13 @@ func (a *App) runConfig(args []string) error {
 	switch args[0] {
 	case "status":
 		return a.runConfigStatus(cfg)
+	case "runtime":
+		return a.runConfigRuntime(cfg)
+	case "set-runtime":
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+			return fmt.Errorf("runtime mode is required: external or hosted")
+		}
+		return a.runConfigSetRuntime(cfg, strings.TrimSpace(args[1]))
 	case "set-generation":
 		return a.runConfigSetGeneration(cfg)
 	case "set-license":
@@ -525,6 +534,9 @@ func (a *App) runConfigStatus(cfg Config) error {
 	if _, err := fmt.Fprintf(a.Stdout, "Default generation mode: %s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
 		return err
 	}
+	if _, err := fmt.Fprintf(a.Stdout, "Default runtime mode: %s\n", runtimeModeLabel(cfg.RuntimeModeOrDefault())); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(a.Stdout, "Default PPT style preset: %s\n", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
 		return err
 	}
@@ -535,6 +547,35 @@ func (a *App) runConfigStatus(cfg Config) error {
 		return err
 	}
 	return nil
+}
+
+func (a *App) runConfigRuntime(cfg Config) error {
+	_, err := fmt.Fprintf(a.Stdout, "Default runtime mode: %s\n", runtimeModeLabel(cfg.RuntimeModeOrDefault()))
+	return err
+}
+
+func (a *App) runConfigSetRuntime(cfg Config, rawMode string) error {
+	mode, err := parseRuntimeMode(rawMode)
+	if err != nil {
+		return err
+	}
+	cfg.Runtime.Mode = mode
+	path, err := WriteConfig("", cfg, true)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(a.Stdout, "Updated default runtime mode: %s\nConfig file: %s\n", mode, path)
+	return err
+}
+
+func parseRuntimeMode(rawMode string) (RuntimeMode, error) {
+	mode := RuntimeMode(strings.ToLower(strings.TrimSpace(rawMode)))
+	switch mode {
+	case RuntimeModeExternal, RuntimeModeHosted:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("unsupported runtime mode: %s (expected external or hosted)", strings.TrimSpace(rawMode))
+	}
 }
 
 func (a *App) runConfigSetGeneration(cfg Config) error {

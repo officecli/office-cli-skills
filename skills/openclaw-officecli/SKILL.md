@@ -86,6 +86,13 @@ Primary event types:
 14. On `task.failed`, convert the error into a user-friendly message.
 15. On user cancel, send `task/cancel`.
 
+## Runtime Mode Rules
+
+- use `officecli config runtime` to inspect the local default runtime mode when the host asks how OfficeCLI is configured
+- use `officecli config set-runtime hosted` when the host explicitly wants platform-managed hosted generation by default
+- use `officecli config set-runtime external` when the host wants local/external generation by default
+- hosted mode requires a platform OfficeCLI API key with hosted credits; do not ask users for aigateway keys because those are created and stored by the platform
+
 ## PPT Image Rules
 
 For all OpenClaw agents using this skill:

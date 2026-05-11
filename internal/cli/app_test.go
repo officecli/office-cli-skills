@@ -1887,7 +1887,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		args    []string
 		needles []string
 	}{
-		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config set-generation", "officecli config set-license"}},
+		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
@@ -2293,6 +2293,67 @@ func TestAppRun_HelpIncludesConfigCommand(t *testing.T) {
 	}
 	if strings.Contains(output, "init") {
 		t.Fatalf("help output should not expose init: %s", output)
+	}
+}
+
+func TestAppRun_ConfigRuntimeShowsCurrentMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	if _, err := WriteConfig("", Config{
+		Runtime: RuntimeConfig{Mode: RuntimeModeHosted},
+	}, true); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	if err := app.Run(t.Context(), []string{"config", "runtime"}); err != nil {
+		t.Fatalf("Run(config runtime): %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Default runtime mode: hosted") {
+		t.Fatalf("missing runtime mode: %s", stdout.String())
+	}
+}
+
+func TestAppRun_ConfigSetRuntimePersistsMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	if _, err := WriteConfig("", Config{
+		Runtime: RuntimeConfig{Mode: RuntimeModeExternal},
+	}, true); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	if err := app.Run(t.Context(), []string{"config", "set-runtime", "hosted"}); err != nil {
+		t.Fatalf("Run(config set-runtime): %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Updated default runtime mode: hosted") {
+		t.Fatalf("missing update message: %s", stdout.String())
+	}
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Runtime.Mode != RuntimeModeHosted {
+		t.Fatalf("runtime mode = %q, want hosted", cfg.Runtime.Mode)
+	}
+}
+
+func TestAppRun_ConfigSetRuntimeRejectsInvalidMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	err := app.Run(t.Context(), []string{"config", "set-runtime", "local"})
+	if err == nil || !strings.Contains(err.Error(), "unsupported runtime mode") {
+		t.Fatalf("expected unsupported runtime mode error, got %v", err)
 	}
 }
 

@@ -49,16 +49,19 @@ GENERATION_READY=0
 LICENSE_READY=0
 PUBLISH_READY=0
 BRIDGE_READY=1
+RUNTIME_MODE=external
 STATE
 fi
 # shellcheck disable=SC1090
 source "${STATE_FILE}"
+RUNTIME_MODE="${RUNTIME_MODE:-external}"
 save_state() {
   cat > "${STATE_FILE}" <<STATE
 GENERATION_READY=${GENERATION_READY}
 LICENSE_READY=${LICENSE_READY}
 PUBLISH_READY=${PUBLISH_READY}
 BRIDGE_READY=${BRIDGE_READY}
+RUNTIME_MODE=${RUNTIME_MODE}
 STATE
 }
 case "${1:-}" in
@@ -96,6 +99,21 @@ case "${1:-}" in
         echo "Access checks enabled: $([[ ${LICENSE_READY} -eq 1 ]] && echo true || echo false)"
         echo "Paid quota key configured: false"
         echo "Online preview publishing enabled: $([[ ${PUBLISH_READY} -eq 1 ]] && echo true || echo false)"
+        echo "Default runtime mode: ${RUNTIME_MODE}"
+        ;;
+      runtime)
+        echo "Default runtime mode: ${RUNTIME_MODE}"
+        ;;
+      set-runtime)
+        case "${2:-}" in
+          external|hosted)
+            RUNTIME_MODE="${2}"
+            save_state
+            ;;
+          *)
+            exit 1
+            ;;
+        esac
         ;;
       set-generation)
         read -r _base_url
@@ -324,6 +342,32 @@ assert_contains "${case8_dir}/out.json" '"status":"ready"'
 assert_contains "${case8_dir}/out.json" '"missing_items":[]'
 assert_contains "${case8_dir}/skill/config.yaml" 'office_cli_path: "'
 assert_contains "${case8_dir}/skill/config.yaml" 'agent_bridge_command: "'
+
+# case 9: officecli fix can set hosted runtime mode on request
+case9_dir="${TMP_ROOT}/case9"
+mkdir -p "${case9_dir}/home" "${case9_dir}/bin" "${case9_dir}/state"
+make_fake_officecli "${case9_dir}/bin/officecli"
+cat > "${case9_dir}/state/state.sh" <<'STATE'
+GENERATION_READY=1
+LICENSE_READY=1
+PUBLISH_READY=1
+BRIDGE_READY=1
+RUNTIME_MODE=external
+STATE
+REFRESH_CMD="mkdir -p '${case9_dir}/home/.codex/skills' && true"
+set +e
+HOME="${case9_dir}/home" \
+PATH="${case9_dir}/bin:/usr/bin:/bin" \
+OFFICECLI_REFRESH_SKILL_COMMAND="${REFRESH_CMD}" \
+OFFICECLI_FAKE_STATE_DIR="${case9_dir}/state" \
+OFFICECLI_SETUP_RUNTIME_MODE="hosted" \
+"${OFFICECLI_SKILL_DIR}/fix-officecli-env.sh" >"${case9_dir}/out.json" 2>&1
+code=$?
+set -e
+assert_eq "${code}" "0" "officecli fix hosted runtime exit code"
+# shellcheck disable=SC1090
+source "${case9_dir}/state/state.sh"
+assert_eq "${RUNTIME_MODE}" "hosted" "runtime configured"
 
 assert_dirs_equal "${OFFICECLI_SKILL_DIR}" "${OFFICECLI_PLUGIN_SKILL_DIR}" "officecli plugin skill bundle drift"
 assert_dirs_equal "${OPENCLAW_SKILL_DIR}" "${OPENCLAW_PLUGIN_SKILL_DIR}" "openclaw plugin skill bundle drift"

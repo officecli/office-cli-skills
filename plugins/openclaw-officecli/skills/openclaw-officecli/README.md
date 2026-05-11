@@ -28,6 +28,8 @@ This skill works as follows:
    - read local files
    - send file attachments back to the current channel
 
+Hosted generation can be made the default with `officecli config set-runtime hosted`; switch back with `officecli config set-runtime external`. Hosted mode requires a platform OfficeCLI API key with hosted credits, not an aigateway key.
+
 ## Installation
 
 Use the repository install script:

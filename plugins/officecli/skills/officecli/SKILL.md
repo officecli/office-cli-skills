@@ -41,6 +41,8 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - installing the public skill can also attempt to install the `officecli` binary when it is missing
 - for agent-oriented integrations, `officecli agent-bridge` now exposes a structured `JSON-RPC 2.0 over stdio` protocol
 - persistent configuration is handled through `officecli config ...`, not through an `init` wizard
+- default runtime mode is visible through `officecli config runtime` and can be changed with `officecli config set-runtime external|hosted`
+- hosted runtime mode uses the OfficeCLI platform service and requires a platform OfficeCLI API key with hosted credits; users should not configure or handle aigateway keys directly
 
 ## Capability Check
 
@@ -116,6 +118,9 @@ When the task is about setting up or fixing `officecli`, prefer the explicit con
 - `./fix-officecli-env.sh`
 - `./uninstall-officecli.sh`
 - `officecli config status`
+- `officecli config runtime`
+- `officecli config set-runtime hosted`
+- `officecli config set-runtime external`
 - `officecli config set-generation`
 - `officecli config set-license`
 - `officecli config set-publish`
@@ -184,6 +189,7 @@ For all agent clients, use the following image-handling rules:
 - for standalone `img`, keep publishing enabled by default when the user wants online access; pass `publish=false` only for local-only output
 - for standalone `img`, surface server-returned balance or quota metadata when present
 - never parse human update prompts from `officecli` stdout when `agent-bridge` is available; use structured `update` fields instead
+- to make hosted the default for human CLI generation, run `officecli config set-runtime hosted`; to return to local/external generation, run `officecli config set-runtime external`
 - for `report`, call `office.prepare` first and keep the final narrative grounded in `workbook_summary` and `base_report_json`
 - if the user explicitly wants a text-only PPT, pass `enable_images=false` and mention `disable_flag` when helpful
 - if the user asks why a generated PPT has no images, point them to `config_command`
