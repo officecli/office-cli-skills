@@ -179,6 +179,7 @@ func New() (*Application, error) {
 		TimeoutSec:             cfg.HostedLLMTimeoutSec,
 		AIGatewayAdminBaseURL:  cfg.AIGatewayAdminBaseURL,
 		AIGatewayAdminAPIKey:   cfg.AIGatewayAdminAPIKey,
+		AIGatewayAPIKeyGroup:   cfg.AIGatewayAPIKeyGroup,
 		AIGatewayCreateKeyPath: cfg.AIGatewayCreateAPIKeyPath,
 		AIGatewayKeyCipher:     apiKeyCipher,
 	}, lic)

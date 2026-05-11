@@ -65,6 +65,9 @@ func (c *httpAIGatewayAdminClient) CreateAPIKey(ctx context.Context, req CreateA
 		"unlimited_quota":      true,
 		"model_limits_enabled": false,
 	}
+	if group := strings.TrimSpace(c.cfg.AIGatewayAPIKeyGroup); group != "" {
+		payload["group"] = group
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

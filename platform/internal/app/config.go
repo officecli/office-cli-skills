@@ -56,6 +56,7 @@ type Config struct {
 	HostedLLMTimeoutSec          int
 	AIGatewayAdminBaseURL        string
 	AIGatewayAdminAPIKey         string
+	AIGatewayAPIKeyGroup         string
 	AIGatewayCreateAPIKeyPath    string
 	PreviewObjectEndpoint        string
 	PreviewObjectAccessKey       string
@@ -121,8 +122,9 @@ func LoadConfig() (Config, error) {
 		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-2"),
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
 		HostedLLMTimeoutSec:          mustEnvInt("HOSTED_LLM_TIMEOUT_SEC", 1200),
-		AIGatewayAdminBaseURL:        mustEnvDefault("AIGATEWAY_ADMIN_BASE_URL", "http://aigateway.claudeoffice.com"),
+		AIGatewayAdminBaseURL:        mustEnvDefault("AIGATEWAY_ADMIN_BASE_URL", "https://aigateway.claudeoffice.com"),
 		AIGatewayAdminAPIKey:         os.Getenv("AIGATEWAY_ADMIN_API_KEY"),
+		AIGatewayAPIKeyGroup:         os.Getenv("AIGATEWAY_API_KEY_GROUP"),
 		AIGatewayCreateAPIKeyPath:    mustEnvDefault("AIGATEWAY_CREATE_API_KEY_PATH", "/api/open/api-keys"),
 		PreviewObjectEndpoint:        mustEnvDefault("PREVIEW_OBJECT_ENDPOINT", ""),
 		PreviewObjectAccessKey:       os.Getenv("PREVIEW_OBJECT_ACCESS_KEY"),

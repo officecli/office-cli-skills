@@ -41,6 +41,27 @@ func TestHTTPAIGatewayAdminClientCreateAPIKeySendsFixedPayloadAndParsesNestedKey
 	}, gotPayload)
 }
 
+func TestHTTPAIGatewayAdminClientCreateAPIKeySendsConfiguredGroup(t *testing.T) {
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/open/api-keys", r.URL.Path)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotPayload))
+		_, _ = w.Write([]byte(`{"data":{"key":"sk-user-42","id":42,"name":"officecli-user-42"}}`))
+	}))
+	defer server.Close()
+
+	client := newHTTPAIGatewayAdminClient(server.Client(), Config{
+		AIGatewayAdminBaseURL:  server.URL,
+		AIGatewayAdminAPIKey:   "admin-token",
+		AIGatewayAPIKeyGroup:   "gpt_codex_only_with_5.5",
+		AIGatewayCreateKeyPath: "/api/open/api-keys",
+	})
+
+	_, err := client.CreateAPIKey(context.Background(), CreateAIGatewayAPIKeyRequest{Name: "officecli-user-42"})
+	require.NoError(t, err)
+	require.Equal(t, "gpt_codex_only_with_5.5", gotPayload["group"])
+}
+
 func TestHTTPAIGatewayAdminClientRejectsResponseWithoutAPIKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"id":"missing-key"}}`))

@@ -115,6 +115,7 @@ Recommended production base URLs:
 - `HOSTED_PRICING_RULES_JSON`: hosted credit pricing rules
 - `AIGATEWAY_ADMIN_BASE_URL`: aigateway management base URL for creating per-user upstream API keys
 - `AIGATEWAY_ADMIN_API_KEY`: aigateway management bearer token; keep this secret out of code and logs
+- `AIGATEWAY_API_KEY_GROUP`: optional aigateway group assigned to generated per-user upstream API keys
 - `AIGATEWAY_CREATE_API_KEY_PATH`: aigateway management path for creating API keys
 
 In production, the service must fail fast if required secrets are missing, still set to example values, or Stripe is configured with test keys.

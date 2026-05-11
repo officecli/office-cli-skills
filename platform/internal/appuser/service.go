@@ -76,6 +76,29 @@ type APIKeyView struct {
 	CreatedAt          time.Time          `json:"created_at"`
 }
 
+type UsageEventView struct {
+	ID               uint64            `json:"id"`
+	FingerprintHash  string            `json:"fingerprint_hash"`
+	Mode             model.UsageMode   `json:"mode"`
+	Action           model.UsageAction `json:"action"`
+	Result           model.UsageResult `json:"result"`
+	ReasonCode       *string           `json:"reason_code,omitempty"`
+	CLIVersion       *string           `json:"cli_version,omitempty"`
+	DocumentType     *string           `json:"document_type,omitempty"`
+	RuntimeMode      *string           `json:"runtime_mode,omitempty"`
+	BilledUnits      int               `json:"billed_units"`
+	UnitType         string            `json:"unit_type"`
+	Charged          bool              `json:"charged"`
+	Provider         *string           `json:"provider,omitempty"`
+	ModelName        *string           `json:"model_name,omitempty"`
+	PromptTokens     int               `json:"prompt_tokens"`
+	CompletionTokens int               `json:"completion_tokens"`
+	ReasoningTokens  int               `json:"reasoning_tokens"`
+	ImageCount       int               `json:"image_count"`
+	SettledCredits   int               `json:"settled_credits"`
+	CreatedAt        time.Time         `json:"created_at"`
+}
+
 type GrowthSnapshot struct {
 	InviteCode        string                 `json:"invite_code,omitempty"`
 	InviteLimit       int                    `json:"invite_limit"`
@@ -345,14 +368,14 @@ func (s *Service) UpdateAPIKey(ctx context.Context, userID, apiKeyID uint64, req
 	return s.store.CreateAuditLog(ctx, "app.api_key.update", "api_key", fmt.Sprintf("%d", apiKeyID), string(payload))
 }
 
-func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]model.UsageEvent, error) {
+func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]UsageEventView, error) {
 	events, err := s.store.ListAppUsageEvents(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	visible := visibleUsageEvents(events)
 	if visible == nil {
-		return []model.UsageEvent{}, nil
+		return []UsageEventView{}, nil
 	}
 	return visible, nil
 }
@@ -546,8 +569,36 @@ func visibleOrders(orders []model.Order) []model.Order {
 	return result
 }
 
-func visibleUsageEvents(events []model.UsageEvent) []model.UsageEvent {
-	return events
+func visibleUsageEvents(events []model.UsageEvent) []UsageEventView {
+	if events == nil {
+		return nil
+	}
+	visible := make([]UsageEventView, 0, len(events))
+	for _, event := range events {
+		visible = append(visible, UsageEventView{
+			ID:               event.ID,
+			FingerprintHash:  event.FingerprintHash,
+			Mode:             event.Mode,
+			Action:           event.Action,
+			Result:           event.Result,
+			ReasonCode:       event.ReasonCode,
+			CLIVersion:       event.CLIVersion,
+			DocumentType:     event.DocumentType,
+			RuntimeMode:      event.RuntimeMode,
+			BilledUnits:      event.BilledUnits,
+			UnitType:         event.UnitType,
+			Charged:          event.Charged,
+			Provider:         event.Provider,
+			ModelName:        event.ModelName,
+			PromptTokens:     event.PromptTokens,
+			CompletionTokens: event.CompletionTokens,
+			ReasoningTokens:  event.ReasoningTokens,
+			ImageCount:       event.ImageCount,
+			SettledCredits:   event.SettledCredits,
+			CreatedAt:        event.CreatedAt,
+		})
+	}
+	return visible
 }
 
 func newAPIKeyView(key model.APIKey) APIKeyView {

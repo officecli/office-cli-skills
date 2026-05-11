@@ -52,6 +52,7 @@ type Config struct {
 	TimeoutSec             int
 	AIGatewayAdminBaseURL  string
 	AIGatewayAdminAPIKey   string
+	AIGatewayAPIKeyGroup   string
 	AIGatewayCreateKeyPath string
 	AIGatewayKeyCipher     *apikey.Cipher
 	AIGatewayAdminClient   AIGatewayAdminClient

@@ -2,6 +2,7 @@ package appuser
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -271,7 +272,20 @@ func TestListUsageEventsIncludesHostedEventsWithoutCostDetails(t *testing.T) {
 		fakeStore: &fakeStore{},
 		usage: []model.UsageEvent{
 			{ID: 1, Mode: model.UsageModePaid},
-			{ID: 2, Mode: model.UsageModeHosted},
+			{
+				ID:                    2,
+				Mode:                  model.UsageModeHosted,
+				UnitType:              "credit",
+				BilledUnits:           6,
+				ModelName:             stringPtr("gpt-5.4"),
+				SettledCredits:        6,
+				MarkupBPS:             3000,
+				HostedPricingRuleID:   3,
+				UpstreamCostMicrousd:  15232,
+				UncappedChargeCredits: 6,
+				ProfitMicrousd:        44768,
+				CapApplied:            true,
+			},
 			{ID: 3, Mode: model.UsageModeFree},
 		},
 	}, fakeBilling{}, "salt", testAPIKeyCipher(t))
@@ -282,6 +296,17 @@ func TestListUsageEventsIncludesHostedEventsWithoutCostDetails(t *testing.T) {
 	require.Equal(t, uint64(1), events[0].ID)
 	require.Equal(t, uint64(2), events[1].ID)
 	require.Equal(t, uint64(3), events[2].ID)
+
+	raw, err := json.Marshal(events[1])
+	require.NoError(t, err)
+	payload := string(raw)
+	require.Contains(t, payload, `"settled_credits":6`)
+	require.NotContains(t, payload, "markup_bps")
+	require.NotContains(t, payload, "hosted_pricing_rule_id")
+	require.NotContains(t, payload, "upstream_cost_microusd")
+	require.NotContains(t, payload, "uncapped_charge_credits")
+	require.NotContains(t, payload, "profit_microusd")
+	require.NotContains(t, payload, "cap_applied")
 }
 
 func TestGetAPIKeyPlaintextReturnsStoredValueForOwnedKey(t *testing.T) {
