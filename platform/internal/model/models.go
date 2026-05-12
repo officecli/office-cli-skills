@@ -371,6 +371,9 @@ type HostedModelPricingConfig struct {
 	PromptPer1MCostMicrousd    int64                  `gorm:"column:prompt_per_1m_cost_microusd;not null;default:0" json:"prompt_per_1m_cost_microusd"`
 	OutputPer1MCostMicrousd    int64                  `gorm:"column:output_per_1m_cost_microusd;not null;default:0" json:"output_per_1m_cost_microusd"`
 	ReasoningPer1MCostMicrousd int64                  `gorm:"column:reasoning_per_1m_cost_microusd;not null;default:0" json:"reasoning_per_1m_cost_microusd"`
+	PromptPer1MCostCredits     int64                  `gorm:"-" json:"prompt_per_1m_cost_credits"`
+	OutputPer1MCostCredits     int64                  `gorm:"-" json:"output_per_1m_cost_credits"`
+	ReasoningPer1MCostCredits  int64                  `gorm:"-" json:"reasoning_per_1m_cost_credits"`
 	Enabled                    bool                   `gorm:"column:enabled;not null;default:true" json:"enabled"`
 	CreatedAt                  time.Time              `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
 	UpdatedAt                  time.Time              `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
@@ -404,11 +407,12 @@ type HostedPricingRule struct {
 func (HostedPricingRule) TableName() string { return "hosted_pricing_rules" }
 
 type HostedPricingSetting struct {
-	ID        uint64    `gorm:"primaryKey" json:"id"`
-	MarkupBPS int       `gorm:"column:markup_bps;not null;default:3000" json:"markup_bps"`
-	Currency  string    `gorm:"column:currency;size:8;not null;default:usd" json:"currency"`
-	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
-	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+	ID            uint64    `gorm:"primaryKey" json:"id"`
+	MarkupBPS     int       `gorm:"column:markup_bps;not null;default:3000" json:"markup_bps"`
+	Currency      string    `gorm:"column:currency;size:8;not null;default:usd" json:"currency"`
+	CreditsPerUSD int       `gorm:"column:credits_per_usd;not null;default:100" json:"credits_per_usd"`
+	CreatedAt     time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt     time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
 }
 
 func (HostedPricingSetting) TableName() string { return "hosted_pricing_settings" }

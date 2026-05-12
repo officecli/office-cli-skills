@@ -179,24 +179,27 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	store := sqlstore.NewWithDB(db)
 	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
 
-	settings, err := svc.UpdateHostedPricingSettings(context.Background(), UpdateHostedPricingSettingsRequest{MarkupBPS: 3500})
+	settings, err := svc.UpdateHostedPricingSettings(context.Background(), UpdateHostedPricingSettingsRequest{MarkupBPS: 3500, CreditsPerUSD: 100})
 	require.NoError(t, err)
 	require.Equal(t, 3500, settings.MarkupBPS)
 	require.Equal(t, "usd", settings.Currency)
+	require.Equal(t, 100, settings.CreditsPerUSD)
 
 	override := 5000
 	modelConfig, err := svc.CreateHostedModelPricingConfig(context.Background(), UpsertHostedModelPricingConfigRequest{
-		Key:                        "text_default",
-		Kind:                       string(model.HostedModelPricingKindText),
-		Provider:                   "aigateway",
-		Model:                      "gpt-shared-text",
-		PromptPer1MCostMicrousd:    1000000,
-		OutputPer1MCostMicrousd:    2000000,
-		ReasoningPer1MCostMicrousd: 3000000,
-		Enabled:                    true,
+		Key:                       "text_default",
+		Kind:                      string(model.HostedModelPricingKindText),
+		Provider:                  "aigateway",
+		Model:                     "gpt-shared-text",
+		PromptPer1MCostCredits:    ptrInt64(100),
+		OutputPer1MCostCredits:    ptrInt64(200),
+		ReasoningPer1MCostCredits: ptrInt64(300),
+		Enabled:                   true,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "text_default", modelConfig.Key)
+	require.Equal(t, int64(1000000), modelConfig.PromptPer1MCostMicrousd)
+	require.Equal(t, int64(100), modelConfig.PromptPer1MCostCredits)
 
 	rule, err := svc.CreateHostedPricingRule(context.Background(), UpsertHostedPricingRuleRequest{
 		DocumentProfile:            "docx-xlsx",
@@ -219,36 +222,40 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.Equal(t, "text_default", rule.TextModelKey)
 
 	updatedModelConfig, err := svc.UpdateHostedModelPricingConfig(context.Background(), modelConfig.ID, UpsertHostedModelPricingConfigRequest{
-		Key:                        "text_default",
-		Kind:                       string(model.HostedModelPricingKindText),
-		Provider:                   "aigateway",
-		Model:                      "gpt-shared-text-2",
-		PromptPer1MCostMicrousd:    1100000,
-		OutputPer1MCostMicrousd:    2100000,
-		ReasoningPer1MCostMicrousd: 3100000,
-		Enabled:                    true,
+		Key:                       "text_default",
+		Kind:                      string(model.HostedModelPricingKindText),
+		Provider:                  "aigateway",
+		Model:                     "gpt-shared-text-2",
+		PromptPer1MCostCredits:    ptrInt64(110),
+		OutputPer1MCostCredits:    ptrInt64(210),
+		ReasoningPer1MCostCredits: ptrInt64(310),
+		Enabled:                   true,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "gpt-shared-text-2", updatedModelConfig.Model)
+	require.Equal(t, int64(110), updatedModelConfig.PromptPer1MCostCredits)
+	require.Equal(t, int64(1100000), updatedModelConfig.PromptPer1MCostMicrousd)
 
 	pack, err := svc.CreateHostedCreditPack(context.Background(), UpsertHostedCreditPackRequest{
 		Code:         "hosted-300",
 		Name:         "Hosted 300",
 		Description:  "300 hosted credits",
 		Currency:     "usd",
-		AmountTotal:  300,
 		CreditAmount: 300,
 		Enabled:      true,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "hosted-300", pack.Code)
+	require.Equal(t, int64(300), pack.AmountTotal)
 
 	payload, err := svc.HostedBillingConfig(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 3500, payload.Settings.MarkupBPS)
+	require.Equal(t, 100, payload.Settings.CreditsPerUSD)
 	require.Len(t, payload.ModelConfigs, 2)
 	require.Equal(t, "image_default", payload.ModelConfigs[0].Key)
 	require.Equal(t, "text_default", payload.ModelConfigs[1].Key)
+	require.Equal(t, int64(110), payload.ModelConfigs[1].PromptPer1MCostCredits)
 	require.Len(t, payload.Rules, 1)
 	require.Len(t, payload.Packs, 1)
 	require.True(t, payload.Packs[0].Enabled)
@@ -256,6 +263,10 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	var auditCount int64
 	require.NoError(t, db.Model(&model.AdminAuditLog{}).Count(&auditCount).Error)
 	require.Equal(t, int64(5), auditCount)
+}
+
+func ptrInt64(value int64) *int64 {
+	return &value
 }
 
 func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {

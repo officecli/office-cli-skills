@@ -612,7 +612,7 @@ func (s *Store) HostedPricingSettings(ctx context.Context) (*model.HostedPricing
 	case !errors.Is(err, gorm.ErrRecordNotFound):
 		return nil, err
 	}
-	settings = model.HostedPricingSetting{ID: 1, MarkupBPS: 3000, Currency: "usd"}
+	settings = model.HostedPricingSetting{ID: 1, MarkupBPS: 3000, Currency: "usd", CreditsPerUSD: 100}
 	if err := s.db.WithContext(ctx).Create(&settings).Error; err != nil {
 		if IsDuplicateError(err) {
 			return s.HostedPricingSettings(ctx)
@@ -628,11 +628,18 @@ func (s *Store) UpdateHostedPricingSettings(ctx context.Context, settings model.
 		return nil, err
 	}
 	updates := map[string]any{
-		"markup_bps": settings.MarkupBPS,
-		"currency":   strings.ToLower(strings.TrimSpace(settings.Currency)),
+		"markup_bps":      settings.MarkupBPS,
+		"currency":        strings.ToLower(strings.TrimSpace(settings.Currency)),
+		"credits_per_usd": settings.CreditsPerUSD,
 	}
 	if updates["currency"] == "" {
 		updates["currency"] = current.Currency
+	}
+	if settings.CreditsPerUSD <= 0 {
+		updates["credits_per_usd"] = current.CreditsPerUSD
+		if current.CreditsPerUSD <= 0 {
+			updates["credits_per_usd"] = 100
+		}
 	}
 	if err := s.db.WithContext(ctx).Model(&model.HostedPricingSetting{}).Where("id = ?", current.ID).Updates(updates).Error; err != nil {
 		return nil, err

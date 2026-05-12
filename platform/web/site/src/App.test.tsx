@@ -61,6 +61,29 @@ describe('marketing site shell', () => {
     expect(screen.queryByText('External 100')).not.toBeInTheDocument()
   })
 
+  it('renders hosted pricing with credits as the primary unit and USD as auxiliary copy', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          { code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, quota_amount: 0, credit_amount: 300, pack_kind: 'hosted_credits' },
+          { code: 'hosted-1000', name: 'Hosted 1000', description: '1000 hosted credits', currency: 'usd', amount_total: 1000, quota_amount: 0, credit_amount: 1000, pack_kind: 'hosted_credits' },
+        ],
+      }),
+    } as Response)
+
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/300 credits/i)).toBeInTheDocument()
+    expect(screen.getByText(/≈ \$3\.00 USD/i)).toBeInTheDocument()
+    expect(screen.getByText(/1000 credits/i)).toBeInTheDocument()
+    expect(screen.getByText(/≈ \$10\.00 USD/i)).toBeInTheDocument()
+  })
+
   it('detects supported operating systems for install tabs', () => {
     expect(detectOperatingSystem('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4)')).toBe('macos')
     expect(detectOperatingSystem('Mozilla/5.0 (X11; Linux x86_64)')).toBe('linux')

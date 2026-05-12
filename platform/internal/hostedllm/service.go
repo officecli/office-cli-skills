@@ -678,11 +678,12 @@ type hostedPriceSnapshot struct {
 }
 
 func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) hostedPriceSnapshot {
+	creditsPerUSD := s.effectiveCreditsPerUSD(ctx)
 	if rule, ok := s.matchRule(ctx, modelName); ok {
 		markupBPS := s.effectiveMarkupBPS(ctx, rule)
 		if config, ok := s.matchModelConfig(ctx, rule, image); ok {
 			cost := hostedUsageModelConfigCostMicrousd(config, usage)
-			charge := creditsFromCostMicrousd(cost, markupBPS)
+			charge := creditsFromCostMicrousd(cost, markupBPS, creditsPerUSD)
 			if charge < rule.MinimumChargeCredits {
 				charge = rule.MinimumChargeCredits
 			}
@@ -692,11 +693,11 @@ func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageS
 				UpstreamCostMicrousd:  cost,
 				ChargeCredits:         charge,
 				UncappedChargeCredits: charge,
-				ProfitMicrousd:        int64(charge)*10000 - cost,
+				ProfitMicrousd:        microusdFromCredits(charge, creditsPerUSD) - cost,
 			}
 		}
 		cost := hostedUsageCostMicrousd(rule, usage)
-		charge := creditsFromCostMicrousd(cost, markupBPS)
+		charge := creditsFromCostMicrousd(cost, markupBPS, creditsPerUSD)
 		if charge < rule.MinimumChargeCredits {
 			charge = rule.MinimumChargeCredits
 		}
@@ -707,20 +708,20 @@ func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageS
 				UpstreamCostMicrousd:  cost,
 				ChargeCredits:         charge,
 				UncappedChargeCredits: charge,
-				ProfitMicrousd:        int64(charge)*10000 - cost,
+				ProfitMicrousd:        microusdFromCredits(charge, creditsPerUSD) - cost,
 			}
 		}
 	}
 	if image {
 		charge := 24 + usage.ImageCount*8
-		return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: int64(charge) * 10000}
+		return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: microusdFromCredits(charge, creditsPerUSD)}
 	}
 	totalTokens := usage.PromptTokens + usage.CompletionTokens + usage.ReasoningTokens
 	if totalTokens == 0 {
 		totalTokens = 200
 	}
 	charge := int(math.Max(1, math.Ceil(float64(totalTokens)/120.0)))
-	return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: int64(charge) * 10000}
+	return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: microusdFromCredits(charge, creditsPerUSD)}
 }
 
 func hostedUsageCostMicrousd(rule model.HostedPricingRule, usage usageSummary) int64 {
@@ -770,12 +771,13 @@ func ceilRemainder(value, divisor int64) int64 {
 	return 1
 }
 
-func creditsFromCostMicrousd(cost int64, markupBPS int) int {
+func creditsFromCostMicrousd(cost int64, markupBPS int, creditsPerUSD int) int {
 	if cost <= 0 {
 		return 0
 	}
-	numerator := cost * int64(10000+markupBPS)
-	denominator := int64(10000 * 10000)
+	creditsPerUSD = normalizeCreditsPerUSD(creditsPerUSD)
+	numerator := cost * int64(creditsPerUSD) * int64(10000+markupBPS)
+	denominator := int64(1_000_000 * 10000)
 	credits := numerator / denominator
 	if numerator%denominator != 0 {
 		credits++
@@ -784,6 +786,14 @@ func creditsFromCostMicrousd(cost int64, markupBPS int) int {
 		return 0
 	}
 	return int(credits)
+}
+
+func microusdFromCredits(credits int, creditsPerUSD int) int64 {
+	if credits <= 0 {
+		return 0
+	}
+	creditsPerUSD = normalizeCreditsPerUSD(creditsPerUSD)
+	return int64(credits) * 1_000_000 / int64(creditsPerUSD)
 }
 
 func (s *Service) effectiveMarkupBPS(ctx context.Context, rule model.HostedPricingRule) int {
@@ -799,6 +809,22 @@ func (s *Service) effectiveMarkupBPS(ctx context.Context, rule model.HostedPrici
 		return s.cfg.MarkupBPS
 	}
 	return 3000
+}
+
+func (s *Service) effectiveCreditsPerUSD(ctx context.Context) int {
+	if s.store != nil {
+		if settings, err := s.store.HostedPricingSettings(ctx); err == nil && settings != nil {
+			return normalizeCreditsPerUSD(settings.CreditsPerUSD)
+		}
+	}
+	return 100
+}
+
+func normalizeCreditsPerUSD(value int) int {
+	if value <= 0 {
+		return 100
+	}
+	return value
 }
 
 func (s *Service) matchRule(ctx context.Context, modelName string) (model.HostedPricingRule, bool) {

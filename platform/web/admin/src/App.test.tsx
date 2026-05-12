@@ -112,8 +112,11 @@ describe('platform admin shell', () => {
           status: 200,
           json: async () => ({
             data: {
-              settings: { id: 1, markup_bps: 3500, currency: 'usd' },
-              model_configs: [{ id: 4, key: 'text_default', kind: 'text', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1m_cost_microusd: 1000000, output_per_1m_cost_microusd: 2000000, reasoning_per_1m_cost_microusd: 4000000, enabled: true }],
+              settings: { id: 1, markup_bps: 3500, currency: 'usd', credits_per_usd: 100 },
+              model_configs: [
+                { id: 4, key: 'text_default', kind: 'text', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1m_cost_microusd: 1000000, output_per_1m_cost_microusd: 2000000, reasoning_per_1m_cost_microusd: 4000000, prompt_per_1m_cost_credits: 100, output_per_1m_cost_credits: 200, reasoning_per_1m_cost_credits: 400, enabled: true },
+                { id: 5, key: 'image_default', kind: 'image', provider: 'aigateway', model: 'gpt-image-2', prompt_per_1m_cost_microusd: 8000000, output_per_1m_cost_microusd: 30000000, reasoning_per_1m_cost_microusd: 0, prompt_per_1m_cost_credits: 800, output_per_1m_cost_credits: 3000, reasoning_per_1m_cost_credits: 0, enabled: true },
+              ],
               rules: [{ id: 9, document_profile: 'docx-xlsx', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
               packs: [{ id: 3, code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, credit_amount: 300, enabled: true }],
             },
@@ -134,8 +137,13 @@ describe('platform admin shell', () => {
 
     expect(await screen.findByRole('heading', { name: /Hosted pricing controls/i })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: /Model pricing/i })).toBeInTheDocument()
-    expect(await screen.findByText(/text_default \/ gpt-4\.1/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/text_default \/ gpt-4\.1/i)).length).toBeGreaterThan(0)
+    expect(await screen.findByText(/prompt 100 \/ output 200 \/ reasoning 400 credits per 1M tokens/i)).toBeInTheDocument()
     expect(await screen.findByText(/docx-xlsx \/ text text_default/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Text model 9/i)).toHaveValue('text_default')
+    expect(screen.getAllByRole('option', { name: /None/i }).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/microUSD/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Price cents/i)).not.toBeInTheDocument()
     expect(await screen.findByText(/hosted-300/i)).toBeInTheDocument()
 
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted model pricing config text_default/i }))
@@ -147,6 +155,8 @@ describe('platform admin shell', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-pricing-rules/9', expect.objectContaining({ method: 'PATCH' }))
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-credit-packs/3', expect.objectContaining({ method: 'PATCH' }))
     })
+    const modelPatch = fetchMock.mock.calls.find(([url, init]) => url === '/api/admin/hosted-model-pricing-configs/4' && (init as RequestInit)?.method === 'PATCH')?.[1] as RequestInit
+    expect(JSON.parse(String(modelPatch.body))).toMatchObject({ prompt_per_1m_cost_credits: 100 })
   })
 
   it('renders the growth ledger route from the real growth API', async () => {

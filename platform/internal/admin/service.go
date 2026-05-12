@@ -518,10 +518,12 @@ func (s *Service) HostedBillingConfig(ctx context.Context) (*HostedBillingConfig
 	if err != nil {
 		return nil, err
 	}
+	settings.CreditsPerUSD = normalizeCreditsPerUSD(settings.CreditsPerUSD)
 	modelConfigs, err := s.store.ListHostedModelPricingConfigs(ctx, false)
 	if err != nil {
 		return nil, err
 	}
+	modelConfigs = hostedModelPricingConfigsWithCredits(modelConfigs, settings.CreditsPerUSD)
 	rules, err := s.store.ListHostedPricingRules(ctx, false)
 	if err != nil {
 		return nil, err
@@ -538,25 +540,30 @@ func (s *Service) UpdateHostedPricingSettings(ctx context.Context, req UpdateHos
 	if currency == "" {
 		currency = "usd"
 	}
-	settings, err := s.store.UpdateHostedPricingSettings(ctx, model.HostedPricingSetting{MarkupBPS: req.MarkupBPS, Currency: currency})
+	creditsPerUSD := req.CreditsPerUSD
+	settings, err := s.store.UpdateHostedPricingSettings(ctx, model.HostedPricingSetting{MarkupBPS: req.MarkupBPS, Currency: currency, CreditsPerUSD: creditsPerUSD})
 	if err != nil {
 		return nil, err
 	}
+	settings.CreditsPerUSD = normalizeCreditsPerUSD(settings.CreditsPerUSD)
 	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.settings.update", "hosted_pricing_settings", fmt.Sprintf("%d", settings.ID), sqlstore.JSONString(settings))
 	return settings, nil
 }
 
 func (s *Service) CreateHostedModelPricingConfig(ctx context.Context, req UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
-	config := hostedModelPricingConfigFromRequest(req)
+	creditsPerUSD := s.currentCreditsPerUSD(ctx)
+	config := hostedModelPricingConfigFromRequest(req, creditsPerUSD)
 	if err := s.store.CreateHostedModelPricingConfig(ctx, &config); err != nil {
 		return nil, err
 	}
+	config = hostedModelPricingConfigWithCredits(config, creditsPerUSD)
 	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.model_config.create", "hosted_model_pricing_config", fmt.Sprintf("%d", config.ID), sqlstore.JSONString(config))
 	return &config, nil
 }
 
 func (s *Service) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, req UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
-	config := hostedModelPricingConfigFromRequest(req)
+	creditsPerUSD := s.currentCreditsPerUSD(ctx)
+	config := hostedModelPricingConfigFromRequest(req, creditsPerUSD)
 	values := map[string]any{
 		"key":                            config.Key,
 		"kind":                           config.Kind,
@@ -571,6 +578,7 @@ func (s *Service) UpdateHostedModelPricingConfig(ctx context.Context, id uint64,
 	if err != nil {
 		return nil, err
 	}
+	*updated = hostedModelPricingConfigWithCredits(*updated, creditsPerUSD)
 	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.model_config.update", "hosted_model_pricing_config", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
 	return updated, nil
 }
@@ -610,7 +618,7 @@ func (s *Service) UpdateHostedPricingRule(ctx context.Context, id uint64, req Up
 }
 
 func (s *Service) CreateHostedCreditPack(ctx context.Context, req UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
-	pack := hostedCreditPackFromRequest(req)
+	pack := hostedCreditPackFromRequest(req, s.currentCreditsPerUSD(ctx))
 	if err := s.store.CreateHostedCreditPack(ctx, &pack); err != nil {
 		return nil, err
 	}
@@ -619,7 +627,7 @@ func (s *Service) CreateHostedCreditPack(ctx context.Context, req UpsertHostedCr
 }
 
 func (s *Service) UpdateHostedCreditPack(ctx context.Context, id uint64, req UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
-	pack := hostedCreditPackFromRequest(req)
+	pack := hostedCreditPackFromRequest(req, s.currentCreditsPerUSD(ctx))
 	values := map[string]any{
 		"code":          pack.Code,
 		"name":          pack.Name,
@@ -637,15 +645,27 @@ func (s *Service) UpdateHostedCreditPack(ctx context.Context, id uint64, req Ups
 	return updated, nil
 }
 
-func hostedModelPricingConfigFromRequest(req UpsertHostedModelPricingConfigRequest) model.HostedModelPricingConfig {
+func hostedModelPricingConfigFromRequest(req UpsertHostedModelPricingConfigRequest, creditsPerUSD int) model.HostedModelPricingConfig {
+	promptCost := req.PromptPer1MCostMicrousd
+	if req.PromptPer1MCostCredits != nil {
+		promptCost = microusdFromCredits(*req.PromptPer1MCostCredits, creditsPerUSD)
+	}
+	outputCost := req.OutputPer1MCostMicrousd
+	if req.OutputPer1MCostCredits != nil {
+		outputCost = microusdFromCredits(*req.OutputPer1MCostCredits, creditsPerUSD)
+	}
+	reasoningCost := req.ReasoningPer1MCostMicrousd
+	if req.ReasoningPer1MCostCredits != nil {
+		reasoningCost = microusdFromCredits(*req.ReasoningPer1MCostCredits, creditsPerUSD)
+	}
 	return model.HostedModelPricingConfig{
 		Key:                        strings.TrimSpace(req.Key),
 		Kind:                       model.HostedModelPricingKind(strings.TrimSpace(req.Kind)),
 		Provider:                   strings.TrimSpace(req.Provider),
 		Model:                      strings.TrimSpace(req.Model),
-		PromptPer1MCostMicrousd:    req.PromptPer1MCostMicrousd,
-		OutputPer1MCostMicrousd:    req.OutputPer1MCostMicrousd,
-		ReasoningPer1MCostMicrousd: req.ReasoningPer1MCostMicrousd,
+		PromptPer1MCostMicrousd:    promptCost,
+		OutputPer1MCostMicrousd:    outputCost,
+		ReasoningPer1MCostMicrousd: reasoningCost,
 		Enabled:                    req.Enabled,
 	}
 }
@@ -668,20 +688,93 @@ func hostedPricingRuleFromRequest(req UpsertHostedPricingRuleRequest) model.Host
 	}
 }
 
-func hostedCreditPackFromRequest(req UpsertHostedCreditPackRequest) model.HostedCreditPack {
+func hostedCreditPackFromRequest(req UpsertHostedCreditPackRequest, creditsPerUSD int) model.HostedCreditPack {
 	currency := strings.ToLower(strings.TrimSpace(req.Currency))
 	if currency == "" {
 		currency = "usd"
+	}
+	amountTotal := req.AmountTotal
+	if req.CreditAmount > 0 {
+		amountTotal = centsFromCredits(req.CreditAmount, creditsPerUSD)
 	}
 	return model.HostedCreditPack{
 		Code:         strings.TrimSpace(req.Code),
 		Name:         strings.TrimSpace(req.Name),
 		Description:  strings.TrimSpace(req.Description),
 		Currency:     currency,
-		AmountTotal:  req.AmountTotal,
+		AmountTotal:  amountTotal,
 		CreditAmount: req.CreditAmount,
 		Enabled:      req.Enabled,
 	}
+}
+
+func (s *Service) currentCreditsPerUSD(ctx context.Context) int {
+	settings, err := s.store.HostedPricingSettings(ctx)
+	if err != nil || settings == nil {
+		return 100
+	}
+	return normalizeCreditsPerUSD(settings.CreditsPerUSD)
+}
+
+func hostedModelPricingConfigsWithCredits(configs []model.HostedModelPricingConfig, creditsPerUSD int) []model.HostedModelPricingConfig {
+	out := make([]model.HostedModelPricingConfig, len(configs))
+	for i, config := range configs {
+		out[i] = hostedModelPricingConfigWithCredits(config, creditsPerUSD)
+	}
+	return out
+}
+
+func hostedModelPricingConfigWithCredits(config model.HostedModelPricingConfig, creditsPerUSD int) model.HostedModelPricingConfig {
+	config.PromptPer1MCostCredits = creditsFromMicrousd(config.PromptPer1MCostMicrousd, creditsPerUSD)
+	config.OutputPer1MCostCredits = creditsFromMicrousd(config.OutputPer1MCostMicrousd, creditsPerUSD)
+	config.ReasoningPer1MCostCredits = creditsFromMicrousd(config.ReasoningPer1MCostMicrousd, creditsPerUSD)
+	return config
+}
+
+func normalizeCreditsPerUSD(value int) int {
+	if value <= 0 {
+		return 100
+	}
+	return value
+}
+
+func microusdFromCredits(credits int64, creditsPerUSD int) int64 {
+	if credits <= 0 {
+		return 0
+	}
+	creditsPerUSD = normalizeCreditsPerUSD(creditsPerUSD)
+	numerator := credits * 1_000_000
+	result := numerator / int64(creditsPerUSD)
+	if numerator%int64(creditsPerUSD) != 0 {
+		result++
+	}
+	return result
+}
+
+func creditsFromMicrousd(microusd int64, creditsPerUSD int) int64 {
+	if microusd <= 0 {
+		return 0
+	}
+	creditsPerUSD = normalizeCreditsPerUSD(creditsPerUSD)
+	numerator := microusd * int64(creditsPerUSD)
+	result := numerator / 1_000_000
+	if numerator%1_000_000 != 0 {
+		result++
+	}
+	return result
+}
+
+func centsFromCredits(credits int, creditsPerUSD int) int64 {
+	if credits <= 0 {
+		return 0
+	}
+	creditsPerUSD = normalizeCreditsPerUSD(creditsPerUSD)
+	numerator := int64(credits) * 100
+	result := numerator / int64(creditsPerUSD)
+	if numerator%int64(creditsPerUSD) != 0 {
+		result++
+	}
+	return result
 }
 
 func generateAPIKey(salt string) (plain string, prefix string, hash string, err error) {

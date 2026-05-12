@@ -108,8 +108,8 @@ export default function BillingPage() {
                   <div className="info-eyebrow text-outline">{pack.code}</div>
                   <div className="mt-3 text-2xl font-bold text-white">{pack.name}</div>
                   <div className="mt-2 text-sm text-outline">{pack.description}</div>
-                  <div className="mt-6 text-4xl font-bold text-primary">{(pack.amount_total / 100).toFixed(2)} <span className="text-sm text-outline">{pack.currency.toUpperCase()}</span></div>
-                  <div className="mt-2 text-sm text-outline">{packUnitLabel(pack)}</div>
+                  <div className="mt-6 text-4xl font-bold text-primary">{packPrimaryLabel(pack)}</div>
+                  <div className="mt-2 text-sm text-outline">{packSecondaryLabel(pack)}</div>
                 </div>
                 <button
                   type="button"
@@ -164,7 +164,7 @@ export default function BillingPage() {
                   <div className="mt-1 text-xs text-outline">Internal order #{order.id} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-sm text-outline">{(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()} <ArrowRight size={14} className="inline" /> {orderUnitLabel(order)}</div>
+                  <div className="text-sm text-outline">{orderPrimaryLabel(order)} <ArrowRight size={14} className="inline" /> {orderSecondaryLabel(order)}</div>
                   <StatusPill value={order.status} />
                 </div>
               </div>
@@ -182,18 +182,36 @@ function stripeOrderReference(order: Order) {
   return order.stripe_payment_intent_id || order.stripe_checkout_session_id || ''
 }
 
-function packUnitLabel(pack: { pack_kind?: string; quota_amount?: number; credit_amount?: number }) {
+function packPrimaryLabel(pack: { pack_kind?: string; amount_total: number; currency: string; credit_amount?: number }) {
   if (pack.pack_kind === 'hosted_credits') {
-    return `${pack.credit_amount ?? 0} hosted credits per purchase`
+    return `${pack.credit_amount ?? 0} credits`
+  }
+  return `${(pack.amount_total / 100).toFixed(2)} ${pack.currency.toUpperCase()}`
+}
+
+function packSecondaryLabel(pack: { pack_kind?: string; amount_total: number; currency: string; quota_amount?: number; credit_amount?: number }) {
+  if (pack.pack_kind === 'hosted_credits') {
+    return `≈ ${usdLabel(pack.amount_total, pack.currency)} at 100 credits = $1 USD`
   }
   return `${pack.quota_amount ?? 0} document generations per purchase`
 }
 
-function orderUnitLabel(order: Order) {
+function orderPrimaryLabel(order: Order) {
   if (order.pack_kind === 'hosted_credits') {
-    return `${order.credit_amount ?? 0} hosted credits`
+    return `${order.credit_amount ?? 0} credits`
+  }
+  return `${(order.amount_total / 100).toFixed(2)} ${order.currency.toUpperCase()}`
+}
+
+function orderSecondaryLabel(order: Order) {
+  if (order.pack_kind === 'hosted_credits') {
+    return `≈ ${usdLabel(order.amount_total, order.currency)}`
   }
   return `${order.quota_amount} document generations`
+}
+
+function usdLabel(amountCents: number, currency: string) {
+  return `${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: currency.toUpperCase() })} USD`
 }
 
 function targetAPIKeyLabel(order: Order, keyByID: Map<number, ApiKey>) {

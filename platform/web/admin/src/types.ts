@@ -139,6 +139,9 @@ export interface HostedModelPricingConfig {
   prompt_per_1m_cost_microusd: number
   output_per_1m_cost_microusd: number
   reasoning_per_1m_cost_microusd: number
+  prompt_per_1m_cost_credits: number
+  output_per_1m_cost_credits: number
+  reasoning_per_1m_cost_credits: number
   enabled: boolean
 }
 
@@ -146,6 +149,7 @@ export interface HostedPricingSetting {
   id: number
   markup_bps: number
   currency: string
+  credits_per_usd: number
 }
 
 export interface HostedCreditPack {

@@ -30,7 +30,7 @@ export default function OrdersPage() {
             </div>,
             <div key={`pack-${order.id}`}>
               <div className="font-semibold text-white">{order.pack_name}</div>
-              <div className="mt-1 text-xs text-outline">{order.pack_code} / {(order.amount_total / 100).toFixed(2)} {order.currency.toUpperCase()}</div>
+              <div className="mt-1 text-xs text-outline">{order.pack_code} / {orderAmountLabel(order)}</div>
             </div>,
             <span key={`target-${order.id}`}>{order.target_api_key_id ? `#${order.target_api_key_id}` : '—'}</span>,
             <StatusPill key={`status-${order.id}`} value={order.status} />,
@@ -51,4 +51,11 @@ export default function OrdersPage() {
       )}
     </Panel>
   )
+}
+
+function orderAmountLabel(order: { pack_kind?: string; credit_amount?: number; amount_total: number; currency: string }) {
+  if (order.pack_kind === 'hosted_credits') {
+    return `${order.credit_amount ?? 0} credits / ≈ ${(order.amount_total / 100).toFixed(2)} ${order.currency.toUpperCase()}`
+  }
+  return `${(order.amount_total / 100).toFixed(2)} ${order.currency.toUpperCase()}`
 }

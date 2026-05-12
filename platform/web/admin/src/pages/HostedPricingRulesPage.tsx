@@ -38,6 +38,9 @@ const defaultModelConfigs: HostedModelPricingConfig[] = [
     prompt_per_1m_cost_microusd: 0,
     output_per_1m_cost_microusd: 0,
     reasoning_per_1m_cost_microusd: 0,
+    prompt_per_1m_cost_credits: 0,
+    output_per_1m_cost_credits: 0,
+    reasoning_per_1m_cost_credits: 0,
     enabled: true,
   },
   {
@@ -48,6 +51,9 @@ const defaultModelConfigs: HostedModelPricingConfig[] = [
     prompt_per_1m_cost_microusd: 0,
     output_per_1m_cost_microusd: 0,
     reasoning_per_1m_cost_microusd: 0,
+    prompt_per_1m_cost_credits: 0,
+    output_per_1m_cost_credits: 0,
+    reasoning_per_1m_cost_credits: 0,
     enabled: true,
   },
 ]
@@ -55,16 +61,19 @@ const defaultModelConfigs: HostedModelPricingConfig[] = [
 export default function HostedPricingRulesPage() {
   const queryClient = useQueryClient()
   const { data } = useQuery({ queryKey: ['admin-hosted-billing'], queryFn: api.hostedBilling })
-  const [markupBPS, setMarkupBPS] = useState('')
+  const [markupPercent, setMarkupPercent] = useState('')
   const [ruleDraft, setRuleDraft] = useState<HostedPricingRule>(blankRule)
   const [packDraft, setPackDraft] = useState<HostedCreditPack>(blankPack)
+  const creditsPerUSD = data?.settings.credits_per_usd || 100
 
   const modelConfigs = useMemo(() => {
     const byKey = new Map((data?.model_configs ?? []).map((config) => [config.key, config]))
-    return defaultModelConfigs.map((config) => byKey.get(config.key) ?? config)
-  }, [data?.model_configs])
+    return defaultModelConfigs.map((config) => modelConfigWithCreditDefaults(byKey.get(config.key) ?? config, creditsPerUSD))
+  }, [creditsPerUSD, data?.model_configs])
 
-  const settingsMarkup = useMemo(() => markupBPS || String(data?.settings.markup_bps ?? 3000), [data?.settings.markup_bps, markupBPS])
+  const settingsMarkupPercent = useMemo(() => markupPercent || bpsToPercentValue(data?.settings.markup_bps ?? 3000), [data?.settings.markup_bps, markupPercent])
+  const textModelConfigs = useMemo(() => modelConfigs.filter((config) => config.kind === 'text'), [modelConfigs])
+  const imageModelConfigs = useMemo(() => modelConfigs.filter((config) => config.kind === 'image'), [modelConfigs])
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-hosted-billing'] })
   const updateSettings = useMutation({ mutationFn: api.updateHostedPricingSettings, onSuccess: invalidate })
   const createModelConfig = useMutation({ mutationFn: api.createHostedModelPricingConfig, onSuccess: invalidate })
@@ -80,11 +89,12 @@ export default function HostedPricingRulesPage() {
         <SectionHeading eyebrow="Hosted billing" title="Hosted pricing controls" body="Configure aigateway base cost, margin, and prepaid credit packs without restarting the platform." />
         <form className="panel-muted grid gap-4 p-5 md:grid-cols-[1fr_auto]" onSubmit={(event: FormEvent) => {
           event.preventDefault()
-          updateSettings.mutate({ markup_bps: Number(settingsMarkup), currency: data?.settings.currency || 'usd' })
+          updateSettings.mutate({ markup_bps: percentToBPS(settingsMarkupPercent), currency: data?.settings.currency || 'usd', credits_per_usd: creditsPerUSD })
         }}>
-          <label className="text-sm text-outline">Global markup BPS
-            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkup} onChange={(event) => setMarkupBPS(event.target.value)} />
+          <label className="text-sm text-outline">Global markup %
+            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkupPercent} onChange={(event) => setMarkupPercent(event.target.value)} />
           </label>
+          <div className="self-end text-sm text-outline">Credit ratio: {formatNumber(creditsPerUSD)} credits = $1 USD</div>
           <button type="submit" className="tonal-button self-end" disabled={updateSettings.isPending}>Save markup</button>
         </form>
       </Panel>
@@ -109,9 +119,9 @@ export default function HostedPricingRulesPage() {
           createRule.mutate(normalizeRule(ruleDraft))
         }}>
           <TextField label="Profile" value={ruleDraft.document_profile} onChange={(value) => setRuleDraft({ ...ruleDraft, document_profile: value })} />
-          <TextField label="Text model key" value={ruleDraft.text_model_key ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
-          <TextField label="Image model key" value={ruleDraft.image_model_key ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
-          <NumberField label="Markup BPS override" value={ruleDraft.markup_bps ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : Number(value) })} />
+          <ModelSelect label="Text model" value={ruleDraft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
+          <ModelSelect label="Image model" value={ruleDraft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
+          <NumberField label="Markup % override" value={bpsToPercentValue(ruleDraft.markup_bps)} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
           <NumberField label="Reservation credits" value={ruleDraft.reservation_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, reservation_credits: Number(value) })} />
           <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
           <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
@@ -123,6 +133,8 @@ export default function HostedPricingRulesPage() {
               <RuleRow
                 key={rule.id}
                 rule={rule}
+                textModelConfigs={textModelConfigs}
+                imageModelConfigs={imageModelConfigs}
                 onSave={(payload) => rule.id && updateRule.mutate({ id: rule.id, payload })}
                 onToggle={() => rule.id && updateRule.mutate({ id: rule.id, payload: { ...rule, enabled: !rule.enabled } })}
               />
@@ -139,8 +151,8 @@ export default function HostedPricingRulesPage() {
         }}>
           <TextField label="Code" value={packDraft.code} onChange={(value) => setPackDraft({ ...packDraft, code: value })} />
           <TextField label="Name" value={packDraft.name} onChange={(value) => setPackDraft({ ...packDraft, name: value })} />
-          <NumberField label="Price cents" value={packDraft.amount_total} onChange={(value) => setPackDraft({ ...packDraft, amount_total: Number(value) })} />
           <NumberField label="Credits" value={packDraft.credit_amount} onChange={(value) => setPackDraft({ ...packDraft, credit_amount: Number(value) })} />
+          <div className="self-end text-sm text-outline">{creditUSDLabel(packDraft.credit_amount, creditsPerUSD)}</div>
           <label className="md:col-span-3 text-sm text-outline">Description
             <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
           </label>
@@ -152,6 +164,7 @@ export default function HostedPricingRulesPage() {
               <PackRow
                 key={pack.id}
                 pack={pack}
+                creditsPerUSD={creditsPerUSD}
                 onSave={(payload) => pack.id && updatePack.mutate({ id: pack.id, payload })}
                 onToggle={() => pack.id && updatePack.mutate({ id: pack.id, payload: { ...pack, enabled: !pack.enabled } })}
               />
@@ -175,15 +188,15 @@ function ModelConfigRow({ config, onSave }: { config: HostedModelPricingConfig; 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 text-white">{config.key} / {config.model}<StatusPill value={config.enabled ? 'active' : 'disabled'} /></div>
-          <div className="mt-1 text-sm text-outline">{config.kind} model; prompt {formatNumber(config.prompt_per_1m_cost_microusd)} / output {formatNumber(config.output_per_1m_cost_microusd)} / reasoning {formatNumber(config.reasoning_per_1m_cost_microusd)} microUSD per 1M tokens</div>
+          <div className="mt-1 text-sm text-outline">{config.kind} model; prompt {formatNumber(config.prompt_per_1m_cost_credits)} / output {formatNumber(config.output_per_1m_cost_credits)} / reasoning {formatNumber(config.reasoning_per_1m_cost_credits)} credits per 1M tokens</div>
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <TextField label={`Provider ${config.key}`} value={draft.provider} onChange={(value) => setDraft({ ...draft, provider: value })} />
         <TextField label={`Model ${config.key}`} value={draft.model} onChange={(value) => setDraft({ ...draft, model: value })} />
-        <NumberField label={`Prompt per 1M ${config.key}`} value={draft.prompt_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, prompt_per_1m_cost_microusd: Number(value) })} />
-        <NumberField label={`Output per 1M ${config.key}`} value={draft.output_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, output_per_1m_cost_microusd: Number(value) })} />
-        <NumberField label={`Reasoning per 1M ${config.key}`} value={draft.reasoning_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, reasoning_per_1m_cost_microusd: Number(value) })} />
+        <NumberField label={`Prompt credits per 1M ${config.key}`} value={draft.prompt_per_1m_cost_credits} onChange={(value) => setDraft({ ...draft, prompt_per_1m_cost_credits: Number(value) })} />
+        <NumberField label={`Output credits per 1M ${config.key}`} value={draft.output_per_1m_cost_credits} onChange={(value) => setDraft({ ...draft, output_per_1m_cost_credits: Number(value) })} />
+        <NumberField label={`Reasoning credits per 1M ${config.key}`} value={draft.reasoning_per_1m_cost_credits} onChange={(value) => setDraft({ ...draft, reasoning_per_1m_cost_credits: Number(value) })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
         <button type="button" className="tonal-button self-end" aria-label={`Save hosted model pricing config ${config.key}`} onClick={() => onSave(normalizeModelConfig(draft))}>Save model</button>
       </div>
@@ -191,7 +204,7 @@ function ModelConfigRow({ config, onSave }: { config: HostedModelPricingConfig; 
   )
 }
 
-function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: (payload: HostedPricingRule) => void; onToggle: () => void }) {
+function RuleRow({ rule, textModelConfigs, imageModelConfigs, onSave, onToggle }: { rule: HostedPricingRule; textModelConfigs: HostedModelPricingConfig[]; imageModelConfigs: HostedModelPricingConfig[]; onSave: (payload: HostedPricingRule) => void; onToggle: () => void }) {
   const [draft, setDraft] = useState(rule)
 
   useEffect(() => {
@@ -203,15 +216,15 @@ function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 text-white">{rule.document_profile} / text {rule.text_model_key || '-'} / image {rule.image_model_key || '-'}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
-          <div className="mt-1 text-sm text-outline">Reservation {rule.reservation_credits}; minimum {rule.minimum_charge_credits}; markup {rule.markup_bps ?? 'global'} bps</div>
+          <div className="mt-1 text-sm text-outline">Reservation {rule.reservation_credits} credits; minimum {rule.minimum_charge_credits} credits; markup {markupLabel(rule.markup_bps)}</div>
         </div>
         <button type="button" className="ghost-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <TextField label={`Profile ${rule.id ?? rule.document_profile}`} value={draft.document_profile} onChange={(value) => setDraft({ ...draft, document_profile: value })} />
-        <TextField label={`Text model key ${rule.id ?? rule.document_profile}`} value={draft.text_model_key ?? ''} onChange={(value) => setDraft({ ...draft, text_model_key: value })} />
-        <TextField label={`Image model key ${rule.id ?? rule.document_profile}`} value={draft.image_model_key ?? ''} onChange={(value) => setDraft({ ...draft, image_model_key: value })} />
-        <NumberField label={`Markup override ${rule.id ?? rule.document_profile}`} value={draft.markup_bps ?? ''} onChange={(value) => setDraft({ ...draft, markup_bps: value === '' ? undefined : Number(value) })} />
+        <ModelSelect label={`Text model ${rule.id ?? rule.document_profile}`} value={draft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setDraft({ ...draft, text_model_key: value })} />
+        <ModelSelect label={`Image model ${rule.id ?? rule.document_profile}`} value={draft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setDraft({ ...draft, image_model_key: value })} />
+        <NumberField label={`Markup % override ${rule.id ?? rule.document_profile}`} value={bpsToPercentValue(draft.markup_bps)} onChange={(value) => setDraft({ ...draft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
         <NumberField label={`Reservation ${rule.id ?? rule.document_profile}`} value={draft.reservation_credits} onChange={(value) => setDraft({ ...draft, reservation_credits: Number(value) })} />
         <NumberField label={`Minimum ${rule.id ?? rule.document_profile}`} value={draft.minimum_charge_credits} onChange={(value) => setDraft({ ...draft, minimum_charge_credits: Number(value) })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
@@ -221,7 +234,7 @@ function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: 
   )
 }
 
-function PackRow({ pack, onSave, onToggle }: { pack: HostedCreditPack; onSave: (payload: HostedCreditPack) => void; onToggle: () => void }) {
+function PackRow({ pack, creditsPerUSD, onSave, onToggle }: { pack: HostedCreditPack; creditsPerUSD: number; onSave: (payload: HostedCreditPack) => void; onToggle: () => void }) {
   const [draft, setDraft] = useState(pack)
 
   useEffect(() => {
@@ -233,15 +246,15 @@ function PackRow({ pack, onSave, onToggle }: { pack: HostedCreditPack; onSave: (
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-white">{pack.name}</div>
-          <div className="mt-1 text-sm text-outline">{pack.code} / ${(pack.amount_total / 100).toFixed(2)} / {formatNumber(pack.credit_amount)} credits</div>
+          <div className="mt-1 text-sm text-outline">{pack.code} / {formatNumber(pack.credit_amount)} credits / {creditUSDLabel(pack.credit_amount, creditsPerUSD)}</div>
         </div>
         <button type="button" className="ghost-button" onClick={onToggle}>{pack.enabled ? 'Disable' : 'Enable'}</button>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <TextField label={`Pack code ${pack.id ?? pack.code}`} value={draft.code} onChange={(value) => setDraft({ ...draft, code: value })} />
         <TextField label={`Pack name ${pack.id ?? pack.code}`} value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
-        <NumberField label={`Pack price cents ${pack.id ?? pack.code}`} value={draft.amount_total} onChange={(value) => setDraft({ ...draft, amount_total: Number(value) })} />
         <NumberField label={`Pack credits ${pack.id ?? pack.code}`} value={draft.credit_amount} onChange={(value) => setDraft({ ...draft, credit_amount: Number(value) })} />
+        <div className="self-end text-sm text-outline">{creditUSDLabel(draft.credit_amount, creditsPerUSD)}</div>
         <label className="md:col-span-3 text-sm text-outline">Pack description {pack.id ?? pack.code}
           <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
         </label>
@@ -255,6 +268,19 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
   return <label className="text-sm text-outline">{label}<input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
+function ModelSelect({ label, value, options, onChange }: { label: string; value: string; options: HostedModelPricingConfig[]; onChange: (value: string) => void }) {
+  return (
+    <label className="text-sm text-outline">{label}
+      <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">None</option>
+        {options.map((option) => (
+          <option key={option.key} value={option.key}>{option.key} / {option.model}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function NumberField({ label, value, onChange }: { label: string; value: number | string; onChange: (value: string) => void }) {
   return <label className="text-sm text-outline">{label}<input type="number" className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
@@ -262,6 +288,9 @@ function NumberField({ label, value, onChange }: { label: string; value: number 
 function normalizeModelConfig(config: HostedModelPricingConfig): HostedModelPricingConfig {
   return {
     ...config,
+    prompt_per_1m_cost_credits: Number(config.prompt_per_1m_cost_credits),
+    output_per_1m_cost_credits: Number(config.output_per_1m_cost_credits),
+    reasoning_per_1m_cost_credits: Number(config.reasoning_per_1m_cost_credits),
     prompt_per_1m_cost_microusd: Number(config.prompt_per_1m_cost_microusd),
     output_per_1m_cost_microusd: Number(config.output_per_1m_cost_microusd),
     reasoning_per_1m_cost_microusd: Number(config.reasoning_per_1m_cost_microusd),
@@ -281,4 +310,36 @@ function normalizeRule(rule: HostedPricingRule): HostedPricingRule {
 
 function normalizePack(pack: HostedCreditPack): HostedCreditPack {
   return { ...pack, currency: pack.currency || 'usd', amount_total: Number(pack.amount_total), credit_amount: Number(pack.credit_amount) }
+}
+
+function modelConfigWithCreditDefaults(config: HostedModelPricingConfig, creditsPerUSD: number): HostedModelPricingConfig {
+  return {
+    ...config,
+    prompt_per_1m_cost_credits: config.prompt_per_1m_cost_credits ?? creditsFromMicrousd(config.prompt_per_1m_cost_microusd, creditsPerUSD),
+    output_per_1m_cost_credits: config.output_per_1m_cost_credits ?? creditsFromMicrousd(config.output_per_1m_cost_microusd, creditsPerUSD),
+    reasoning_per_1m_cost_credits: config.reasoning_per_1m_cost_credits ?? creditsFromMicrousd(config.reasoning_per_1m_cost_microusd, creditsPerUSD),
+  }
+}
+
+function creditsFromMicrousd(microusd: number, creditsPerUSD: number) {
+  if (!microusd || microusd <= 0) return 0
+  return Math.ceil((microusd * (creditsPerUSD || 100)) / 1_000_000)
+}
+
+function bpsToPercentValue(bps?: number) {
+  if (bps === undefined || bps === null) return ''
+  return String(bps / 100)
+}
+
+function percentToBPS(value: string | number) {
+  return Math.round(Number(value) * 100)
+}
+
+function markupLabel(bps?: number) {
+  return bps === undefined || bps === null ? 'global' : `${bps / 100}%`
+}
+
+function creditUSDLabel(credits: number, creditsPerUSD: number) {
+  const usd = Number(credits || 0) / (creditsPerUSD || 100)
+  return `≈ $${usd.toFixed(2)} USD`
 }

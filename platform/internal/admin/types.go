@@ -78,8 +78,9 @@ type UpdateUserRequest struct {
 }
 
 type UpdateHostedPricingSettingsRequest struct {
-	MarkupBPS int    `json:"markup_bps"`
-	Currency  string `json:"currency,omitempty"`
+	MarkupBPS     int    `json:"markup_bps"`
+	Currency      string `json:"currency,omitempty"`
+	CreditsPerUSD int    `json:"credits_per_usd,omitempty"`
 }
 
 type UpsertHostedModelPricingConfigRequest struct {
@@ -90,6 +91,9 @@ type UpsertHostedModelPricingConfigRequest struct {
 	PromptPer1MCostMicrousd    int64  `json:"prompt_per_1m_cost_microusd"`
 	OutputPer1MCostMicrousd    int64  `json:"output_per_1m_cost_microusd"`
 	ReasoningPer1MCostMicrousd int64  `json:"reasoning_per_1m_cost_microusd"`
+	PromptPer1MCostCredits     *int64 `json:"prompt_per_1m_cost_credits,omitempty"`
+	OutputPer1MCostCredits     *int64 `json:"output_per_1m_cost_credits,omitempty"`
+	ReasoningPer1MCostCredits  *int64 `json:"reasoning_per_1m_cost_credits,omitempty"`
 	Enabled                    bool   `json:"enabled"`
 }
 

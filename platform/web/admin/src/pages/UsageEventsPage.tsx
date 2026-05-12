@@ -80,8 +80,8 @@ export default function UsageEventsPage() {
               <StatusPill key="result" value={event.result} />,
               <span key="model" className="text-outline">{event.model_name || event.reason_code || '--'}</span>,
               <span key="charge" className="text-white">{event.mode === 'hosted' ? `${event.settled_credits ?? 0} credits` : `${event.billed_units ?? 0} ${event.unit_type ?? ''}`}</span>,
-              <span key="cost">{event.mode === 'hosted' ? moneyFromMicrousd(event.upstream_cost_microusd) : '--'}</span>,
-              <span key="profit" className={event.cap_applied ? 'text-amber-200' : 'text-outline'}>{event.mode === 'hosted' ? `${moneyFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}` : '--'}</span>,
+              <span key="cost">{event.mode === 'hosted' ? creditsFromMicrousd(event.upstream_cost_microusd) : '--'}</span>,
+              <span key="profit" className={event.cap_applied ? 'text-amber-200' : 'text-outline'}>{event.mode === 'hosted' ? `${creditsFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}` : '--'}</span>,
               <span key="created">{formatDate(event.created_at)}</span>,
             ])}
           />
@@ -93,6 +93,7 @@ export default function UsageEventsPage() {
   )
 }
 
-function moneyFromMicrousd(value?: number) {
-  return `$${((value ?? 0) / 1_000_000).toFixed(4)}`
+function creditsFromMicrousd(value?: number) {
+  const credits = Math.ceil(((value ?? 0) * 100) / 1_000_000)
+  return `${credits} credits`
 }

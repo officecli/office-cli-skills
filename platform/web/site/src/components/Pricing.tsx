@@ -4,7 +4,7 @@ import { Check } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
 import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
-import { fetchPricing, formatPrice, type PricingPack } from '../siteApi'
+import { fetchPricing, formatAuxiliaryPrice, formatPrice, type PricingPack } from '../siteApi'
 import { platformBillingURL } from '../siteData'
 
 interface PricingProps {
@@ -50,10 +50,10 @@ export default function Pricing({ standalone = false }: PricingProps) {
   const titleClass = 'font-headline text-5xl md:text-6xl font-bold text-white mb-8 tracking-tighter'
 
   const starterItems = useMemo(() => [
-    `${starterPack?.quota_amount ?? 0} paid document generations`,
+    packUnitItem(starterPack),
     'Entry pack for evaluation',
     'CLI and platform access',
-  ], [starterPack?.quota_amount])
+  ], [starterPack])
 
   const productionItems = useMemo(() => [
     'Best value for recurring usage',
@@ -75,7 +75,8 @@ export default function Pricing({ standalone = false }: PricingProps) {
               className="p-10 bg-surface-low rounded-2xl border border-outline-variant/10"
             >
               <h3 className="font-headline text-2xl font-bold text-white mb-2">{starterPack.name}</h3>
-              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(starterPack)} <span className="text-sm font-normal text-outline-variant">/ {starterPack.quota_amount} generations</span></div>
+              <div className="text-4xl font-headline font-black text-primary mb-2">{formatPrice(starterPack)}</div>
+              <div className="mb-6 text-sm font-normal text-outline-variant">{priceMeta(starterPack)}</div>
               <ul className="space-y-4 mb-10 text-outline-variant text-sm">
                 {starterItems.map((item) => (
                   <li key={item} className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> {item}</li>
@@ -95,7 +96,8 @@ export default function Pricing({ standalone = false }: PricingProps) {
             >
               <div className="absolute top-5 right-5 bg-primary text-[#002e6b] text-[10px] font-bold px-2 py-1 rounded">POPULAR</div>
               <h3 className="font-headline text-2xl font-bold text-white mb-2">{productionPack.name}</h3>
-              <div className="text-4xl font-headline font-black text-primary mb-6">{formatPrice(productionPack)} <span className="text-sm font-normal text-outline-variant">/ {productionPack.quota_amount} generations</span></div>
+              <div className="text-4xl font-headline font-black text-primary mb-2">{formatPrice(productionPack)}</div>
+              <div className="mb-6 text-sm font-normal text-outline-variant">{priceMeta(productionPack)}</div>
               <ul className="space-y-4 mb-10 text-outline-variant text-sm">
                 <li className="text-outline-variant leading-relaxed">{productionPack.description}</li>
                 {productionItems.map((item) => (
@@ -148,4 +150,19 @@ export default function Pricing({ standalone = false }: PricingProps) {
       </div>
     </section>
   )
+}
+
+function packUnitItem(pack?: PricingPack) {
+  if (!pack) return '0 paid document generations'
+  if (pack.pack_kind === 'hosted_credits') {
+    return `${pack.credit_amount ?? 0} hosted credits`
+  }
+  return `${pack.quota_amount ?? 0} paid document generations`
+}
+
+function priceMeta(pack: PricingPack) {
+  if (pack.pack_kind === 'hosted_credits') {
+    return formatAuxiliaryPrice(pack)
+  }
+  return `/ ${pack.quota_amount} generations`
 }

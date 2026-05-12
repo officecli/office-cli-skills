@@ -180,6 +180,8 @@ describe('billing page', () => {
 
     expect((await screen.findAllByText('Hosted 300')).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/300 hosted credits/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/300 credits/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/≈ \$3\.00 USD/i).length).toBeGreaterThan(0)
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
 

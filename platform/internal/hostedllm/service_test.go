@@ -589,7 +589,7 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 	defaultRuntimeMode := "hosted"
 	userID := uint64(42)
 	store := &fakeAPIKeyStore{
-		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd"},
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd", CreditsPerUSD: 100},
 		key: &model.APIKey{
 			ID:                 7,
 			OwnerUserID:        &userID,
@@ -633,6 +633,64 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 	require.Equal(t, 100, store.events[0].UncappedChargeCredits)
 	require.Equal(t, 5, store.events[0].SettledCredits)
 	require.True(t, store.events[0].CapApplied)
+}
+
+func TestCompleteUsesConfiguredCreditsPerUSDForHostedCharges(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10000,"completion_tokens":0}}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd", CreditsPerUSD: 200},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+		modelConfigs: []model.HostedModelPricingConfig{{
+			Key:                     "text_default",
+			Kind:                    model.HostedModelPricingKindText,
+			Provider:                "aigateway",
+			Model:                   "gpt-credit-ratio",
+			PromptPer1MCostMicrousd: 1000000,
+			Enabled:                 true,
+		}},
+		rules: []model.HostedPricingRule{{
+			ID:                   31,
+			DocumentProfile:      "docx-xlsx",
+			TextModelKey:         "text_default",
+			MinimumChargeCredits: 0,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		APIKey:               "upstream-key",
+		HashSalt:             "salt",
+		TextModel:            "legacy-text",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/docx-xlsx",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, store.events, 1)
+	require.Equal(t, int64(10000), store.events[0].UpstreamCostMicrousd)
+	require.Equal(t, 2, store.events[0].SettledCredits)
 }
 
 func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
