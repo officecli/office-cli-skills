@@ -29,6 +29,7 @@ type APIKeyStore interface {
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
 	HostedPricingSettings(ctx context.Context) (*model.HostedPricingSetting, error)
 	ListHostedPricingRules(ctx context.Context, enabledOnly bool) ([]model.HostedPricingRule, error)
+	ListHostedModelPricingConfigs(ctx context.Context, enabledOnly bool) ([]model.HostedModelPricingConfig, error)
 	FindUserAIGatewayAPIKeyByUserID(ctx context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error)
 	ClaimUserAIGatewayAPIKeyCreation(ctx context.Context, userID uint64, upstreamName string) (*model.UserAIGatewayAPIKey, error)
 	ActivateUserAIGatewayAPIKey(ctx context.Context, userID uint64, ciphertext, prefix, upstreamID, upstreamName string) (*model.UserAIGatewayAPIKey, error)
@@ -48,6 +49,7 @@ type Config struct {
 	Provider               string
 	HashSalt               string
 	MarkupBPS              int
+	ModelConfigs           []model.HostedModelPricingConfig
 	Rules                  []model.HostedPricingRule
 	TimeoutSec             int
 	AIGatewayAdminBaseURL  string
@@ -156,7 +158,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if err != nil {
 		return nil, err
 	}
-	modelName := s.normalizeModel(req.Model, false)
+	modelName := s.normalizeModel(ctx, req.Model, false)
 
 	payload := map[string]any{
 		"model":    modelName,
@@ -238,7 +240,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if err != nil {
 		return nil, err
 	}
-	modelName := s.normalizeModel(req.Model, true)
+	modelName := s.normalizeModel(ctx, req.Model, true)
 	payload := map[string]any{
 		"model":           modelName,
 		"prompt":          req.Prompt,
@@ -299,7 +301,7 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 	if err := s.quota.ValidateCommitToken(consumeReq); err != nil {
 		return nil, err
 	}
-	modelName := s.normalizeModel(req.Model, true)
+	modelName := s.normalizeModel(ctx, req.Model, true)
 	payload := map[string]any{
 		"model":           modelName,
 		"prompt":          req.Prompt,
@@ -629,9 +631,14 @@ func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequ
 	}
 }
 
-func (s *Service) normalizeModel(value string, image bool) string {
+func (s *Service) normalizeModel(ctx context.Context, value string, image bool) string {
 	model := strings.TrimSpace(value)
 	if model == "" || strings.HasPrefix(model, "hosted/") {
+		if rule, ok := s.matchRule(ctx, model); ok {
+			if config, ok := s.matchModelConfig(ctx, rule, image); ok && strings.TrimSpace(config.Model) != "" {
+				return strings.TrimSpace(config.Model)
+			}
+		}
 		if image {
 			if strings.TrimSpace(s.cfg.ImageModel) != "" {
 				return strings.TrimSpace(s.cfg.ImageModel)
@@ -673,6 +680,21 @@ type hostedPriceSnapshot struct {
 func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) hostedPriceSnapshot {
 	if rule, ok := s.matchRule(ctx, modelName); ok {
 		markupBPS := s.effectiveMarkupBPS(ctx, rule)
+		if config, ok := s.matchModelConfig(ctx, rule, image); ok {
+			cost := hostedUsageModelConfigCostMicrousd(config, usage)
+			charge := creditsFromCostMicrousd(cost, markupBPS)
+			if charge < rule.MinimumChargeCredits {
+				charge = rule.MinimumChargeCredits
+			}
+			return hostedPriceSnapshot{
+				RuleID:                rule.ID,
+				MarkupBPS:             markupBPS,
+				UpstreamCostMicrousd:  cost,
+				ChargeCredits:         charge,
+				UncappedChargeCredits: charge,
+				ProfitMicrousd:        int64(charge)*10000 - cost,
+			}
+		}
 		cost := hostedUsageCostMicrousd(rule, usage)
 		charge := creditsFromCostMicrousd(cost, markupBPS)
 		if charge < rule.MinimumChargeCredits {
@@ -710,6 +732,14 @@ func hostedUsageCostMicrousd(rule model.HostedPricingRule, usage usageSummary) i
 	return cost
 }
 
+func hostedUsageModelConfigCostMicrousd(config model.HostedModelPricingConfig, usage usageSummary) int64 {
+	var cost int64
+	cost += costByPer1M(usage.PromptTokens, config.PromptPer1MCostMicrousd)
+	cost += costByPer1M(usage.CompletionTokens, config.OutputPer1MCostMicrousd)
+	cost += costByPer1M(usage.ReasoningTokens, config.ReasoningPer1MCostMicrousd)
+	return cost
+}
+
 func firstPositiveInt64(values ...int64) int64 {
 	for _, value := range values {
 		if value > 0 {
@@ -724,6 +754,13 @@ func costByPer1K(tokens int, microusdPer1K int64) int64 {
 		return 0
 	}
 	return int64(tokens)*microusdPer1K/1000 + ceilRemainder(int64(tokens)*microusdPer1K, 1000)
+}
+
+func costByPer1M(tokens int, microusdPer1M int64) int64 {
+	if tokens <= 0 || microusdPer1M <= 0 {
+		return 0
+	}
+	return int64(tokens)*microusdPer1M/1000000 + ceilRemainder(int64(tokens)*microusdPer1M, 1000000)
 }
 
 func ceilRemainder(value, divisor int64) int64 {
@@ -785,6 +822,47 @@ func (s *Service) matchRule(ctx context.Context, modelName string) (model.Hosted
 		}
 	}
 	return model.HostedPricingRule{}, false
+}
+
+func (s *Service) matchModelConfig(ctx context.Context, rule model.HostedPricingRule, image bool) (model.HostedModelPricingConfig, bool) {
+	key := strings.TrimSpace(rule.TextModelKey)
+	kind := model.HostedModelPricingKindText
+	if image {
+		key = strings.TrimSpace(rule.ImageModelKey)
+		kind = model.HostedModelPricingKindImage
+	}
+	if key == "" {
+		return model.HostedModelPricingConfig{}, false
+	}
+	for _, config := range s.hostedModelPricingConfigs(ctx, true) {
+		if strings.TrimSpace(config.Key) == key && config.Kind == kind {
+			return config, true
+		}
+	}
+	return model.HostedModelPricingConfig{}, false
+}
+
+func (s *Service) hostedModelPricingConfigs(ctx context.Context, enabledOnly bool) []model.HostedModelPricingConfig {
+	s.mu.RLock()
+	cfgConfigs := make([]model.HostedModelPricingConfig, len(s.cfg.ModelConfigs))
+	copy(cfgConfigs, s.cfg.ModelConfigs)
+	s.mu.RUnlock()
+	configs := cfgConfigs
+	if s.store != nil {
+		if dbConfigs, err := s.store.ListHostedModelPricingConfigs(ctx, enabledOnly); err == nil && len(dbConfigs) > 0 {
+			configs = dbConfigs
+		}
+	}
+	if !enabledOnly {
+		return configs
+	}
+	out := make([]model.HostedModelPricingConfig, 0, len(configs))
+	for _, config := range configs {
+		if config.Enabled {
+			out = append(out, config)
+		}
+	}
+	return out
 }
 
 func normalizeProfile(modelName string) string {

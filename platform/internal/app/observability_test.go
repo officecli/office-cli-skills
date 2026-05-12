@@ -105,6 +105,12 @@ func (fakeAdminRouteFailureService) HostedBillingConfig(_ context.Context) (*adm
 func (fakeAdminRouteFailureService) UpdateHostedPricingSettings(_ context.Context, req admin.UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error) {
 	return &model.HostedPricingSetting{}, nil
 }
+func (fakeAdminRouteFailureService) CreateHostedModelPricingConfig(_ context.Context, req admin.UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
+	return &model.HostedModelPricingConfig{}, nil
+}
+func (fakeAdminRouteFailureService) UpdateHostedModelPricingConfig(_ context.Context, id uint64, req admin.UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
+	return &model.HostedModelPricingConfig{}, nil
+}
 func (fakeAdminRouteFailureService) CreateHostedPricingRule(_ context.Context, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
 	return &model.HostedPricingRule{}, nil
 }

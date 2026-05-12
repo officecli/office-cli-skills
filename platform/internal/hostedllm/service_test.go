@@ -25,6 +25,7 @@ type fakeAPIKeyStore struct {
 	userKeys     map[uint64]*model.UserAIGatewayAPIKey
 	settings     *model.HostedPricingSetting
 	rules        []model.HostedPricingRule
+	modelConfigs []model.HostedModelPricingConfig
 	reservations []int
 	releases     []int
 	settlements  []int
@@ -94,6 +95,17 @@ func (f *fakeAPIKeyStore) ListHostedPricingRules(_ context.Context, enabledOnly 
 			continue
 		}
 		out = append(out, rule)
+	}
+	return out, nil
+}
+
+func (f *fakeAPIKeyStore) ListHostedModelPricingConfigs(_ context.Context, enabledOnly bool) ([]model.HostedModelPricingConfig, error) {
+	var out []model.HostedModelPricingConfig
+	for _, cfg := range f.modelConfigs {
+		if enabledOnly && !cfg.Enabled {
+			continue
+		}
+		out = append(out, cfg)
 	}
 	return out, nil
 }
@@ -621,6 +633,141 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 	require.Equal(t, 100, store.events[0].UncappedChargeCredits)
 	require.Equal(t, 5, store.events[0].SettledCredits)
 	require.True(t, store.events[0].CapApplied)
+}
+
+func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
+	var upstreamPayloads []map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		upstreamPayloads = append(upstreamPayloads, payload)
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":1000,"completion_tokens":2000,"reasoning_tokens":1000}}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd"},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+		modelConfigs: []model.HostedModelPricingConfig{{
+			Key:                        "text_default",
+			Kind:                       model.HostedModelPricingKindText,
+			Provider:                   "aigateway",
+			Model:                      "gpt-shared-text",
+			PromptPer1MCostMicrousd:    1000000,
+			OutputPer1MCostMicrousd:    2000000,
+			ReasoningPer1MCostMicrousd: 3000000,
+			Enabled:                    true,
+		}},
+		rules: []model.HostedPricingRule{
+			{ID: 11, DocumentProfile: "docx-xlsx", TextModelKey: "text_default", ReservationCredits: 20, MinimumChargeCredits: 1, Enabled: true},
+			{ID: 12, DocumentProfile: "pptx-no-image", TextModelKey: "text_default", ReservationCredits: 28, MinimumChargeCredits: 1, Enabled: true},
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		APIKey:               "upstream-key",
+		HashSalt:             "salt",
+		TextModel:            "legacy-text",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	for _, requested := range []string{"hosted/docx-xlsx", "hosted/pptx-no-image"} {
+		_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+			Model:    requested,
+			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+		})
+		require.NoError(t, err)
+	}
+
+	require.Len(t, upstreamPayloads, 2)
+	require.Equal(t, "gpt-shared-text", upstreamPayloads[0]["model"])
+	require.Equal(t, "gpt-shared-text", upstreamPayloads[1]["model"])
+	require.Len(t, store.events, 2)
+	for _, event := range store.events {
+		require.Equal(t, int64(8000), event.UpstreamCostMicrousd)
+		require.Equal(t, 1, event.SettledCredits)
+	}
+}
+
+func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var upstreamPayload map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&upstreamPayload))
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}],"usage":{"prompt_tokens":3000,"completion_tokens":1000}}`, imageData)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd"},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+		modelConfigs: []model.HostedModelPricingConfig{{
+			Key:                     "image_default",
+			Kind:                    model.HostedModelPricingKindImage,
+			Provider:                "aigateway",
+			Model:                   "gpt-image-shared",
+			PromptPer1MCostMicrousd: 1000000,
+			OutputPer1MCostMicrousd: 2000000,
+			Enabled:                 true,
+		}},
+		rules: []model.HostedPricingRule{{
+			ID:                   21,
+			DocumentProfile:      "img",
+			ImageModelKey:        "image_default",
+			ImagePerAssetCredits: 99,
+			ReservationCredits:   12,
+			MinimumChargeCredits: 1,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		APIKey:               "upstream-key",
+		HashSalt:             "salt",
+		ImageModel:           "legacy-image",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "hosted/img",
+		Prompt:      "A product image",
+		AspectRatio: 1,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Equal(t, "gpt-image-shared", upstreamPayload["model"])
+	require.Len(t, store.events, 1)
+	require.Equal(t, int64(5000), store.events[0].UpstreamCostMicrousd)
+	require.Equal(t, 1, store.events[0].SettledCredits)
 }
 
 func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {

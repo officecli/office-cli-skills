@@ -640,6 +640,59 @@ func (s *Store) UpdateHostedPricingSettings(ctx context.Context, settings model.
 	return s.HostedPricingSettings(ctx)
 }
 
+func (s *Store) ListHostedModelPricingConfigs(ctx context.Context, enabledOnly bool) ([]model.HostedModelPricingConfig, error) {
+	if err := s.ensureDefaultHostedModelPricingConfigs(ctx); err != nil {
+		return nil, err
+	}
+	query := s.db.WithContext(ctx).Model(&model.HostedModelPricingConfig{})
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
+	}
+	var configs []model.HostedModelPricingConfig
+	err := query.Order("kind asc, key asc, id asc").Find(&configs).Error
+	return configs, err
+}
+
+func (s *Store) CreateHostedModelPricingConfig(ctx context.Context, config *model.HostedModelPricingConfig) error {
+	return s.db.WithContext(ctx).Create(config).Error
+}
+
+func (s *Store) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, values map[string]any) (*model.HostedModelPricingConfig, error) {
+	if err := s.db.WithContext(ctx).Model(&model.HostedModelPricingConfig{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	var config model.HostedModelPricingConfig
+	if err := s.db.WithContext(ctx).First(&config, id).Error; err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func (s *Store) ensureDefaultHostedModelPricingConfigs(ctx context.Context) error {
+	defaults := []model.HostedModelPricingConfig{
+		{
+			Key:      "text_default",
+			Kind:     model.HostedModelPricingKindText,
+			Provider: "openai",
+			Model:    "gpt-4.1",
+			Enabled:  true,
+		},
+		{
+			Key:      "image_default",
+			Kind:     model.HostedModelPricingKindImage,
+			Provider: "openai",
+			Model:    "gpt-image-2",
+			Enabled:  true,
+		},
+	}
+	for _, cfg := range defaults {
+		if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "key"}}, DoNothing: true}).Create(&cfg).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) ListHostedPricingRules(ctx context.Context, enabledOnly bool) ([]model.HostedPricingRule, error) {
 	query := s.db.WithContext(ctx).Model(&model.HostedPricingRule{})
 	if enabledOnly {

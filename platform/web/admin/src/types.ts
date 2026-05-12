@@ -118,6 +118,8 @@ export interface HostedPricingRule {
   document_profile: string
   provider: string
   model: string
+  text_model_key?: string
+  image_model_key?: string
   prompt_per_1k_cost_microusd: number
   output_per_1k_cost_microusd: number
   reasoning_per_1k_cost_microusd: number
@@ -125,6 +127,18 @@ export interface HostedPricingRule {
   reservation_credits: number
   minimum_charge_credits: number
   markup_bps?: number
+  enabled: boolean
+}
+
+export interface HostedModelPricingConfig {
+  id?: number
+  key: string
+  kind: 'text' | 'image'
+  provider: string
+  model: string
+  prompt_per_1m_cost_microusd: number
+  output_per_1m_cost_microusd: number
+  reasoning_per_1m_cost_microusd: number
   enabled: boolean
 }
 
@@ -147,6 +161,7 @@ export interface HostedCreditPack {
 
 export interface HostedBillingConfig {
   settings: HostedPricingSetting
+  model_configs: HostedModelPricingConfig[]
   rules: HostedPricingRule[]
   packs: HostedCreditPack[]
 }

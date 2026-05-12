@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedPricingRule, HostedPricingSetting, Order, Overview, QuotaSources, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -53,6 +53,8 @@ export const api = {
   hostedPricingRules: () => request<HostedPricingRule[]>('/api/admin/hosted-pricing-rules'),
   hostedBilling: () => request<HostedBillingConfig>('/api/admin/hosted-billing'),
   updateHostedPricingSettings: (payload: Partial<HostedPricingSetting>) => request<HostedPricingSetting>('/api/admin/hosted-pricing-settings', { method: 'PATCH', body: JSON.stringify(payload) }),
+  createHostedModelPricingConfig: (payload: HostedModelPricingConfig) => request<HostedModelPricingConfig>('/api/admin/hosted-model-pricing-configs', { method: 'POST', body: JSON.stringify(payload) }),
+  updateHostedModelPricingConfig: (id: number, payload: HostedModelPricingConfig) => request<HostedModelPricingConfig>(`/api/admin/hosted-model-pricing-configs/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   createHostedPricingRule: (payload: HostedPricingRule) => request<HostedPricingRule>('/api/admin/hosted-pricing-rules', { method: 'POST', body: JSON.stringify(payload) }),
   updateHostedPricingRule: (id: number, payload: HostedPricingRule) => request<HostedPricingRule>(`/api/admin/hosted-pricing-rules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   createHostedCreditPack: (payload: HostedCreditPack) => request<HostedCreditPack>('/api/admin/hosted-credit-packs', { method: 'POST', body: JSON.stringify(payload) }),

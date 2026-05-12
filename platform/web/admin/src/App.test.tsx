@@ -113,7 +113,8 @@ describe('platform admin shell', () => {
           json: async () => ({
             data: {
               settings: { id: 1, markup_bps: 3500, currency: 'usd' },
-              rules: [{ id: 9, document_profile: 'docx-xlsx', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
+              model_configs: [{ id: 4, key: 'text_default', kind: 'text', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1m_cost_microusd: 1000000, output_per_1m_cost_microusd: 2000000, reasoning_per_1m_cost_microusd: 4000000, enabled: true }],
+              rules: [{ id: 9, document_profile: 'docx-xlsx', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
               packs: [{ id: 3, code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, credit_amount: 300, enabled: true }],
             },
           }),
@@ -132,13 +133,17 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Hosted pricing controls/i })).toBeInTheDocument()
-    expect(await screen.findByText(/docx-xlsx \/ gpt-4\.1/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Model pricing/i })).toBeInTheDocument()
+    expect(await screen.findByText(/text_default \/ gpt-4\.1/i)).toBeInTheDocument()
+    expect(await screen.findByText(/docx-xlsx \/ text text_default/i)).toBeInTheDocument()
     expect(await screen.findByText(/hosted-300/i)).toBeInTheDocument()
 
+    fireEvent.click(await screen.findByRole('button', { name: /Save hosted model pricing config text_default/i }))
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted pricing rule 9/i }))
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted credit pack 3/i }))
 
     await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-model-pricing-configs/4', expect.objectContaining({ method: 'PATCH' }))
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-pricing-rules/9', expect.objectContaining({ method: 'PATCH' }))
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-credit-packs/3', expect.objectContaining({ method: 'PATCH' }))
     })

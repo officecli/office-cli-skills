@@ -518,6 +518,10 @@ func (s *Service) HostedBillingConfig(ctx context.Context) (*HostedBillingConfig
 	if err != nil {
 		return nil, err
 	}
+	modelConfigs, err := s.store.ListHostedModelPricingConfigs(ctx, false)
+	if err != nil {
+		return nil, err
+	}
 	rules, err := s.store.ListHostedPricingRules(ctx, false)
 	if err != nil {
 		return nil, err
@@ -526,7 +530,7 @@ func (s *Service) HostedBillingConfig(ctx context.Context) (*HostedBillingConfig
 	if err != nil {
 		return nil, err
 	}
-	return &HostedBillingConfig{Settings: *settings, Rules: rules, Packs: packs}, nil
+	return &HostedBillingConfig{Settings: *settings, ModelConfigs: modelConfigs, Rules: rules, Packs: packs}, nil
 }
 
 func (s *Service) UpdateHostedPricingSettings(ctx context.Context, req UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error) {
@@ -540,6 +544,35 @@ func (s *Service) UpdateHostedPricingSettings(ctx context.Context, req UpdateHos
 	}
 	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.settings.update", "hosted_pricing_settings", fmt.Sprintf("%d", settings.ID), sqlstore.JSONString(settings))
 	return settings, nil
+}
+
+func (s *Service) CreateHostedModelPricingConfig(ctx context.Context, req UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
+	config := hostedModelPricingConfigFromRequest(req)
+	if err := s.store.CreateHostedModelPricingConfig(ctx, &config); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.model_config.create", "hosted_model_pricing_config", fmt.Sprintf("%d", config.ID), sqlstore.JSONString(config))
+	return &config, nil
+}
+
+func (s *Service) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, req UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error) {
+	config := hostedModelPricingConfigFromRequest(req)
+	values := map[string]any{
+		"key":                            config.Key,
+		"kind":                           config.Kind,
+		"provider":                       config.Provider,
+		"model":                          config.Model,
+		"prompt_per_1m_cost_microusd":    config.PromptPer1MCostMicrousd,
+		"output_per_1m_cost_microusd":    config.OutputPer1MCostMicrousd,
+		"reasoning_per_1m_cost_microusd": config.ReasoningPer1MCostMicrousd,
+		"enabled":                        config.Enabled,
+	}
+	updated, err := s.store.UpdateHostedModelPricingConfig(ctx, id, values)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.model_config.update", "hosted_model_pricing_config", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	return updated, nil
 }
 
 func (s *Service) CreateHostedPricingRule(ctx context.Context, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
@@ -557,6 +590,8 @@ func (s *Service) UpdateHostedPricingRule(ctx context.Context, id uint64, req Up
 		"document_profile":               rule.DocumentProfile,
 		"provider":                       rule.Provider,
 		"model":                          rule.Model,
+		"text_model_key":                 rule.TextModelKey,
+		"image_model_key":                rule.ImageModelKey,
 		"prompt_per_1k_cost_microusd":    rule.PromptPer1KCostMicrousd,
 		"output_per_1k_cost_microusd":    rule.OutputPer1KCostMicrousd,
 		"reasoning_per_1k_cost_microusd": rule.ReasoningPer1KCostMicrousd,
@@ -602,11 +637,26 @@ func (s *Service) UpdateHostedCreditPack(ctx context.Context, id uint64, req Ups
 	return updated, nil
 }
 
+func hostedModelPricingConfigFromRequest(req UpsertHostedModelPricingConfigRequest) model.HostedModelPricingConfig {
+	return model.HostedModelPricingConfig{
+		Key:                        strings.TrimSpace(req.Key),
+		Kind:                       model.HostedModelPricingKind(strings.TrimSpace(req.Kind)),
+		Provider:                   strings.TrimSpace(req.Provider),
+		Model:                      strings.TrimSpace(req.Model),
+		PromptPer1MCostMicrousd:    req.PromptPer1MCostMicrousd,
+		OutputPer1MCostMicrousd:    req.OutputPer1MCostMicrousd,
+		ReasoningPer1MCostMicrousd: req.ReasoningPer1MCostMicrousd,
+		Enabled:                    req.Enabled,
+	}
+}
+
 func hostedPricingRuleFromRequest(req UpsertHostedPricingRuleRequest) model.HostedPricingRule {
 	return model.HostedPricingRule{
 		DocumentProfile:            strings.TrimSpace(req.DocumentProfile),
 		Provider:                   strings.TrimSpace(req.Provider),
 		Model:                      strings.TrimSpace(req.Model),
+		TextModelKey:               strings.TrimSpace(req.TextModelKey),
+		ImageModelKey:              strings.TrimSpace(req.ImageModelKey),
 		PromptPer1KCostMicrousd:    req.PromptPer1KCostMicrousd,
 		OutputPer1KCostMicrousd:    req.OutputPer1KCostMicrousd,
 		ReasoningPer1KCostMicrousd: req.ReasoningPer1KCostMicrousd,

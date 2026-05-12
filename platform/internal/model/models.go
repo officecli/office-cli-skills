@@ -355,11 +355,36 @@ type PricingPack struct {
 	PackKind     string `json:"pack_kind,omitempty"`
 }
 
+type HostedModelPricingKind string
+
+const (
+	HostedModelPricingKindText  HostedModelPricingKind = "text"
+	HostedModelPricingKindImage HostedModelPricingKind = "image"
+)
+
+type HostedModelPricingConfig struct {
+	ID                         uint64                 `gorm:"primaryKey" json:"id,omitempty"`
+	Key                        string                 `gorm:"column:key;size:64;uniqueIndex;not null" json:"key"`
+	Kind                       HostedModelPricingKind `gorm:"column:kind;size:32;index;not null" json:"kind"`
+	Provider                   string                 `gorm:"column:provider;size:64;not null" json:"provider"`
+	Model                      string                 `gorm:"column:model;size:128;not null" json:"model"`
+	PromptPer1MCostMicrousd    int64                  `gorm:"column:prompt_per_1m_cost_microusd;not null;default:0" json:"prompt_per_1m_cost_microusd"`
+	OutputPer1MCostMicrousd    int64                  `gorm:"column:output_per_1m_cost_microusd;not null;default:0" json:"output_per_1m_cost_microusd"`
+	ReasoningPer1MCostMicrousd int64                  `gorm:"column:reasoning_per_1m_cost_microusd;not null;default:0" json:"reasoning_per_1m_cost_microusd"`
+	Enabled                    bool                   `gorm:"column:enabled;not null;default:true" json:"enabled"`
+	CreatedAt                  time.Time              `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt                  time.Time              `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (HostedModelPricingConfig) TableName() string { return "hosted_model_pricing_configs" }
+
 type HostedPricingRule struct {
 	ID                         uint64    `gorm:"primaryKey" json:"id,omitempty"`
 	DocumentProfile            string    `gorm:"column:document_profile;size:64;index;not null" json:"document_profile"`
 	Provider                   string    `gorm:"column:provider;size:64;not null" json:"provider"`
 	Model                      string    `gorm:"column:model;size:128;not null" json:"model"`
+	TextModelKey               string    `gorm:"column:text_model_key;size:64;index;not null;default:''" json:"text_model_key"`
+	ImageModelKey              string    `gorm:"column:image_model_key;size:64;index;not null;default:''" json:"image_model_key"`
 	PromptPer1KCredits         int       `gorm:"-" json:"prompt_per_1k_credits,omitempty"`
 	OutputPer1KCredits         int       `gorm:"-" json:"output_per_1k_credits,omitempty"`
 	ReasoningPer1KCredits      int       `gorm:"-" json:"reasoning_per_1k_credits,omitempty"`

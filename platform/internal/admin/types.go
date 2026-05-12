@@ -82,10 +82,23 @@ type UpdateHostedPricingSettingsRequest struct {
 	Currency  string `json:"currency,omitempty"`
 }
 
+type UpsertHostedModelPricingConfigRequest struct {
+	Key                        string `json:"key"`
+	Kind                       string `json:"kind"`
+	Provider                   string `json:"provider"`
+	Model                      string `json:"model"`
+	PromptPer1MCostMicrousd    int64  `json:"prompt_per_1m_cost_microusd"`
+	OutputPer1MCostMicrousd    int64  `json:"output_per_1m_cost_microusd"`
+	ReasoningPer1MCostMicrousd int64  `json:"reasoning_per_1m_cost_microusd"`
+	Enabled                    bool   `json:"enabled"`
+}
+
 type UpsertHostedPricingRuleRequest struct {
 	DocumentProfile            string `json:"document_profile"`
 	Provider                   string `json:"provider"`
 	Model                      string `json:"model"`
+	TextModelKey               string `json:"text_model_key"`
+	ImageModelKey              string `json:"image_model_key"`
 	PromptPer1KCostMicrousd    int64  `json:"prompt_per_1k_cost_microusd"`
 	OutputPer1KCostMicrousd    int64  `json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64  `json:"reasoning_per_1k_cost_microusd"`
@@ -107,9 +120,10 @@ type UpsertHostedCreditPackRequest struct {
 }
 
 type HostedBillingConfig struct {
-	Settings model.HostedPricingSetting `json:"settings"`
-	Rules    []model.HostedPricingRule  `json:"rules"`
-	Packs    []model.HostedCreditPack   `json:"packs"`
+	Settings     model.HostedPricingSetting       `json:"settings"`
+	ModelConfigs []model.HostedModelPricingConfig `json:"model_configs"`
+	Rules        []model.HostedPricingRule        `json:"rules"`
+	Packs        []model.HostedCreditPack         `json:"packs"`
 }
 
 type CreateAPIKeyResponse struct {

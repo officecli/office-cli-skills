@@ -2,12 +2,14 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatNumber } from '../components/ui'
-import type { HostedCreditPack, HostedPricingRule } from '../types'
+import type { HostedCreditPack, HostedModelPricingConfig, HostedPricingRule } from '../types'
 
 const blankRule: HostedPricingRule = {
   document_profile: 'docx-xlsx',
   provider: 'aigateway',
-  model: 'gpt-4.1',
+  model: '',
+  text_model_key: 'text_default',
+  image_model_key: '',
   prompt_per_1k_cost_microusd: 0,
   output_per_1k_cost_microusd: 0,
   reasoning_per_1k_cost_microusd: 0,
@@ -27,6 +29,29 @@ const blankPack: HostedCreditPack = {
   enabled: true,
 }
 
+const defaultModelConfigs: HostedModelPricingConfig[] = [
+  {
+    key: 'text_default',
+    kind: 'text',
+    provider: 'openai',
+    model: 'gpt-4.1',
+    prompt_per_1m_cost_microusd: 0,
+    output_per_1m_cost_microusd: 0,
+    reasoning_per_1m_cost_microusd: 0,
+    enabled: true,
+  },
+  {
+    key: 'image_default',
+    kind: 'image',
+    provider: 'openai',
+    model: 'gpt-image-2',
+    prompt_per_1m_cost_microusd: 0,
+    output_per_1m_cost_microusd: 0,
+    reasoning_per_1m_cost_microusd: 0,
+    enabled: true,
+  },
+]
+
 export default function HostedPricingRulesPage() {
   const queryClient = useQueryClient()
   const { data } = useQuery({ queryKey: ['admin-hosted-billing'], queryFn: api.hostedBilling })
@@ -34,9 +59,16 @@ export default function HostedPricingRulesPage() {
   const [ruleDraft, setRuleDraft] = useState<HostedPricingRule>(blankRule)
   const [packDraft, setPackDraft] = useState<HostedCreditPack>(blankPack)
 
+  const modelConfigs = useMemo(() => {
+    const byKey = new Map((data?.model_configs ?? []).map((config) => [config.key, config]))
+    return defaultModelConfigs.map((config) => byKey.get(config.key) ?? config)
+  }, [data?.model_configs])
+
   const settingsMarkup = useMemo(() => markupBPS || String(data?.settings.markup_bps ?? 3000), [data?.settings.markup_bps, markupBPS])
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-hosted-billing'] })
   const updateSettings = useMutation({ mutationFn: api.updateHostedPricingSettings, onSuccess: invalidate })
+  const createModelConfig = useMutation({ mutationFn: api.createHostedModelPricingConfig, onSuccess: invalidate })
+  const updateModelConfig = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedModelPricingConfig }) => api.updateHostedModelPricingConfig(id, payload), onSuccess: invalidate })
   const createRule = useMutation({ mutationFn: api.createHostedPricingRule, onSuccess: async () => { setRuleDraft(blankRule); await invalidate() } })
   const updateRule = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedPricingRule }) => api.updateHostedPricingRule(id, payload), onSuccess: invalidate })
   const createPack = useMutation({ mutationFn: api.createHostedCreditPack, onSuccess: async () => { setPackDraft(blankPack); await invalidate() } })
@@ -58,19 +90,28 @@ export default function HostedPricingRulesPage() {
       </Panel>
 
       <Panel>
-        <SectionHeading eyebrow="Aigateway cost" title="Pricing rules" body="Each rule snapshots the upstream cost and effective markup onto hosted usage records." />
+        <SectionHeading eyebrow="Aigateway cost" title="Model pricing" body="Configure shared text and image model costs once, then reference them from hosted profiles." />
+        <div className="space-y-3">
+          {modelConfigs.map((config) => (
+            <ModelConfigRow
+              key={config.key}
+              config={config}
+              onSave={(payload) => config.id ? updateModelConfig.mutate({ id: config.id, payload }) : createModelConfig.mutate(payload)}
+            />
+          ))}
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Hosted profiles" title="Pricing rules" body="Profiles choose shared model pricing and keep only reservation, minimum charge, and markup policy." />
         <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           createRule.mutate(normalizeRule(ruleDraft))
         }}>
           <TextField label="Profile" value={ruleDraft.document_profile} onChange={(value) => setRuleDraft({ ...ruleDraft, document_profile: value })} />
-          <TextField label="Provider" value={ruleDraft.provider} onChange={(value) => setRuleDraft({ ...ruleDraft, provider: value })} />
-          <TextField label="Model" value={ruleDraft.model} onChange={(value) => setRuleDraft({ ...ruleDraft, model: value })} />
+          <TextField label="Text model key" value={ruleDraft.text_model_key ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
+          <TextField label="Image model key" value={ruleDraft.image_model_key ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
           <NumberField label="Markup BPS override" value={ruleDraft.markup_bps ?? ''} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : Number(value) })} />
-          <NumberField label="Prompt / 1K microUSD" value={ruleDraft.prompt_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, prompt_per_1k_cost_microusd: Number(value) })} />
-          <NumberField label="Output / 1K microUSD" value={ruleDraft.output_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, output_per_1k_cost_microusd: Number(value) })} />
-          <NumberField label="Reasoning / 1K microUSD" value={ruleDraft.reasoning_per_1k_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, reasoning_per_1k_cost_microusd: Number(value) })} />
-          <NumberField label="Image microUSD" value={ruleDraft.image_per_asset_cost_microusd} onChange={(value) => setRuleDraft({ ...ruleDraft, image_per_asset_cost_microusd: Number(value) })} />
           <NumberField label="Reservation credits" value={ruleDraft.reservation_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, reservation_credits: Number(value) })} />
           <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
           <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
@@ -122,6 +163,34 @@ export default function HostedPricingRulesPage() {
   )
 }
 
+function ModelConfigRow({ config, onSave }: { config: HostedModelPricingConfig; onSave: (payload: HostedModelPricingConfig) => void }) {
+  const [draft, setDraft] = useState(config)
+
+  useEffect(() => {
+    setDraft(config)
+  }, [config])
+
+  return (
+    <div className="panel-muted grid gap-4 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 text-white">{config.key} / {config.model}<StatusPill value={config.enabled ? 'active' : 'disabled'} /></div>
+          <div className="mt-1 text-sm text-outline">{config.kind} model; prompt {formatNumber(config.prompt_per_1m_cost_microusd)} / output {formatNumber(config.output_per_1m_cost_microusd)} / reasoning {formatNumber(config.reasoning_per_1m_cost_microusd)} microUSD per 1M tokens</div>
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-4">
+        <TextField label={`Provider ${config.key}`} value={draft.provider} onChange={(value) => setDraft({ ...draft, provider: value })} />
+        <TextField label={`Model ${config.key}`} value={draft.model} onChange={(value) => setDraft({ ...draft, model: value })} />
+        <NumberField label={`Prompt per 1M ${config.key}`} value={draft.prompt_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, prompt_per_1m_cost_microusd: Number(value) })} />
+        <NumberField label={`Output per 1M ${config.key}`} value={draft.output_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, output_per_1m_cost_microusd: Number(value) })} />
+        <NumberField label={`Reasoning per 1M ${config.key}`} value={draft.reasoning_per_1m_cost_microusd} onChange={(value) => setDraft({ ...draft, reasoning_per_1m_cost_microusd: Number(value) })} />
+        <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
+        <button type="button" className="tonal-button self-end" aria-label={`Save hosted model pricing config ${config.key}`} onClick={() => onSave(normalizeModelConfig(draft))}>Save model</button>
+      </div>
+    </div>
+  )
+}
+
 function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: (payload: HostedPricingRule) => void; onToggle: () => void }) {
   const [draft, setDraft] = useState(rule)
 
@@ -133,20 +202,16 @@ function RuleRow({ rule, onSave, onToggle }: { rule: HostedPricingRule; onSave: 
     <div className="panel-muted grid gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 text-white">{rule.document_profile} / {rule.model}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
-          <div className="mt-1 text-sm text-outline">Prompt {rule.prompt_per_1k_cost_microusd} / output {rule.output_per_1k_cost_microusd} / image {rule.image_per_asset_cost_microusd} microUSD; markup {rule.markup_bps ?? 'global'} bps</div>
+          <div className="flex items-center gap-3 text-white">{rule.document_profile} / text {rule.text_model_key || '-'} / image {rule.image_model_key || '-'}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
+          <div className="mt-1 text-sm text-outline">Reservation {rule.reservation_credits}; minimum {rule.minimum_charge_credits}; markup {rule.markup_bps ?? 'global'} bps</div>
         </div>
         <button type="button" className="ghost-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <TextField label={`Profile ${rule.id ?? rule.document_profile}`} value={draft.document_profile} onChange={(value) => setDraft({ ...draft, document_profile: value })} />
-        <TextField label={`Provider ${rule.id ?? rule.document_profile}`} value={draft.provider} onChange={(value) => setDraft({ ...draft, provider: value })} />
-        <TextField label={`Model ${rule.id ?? rule.document_profile}`} value={draft.model} onChange={(value) => setDraft({ ...draft, model: value })} />
+        <TextField label={`Text model key ${rule.id ?? rule.document_profile}`} value={draft.text_model_key ?? ''} onChange={(value) => setDraft({ ...draft, text_model_key: value })} />
+        <TextField label={`Image model key ${rule.id ?? rule.document_profile}`} value={draft.image_model_key ?? ''} onChange={(value) => setDraft({ ...draft, image_model_key: value })} />
         <NumberField label={`Markup override ${rule.id ?? rule.document_profile}`} value={draft.markup_bps ?? ''} onChange={(value) => setDraft({ ...draft, markup_bps: value === '' ? undefined : Number(value) })} />
-        <NumberField label={`Prompt microUSD ${rule.id ?? rule.document_profile}`} value={draft.prompt_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, prompt_per_1k_cost_microusd: Number(value) })} />
-        <NumberField label={`Output microUSD ${rule.id ?? rule.document_profile}`} value={draft.output_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, output_per_1k_cost_microusd: Number(value) })} />
-        <NumberField label={`Reasoning microUSD ${rule.id ?? rule.document_profile}`} value={draft.reasoning_per_1k_cost_microusd} onChange={(value) => setDraft({ ...draft, reasoning_per_1k_cost_microusd: Number(value) })} />
-        <NumberField label={`Image microUSD ${rule.id ?? rule.document_profile}`} value={draft.image_per_asset_cost_microusd} onChange={(value) => setDraft({ ...draft, image_per_asset_cost_microusd: Number(value) })} />
         <NumberField label={`Reservation ${rule.id ?? rule.document_profile}`} value={draft.reservation_credits} onChange={(value) => setDraft({ ...draft, reservation_credits: Number(value) })} />
         <NumberField label={`Minimum ${rule.id ?? rule.document_profile}`} value={draft.minimum_charge_credits} onChange={(value) => setDraft({ ...draft, minimum_charge_credits: Number(value) })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
@@ -194,8 +259,24 @@ function NumberField({ label, value, onChange }: { label: string; value: number 
   return <label className="text-sm text-outline">{label}<input type="number" className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
+function normalizeModelConfig(config: HostedModelPricingConfig): HostedModelPricingConfig {
+  return {
+    ...config,
+    prompt_per_1m_cost_microusd: Number(config.prompt_per_1m_cost_microusd),
+    output_per_1m_cost_microusd: Number(config.output_per_1m_cost_microusd),
+    reasoning_per_1m_cost_microusd: Number(config.reasoning_per_1m_cost_microusd),
+  }
+}
+
 function normalizeRule(rule: HostedPricingRule): HostedPricingRule {
-  return { ...rule, markup_bps: rule.markup_bps === undefined ? undefined : Number(rule.markup_bps) }
+  return {
+    ...rule,
+    provider: rule.provider || '',
+    model: rule.model || '',
+    text_model_key: rule.text_model_key || '',
+    image_model_key: rule.image_model_key || '',
+    markup_bps: rule.markup_bps === undefined ? undefined : Number(rule.markup_bps),
+  }
 }
 
 function normalizePack(pack: HostedCreditPack): HostedCreditPack {

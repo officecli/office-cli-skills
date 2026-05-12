@@ -88,6 +88,8 @@ type adminRouteService interface {
 	HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error)
 	HostedBillingConfig(ctx context.Context) (*admin.HostedBillingConfig, error)
 	UpdateHostedPricingSettings(ctx context.Context, req admin.UpdateHostedPricingSettingsRequest) (*model.HostedPricingSetting, error)
+	CreateHostedModelPricingConfig(ctx context.Context, req admin.UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error)
+	UpdateHostedModelPricingConfig(ctx context.Context, id uint64, req admin.UpsertHostedModelPricingConfigRequest) (*model.HostedModelPricingConfig, error)
 	CreateHostedPricingRule(ctx context.Context, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error)
 	UpdateHostedPricingRule(ctx context.Context, id uint64, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error)
 	CreateHostedCreditPack(ctx context.Context, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error)
@@ -175,6 +177,7 @@ func New() (*Application, error) {
 		ImageModel:             cfg.HostedLLMImageModel,
 		Provider:               cfg.HostedLLMProvider,
 		HashSalt:               cfg.APIKeyHashSalt,
+		ModelConfigs:           cfg.HostedModelPricingConfigs,
 		Rules:                  cfg.HostedPricingRules,
 		TimeoutSec:             cfg.HostedLLMTimeoutSec,
 		AIGatewayAdminBaseURL:  cfg.AIGatewayAdminBaseURL,
@@ -832,6 +835,33 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 			return
 		}
 		data, err := adminSvc.UpdateHostedPricingSettings(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/hosted-model-pricing-configs", func(c *gin.Context) {
+		var req admin.UpsertHostedModelPricingConfigRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateHostedModelPricingConfig(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/hosted-model-pricing-configs/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var req admin.UpsertHostedModelPricingConfigRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateHostedModelPricingConfig(c.Request.Context(), id, req)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return

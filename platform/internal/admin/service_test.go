@@ -171,6 +171,7 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&model.HostedPricingSetting{},
+		&model.HostedModelPricingConfig{},
 		&model.HostedPricingRule{},
 		&model.HostedCreditPack{},
 		&model.AdminAuditLog{},
@@ -184,10 +185,24 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.Equal(t, "usd", settings.Currency)
 
 	override := 5000
+	modelConfig, err := svc.CreateHostedModelPricingConfig(context.Background(), UpsertHostedModelPricingConfigRequest{
+		Key:                        "text_default",
+		Kind:                       string(model.HostedModelPricingKindText),
+		Provider:                   "aigateway",
+		Model:                      "gpt-shared-text",
+		PromptPer1MCostMicrousd:    1000000,
+		OutputPer1MCostMicrousd:    2000000,
+		ReasoningPer1MCostMicrousd: 3000000,
+		Enabled:                    true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "text_default", modelConfig.Key)
+
 	rule, err := svc.CreateHostedPricingRule(context.Background(), UpsertHostedPricingRuleRequest{
 		DocumentProfile:            "docx-xlsx",
 		Provider:                   "aigateway",
 		Model:                      "gpt-test",
+		TextModelKey:               "text_default",
 		PromptPer1KCostMicrousd:    10000,
 		OutputPer1KCostMicrousd:    20000,
 		ReasoningPer1KCostMicrousd: 40000,
@@ -201,6 +216,20 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.Equal(t, uint64(1), rule.ID)
 	require.NotNil(t, rule.MarkupBPS)
 	require.Equal(t, 5000, *rule.MarkupBPS)
+	require.Equal(t, "text_default", rule.TextModelKey)
+
+	updatedModelConfig, err := svc.UpdateHostedModelPricingConfig(context.Background(), modelConfig.ID, UpsertHostedModelPricingConfigRequest{
+		Key:                        "text_default",
+		Kind:                       string(model.HostedModelPricingKindText),
+		Provider:                   "aigateway",
+		Model:                      "gpt-shared-text-2",
+		PromptPer1MCostMicrousd:    1100000,
+		OutputPer1MCostMicrousd:    2100000,
+		ReasoningPer1MCostMicrousd: 3100000,
+		Enabled:                    true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "gpt-shared-text-2", updatedModelConfig.Model)
 
 	pack, err := svc.CreateHostedCreditPack(context.Background(), UpsertHostedCreditPackRequest{
 		Code:         "hosted-300",
@@ -217,13 +246,16 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	payload, err := svc.HostedBillingConfig(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, 3500, payload.Settings.MarkupBPS)
+	require.Len(t, payload.ModelConfigs, 2)
+	require.Equal(t, "image_default", payload.ModelConfigs[0].Key)
+	require.Equal(t, "text_default", payload.ModelConfigs[1].Key)
 	require.Len(t, payload.Rules, 1)
 	require.Len(t, payload.Packs, 1)
 	require.True(t, payload.Packs[0].Enabled)
 
 	var auditCount int64
 	require.NoError(t, db.Model(&model.AdminAuditLog{}).Count(&auditCount).Error)
-	require.Equal(t, int64(3), auditCount)
+	require.Equal(t, int64(5), auditCount)
 }
 
 func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {

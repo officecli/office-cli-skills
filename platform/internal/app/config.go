@@ -69,6 +69,7 @@ type Config struct {
 	PublishRateLimitPerMinute    int
 	PublishMaxFileBytes          int64
 	PublishDefaultExpireSeconds  int
+	HostedModelPricingConfigs    []model.HostedModelPricingConfig
 	HostedPricingRules           []model.HostedPricingRule
 	AdminGoogleRedirectURL       string
 	AdminGoogleAllowlist         []string
@@ -147,6 +148,7 @@ func LoadConfig() (Config, error) {
 		ExternalUnitPriceCents:       mustEnvInt64("EXTERNAL_UNIT_PRICE_CENTS", 5),
 		External500PriceRatio:        mustEnvDefault("EXTERNAL_500_PRICE_RATIO", "449/495"),
 	}
+	cfg.HostedModelPricingConfigs = defaultHostedModelPricingConfigs(cfg.HostedLLMProvider, cfg.HostedLLMTextModel, cfg.HostedLLMImageModel)
 	cfg.AdminLoginRateLimitPerMinute = mustEnvInt("ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", cfg.AdminLoginRateLimitPerMinute)
 	cfg.LicenseRateLimitPerMinute = mustEnvInt("LICENSE_RATE_LIMIT_PER_MINUTE", cfg.LicenseRateLimitPerMinute)
 	cfg.RateLimitVisitorTTL = mustEnvDuration("RATE_LIMIT_VISITOR_TTL", cfg.RateLimitVisitorTTL)
@@ -303,6 +305,25 @@ func applyPriceRatio(amountCents int64, ratio *big.Rat) int64 {
 	return quotient.Int64()
 }
 
+func defaultHostedModelPricingConfigs(provider, textModel, imageModel string) []model.HostedModelPricingConfig {
+	return []model.HostedModelPricingConfig{
+		{
+			Key:      "text_default",
+			Kind:     model.HostedModelPricingKindText,
+			Provider: strings.TrimSpace(provider),
+			Model:    strings.TrimSpace(textModel),
+			Enabled:  true,
+		},
+		{
+			Key:      "image_default",
+			Kind:     model.HostedModelPricingKindImage,
+			Provider: strings.TrimSpace(provider),
+			Model:    strings.TrimSpace(imageModel),
+			Enabled:  true,
+		},
+	}
+}
+
 func defaultHostedPricingRules() []model.HostedPricingRule {
 	raw := strings.TrimSpace(os.Getenv("HOSTED_PRICING_RULES_JSON"))
 	if raw != "" {
@@ -316,6 +337,7 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			DocumentProfile:       "docx-xlsx",
 			Provider:              "openai",
 			Model:                 "gpt-4.1",
+			TextModelKey:          "text_default",
 			PromptPer1KCredits:    1,
 			OutputPer1KCredits:    2,
 			ReasoningPer1KCredits: 2,
@@ -327,6 +349,7 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			DocumentProfile:       "pptx-no-image",
 			Provider:              "openai",
 			Model:                 "gpt-4.1",
+			TextModelKey:          "text_default",
 			PromptPer1KCredits:    2,
 			OutputPer1KCredits:    3,
 			ReasoningPer1KCredits: 3,
@@ -338,6 +361,7 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			DocumentProfile:      "img",
 			Provider:             "openai",
 			Model:                "gpt-image-2",
+			ImageModelKey:        "image_default",
 			ImagePerAssetCredits: 1,
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
@@ -346,6 +370,8 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			DocumentProfile:       "pptx-with-image",
 			Provider:              "openai",
 			Model:                 "gpt-4.1",
+			TextModelKey:          "text_default",
+			ImageModelKey:         "image_default",
 			PromptPer1KCredits:    2,
 			OutputPer1KCredits:    4,
 			ReasoningPer1KCredits: 4,
