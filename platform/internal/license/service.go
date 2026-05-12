@@ -114,6 +114,9 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 			SelectedRuntimeMode: "hosted",
 		}, nil
 	}
+	if isExternalRuntime(req.RuntimeMode) {
+		return s.checkExternalFree(ctx, req)
+	}
 	if strings.TrimSpace(req.APIKey) != "" {
 		return s.checkPaid(ctx, req)
 	}
@@ -267,6 +270,29 @@ func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckRespon
 	return response, nil
 }
 
+func (s *Service) checkExternalFree(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
+	response := &CheckResponse{
+		Allowed:             true,
+		AccessMode:          model.AccessModeFree,
+		AllowedModes:        []string{"external"},
+		SelectedRuntimeMode: "external",
+		Message:             "External mode is free with unlimited generations.",
+	}
+	var err error
+	response.CommitToken, err = s.issueCommitToken(req, model.AccessModeFree, "")
+	if err != nil {
+		return nil, err
+	}
+	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeFree, response, nil)); err != nil {
+		return nil, err
+	}
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, nil, response.RewardRemaining)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (s *Service) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
 	if strings.TrimSpace(req.FingerprintHash) == "" {
 		return nil, ErrFingerprintRequired
@@ -322,6 +348,9 @@ func (s *Service) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResp
 	case model.AccessModeFree:
 		fallthrough
 	default:
+		if isExternalRuntime(commitTokenRuntimeMode(req.CommitToken)) {
+			return s.consumeExternalFree(ctx, req)
+		}
 		return s.consumeFree(ctx, req)
 	}
 }
@@ -366,6 +395,13 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 		}
 		return resp, nil
 	default:
+		if existing.RuntimeMode != nil && isExternalRuntime(*existing.RuntimeMode) {
+			resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
+			if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
+				return nil, err
+			}
+			return resp, nil
+		}
 		usageDate := s.currentUsageDate()
 		if !existing.CreatedAt.IsZero() {
 			usageDate = existing.CreatedAt.UTC().Format("2006-01-02")
@@ -389,6 +425,36 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 		}
 		return resp, nil
 	}
+}
+
+func (s *Service) consumeExternalFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
+	documentType := consumeDocumentType(req)
+	requestID := req.RequestID
+	runtimeMode := commitTokenRuntimeMode(req.CommitToken)
+	event := &model.UsageEvent{
+		RequestID:       &requestID,
+		FingerprintHash: req.FingerprintHash,
+		Mode:            model.UsageModeFree,
+		Action:          model.UsageActionGenerate,
+		Result:          model.UsageResultAllowed,
+		Charged:         true,
+		BilledUnits:     0,
+		UnitType:        unitTypeForDocumentType(documentType),
+		DocumentType:    optionalString(documentType),
+		RuntimeMode:     optionalString(runtimeMode),
+		UserID:          optionalUserID(req.UserID),
+	}
+	if err := s.usage.Create(ctx, event); err != nil {
+		return nil, err
+	}
+	if err := s.activateReferralOnSuccess(ctx, req.UserID); err != nil {
+		return nil, err
+	}
+	resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
+	if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
@@ -703,6 +769,17 @@ func consumeDocumentType(req ConsumeRequest) string {
 		return req.CommitToken.DocumentType
 	}
 	return ""
+}
+
+func commitTokenRuntimeMode(token *CommitToken) string {
+	if token == nil {
+		return ""
+	}
+	return strings.TrimSpace(token.RuntimeMode)
+}
+
+func isExternalRuntime(runtimeMode string) bool {
+	return strings.EqualFold(strings.TrimSpace(runtimeMode), "external")
 }
 
 func hashAPIKey(apiKey, salt string) string {

@@ -312,6 +312,78 @@ func TestCheckBlocksWhenFreeQuotaExhausted(t *testing.T) {
 	require.Equal(t, "free_quota_exhausted", resp.ReasonCode)
 }
 
+func TestExternalCheckAllowsUnlimitedWhenFreeQuotaExhausted(t *testing.T) {
+	usageDate := time.Now().UTC().Format("2006-01-02")
+	quotas := newFakeFreeQuotaStore()
+	quotas.quotas["fp-external|"+usageDate+"|document"] = &model.DailyFreeQuota{
+		FingerprintHash: "fp-external",
+		UsageDate:       usageDate,
+		DocumentType:    "document",
+		DailyLimit:      1,
+		DailyUsed:       1,
+	}
+	usage := newFakeUsageStore()
+	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+
+	req := testCheckRequest("fp-external", "generate")
+	req.RuntimeMode = "external"
+	resp, err := svc.Check(context.Background(), req)
+
+	require.NoError(t, err)
+	require.True(t, resp.Allowed)
+	require.Equal(t, model.AccessModeFree, resp.AccessMode)
+	require.Equal(t, "External mode is free with unlimited generations.", resp.Message)
+	require.NotNil(t, resp.CommitToken)
+	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
+}
+
+func TestExternalConsumeDoesNotDecrementFreeOrPaidQuota(t *testing.T) {
+	usageDate := time.Now().UTC().Format("2006-01-02")
+	quotaTotal := 1
+	quotas := newFakeFreeQuotaStore()
+	quotas.quotas["fp-external-consume|"+usageDate+"|document"] = &model.DailyFreeQuota{
+		FingerprintHash: "fp-external-consume",
+		UsageDate:       usageDate,
+		DocumentType:    "document",
+		DailyLimit:      1,
+		DailyUsed:       1,
+	}
+	keys := &fakeAPIKeyStore{key: &model.APIKey{
+		ID:           7,
+		Status:       model.APIKeyStatusActive,
+		AllowedModes: "external_only",
+		QuotaTotal:   &quotaTotal,
+		QuotaUsed:    1,
+	}}
+	usage := newFakeUsageStore()
+	svc := NewService(keys, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	checkReq := testCheckRequest("fp-external-consume", "generate")
+	checkReq.APIKey = "paid-key"
+	checkReq.RuntimeMode = "external"
+	resp, err := svc.Check(context.Background(), checkReq)
+	require.NoError(t, err)
+	require.True(t, resp.Allowed)
+	require.Equal(t, model.AccessModeFree, resp.AccessMode)
+
+	consume, err := svc.Consume(context.Background(), ConsumeRequest{
+		FingerprintHash: resp.CommitToken.FingerprintHash,
+		RequestID:       resp.CommitToken.RequestID,
+		UsageType:       string(model.UsageActionGenerate),
+		AccessMode:      resp.CommitToken.AccessMode,
+		APIKey:          "paid-key",
+		CommitToken:     resp.CommitToken,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, model.AccessModeFree, consume.AccessMode)
+	require.Equal(t, 0, consume.Remaining)
+	require.Equal(t, 1, quotas.quotas["fp-external-consume|"+usageDate+"|document"].DailyUsed)
+	require.Equal(t, 1, keys.key.QuotaUsed)
+	require.Len(t, usage.events, 2)
+	require.True(t, usage.events[1].Charged)
+	require.Equal(t, 0, usage.events[1].BilledUnits)
+}
+
 func TestCheckPaidKeyStatuses(t *testing.T) {
 	now := time.Now().UTC()
 	quota10 := 10

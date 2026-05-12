@@ -28,7 +28,7 @@ var (
 
 const (
 	MaxReferralsPerInviter       = 5
-	InviteActivationRewardAmount = 10
+	InviteActivationRewardAmount = 20
 )
 
 type UserStore interface {
@@ -56,12 +56,18 @@ type RewardGrantStore interface {
 	SaveRewardGrant(ctx context.Context, grant *model.RewardGrant) error
 }
 
+type HostedCreditStore interface {
+	FindAPIKeysByOwner(ctx context.Context, userID uint64) ([]model.APIKey, error)
+	GrantHostedCreditsToAPIKey(ctx context.Context, apiKeyID, userID uint64, source model.HostedCreditGrantSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.HostedCreditGrant, bool, error)
+}
+
 type Service struct {
-	users     UserStore
-	referrals ReferralStore
-	discord   DiscordStore
-	grants    RewardGrantStore
-	clock     func() time.Time
+	users         UserStore
+	referrals     ReferralStore
+	discord       DiscordStore
+	grants        RewardGrantStore
+	hostedCredits HostedCreditStore
+	clock         func() time.Time
 }
 
 type RewardGrantResult struct {
@@ -69,13 +75,18 @@ type RewardGrantResult struct {
 	Created bool
 }
 
-func NewService(users UserStore, referrals ReferralStore, discord DiscordStore, grants RewardGrantStore) *Service {
+func NewService(users UserStore, referrals ReferralStore, discord DiscordStore, grants RewardGrantStore, hostedCredits ...HostedCreditStore) *Service {
+	var hostedStore HostedCreditStore
+	if len(hostedCredits) > 0 {
+		hostedStore = hostedCredits[0]
+	}
 	return &Service{
-		users:     users,
-		referrals: referrals,
-		discord:   discord,
-		grants:    grants,
-		clock:     time.Now,
+		users:         users,
+		referrals:     referrals,
+		discord:       discord,
+		grants:        grants,
+		hostedCredits: hostedStore,
+		clock:         time.Now,
 	}
 }
 
@@ -145,6 +156,19 @@ func (s *Service) ActivateReferral(ctx context.Context, invitedUserID uint64, re
 	}
 
 	idempotencyKey := fmt.Sprintf("invite-activation:%d", invitedUserID)
+	if s.hostedCredits != nil {
+		created, err := s.grantHostedInviteCredits(ctx, referral, idempotencyKey, rewardAmount)
+		if err != nil {
+			return nil, err
+		}
+		if referral.RewardGrantedAt == nil {
+			referral.RewardGrantedAt = &now
+			if err := s.referrals.SaveReferral(ctx, referral); err != nil {
+				return nil, err
+			}
+		}
+		return &RewardGrantResult{Created: created}, nil
+	}
 	if existing, err := s.grants.FindRewardGrantByIdempotencyKey(ctx, idempotencyKey); err != nil {
 		return nil, err
 	} else if existing != nil {
@@ -188,6 +212,43 @@ func (s *Service) ActivateReferral(ctx context.Context, invitedUserID uint64, re
 		return nil, err
 	}
 	return &RewardGrantResult{Grant: grant, Created: true}, nil
+}
+
+func (s *Service) grantHostedInviteCredits(ctx context.Context, referral *model.UserReferral, idempotencyKey string, rewardAmount int) (bool, error) {
+	keys, err := s.hostedCredits.FindAPIKeysByOwner(ctx, referral.InviterUserID)
+	if err != nil {
+		return false, err
+	}
+	var targetID uint64
+	for _, key := range keys {
+		if key.Status == model.APIKeyStatusActive {
+			targetID = key.ID
+			break
+		}
+	}
+	if targetID == 0 {
+		return false, fmt.Errorf("inviter has no active api key for hosted credit reward")
+	}
+	metadata, err := marshalMetadata(map[string]any{
+		"invite_code":      referral.InviteCode,
+		"inviter_user_id":  referral.InviterUserID,
+		"invited_user_id":  referral.InvitedUserID,
+		"activation_event": "first_successful_generation",
+	})
+	if err != nil {
+		return false, err
+	}
+	_, created, err := s.hostedCredits.GrantHostedCreditsToAPIKey(
+		ctx,
+		targetID,
+		referral.InviterUserID,
+		model.HostedCreditGrantSourceInviteActivation,
+		idempotencyKey,
+		rewardAmount,
+		"invite activation hosted credits",
+		metadata,
+	)
+	return created, err
 }
 
 func (s *Service) ConnectDiscord(ctx context.Context, userID uint64, discordUserID, username string, guildMember bool) (*model.DiscordConnection, error) {

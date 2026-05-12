@@ -27,6 +27,8 @@ type Store interface {
 	FindDiscordConnectionByUserID(ctx context.Context, userID uint64) (*model.DiscordConnection, error)
 	CreateAuditLog(ctx context.Context, action, targetType, targetID string, payload string) error
 	AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix, ciphertext string) (*model.APIKey, error)
+	FindHostedCreditGrantByIdempotencyKey(ctx context.Context, key string) (*model.HostedCreditGrant, error)
+	GrantHostedCreditsToAPIKey(ctx context.Context, apiKeyID, userID uint64, source model.HostedCreditGrantSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.HostedCreditGrant, bool, error)
 	UpdateAPIKey(ctx context.Context, id uint64, values map[string]any) error
 	IsAPIKeyOwnedByUser(ctx context.Context, apiKeyID, userID uint64) (bool, error)
 }
@@ -42,10 +44,13 @@ type GrowthManager interface {
 }
 
 const DiscordGuildVerificationBlockedReason = "discord guild verification is not configured in this build yet"
+const SignupHostedCreditBonus = 30
 
 type Overview struct {
 	APIKeyCount            int64               `json:"api_key_count"`
 	TotalRemaining         int                 `json:"total_remaining"`
+	HostedCreditBalance    int                 `json:"hosted_credit_balance"`
+	SignupCreditBonus      int                 `json:"signup_credit_bonus"`
 	RewardRemaining        int                 `json:"reward_remaining"`
 	InviteCode             string              `json:"invite_code,omitempty"`
 	InviteLimit            int                 `json:"invite_limit"`
@@ -213,6 +218,9 @@ func NewService(store Store, billing Billing, salt string, apiKeyCipher *apikey.
 }
 
 func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error) {
+	if err := s.ensureSignupHostedCredits(ctx, userID); err != nil {
+		return nil, err
+	}
 	count, err := s.store.CountUserAPIKeys(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -246,8 +254,10 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 		return nil, err
 	}
 	remaining := 0
+	hostedCredits := 0
 	for _, key := range keys {
 		remaining += key.PaidQuotaRemaining()
+		hostedCredits += key.AvailableCredits()
 	}
 	visibleUsage := visibleUsageEvents(usage)
 	visibleOrders := visibleOrders(orders)
@@ -269,6 +279,8 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 	return &Overview{
 		APIKeyCount:            count,
 		TotalRemaining:         remaining,
+		HostedCreditBalance:    hostedCredits,
+		SignupCreditBonus:      SignupHostedCreditBonus,
 		RewardRemaining:        rewardRemaining,
 		InviteCode:             inviteCode,
 		InviteLimit:            growthsvc.MaxReferralsPerInviter,
@@ -297,6 +309,26 @@ func (s *Service) ListAPIKeys(ctx context.Context, userID uint64) ([]APIKeyView,
 }
 
 func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
+	resp, err := s.createAPIKeyWithoutSignupGrant(ctx, userID, req)
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := s.grantSignupHostedCreditsToKey(ctx, userID, resp.Key.ID); err != nil {
+		return nil, err
+	}
+	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
+	if err == nil {
+		for _, key := range keys {
+			if key.ID == resp.Key.ID {
+				resp.Key = newAPIKeyView(key)
+				break
+			}
+		}
+	}
+	return resp, nil
+}
+
+func (s *Service) createAPIKeyWithoutSignupGrant(ctx context.Context, userID uint64, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
 	planName := strings.TrimSpace(req.PlanName)
 	if planName == "" {
 		planName = "Starter"
@@ -315,6 +347,63 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPI
 	}
 	_ = s.store.CreateAuditLog(ctx, "app.api_key.create", "api_key", fmt.Sprintf("%d", key.ID), sqlstore.JSONString(key))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: newAPIKeyView(*key)}, nil
+}
+
+func (s *Service) ensureSignupHostedCredits(ctx context.Context, userID uint64) error {
+	idempotencyKey := signupHostedCreditsIdempotencyKey(userID)
+	existing, err := s.store.FindHostedCreditGrantByIdempotencyKey(ctx, idempotencyKey)
+	if err != nil || existing != nil {
+		return err
+	}
+	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
+	if err != nil {
+		return err
+	}
+	var targetID uint64
+	for _, key := range keys {
+		if key.Status == model.APIKeyStatusActive {
+			targetID = key.ID
+			break
+		}
+	}
+	if targetID == 0 {
+		resp, err := s.createAPIKeyWithoutSignupGrant(ctx, userID, CreateAPIKeyRequest{PlanName: "Starter"})
+		if err != nil {
+			return err
+		}
+		targetID = resp.Key.ID
+	}
+	_, _, err = s.grantSignupHostedCreditsToKey(ctx, userID, targetID)
+	return err
+}
+
+func (s *Service) grantSignupHostedCreditsToKey(ctx context.Context, userID, apiKeyID uint64) (*model.HostedCreditGrant, bool, error) {
+	metadata, err := json.Marshal(map[string]any{
+		"user_id": userID,
+		"bonus":   "new_user_signup",
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	grant, created, err := s.store.GrantHostedCreditsToAPIKey(
+		ctx,
+		apiKeyID,
+		userID,
+		model.HostedCreditGrantSourceSignup,
+		signupHostedCreditsIdempotencyKey(userID),
+		SignupHostedCreditBonus,
+		"new user signup hosted credits",
+		string(metadata),
+	)
+	if err != nil || !created {
+		return grant, created, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "app.signup_hosted_credits.grant", "user", fmt.Sprintf("%d", userID), string(metadata))
+	return grant, true, nil
+}
+
+func signupHostedCreditsIdempotencyKey(userID uint64) string {
+	return fmt.Sprintf("signup-hosted-credits:%d", userID)
 }
 
 func (s *Service) GetAPIKeyPlaintext(ctx context.Context, userID, apiKeyID uint64) (string, error) {

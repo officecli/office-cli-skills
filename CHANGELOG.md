@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.2.54 - 2026-05-12
+
+### Changed
+
+- External Mode is now free and unlimited for document and standalone image generation, while Hosted Mode continues to use hosted credits.
+- Billing and pricing now sell hosted credit packs only, with historical external orders preserved for reconciliation.
+- The marketing site, app, admin, docs, and quickstart copy now present External and Hosted as the two primary runtime modes.
+
+### Added
+
+- New users receive 30 hosted credits, and each activated referral grants the inviter 20 hosted credits with idempotent grant tracking.
+
 ## 0.2.53 - 2026-05-12
 
 ### Changed

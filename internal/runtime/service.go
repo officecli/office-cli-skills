@@ -203,7 +203,7 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 }
 
 func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
-	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting image generation from the OfficeCLI server")
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting image generation from the configured image provider")
 	image, err := s.llm.GenerateImage(ctx, engine.ImageGenerationRequest{
 		Prompt:            buildImageGenerationPrompt(prompt, target),
 		TargetAspectRatio: imageAspectRatio(ratio),

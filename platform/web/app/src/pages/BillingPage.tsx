@@ -12,7 +12,7 @@ import type { ApiKey, Order } from '../types'
 export default function BillingPage() {
   const location = useLocation()
   const queryClient = useQueryClient()
-  const { data: pricing = [] } = useQuery({ queryKey: ['pricing'], queryFn: api.pricing })
+  const { data: pricingRaw = [] } = useQuery({ queryKey: ['pricing'], queryFn: api.pricing })
   const { data: keys = [] } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
   const pendingPollInterval = 5000
   const { data: orders = [] } = useQuery({
@@ -21,6 +21,7 @@ export default function BillingPage() {
     refetchInterval: (query) => query.state.data?.some((item) => item.status === 'pending') ? pendingPollInterval : false,
   })
   const activeKeys = useMemo(() => keys.filter((item) => item.status === 'active'), [keys])
+  const pricing = useMemo(() => pricingRaw.filter((pack) => pack.pack_kind === 'hosted_credits'), [pricingRaw])
   const keyByID = useMemo(() => new Map(keys.map((item) => [item.id, item])), [keys])
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const checkoutSessionID = searchParams.get('session_id')?.trim() ?? ''
@@ -70,7 +71,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Secure checkout" title="Buy quota for an API key" body="Select the key that should receive more document generations or hosted credits, then continue into secure Stripe Checkout from the same workspace." />
+        <SectionHeading eyebrow="Secure checkout" title="Buy hosted credits for an API key" body="External Mode is free and unlimited, so checkout only sells hosted credits for the OfficeCLI-managed runtime." />
         <div className="billing-shell mb-6">
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
@@ -90,7 +91,7 @@ export default function BillingPage() {
             <div className="info-eyebrow text-tertiary">Billing flow</div>
             <ol className="mt-4 space-y-3 text-sm text-outline">
               <li>1. Choose the target API key.</li>
-              <li>2. Pick a pricing pack below.</li>
+              <li>2. Pick a hosted credits pack below.</li>
               <li>3. Continue to Stripe Checkout and land back in the billing view.</li>
             </ol>
           </div>

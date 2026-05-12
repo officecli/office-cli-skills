@@ -110,7 +110,7 @@ func (s *Service) Pricing() []model.PricingPack {
 	defer s.mu.RUnlock()
 	result := make([]model.PricingPack, 0, len(s.packs))
 	for _, pack := range s.packs {
-		if pack.PackKind != string(model.PackKindHostedCredits) {
+		if pack.PackKind == string(model.PackKindHostedCredits) {
 			result = append(result, pack)
 		}
 	}
@@ -144,6 +144,9 @@ func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*mod
 	pack, ok := s.pricingPack(ctx, req.PackCode)
 	if !ok || (pack.PackKind != string(model.PackKindExternalGeneration) && pack.PackKind != string(model.PackKindHostedCredits)) {
 		return nil, "", fmt.Errorf("unknown pack_code")
+	}
+	if pack.PackKind == string(model.PackKindExternalGeneration) {
+		return nil, "", fmt.Errorf("external mode is free and no longer sold as a paid pack")
 	}
 	targetKey, err := s.store.FindAPIKeyByID(ctx, req.TargetAPIKeyID)
 	if err != nil {

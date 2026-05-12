@@ -196,7 +196,7 @@ export default function Hero() {
               Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
             </div>
             <div className="text-outline-variant">
-              Access: paid mode; 109 generations remaining; trial 10
+              Access: External Mode; free unlimited with your model endpoint
             </div>
           </div>
           <HeroOutputFileCard
@@ -226,7 +226,7 @@ export default function Hero() {
               Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
             </div>
             <div className="text-outline-variant">
-              Access: paid mode; 109 generations remaining; trial 10
+              Access: External Mode; free unlimited with your model endpoint
             </div>
           </div>
           <HeroOutputFileCard
@@ -254,7 +254,7 @@ export default function Hero() {
               Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
             </div>
             <div className="text-outline-variant">
-              Access: paid mode; 109 generations remaining; trial 10
+              Access: External Mode; free unlimited with your model endpoint
             </div>
           </div>
           <HeroOutputFileCard
@@ -282,7 +282,7 @@ export default function Hero() {
               Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/xyz123</a>; password: abcdef
             </div>
             <div className="text-outline-variant">
-              Access: paid mode; 109 generations remaining; trial 10
+              Access: External Mode; free unlimited with your model endpoint
             </div>
           </div>
           <div className="text-[10px] font-headline uppercase tracking-[0.25em] text-tertiary">
@@ -319,7 +319,7 @@ export default function Hero() {
               Preview URL: <a href="https://officecli.io/p/img-xyz" target="_blank" rel="noreferrer" className="text-primary hover:underline">https://officecli.io/p/img-xyz</a>; password: abcdef
             </div>
             <div className="text-outline-variant">
-              Access: paid mode; 24 image generations remaining; free bucket 3/day
+              Access: External Mode; local image provider configured; hosted credits unchanged
             </div>
           </div>
           <div className="text-[10px] font-headline uppercase tracking-[0.25em] text-tertiary">
@@ -353,14 +353,24 @@ export default function Hero() {
         >
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0d4c54]/40 text-[#8af3f7] text-xs font-headline uppercase tracking-widest mb-6 border border-[#0d4c54]/60">
             <span className="w-2 h-2 rounded-full bg-tertiary terminal-pulse shadow-[0_0_8px_#00dce5]"></span>
-            Local-first AI document CLI · One-command online publish
+            External + Hosted modes · One binary · No agent required
           </span>
           <h1 className="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
-            Generate <span className="text-primary italic">PPTX</span>, DOCX, XLSX, REPORT, and IMG Outputs From One AI CLI
+            AI Document Generation in External or Hosted Mode
           </h1>
-          <p className="text-xl text-outline-variant max-w-xl mb-10 leading-relaxed font-light">
-            OfficeCLI is a local-first AI document generation CLI for terminal workflows. Generate PPTX, DOCX, XLSX, workbook-backed REPORT outputs, and standalone IMG visuals with your own LLM endpoint or the OfficeCLI image service, then publish a password-protected online preview link with a single command — no other CLI generator ships this end-to-end share path out of the box.
+          <p className="text-xl text-outline-variant max-w-xl mb-6 leading-relaxed font-light">
+            External: free unlimited with your own model endpoint. Hosted: OfficeCLI-managed runtime with hosted credits. Both modes use the same dependency-free officecli binary for PPTX, DOCX, XLSX, REPORT, and IMG outputs.
           </p>
+          <div className="mb-10 grid gap-3 sm:grid-cols-2 max-w-2xl">
+            <div className="rounded-lg border border-tertiary/25 bg-tertiary/10 p-4">
+              <div className="font-headline text-sm uppercase tracking-widest text-tertiary">External Mode</div>
+              <p className="mt-2 text-sm leading-relaxed text-outline-variant">Free unlimited generations with your own LLM endpoint and local image provider.</p>
+            </div>
+            <div className="rounded-lg border border-primary/25 bg-primary/10 p-4">
+              <div className="font-headline text-sm uppercase tracking-widest text-primary">Hosted Mode</div>
+              <p className="mt-2 text-sm leading-relaxed text-outline-variant">OfficeCLI-managed runtime using hosted credits when you do not want to operate model services.</p>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-4">
             <motion.a
               whileHover={{ scale: 0.95 }}

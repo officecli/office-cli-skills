@@ -24,7 +24,9 @@ export default function OverviewPage() {
   const referralCount = overview?.referral_count ?? referrals.length
   const activatedReferralCount = overview?.activated_referral_count ?? referrals.filter((referral) => referral.activated_at).length
   const inviteRemaining = overview?.invite_remaining ?? growth?.invite_remaining ?? Math.max(inviteLimit - referrals.length, 0)
-  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 10
+  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 20
+  const hostedCredits = overview?.hosted_credit_balance ?? apiKeys.reduce((sum, key) => sum + (key.credit_balance ?? 0), 0)
+  const signupBonus = overview?.signup_credit_bonus ?? 30
   const discordParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const discordResult = discordParams.get('discord')
   const discordMessage = discordParams.get('discord_message')
@@ -78,8 +80,8 @@ export default function OverviewPage() {
             ) : (
               <>
                 <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
-                <MetricCard label="Paid Quota" value={formatNumber(overview?.total_remaining)} detail="Remaining purchased document generations across all keys" />
-                <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External requests recorded recently" />
+                <MetricCard label="Hosted Credits" value={formatNumber(hostedCredits)} detail={`${formatNumber(signupBonus)} credits granted to new users; hosted runtime spends credits`} />
+                <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External and hosted requests recorded recently" />
               </>
             )}
           </div>
@@ -121,11 +123,11 @@ export default function OverviewPage() {
           <>
             <MetricCard label="Orders" value={formatNumber(overview?.recent_orders_count)} detail="Recent billing events that landed in this workspace" />
             <MetricCard
-              label="Reward Quota"
+              label="Invite Credits"
               value={formatNumber(overview?.reward_remaining)}
               detail={(
                 <div>
-                  <div>{inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} bonus generations per activated invite` : 'No invite code available yet'}</div>
+                  <div>{inviteCode ? `Invite code: ${inviteCode} · ${formatNumber(rewardPerInvite)} hosted credits per activated invite` : 'No invite code available yet'}</div>
                   <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-primary transition-colors hover:text-white">
                     How invite rewards work
                   </a>
@@ -152,9 +154,9 @@ export default function OverviewPage() {
                   <StatusPill value={key.status} />
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <KeyStat label="Total" value={key.quota_total} meta="Paid quota" />
-                  <KeyStat label="Used" value={key.quota_used} meta="Consumed" />
-                  <KeyStat label="Remaining" value={key.quota_remaining} meta="Available now" />
+                  <KeyStat label="Hosted" value={key.credit_balance ?? 0} meta="Credits" />
+                  <KeyStat label="External" value={0} meta="Free unlimited" />
+                  <KeyStat label="Remaining" value={key.quota_remaining} meta="Legacy quota" />
                 </div>
               </div>
             ))}
@@ -169,7 +171,7 @@ export default function OverviewPage() {
           <SectionHeading
             eyebrow="Rewards ledger"
             title="Reward grants and referral progress"
-            body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} bonus generations to account quota.`}
+            body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} hosted credits.`}
             action={(
               <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
                 Full invite guide

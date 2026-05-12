@@ -318,7 +318,7 @@ Default behavior:
   - If defaults.publish=true and publishing is configured, document output is published automatically
   - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
   - If publishing is not configured, files are saved locally and online preview is skipped
-  - Standalone img generation always uses the OfficeCLI server and requires config set-license
+  - Standalone img uses the local image provider in external mode, or hosted credits in hosted mode
   - Standalone img accepts one or more reference images with repeated --reference-image <path-or-url>
   - Standalone img local preview sidecars are not supported
 
@@ -373,7 +373,7 @@ func AuthHelpText() string {
   officecli auth set-key <api-key>
 
 Description:
-  View access status or save a paid API key.
+  View access status or save a hosted API key.
 `
 }
 
@@ -408,7 +408,7 @@ Description:
   - For a text-only PPT, pass ` + "`--no-images`" + `
   - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
   - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
-  - ` + "`img`" + ` generates one local image through the OfficeCLI server; run ` + "`officecli config set-license`" + ` first
+  - ` + "`img`" + ` generates one local image through your configured image provider in external mode, or the hosted image route in hosted mode
   - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, ` + "`--size <WxH>`" + `, repeated ` + "`--reference-image <path-or-url>`" + `, and publishing by default when configured
   - ` + "`img`" + ` does not support best mode, source files, or local preview
 `
@@ -629,7 +629,7 @@ func (a *App) runConfigSetLicense(cfg Config) error {
 	}
 	cfg.License.BaseURL = defaultInitConfig().License.BaseURL
 	if cfg.License.Enabled {
-		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the paid API key (optional; free quota will be used first)", cfg.License.APIKey); err != nil {
+		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the hosted API key (optional for External Mode)", cfg.License.APIKey); err != nil {
 			return err
 		}
 		syncPublishCredentialFromLicense(&cfg)
@@ -792,7 +792,7 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 			cfg.LLM.Model = defaultInitConfig().LLM.Model
 		}
 	}
-	if cfg.License.APIKey, err = a.promptLine(reader, "Enter the paid API key (optional; free quota will be used first)", cfg.License.APIKey); err != nil {
+	if cfg.License.APIKey, err = a.promptLine(reader, "Enter the hosted API key (optional for External Mode)", cfg.License.APIKey); err != nil {
 		return Config{}, err
 	}
 	cfg.Publish.Enabled, err = a.promptYesNo(reader, "Enable online preview publishing? (yes/no)", cfg.Publish.Enabled)
@@ -1015,7 +1015,7 @@ func (a *App) runAuth(ctx context.Context, cfg Config, args []string) error {
 		return a.runAuthStatus(ctx, cfg)
 	case "set-key":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the paid API key", "")
+			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the hosted API key", "")
 			if err != nil {
 				return err
 			}
@@ -1061,14 +1061,14 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 			return err
 		}
 	} else {
-		if _, err := fmt.Fprintln(a.Stdout, "Paid quota on current key: no paid API key configured"); err != nil {
+		if _, err := fmt.Fprintln(a.Stdout, "Hosted key: no hosted API key configured"); err != nil {
 			return err
 		}
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Access checks enabled: %t\n", cfg.License.Enabled); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Paid API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Hosted API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
 		return err
 	}
 	if strings.TrimSpace(result.Message) != "" {
@@ -1117,12 +1117,12 @@ func (a *App) runAuthSetKey(ctx context.Context, cfg Config, key string) error {
 		return err
 	}
 	if !result.Allowed || result.AccessMode == LicenseAccessModeBlocked {
-		return fmt.Errorf("paid API key validation failed: %s", fallbackMessage(result.Message, "the key is invalid, expired, depleted, or the access service is unavailable"))
+		return fmt.Errorf("hosted API key validation failed: %s", fallbackMessage(result.Message, "the key is invalid, expired, depleted, or the access service is unavailable"))
 	}
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "Saved the paid API key. Current access mode: %s\n", displayAccessMode(result.AccessMode))
+	_, err = fmt.Fprintf(a.Stdout, "Saved the hosted API key. Current access mode: %s\n", displayAccessMode(result.AccessMode))
 	return err
 }
 

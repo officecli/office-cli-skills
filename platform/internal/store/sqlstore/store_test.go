@@ -189,6 +189,46 @@ func TestAddCreditBalanceToAPIKeyEnablesHostedEntitlement(t *testing.T) {
 	require.Equal(t, "hosted", *updated.DefaultRuntimeMode)
 }
 
+func TestGrantHostedCreditsToAPIKeyIsIdempotent(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:grant_hosted_credits_idempotent?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.HostedCreditGrant{}))
+
+	store := NewWithDB(db)
+	user := &model.User{GoogleSub: "sub-hosted", Email: "hosted@example.com", Name: "Hosted", InviteCode: "invite-hosted", Status: model.UserStatusActive}
+	require.NoError(t, db.Create(user).Error)
+	defaultRuntimeMode := "external"
+	key := &model.APIKey{
+		OwnerUserID:        &user.ID,
+		KeyHash:            "hash-hosted-grant",
+		KeyPrefix:          "cop_hosted_grant",
+		Status:             model.APIKeyStatusActive,
+		PlanName:           "Starter",
+		AllowedModes:       "external_only",
+		HostedEnabled:      false,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+	}
+	require.NoError(t, store.CreateAPIKey(context.Background(), key))
+
+	grant, created, err := store.GrantHostedCreditsToAPIKey(context.Background(), key.ID, user.ID, model.HostedCreditGrantSourceSignup, "signup-hosted-credits:1", 30, "new user signup hosted credits", "{}")
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Equal(t, 30, grant.CreditAmount)
+
+	grant, created, err = store.GrantHostedCreditsToAPIKey(context.Background(), key.ID, user.ID, model.HostedCreditGrantSourceSignup, "signup-hosted-credits:1", 30, "new user signup hosted credits", "{}")
+	require.NoError(t, err)
+	require.False(t, created)
+	require.Equal(t, 30, grant.CreditAmount)
+
+	updated, err := store.FindAPIKeyByID(context.Background(), key.ID)
+	require.NoError(t, err)
+	require.Equal(t, 30, updated.CreditBalance)
+	require.True(t, updated.HostedEnabled)
+	require.Equal(t, "hybrid", updated.AllowedModes)
+	require.NotNil(t, updated.DefaultRuntimeMode)
+	require.Equal(t, "hosted", *updated.DefaultRuntimeMode)
+}
+
 func TestFindAPIKeyByHashTreatsDisabledOwnerAsDisabledKey(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:find_api_key_by_hash_treats_disabled_owner_as_disabled_key?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

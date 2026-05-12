@@ -5,8 +5,8 @@ This quickstart explains how to use OfficeCLI from an OpenClaw integration witho
 ## Prerequisites
 
 - a working `officecli` binary
-- generation configuration completed through the CLI for document generation and PPT image assets
-- license configuration completed through the CLI for access checks and standalone `img`
+- generation configuration completed through the CLI for External Mode document generation and PPT/IMG image assets
+- license configuration completed through the CLI only when using Hosted Mode, hosted credits, or online publishing credentials
 - optional publish configuration if online preview links are required
 
 ## Basic Flow
@@ -45,7 +45,7 @@ officecli new img "Product Launch Visual" --prompt "Create a polished launch ima
 
 - User-visible output must remain English-only.
 - Binary behavior is the source of truth; do not rely on skill-only wording or wrappers to change product semantics.
-- Standalone `img` generation uses the OfficeCLI server image route and does not use local `config set-generation` image provider settings.
+- External Mode standalone `img` generation uses the local `config set-generation` image provider. Hosted Mode standalone `img` uses the OfficeCLI-managed runtime and hosted credits.
 - Standalone `img` supports one `--reference-image <path-or-url>` for local or remote reference images.
 - Standalone `img` publishes online by default when publishing is configured; pass `--no-publish` for local-only output.
 - If the platform returns preview links, passwords, or quota warnings, that output should already be normalized by the binary.

@@ -70,7 +70,7 @@ describe('platform app shell', () => {
         return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
       }
       if (url === '/api/app/overview') {
-        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, reward_remaining: 10, invite_code: 'invite-abc', invite_limit: 5, invite_remaining: 2, reward_per_invite: 10, referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
+        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, hosted_credit_balance: 30, signup_credit_bonus: 30, reward_remaining: 20, invite_code: 'invite-abc', invite_limit: 5, invite_remaining: 2, reward_per_invite: 20, referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
       }
       if (url === '/api/app/growth') {
         return {
@@ -81,9 +81,9 @@ describe('platform app shell', () => {
               invite_code: 'invite-abc',
               invite_limit: 5,
               invite_remaining: 4,
-              reward_per_invite: 10,
-              reward_remaining: 10,
-              reward_grants: [{ source_type: 'invite_activation_reward', amount_total: 10, amount_used: 0, remaining: 10, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
+              reward_per_invite: 20,
+              reward_remaining: 20,
+              reward_grants: [{ source_type: 'invite_activation_reward', amount_total: 20, amount_used: 0, remaining: 20, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
               referrals: [{ invite_code: 'invite-abc', registered_at: '2026-04-01T00:00:00Z' }],
               discord_connection: { username: 'officecli-user', guild_member: false, connected_at: '2026-04-02T00:00:00Z', verification_status: 'verification_blocked', verification_blocked_reason: 'discord guild verification is not configured in this build yet' },
             },
@@ -101,12 +101,12 @@ describe('platform app shell', () => {
 
     expect(await screen.findByRole('heading', { name: /Remaining Quota/i })).toBeInTheDocument()
     expect(document.title).toBe('OfficeCLI App | Overview')
-    expect(await screen.findByText(/^Reward Quota$/i)).toBeInTheDocument()
+    expect(await screen.findByText(/^Invite Credits$/i)).toBeInTheDocument()
     expect(await screen.findByText(/^Referral Progress$/i)).toBeInTheDocument()
-    expect(screen.getByText(/Invite code: invite-abc · 10 bonus generations per activated invite/i)).toBeInTheDocument()
+    expect(screen.getByText(/Invite code: invite-abc · 20 hosted credits per activated invite/i)).toBeInTheDocument()
     expect((await screen.findAllByText(/^Discord Status$/i)).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /Reward grants and referral progress/i })).toBeInTheDocument()
-    expect(screen.getByText(/every activated referral adds 10 bonus generations to account quota/i)).toBeInTheDocument()
+    expect(screen.getByText(/every activated referral adds 20 hosted credits/i)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Link Discord for growth rewards/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute('href', 'https://officecli.io/docs#invite-rewards')
     expect(screen.getByRole('link', { name: /How invite rewards work/i })).toHaveAttribute('href', 'https://officecli.io/docs#invite-rewards')
@@ -153,7 +153,7 @@ describe('platform app shell', () => {
     expect(screen.queryByText(/\$0\.0200/)).not.toBeInTheDocument()
   })
 
-  it('renders the quota page with reward and paid account quota only', async () => {
+  it('renders the quota page with legacy reward and external quota context', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/auth/me') {
@@ -167,7 +167,7 @@ describe('platform app shell', () => {
             data: {
               reward_quota: {
                 remaining: 10,
-                grants: [{ source_type: 'invite_activation_reward', amount_total: 10, amount_used: 0, remaining: 10, reason: 'invite activation reward', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
+                grants: [{ source_type: 'legacy_reward', amount_total: 10, amount_used: 0, remaining: 10, reason: 'legacy reward grant', metadata_json: '{}', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' }],
               },
               paid_external_quota: {
                 total_remaining: 40,
@@ -175,7 +175,7 @@ describe('platform app shell', () => {
               },
               trial_policy: {
                 cli_binary_only: true,
-                message: 'Anonymous trial counts only apply to the local officecli binary and never count as account balance.',
+                message: 'External Mode uses your configured model endpoint and does not consume OfficeCLI quota.',
               },
             },
           }),
@@ -187,8 +187,8 @@ describe('platform app shell', () => {
 
     renderApp('/quota')
 
-    expect(await screen.findByRole('heading', { name: /Reward and paid quota/i })).toBeInTheDocument()
-    expect(await screen.findByText(/CLI trial only/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Historical reward and external quota/i })).toBeInTheDocument()
+    expect(await screen.findByText(/External Mode free unlimited/i)).toBeInTheDocument()
     expect(await screen.findByText(/cop_live_demo/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /How invite rewards work/i })).toHaveAttribute('href', 'https://officecli.io/docs#invite-rewards')
     expect(screen.getByRole('link', { name: /Referral rules/i })).toHaveAttribute('href', 'https://officecli.io/docs#invite-rewards')

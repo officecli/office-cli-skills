@@ -52,7 +52,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
   const starterItems = useMemo(() => [
     packUnitItem(starterPack),
     'Entry pack for evaluation',
-    'CLI and platform access',
+    'External Mode remains free and unlimited',
   ], [starterPack])
 
   const productionItems = useMemo(() => [
@@ -65,8 +65,8 @@ export default function Pricing({ standalone = false }: PricingProps) {
     <section id="pricing" className={`px-8 md:px-16 max-w-[1440px] mx-auto text-center ${standalone ? 'pt-8 pb-24' : 'py-32'}`}>
       <div className="max-w-3xl mx-auto">
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Pricing</span>
-        <h2 className={titleClass}>Simple Access for Paid Workflows</h2>
-        <p className="text-xl text-outline-variant mb-12">Start with a small paid pack, then scale document generation quota for recurring team usage when the platform or paid access model fits your workflow.</p>
+        <h2 className={titleClass}>Choose External or Hosted Mode</h2>
+        <p className="text-xl text-outline-variant mb-12">External Mode is free and unlimited with your own model endpoint. Hosted Mode uses hosted credits for the OfficeCLI-managed runtime.</p>
 
         {packs.length > 0 && starterPack && productionPack ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto mb-16">
@@ -153,11 +153,11 @@ export default function Pricing({ standalone = false }: PricingProps) {
 }
 
 function packUnitItem(pack?: PricingPack) {
-  if (!pack) return '0 paid document generations'
+  if (!pack) return '0 hosted credits'
   if (pack.pack_kind === 'hosted_credits') {
     return `${pack.credit_amount ?? 0} hosted credits`
   }
-  return `${pack.quota_amount ?? 0} paid document generations`
+  return `${pack.quota_amount ?? 0} legacy document generations`
 }
 
 function priceMeta(pack: PricingPack) {

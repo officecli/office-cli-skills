@@ -58,7 +58,7 @@ export default function DownloadsPage() {
             </div>
             <div className="soft-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
               <ShieldCheck size={18} className="mt-0.5 text-primary" />
-              <p>Platform access is optional. Use it for paid API keys, hosted runtime workflows, billing, and online preview publishing, not for basic local setup.</p>
+              <p>Platform access is optional. Use it for hosted API keys, hosted runtime workflows, billing, and online preview publishing, not for basic External Mode setup.</p>
             </div>
           </div>
         </Panel>

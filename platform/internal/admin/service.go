@@ -44,6 +44,7 @@ type Service struct {
 
 type GrowthSnapshot struct {
 	RewardGrants       []model.RewardGrant       `json:"reward_grants"`
+	HostedCreditGrants []model.HostedCreditGrant `json:"hosted_credit_grants"`
 	Referrals          []model.UserReferral      `json:"referrals"`
 	DiscordConnections []model.DiscordConnection `json:"discord_connections"`
 }
@@ -431,6 +432,10 @@ func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+	hostedCreditGrants, err := s.store.ListHostedCreditGrants(ctx)
+	if err != nil {
+		return nil, err
+	}
 	referrals, err := s.store.ListReferrals(ctx)
 	if err != nil {
 		return nil, err
@@ -441,6 +446,7 @@ func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
 	}
 	return &GrowthSnapshot{
 		RewardGrants:       rewardGrants,
+		HostedCreditGrants: hostedCreditGrants,
 		Referrals:          referrals,
 		DiscordConnections: discordConnections,
 	}, nil

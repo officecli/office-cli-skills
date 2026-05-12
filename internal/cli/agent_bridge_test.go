@@ -607,6 +607,7 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 	}
 	bridge := newAgentBridgeServer(app, Config{
 		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true, Mode: "fast"},
+		Runtime:  RuntimeConfig{Mode: RuntimeModeHosted},
 		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
 		Publish:  disabledPublishConfig(),
 	}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))

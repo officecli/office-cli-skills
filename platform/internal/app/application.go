@@ -150,7 +150,7 @@ func New() (*Application, error) {
 	}
 
 	rewardService := rewardsvc.NewService(dbStore)
-	growthService := growthsvc.NewService(dbStore, dbStore, dbStore, dbStore)
+	growthService := growthsvc.NewService(dbStore, dbStore, dbStore, dbStore, dbStore)
 	apiKeyCipher, err := apikey.NewCipher(cfg.APIKeyEncryptionKey)
 	if err != nil {
 		return nil, err

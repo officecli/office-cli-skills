@@ -16,25 +16,25 @@ export default function QuotaPage() {
     <div className="space-y-8">
       <Panel>
         <SectionHeading
-          eyebrow="Account quota"
-          title="Reward and paid quota"
-          body="Track account-owned quota here. Anonymous trial counts stay inside the local officecli binary and never become account balance."
+          eyebrow="Legacy quota"
+          title="Historical reward and external quota"
+          body="External Mode is free and unlimited now. This page preserves legacy quota visibility for older grants and historical keys; Hosted credits are shown on Overview and Billing."
         />
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="panel-muted p-5">
-            <div className="info-eyebrow text-primary">Reward quota</div>
+            <div className="info-eyebrow text-primary">Legacy reward quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(rewardQuota?.remaining)}</div>
             <div className="mt-2 text-sm text-outline">
-              <div>Bonus generations granted by invite activation and future growth programs.</div>
+              <div>Historical bonus-generation grants. New signup and invite rewards are issued as hosted credits.</div>
               <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-semibold text-primary transition-colors hover:text-white">
                 How invite rewards work
               </a>
             </div>
           </div>
           <div className="panel-muted p-5">
-            <div className="info-eyebrow text-tertiary">Paid external quota</div>
+            <div className="info-eyebrow text-tertiary">Legacy paid external quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(paidQuota?.total_remaining)}</div>
-            <div className="mt-2 text-sm text-outline">Remaining paid document generations across all active and disabled keys in this workspace.</div>
+            <div className="mt-2 text-sm text-outline">Historical paid document-generation quota across active and disabled keys. New external packs are no longer sold.</div>
           </div>
         </div>
       </Panel>
@@ -42,14 +42,14 @@ export default function QuotaPage() {
       <Panel>
         <SectionHeading
           eyebrow="Trial policy"
-          title="CLI trial only"
-          body="Anonymous trial counts are tracked on the machine that runs the officecli binary. They do not appear in account quota and are never added to account totals."
+          title="External Mode free unlimited"
+          body="External Mode generation no longer depends on anonymous trial buckets. Hosted Mode continues to use hosted credits."
         />
         <div className="panel-muted p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-white">Anonymous trial remains binary-only</div>
-              <div className="mt-2 text-sm text-outline">{trialPolicy?.message ?? 'Anonymous trial counts only apply to the local officecli binary and never count as account balance.'}</div>
+              <div className="text-white">External generation is free and unlimited</div>
+              <div className="mt-2 text-sm text-outline">{trialPolicy?.message ?? 'External Mode uses your configured model endpoint and does not consume OfficeCLI quota.'}</div>
             </div>
             <StatusPill value={trialPolicy?.cli_binary_only ? 'active' : 'blocked'} />
           </div>
@@ -59,8 +59,8 @@ export default function QuotaPage() {
       <Panel>
         <SectionHeading
           eyebrow="Rewards ledger"
-          title="Reward grant detail"
-          body="Each grant shows the original amount, what has been consumed, and what remains available now."
+          title="Legacy reward grant detail"
+          body="Each legacy grant shows the original amount, what has been consumed, and what remains available now."
           action={(
             <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
               Referral rules
@@ -87,15 +87,15 @@ export default function QuotaPage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No reward grants yet" body="Invite activation rewards and future growth grants will appear here after the backend issues them." />
+          <EmptyState title="No legacy reward grants yet" body="New signup and invite benefits are issued as hosted credits and appear in hosted credit grant records." />
         )}
       </Panel>
 
       <Panel>
         <SectionHeading
-          eyebrow="Paid quota"
-          title="Paid quota by key"
-          body="These rows show the purchased document generations tied to each API key."
+          eyebrow="Legacy paid quota"
+          title="Legacy paid quota by key"
+          body="These rows preserve purchased external generations tied to each API key. New external purchases are disabled because External Mode is free and unlimited."
         />
         {isLoading ? null : keys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -117,7 +117,7 @@ export default function QuotaPage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No paid quota yet" body="Create a key and buy a pack from Billing to start building paid quota." />
+          <EmptyState title="No legacy paid quota" body="Billing now sells hosted credits only. External Mode does not need a paid quota pack." />
         )}
       </Panel>
     </div>

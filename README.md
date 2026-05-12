@@ -4,7 +4,7 @@ OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`
 
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
 
-Standalone `new img` generation always goes through the OfficeCLI server and uses the runtime selected by `config set-runtime`: `external` consumes generation quota from `config set-license` / license checks, while `hosted` consumes hosted credits. It does not use local `config set-generation` image provider settings. Standalone images publish online by default when publishing is configured; use `--no-publish` for local-only output.
+Standalone `new img` generation follows the runtime selected by `config set-runtime`: `external` is free and unlimited and uses the local image provider from `config set-generation`, while `hosted` goes through the OfficeCLI-managed runtime and consumes hosted credits. Standalone images publish online by default when publishing is configured; use `--no-publish` for local-only output.
 
 ## Claude Marketplace Install
 
@@ -67,7 +67,7 @@ Initialize configuration:
 ./officecli config set-defaults  # optional
 ```
 
-`config set-license` is required for standalone image generation. In `external` runtime mode, a successful standalone image consumes one generation count. Free usage has a separate image bucket of 3 images per user per day, while document generation keeps the 10 documents per day free bucket. In `hosted` runtime mode, a successful standalone image consumes hosted credits:
+External Mode is free and unlimited for standalone image generation and uses the image provider configured by `config set-generation`. In `hosted` runtime mode, a successful standalone image consumes hosted credits:
 
 ```bash
 ./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png
@@ -168,7 +168,7 @@ Generate a standalone image:
 ./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
 ```
 
-`new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and only charges after a successful image response. In `external` runtime mode it consumes one image generation count; in `hosted` runtime mode it consumes hosted credits. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
+`new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and only charges hosted credits after a successful hosted image response. In `external` runtime mode it is free and unlimited and uses your configured image provider; in `hosted` runtime mode it consumes hosted credits. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
 
 Write output to a custom directory:
 

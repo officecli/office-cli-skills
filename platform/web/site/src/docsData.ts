@@ -68,8 +68,8 @@ export const quickstartChecklist: DocsChecklist[] = [
   {
     title: 'Configure generation and access',
     items: [
-      'Run `officecli config set-generation` to configure your LLM endpoint.',
-      'Run `officecli config set-license` to enable free or paid access checks.',
+      'For External Mode, run `officecli config set-generation` to configure your LLM endpoint. External Mode is free and unlimited.',
+      'For Hosted Mode, run `officecli config set-license` and use hosted credits for OfficeCLI-managed runtime.',
       'Run `officecli config set-publish` to turn on one-command online publish — every successful generation will return a password-protected preview URL you can share without uploading or hosting anything else.',
     ],
   },
@@ -78,7 +78,7 @@ export const quickstartChecklist: DocsChecklist[] = [
     items: [
       'Use `officecli new pptx|docx|xlsx|report ...` for file generation.',
       'For `pptx`, images are enabled by default when the plan benefits from visuals; add `--no-images` for a text-only deck.',
-      'Use `officecli new img <title> --prompt ...` for standalone image generation. `set-license` is required and `set-publish` is required for online image previews.',
+      'Use `officecli new img <title> --prompt ...` for standalone image generation. External IMG uses the configured local image provider; Hosted IMG uses hosted credits.',
       'Once `set-publish` is configured, every successful generation prints a `Preview URL` plus an auto-generated access password — share that line with stakeholders. Add `--no-publish` to any single run for fully local output.',
     ],
   },
@@ -146,17 +146,17 @@ export const commandGroups: CommandGroup[] = [
   {
     title: 'Access and quota status',
     command: 'officecli auth status | set-key <api-key>',
-    summary: 'Check whether the current machine is using free or paid access, or save a paid API key.',
+    summary: 'Check whether the current machine is using External Mode or Hosted Mode, or save a hosted API key.',
     examples: [
       {
         label: 'Check current access mode',
         command: 'officecli auth status',
-        detail: 'Shows free or paid status together with remaining quota information.',
+        detail: 'Shows runtime mode, hosted credit status, and access configuration.',
       },
       {
-        label: 'Save a paid key',
+        label: 'Save a hosted key',
         command: 'officecli auth set-key cop_live_xxx',
-        detail: 'Routes future generation requests through the paid document-generation quota linked to that key.',
+        detail: 'Routes Hosted Mode generation requests through the hosted credits linked to that key. External Mode remains free and unlimited.',
       },
     ],
   },
@@ -168,7 +168,7 @@ export const commandGroups: CommandGroup[] = [
       '`--prompt` takes highest precedence when you want to provide the full brief directly in the command.',
       '`--prompt-file` is the best fit for longer structured prompts or reusable prompt templates.',
       '`report` requires `--file <xlsx-path>` because the workbook is the source of truth for the report output.',
-      '`img` always calls the OfficeCLI image service. It uses the license-tracked image quota, supports `--ratio`, an explicit `--size <WxH>`, and one or more `--reference-image` inputs, and publishes online previews by default when publishing is configured.',
+      '`img` uses your configured image provider in External Mode and the OfficeCLI-managed runtime in Hosted Mode. It supports `--ratio`, an explicit `--size <WxH>`, and one or more `--reference-image` inputs, and publishes online previews by default when publishing is configured.',
     ],
     examples: [
       {
@@ -357,35 +357,35 @@ export const agentSkillHighlights: DocsChecklist[] = [
 
 export const usageRules: UsageRule[] = [
   {
-    title: 'Anonymous users can use a free quota',
-    detail: 'Free access is tracked by machine fingerprint and works without a paid API key.',
+    title: 'External Mode is free and unlimited',
+    detail: 'External Mode uses your own model endpoint and works without a hosted API key or OfficeCLI usage quota.',
   },
   {
-    title: 'Documents and standalone images use separate buckets',
-    detail: 'Free document generation has a 10-document-per-day bucket. Standalone `new img` has its own 3-image-per-day free bucket and always calls the OfficeCLI image service.',
+    title: 'External and Hosted Mode share one binary',
+    detail: 'PPTX, DOCX, XLSX, REPORT, and IMG generation all run from the same officecli binary. External IMG uses your local image provider; Hosted IMG uses OfficeCLI-managed runtime.',
   },
   {
-    title: 'Paid usage is API-key based',
-    detail: 'Paid users consume purchased document-generation quota through API keys managed by the platform. A successful image consumes one image generation count from the same license.',
+    title: 'Hosted usage is API-key based',
+    detail: 'Hosted users consume hosted credits through API keys managed by the platform. Checkout sells hosted credits only.',
   },
   {
-    title: 'Quota is consumed only after successful generation',
-    detail: 'Availability is checked before generation, but quota is spent only after the document or image is generated successfully.',
+    title: 'Hosted credits are consumed only after successful generation',
+    detail: 'Availability is checked before Hosted Mode generation, but hosted credits are spent only after the document or image is generated successfully.',
   },
   {
-    title: 'Platform and CLI surfaces reflect quota status',
-    detail: 'The CLI, app, and admin surfaces are expected to show the current free or paid quota state for both documents and standalone images.',
+    title: 'Platform and CLI surfaces reflect runtime status',
+    detail: 'The CLI, app, and admin surfaces show hosted credits, usage events, orders, and growth credit grants while External Mode remains free and unlimited.',
   },
   {
     title: 'Invite rewards are available with current limits',
-    detail: 'Invite codes, referral progress, and reward quota are visible today, but Discord reward automation and attribution analytics are still partial.',
+    detail: 'Invite codes, referral progress, and hosted credit grants are visible today. Each activated referral grants 20 hosted credits up to the current limit.',
   },
 ]
 
 export const inviteRewardSteps: TipGroup[] = [
   {
     title: 'Find your invite code in the app',
-    detail: 'Open the platform Overview page and look at Reward Quota. That card shows the invite code currently attached to your account.',
+    detail: 'Open the platform Overview page and look at Invite Credits. That card shows the invite code currently attached to your account.',
   },
   {
     title: 'Share the invite-bearing login link',
@@ -393,7 +393,7 @@ export const inviteRewardSteps: TipGroup[] = [
   },
   {
     title: 'Wait for activation before expecting quota',
-    detail: 'Registration and activation are different states. Bonus generations are granted only after the invited account completes its first successful generation.',
+    detail: 'Registration and activation are different states. Hosted credits are granted only after the invited account completes its first successful generation.',
   },
 ]
 
@@ -403,8 +403,8 @@ export const inviteRewardRules: UsageRule[] = [
     detail: 'The current backend limit is five captured referrals per inviter account.',
   },
   {
-    title: 'Each activated referral adds 10 bonus generations',
-    detail: 'Reward quota increases only when the referral becomes activated, not when the invite link is merely shared.',
+    title: 'Each activated referral adds 20 hosted credits',
+    detail: 'Hosted credits increase only when the referral becomes activated, not when the invite link is merely shared.',
   },
   {
     title: 'Current app access policy still applies',
@@ -412,7 +412,7 @@ export const inviteRewardRules: UsageRule[] = [
   },
   {
     title: 'Use app surfaces to verify progress',
-    detail: 'Overview shows Reward Quota, Referral Progress, and the referral timeline. Quota shows reward grant detail and current remaining reward balance.',
+    detail: 'Overview shows Invite Credits, Referral Progress, and the referral timeline. Admin growth surfaces show hosted credit grant detail and current reward state.',
   },
 ]
 
@@ -431,7 +431,7 @@ export const inviteRewardChecklists: DocsChecklist[] = [
     items: [
       'Use Referral Progress to see how many invite slots are still available.',
       'Use the referral timeline to distinguish registered, activated, and reward-granted states.',
-      'Use Reward grant detail on the Quota page to confirm the bonus quota that landed on the account.',
+      'Use hosted credit grant detail to confirm the invite credits that landed on the account.',
     ],
   },
 ]
@@ -447,7 +447,7 @@ export const troubleshootingTips: TipGroup[] = [
   },
   {
     title: 'Standalone `new img` fails or skips quota',
-    detail: 'Standalone images always go through the OfficeCLI server and require `officecli config set-license`. They ignore `config set-generation` image settings. The free bucket is 3 images per user per day; paid usage consumes the license image quota.',
+    detail: 'External Mode standalone images use your local `config set-generation` image provider and do not consume OfficeCLI hosted credits. Hosted Mode images require `officecli config set-license` and spend hosted credits through the OfficeCLI-managed runtime.',
   },
   {
     title: 'No image preview link returned',
@@ -463,7 +463,7 @@ export const troubleshootingTips: TipGroup[] = [
   },
   {
     title: 'Access or quota behavior looks wrong',
-    detail: 'Run `officecli auth status` and confirm whether the machine is in free mode or using a paid API key. If you expect paid usage, save the correct key with `officecli auth set-key`.',
+    detail: 'Run `officecli auth status` and confirm whether the machine is using External Mode or Hosted Mode. If you expect Hosted Mode usage, save the correct hosted key with `officecli auth set-key`.',
   },
 ]
 
@@ -548,7 +548,7 @@ export const publishGuide: PublishGuide = {
     '$ officecli new pptx "Q3 Business Review" --prompt-file ./brief.md',
     'Generation completed. Saved to output/Q3_BUSINESS_REVIEW.PPTX',
     'Preview URL: https://officecli.io/p/xyz123; password: abcdef',
-    'Access: paid mode; 109 generations remaining; trial 10',
+    'Access: External Mode; free unlimited with your model endpoint',
   ],
 }
 

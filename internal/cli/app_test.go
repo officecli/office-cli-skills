@@ -1392,7 +1392,7 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 		"Launch Visual",
 		"--prompt", "A polished product launch hero image",
 		"--ratio", "landscape",
-	}, Config{Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true}}, InputSources{IsTTY: true, CWD: tmpDir})
+	}, Config{Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true}, Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, InputSources{IsTTY: true, CWD: tmpDir})
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
 	}
@@ -1555,7 +1555,7 @@ func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
 		DocumentType: engine.DocumentTypeIMG,
 		Topic:        "Slow Image",
 		Prompt:       "A polished product launch hero image",
-		RuntimeMode:  RuntimeModeExternal,
+		RuntimeMode:  RuntimeModeHosted,
 		Mode:         "fast",
 		OutputDir:    tmpDir,
 		ImageRatio:   "square",
@@ -1580,7 +1580,7 @@ func TestExecuteGenerateJob_IMGRequiresLicenseConfig(t *testing.T) {
 	}
 
 	_, err := app.executeGenerateJob(t.Context(), Config{}, job, false, noopProgressController{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "officecli config set-license") {
+	if err == nil || !strings.Contains(err.Error(), "officecli config set-generation") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -1623,6 +1623,7 @@ func TestExecuteGenerateJob_IMGForcesLicenseCheckWhenAccessChecksDisabled(t *tes
 		Prompt:       "A polished product launch hero image",
 		OutputDir:    tmpDir,
 		ImageRatio:   "square",
+		RuntimeMode:  RuntimeModeHosted,
 	}
 	result, err := app.executeGenerateJob(t.Context(), Config{
 		License: LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: false, TimeoutSec: 5},
@@ -1976,10 +1977,10 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		needles []string
 	}{
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
-		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a paid API key."}},
+		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a hosted API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--ratio <value>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`", "officecli config set-license"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--ratio <value>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`", "hosted image route"}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
@@ -2799,7 +2800,7 @@ func TestAppRun_AuthSetKeyWritesConfig(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-license\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "Saved the paid API key") {
+	if !strings.Contains(stdout.String(), "Saved the hosted API key") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -2843,7 +2844,7 @@ func TestAppRun_AuthSetKeyPromptsWhenArgMissing(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-interactive\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "Enter the paid API key") {
+	if !strings.Contains(stdout.String(), "Enter the hosted API key") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -3322,7 +3323,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	if !strings.Contains(output, "Access checks enabled: true") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "Paid API key configured: false") {
+	if !strings.Contains(output, "Hosted API key configured: false") {
 		t.Fatalf("stdout = %s", output)
 	}
 }

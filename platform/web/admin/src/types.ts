@@ -109,8 +109,21 @@ export interface BillingEvent {
 
 export interface AdminGrowth {
   reward_grants: RewardGrant[]
+  hosted_credit_grants?: HostedCreditGrant[]
   referrals: Referral[]
   discord_connections: DiscordConnection[]
+}
+
+export interface HostedCreditGrant {
+  id: number
+  user_id: number
+  api_key_id: number
+  source_type: string
+  idempotency_key: string
+  credit_amount: number
+  reason: string
+  metadata_json: string
+  created_at: string
 }
 
 export interface HostedPricingRule {

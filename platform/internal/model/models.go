@@ -12,6 +12,7 @@ type UsageMode string
 type UsageAction string
 type UsageResult string
 type RewardSourceType string
+type HostedCreditGrantSource string
 type PackKind string
 
 const (
@@ -54,6 +55,9 @@ const (
 	RewardSourceInviteActivation RewardSourceType = "invite_activation_reward"
 	RewardSourceDiscordJoin      RewardSourceType = "discord_join_reward"
 	RewardSourceAdminManual      RewardSourceType = "admin_manual_grant"
+
+	HostedCreditGrantSourceSignup           HostedCreditGrantSource = "signup_bonus"
+	HostedCreditGrantSourceInviteActivation HostedCreditGrantSource = "invite_activation_bonus"
 
 	PackKindExternalGeneration PackKind = "external_generation"
 	PackKindHostedCredits      PackKind = "hosted_credits"
@@ -272,6 +276,20 @@ type UserReferral struct {
 }
 
 func (UserReferral) TableName() string { return "user_referrals" }
+
+type HostedCreditGrant struct {
+	ID             uint64                  `gorm:"primaryKey" json:"id"`
+	UserID         uint64                  `gorm:"column:user_id;index;not null" json:"user_id"`
+	APIKeyID       uint64                  `gorm:"column:api_key_id;index;not null" json:"api_key_id"`
+	SourceType     HostedCreditGrantSource `gorm:"column:source_type;size:64;index;not null" json:"source_type"`
+	IdempotencyKey string                  `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
+	CreditAmount   int                     `gorm:"column:credit_amount;not null" json:"credit_amount"`
+	Reason         string                  `gorm:"column:reason;size:191;not null" json:"reason"`
+	MetadataJSON   string                  `gorm:"column:metadata_json;type:json;not null" json:"metadata_json"`
+	CreatedAt      time.Time               `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+func (HostedCreditGrant) TableName() string { return "hosted_credit_grants" }
 
 type DiscordConnection struct {
 	ID              uint64     `gorm:"primaryKey" json:"id"`

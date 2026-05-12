@@ -16,6 +16,15 @@ export default function GrowthPage() {
     ]
   })
 
+  const hostedCreditRows = (growth?.hosted_credit_grants ?? []).map((grant) => [
+    <span key="user" className="text-white">{grant.user_id}</span>,
+    <span key="key" className="text-white">{grant.api_key_id}</span>,
+    <span key="source" className="text-white">{grant.source_type}</span>,
+    <span key="credits" className="text-white">{formatNumber(grant.credit_amount)}</span>,
+    <code key="idempotency" className="font-mono text-xs text-outline">{grant.idempotency_key}</code>,
+    <span key="created">{formatDate(grant.created_at)}</span>,
+  ])
+
   const referralRows = (growth?.referrals ?? []).map((referral) => [
     <span key="inviter" className="text-white">{referral.inviter_user_id}</span>,
     <span key="invited" className="text-white">{referral.invited_user_id}</span>,
@@ -38,12 +47,12 @@ export default function GrowthPage() {
         <SectionHeading
           eyebrow="Growth operations"
           title="Reward grants, referrals, and Discord connections"
-          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace how reward quota is granted and which Discord records are still blocked on trusted guild verification."
+          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace hosted credit grants, legacy reward quota, referrals, and Discord records."
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="panel-muted p-5">
-            <div className="info-eyebrow text-outline">Reward grants</div>
-            <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.reward_grants.length)}</div>
+            <div className="info-eyebrow text-outline">Hosted credit grants</div>
+            <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.hosted_credit_grants?.length)}</div>
           </div>
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-outline">Referrals</div>
@@ -54,6 +63,15 @@ export default function GrowthPage() {
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.discord_connections.length)}</div>
           </div>
         </div>
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Hosted credits ledger" title="Signup and invite credits" body="New users receive 30 hosted credits; each activated referral grants 20 hosted credits to the inviter, capped by the referral limit." />
+        {hostedCreditRows.length ? (
+          <DataTable headers={['User', 'API key', 'Source', 'Credits', 'Idempotency key', 'Created']} rows={hostedCreditRows} columns="0.6fr 0.7fr 1fr 0.6fr 1.4fr 1fr" />
+        ) : (
+          <EmptyState title="No hosted credit grants yet" body="Signup and invite hosted credit grants appear here after users enter the app or referrals activate." />
+        )}
       </Panel>
 
       <Panel>

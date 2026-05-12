@@ -274,11 +274,11 @@ func TestCreateCheckoutRejectsTargetKeyOwnedByAnotherUser(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
-		PackCode:       "pack_100",
+		PackCode:       "hosted-300",
 		TargetAPIKeyID: 7,
 	})
 
@@ -307,11 +307,11 @@ func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
-		PackCode:       "pack_100",
+		PackCode:       "hosted-300",
 		TargetAPIKeyID: 7,
 	})
 
@@ -321,6 +321,52 @@ func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
 	require.Contains(t, err.Error(), "disabled")
 	require.Empty(t, store.orders)
 	require.False(t, gateway.called)
+}
+
+func TestPricingOmitsExternalGenerationPacks(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(&fakeStore{}, &fakeGateway{}, []model.PricingPack{
+		{Code: "external-100", Name: "External 100", Currency: "usd", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)},
+		{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 300, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
+	})
+
+	packs := svc.Pricing()
+
+	require.Len(t, packs, 1)
+	require.Equal(t, "hosted-300", packs[0].Code)
+}
+
+func TestCreateCheckoutRejectsExternalGenerationPacks(t *testing.T) {
+	t.Parallel()
+
+	quota := 10
+	store := &fakeStore{
+		apiKeys: map[uint64]*model.APIKey{
+			7: {
+				ID:          7,
+				OwnerUserID: uint64Ptr(42),
+				Status:      model.APIKeyStatusActive,
+				PlanName:    "Growth",
+				QuotaTotal:  &quota,
+			},
+		},
+	}
+	gateway := &fakeGateway{}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "external-100", Name: "External 100", Currency: "usd", AmountTotal: 500, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
+		UserID:         42,
+		PackCode:       "external-100",
+		TargetAPIKeyID: 7,
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "external mode is free and no longer sold as a paid pack")
+	require.Nil(t, order)
+	require.Empty(t, checkoutURL)
+	require.False(t, gateway.called)
+	require.Empty(t, store.orders)
 }
 
 func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
@@ -343,11 +389,11 @@ func TestCreateCheckoutUsesExistingStripeCustomerID(t *testing.T) {
 		},
 	}
 	gateway := &fakeGateway{}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
-		PackCode:       "pack_100",
+		PackCode:       "hosted-300",
 		TargetAPIKeyID: 7,
 	})
 
@@ -388,11 +434,11 @@ func TestCreateCheckoutRetriesWithoutStoredStripeCustomerWhenStripeCustomerIsMis
 			nil,
 		},
 	}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
-		PackCode:       "pack_100",
+		PackCode:       "hosted-300",
 		TargetAPIKeyID: 7,
 	})
 
@@ -431,11 +477,11 @@ func TestCreateCheckoutDoesNotRetryWithoutCustomerForOtherStripeErrors(t *testin
 			},
 		},
 	}
-	svc := NewService(store, gateway, []model.PricingPack{{Code: "pack_100", Name: "100 Credits", Currency: "usd", AmountTotal: 990, QuotaAmount: 100, PackKind: string(model.PackKindExternalGeneration)}})
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
 		UserID:         42,
-		PackCode:       "pack_100",
+		PackCode:       "hosted-300",
 		TargetAPIKeyID: 7,
 	})
 

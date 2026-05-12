@@ -9,8 +9,19 @@ export default function Features() {
           What Is <span className="text-primary italic">OfficeCLI</span>
         </h2>
         <p className="text-outline-variant text-lg max-w-2xl">
-          OfficeCLI is a local-first AI document generation CLI for developers and automation teams. It keeps document automation close to your terminal with one binary, your own LLM endpoint, and no required backend stack.
+          OfficeCLI is a local-first AI document generation CLI for developers and automation teams. Choose free unlimited External Mode with your own model endpoint, or Hosted Mode with OfficeCLI-managed runtime and hosted credits.
         </p>
+      </div>
+
+      <div className="mb-8 grid gap-6 md:grid-cols-2">
+        <div className="bg-surface-low p-8 rounded-2xl border border-tertiary/20">
+          <h3 className="font-headline text-2xl font-bold text-white mb-3">External Mode</h3>
+          <p className="text-outline-variant leading-relaxed">Free unlimited PPTX, DOCX, XLSX, REPORT, and IMG generation with your own LLM endpoint. Standalone IMG uses the image provider configured by <code>config set-generation</code>.</p>
+        </div>
+        <div className="bg-surface-low p-8 rounded-2xl border border-primary/20">
+          <h3 className="font-headline text-2xl font-bold text-white mb-3">Hosted Mode</h3>
+          <p className="text-outline-variant leading-relaxed">Use OfficeCLI-managed model runtime and hosted credits when you want fast setup without maintaining model service configuration.</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(200px,auto)]">
@@ -30,7 +41,7 @@ export default function Features() {
                 <Bolt className="text-tertiary w-12 h-12 mb-8" />
                 <h3 className="font-headline text-4xl font-bold text-white mb-4">Single-Binary Document Automation</h3>
                 <p className="text-outline-variant text-lg leading-relaxed max-w-md">
-                  OfficeCLI ships as one lightweight binary for AI document generation. For the core local path, it only needs your LLM endpoint instead of a backend stack, queueing layer, or cluster.
+                  OfficeCLI ships as one lightweight binary for AI document generation. It does not require Python, LibreOffice, Microsoft Office, Docker, Kubernetes, a backend stack, queueing layer, or cluster.
                 </p>
               </div>
               <div className="mt-12 border-t border-outline-variant/10 pt-6">
@@ -94,8 +105,8 @@ export default function Features() {
             <li className="flex items-start gap-3">
               <Bot className="text-primary w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-white block mb-0.5">AI Agents</span>
-                <span className="text-outline-variant">Embed in custom agentic workflows</span>
+                <span className="font-bold text-white block mb-0.5">Optional AI Agents</span>
+                <span className="text-outline-variant">Use fully without an agent, or integrate Codex, Claude, and OpenClaw</span>
               </div>
             </li>
             <li className="flex items-start gap-3">

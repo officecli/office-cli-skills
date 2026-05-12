@@ -22,8 +22,12 @@ describe('marketing site shell', () => {
 
     expect(screen.getAllByText('OfficeCLI').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('heading', { name: /Generate PPTX.*DOCX, XLSX, REPORT, and IMG Outputs From One AI CLI/i, level: 1 }),
+      screen.getByRole('heading', { name: /AI Document Generation in External or Hosted Mode/i, level: 1 }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/External: free unlimited with your own model endpoint/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hosted: OfficeCLI-managed runtime with hosted credits/i)).toBeInTheDocument()
+    expect(screen.getAllByText('External Mode').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Hosted Mode').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /^ROADMAP$/i, level: 2 })).toBeInTheDocument()
     expect(
       screen.getByText(/OfficeCLI is moving from document generation into a broader document operations workflow/i),
@@ -169,7 +173,7 @@ describe('marketing site shell', () => {
     expect(screen.getAllByText('Use With OpenClaw').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Pricing & Usage Rules').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Invite Rewards').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Each activated referral adds 10 bonus generations/i)).toBeInTheDocument()
+    expect(screen.getByText(/Each activated referral adds 20 hosted credits/i)).toBeInTheDocument()
     expect(screen.getAllByText(/--prompt-file/i).length).toBeGreaterThan(0)
     expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
   })
@@ -225,7 +229,8 @@ describe('site metadata and assets', () => {
     const html = renderRouteApp('/')
 
     expect(html).toContain('<main')
-    expect(html).toContain('REPORT, and IMG Outputs From One AI CLI')
+    expect(html).toContain('External + Hosted modes')
+    expect(html).toContain('External: free unlimited with your own model endpoint')
     expect(html).toContain('id="faq"')
   })
 

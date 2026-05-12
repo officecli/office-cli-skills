@@ -26,6 +26,7 @@ type overviewRouteStore struct {
 	rewardGrants []model.RewardGrant
 	referrals    []model.UserReferral
 	discord      *model.DiscordConnection
+	creditGrants map[string]*model.HostedCreditGrant
 }
 
 func (s *overviewRouteStore) CountUserAPIKeys(_ context.Context, _ uint64) (int64, error) {
@@ -61,7 +62,39 @@ func (s *overviewRouteStore) CreateAuditLog(_ context.Context, _, _, _, _ string
 }
 
 func (s *overviewRouteStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix, ciphertext string) (*model.APIKey, error) {
-	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext}, nil
+	key := model.APIKey{ID: uint64(len(s.apiKeys) + 1), OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext, Status: model.APIKeyStatusActive, AllowedModes: "external_only"}
+	s.apiKeys = append(s.apiKeys, key)
+	return &key, nil
+}
+
+func (s *overviewRouteStore) FindHostedCreditGrantByIdempotencyKey(_ context.Context, key string) (*model.HostedCreditGrant, error) {
+	if s.creditGrants == nil || s.creditGrants[key] == nil {
+		return nil, nil
+	}
+	copied := *s.creditGrants[key]
+	return &copied, nil
+}
+
+func (s *overviewRouteStore) GrantHostedCreditsToAPIKey(_ context.Context, apiKeyID, userID uint64, source model.HostedCreditGrantSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.HostedCreditGrant, bool, error) {
+	if s.creditGrants == nil {
+		s.creditGrants = map[string]*model.HostedCreditGrant{}
+	}
+	if grant := s.creditGrants[idempotencyKey]; grant != nil {
+		copied := *grant
+		return &copied, false, nil
+	}
+	for i := range s.apiKeys {
+		if s.apiKeys[i].ID == apiKeyID {
+			s.apiKeys[i].CreditBalance += creditAmount
+			s.apiKeys[i].HostedEnabled = true
+			s.apiKeys[i].AllowedModes = "hybrid"
+			break
+		}
+	}
+	grant := &model.HostedCreditGrant{ID: uint64(len(s.creditGrants) + 1), UserID: userID, APIKeyID: apiKeyID, SourceType: source, IdempotencyKey: idempotencyKey, CreditAmount: creditAmount, Reason: reason, MetadataJSON: metadataJSON}
+	s.creditGrants[idempotencyKey] = grant
+	copied := *grant
+	return &copied, true, nil
 }
 
 func (s *overviewRouteStore) UpdateAPIKey(_ context.Context, _ uint64, _ map[string]any) error {
@@ -176,7 +209,7 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 	gin.SetMode(gin.TestMode)
 
 	store := &overviewRouteStore{
-		apiKeys:      []model.APIKey{{QuotaTotal: routeIntPtr(10), QuotaUsed: 4}},
+		apiKeys:      []model.APIKey{{ID: 1, Status: model.APIKeyStatusActive, QuotaTotal: routeIntPtr(10), QuotaUsed: 4}},
 		usage:        []model.UsageEvent{{ID: 1}, {ID: 2}},
 		user:         &model.User{ID: 42, InviteCode: "invite-xyz"},
 		rewardGrants: []model.RewardGrant{{AmountTotal: 9, AmountUsed: 3}},

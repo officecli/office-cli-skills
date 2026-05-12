@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -103,7 +105,7 @@ func TestExecuteGenerateJob_IMGChecksGenerationAccessBeforeImageRequest(t *testi
 		DocumentType: engine.DocumentTypeIMG,
 		Topic:        "Launch Visual",
 		Prompt:       "A polished product launch hero image",
-		RuntimeMode:  RuntimeModeExternal,
+		RuntimeMode:  RuntimeModeHosted,
 		Mode:         "fast",
 		OutputDir:    t.TempDir(),
 		ImageRatio:   "square",
@@ -117,4 +119,123 @@ func TestExecuteGenerateJob_IMGChecksGenerationAccessBeforeImageRequest(t *testi
 	if imageCalls != 0 {
 		t.Fatalf("image requests = %d, want 0", imageCalls)
 	}
+}
+
+func TestExecuteGenerateJob_IMGExternalUsesLocalImageProvider(t *testing.T) {
+	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9sAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode image: %v", err)
+	}
+	imageCalls := 0
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		return localImageLLMClient{
+			onImage: func(req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+				imageCalls++
+				if req.Prompt == "" {
+					t.Fatalf("image prompt is empty")
+				}
+				return &engine.ImageGenerationResult{Data: imageBytes, MIME: "image/png"}, nil
+			},
+		}, nil
+	}
+	licenseChecks := 0
+	licenseConsumes := 0
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return countingLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				licenseChecks++
+				if RuntimeMode(req.RuntimeMode) != RuntimeModeExternal {
+					t.Fatalf("runtime mode = %q", req.RuntimeMode)
+				}
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModeFree,
+					CommitToken: signTestCommitToken(req, LicenseAccessModeFree, UsageCommitToken{}),
+				}, nil
+			},
+			consume: func(token UsageCommitToken) (*UsageConsumeResult, error) {
+				licenseConsumes++
+				return &UsageConsumeResult{AccessMode: LicenseAccessModeFree}, nil
+			},
+		}, nil
+	}
+
+	tmpDir := t.TempDir()
+	result, err := app.executeGenerateJob(context.Background(), Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		LLM:      LLMConfig{BaseURL: "https://llm.example.com/v1", APIKey: "image-key", Model: "gpt-4.1", ImageModel: "gpt-image-1"},
+		License:  LicenseConfig{BaseURL: "https://platform.example.com/api", APIKey: "optional-key", Enabled: true, TimeoutSec: 5},
+		Publish:  disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch Visual",
+		Prompt:       "A polished product launch hero image",
+		RuntimeMode:  RuntimeModeExternal,
+		Mode:         "fast",
+		OutputDir:    tmpDir,
+		ImageRatio:   "landscape",
+	}, false, noopProgressController{}, nil)
+
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if imageCalls != 1 {
+		t.Fatalf("image calls = %d", imageCalls)
+	}
+	if licenseChecks != 1 || licenseConsumes != 1 {
+		t.Fatalf("license checks=%d consumes=%d", licenseChecks, licenseConsumes)
+	}
+	data, err := os.ReadFile(result.FilePath)
+	if err != nil {
+		t.Fatalf("read image: %v", err)
+	}
+	if string(data) != string(imageBytes) {
+		t.Fatalf("image bytes = %q", string(data))
+	}
+	if result.RuntimeMode != string(RuntimeModeExternal) {
+		t.Fatalf("runtime mode = %q", result.RuntimeMode)
+	}
+}
+
+type localImageLLMClient struct {
+	onImage func(engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error)
+}
+
+func (localImageLLMClient) CompleteText(context.Context, []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (localImageLLMClient) CompleteJSON(context.Context, []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (localImageLLMClient) CompleteStructured(context.Context, engine.StructuredCompletionRequest) (string, error) {
+	return "", nil
+}
+
+func (c localImageLLMClient) GenerateImage(_ context.Context, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	if c.onImage == nil {
+		return nil, fmt.Errorf("unexpected image request")
+	}
+	return c.onImage(req)
+}
+
+type countingLicenseManager struct {
+	check   func(LicenseCheckRequest) (*LicenseCheckResult, error)
+	consume func(UsageCommitToken) (*UsageConsumeResult, error)
+}
+
+func (m countingLicenseManager) Check(_ context.Context, req LicenseCheckRequest) (*LicenseCheckResult, error) {
+	if m.check == nil {
+		return nil, fmt.Errorf("unexpected check")
+	}
+	return m.check(req)
+}
+
+func (m countingLicenseManager) Consume(_ context.Context, token UsageCommitToken) (*UsageConsumeResult, error) {
+	if m.consume == nil {
+		return nil, nil
+	}
+	return m.consume(token)
 }

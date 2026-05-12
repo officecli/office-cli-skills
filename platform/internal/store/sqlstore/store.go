@@ -503,6 +503,93 @@ func (s *Store) AddCreditBalanceToAPIKey(ctx context.Context, apiKeyID uint64, c
 	return withRemaining(key), nil
 }
 
+func (s *Store) FindHostedCreditGrantByIdempotencyKey(ctx context.Context, key string) (*model.HostedCreditGrant, error) {
+	var grant model.HostedCreditGrant
+	if err := s.db.WithContext(ctx).Where("idempotency_key = ?", key).First(&grant).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &grant, nil
+}
+
+func (s *Store) ListHostedCreditGrants(ctx context.Context) ([]model.HostedCreditGrant, error) {
+	var grants []model.HostedCreditGrant
+	if err := s.db.WithContext(ctx).Order("created_at desc, id desc").Find(&grants).Error; err != nil {
+		return nil, err
+	}
+	return grants, nil
+}
+
+func (s *Store) GrantHostedCreditsToAPIKey(ctx context.Context, apiKeyID, userID uint64, source model.HostedCreditGrantSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.HostedCreditGrant, bool, error) {
+	if creditAmount <= 0 {
+		return nil, false, fmt.Errorf("credit amount must be positive")
+	}
+	var result *model.HostedCreditGrant
+	created := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.HostedCreditGrant
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			result = &existing
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		var key model.APIKey
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&key, apiKeyID).Error; err != nil {
+			return err
+		}
+		if key.OwnerUserID == nil || *key.OwnerUserID != userID {
+			return fmt.Errorf("target api key does not belong to user")
+		}
+		if key.Status != model.APIKeyStatusActive {
+			return fmt.Errorf("target api key is disabled")
+		}
+
+		grant := &model.HostedCreditGrant{
+			UserID:         userID,
+			APIKeyID:       apiKeyID,
+			SourceType:     source,
+			IdempotencyKey: strings.TrimSpace(idempotencyKey),
+			CreditAmount:   creditAmount,
+			Reason:         strings.TrimSpace(reason),
+			MetadataJSON:   metadataJSON,
+		}
+		if grant.MetadataJSON == "" {
+			grant.MetadataJSON = "{}"
+		}
+		if err := tx.Create(grant).Error; err != nil {
+			if isDuplicateConstraintError(err) {
+				if loadErr := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; loadErr == nil {
+					result = &existing
+					return nil
+				}
+			}
+			return err
+		}
+
+		key.CreditBalance += creditAmount
+		key.HostedEnabled = true
+		switch key.AllowedModes {
+		case "", "external_only":
+			key.AllowedModes = "hybrid"
+		}
+		if key.DefaultRuntimeMode == nil || strings.TrimSpace(*key.DefaultRuntimeMode) == "" || strings.TrimSpace(*key.DefaultRuntimeMode) == "external" {
+			defaultRuntimeMode := "hosted"
+			key.DefaultRuntimeMode = &defaultRuntimeMode
+		}
+		if err := tx.Save(&key).Error; err != nil {
+			return err
+		}
+		result = grant
+		created = true
+		return nil
+	})
+	return result, created, err
+}
+
 func (s *Store) ReserveCreditsByHash(ctx context.Context, hash string, credits int) (*model.APIKey, error) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {

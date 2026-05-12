@@ -64,91 +64,103 @@ assert_body_contains() {
 
 info "platform=${PLATFORM_BASE_URL}"
 info "fingerprint=${FINGERPRINT_HASH}"
-info "Recommendation: set the free_limit for this fingerprint to ${FREE_LIMIT} in the admin backend or database first"
+info "External Mode should remain free and unlimited even if historical free quota counters are exhausted"
 
-info "1) First free check"
+info "0) Public pricing only exposes hosted credit packs"
+pricing="$(curl -fsS "${PLATFORM_BASE_URL}/api/pricing")"
+printf '%s' "$pricing" | jq -e '.data | length > 0 and all(.[]; .pack_kind == "hosted_credits")' >/dev/null || fail "pricing contains non-hosted packs: ${pricing}"
+pass "pricing exposes hosted credit packs only"
+
+info "1) First external check"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
   "request_nonce":"${FINGERPRINT_HASH}-nonce-1",
-  "action":"generate"
+  "action":"generate",
+  "runtime_mode":"external",
+  "document_type":"pptx"
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "First free check returns 200"
-assert_body_contains "$body" '"access_mode":"free"' "First free check returns free mode"
-assert_body_contains "$body" '"allowed":true' "First free check is allowed"
+assert_status "$status" "200" "First external check returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "First external check returns free access token"
+assert_body_contains "$body" '"allowed":true' "First external check is allowed"
+assert_body_contains "$body" '"selected_runtime_mode":"external"' "First external check selects external runtime"
+assert_body_contains "$body" 'External mode is free with unlimited generations' "First external check explains free unlimited"
 commit_token_1="$(extract_json "$body" '.data.commit_token')"
 request_id_1="$(extract_json "$body" '.data.commit_token.request_id')"
 
-info "2) First free consume"
+info "2) First external consume"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
   "request_id":"${request_id_1}",
   "usage_type":"generate",
   "access_mode":"free",
+  "runtime_mode":"external",
   "commit_token":${commit_token_1}
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "First free consume returns 200"
-assert_body_contains "$body" '"access_mode":"free"' "First free consume returns free mode"
+assert_status "$status" "200" "First external consume returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "First external consume returns free mode"
 
-info "3) Second free check"
+info "3) Second external check after consume"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
   "request_nonce":"${FINGERPRINT_HASH}-nonce-2",
-  "action":"generate"
+  "action":"generate",
+  "runtime_mode":"external",
+  "document_type":"img"
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "Second free check returns 200"
-assert_body_contains "$body" '"access_mode":"free"' "Second free check returns free mode"
-assert_body_contains "$body" '"allowed":true' "Second free check is allowed"
+assert_status "$status" "200" "Second external check returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "Second external check returns free mode"
+assert_body_contains "$body" '"allowed":true' "Second external check is still allowed"
 commit_token_2="$(extract_json "$body" '.data.commit_token')"
 request_id_2="$(extract_json "$body" '.data.commit_token.request_id')"
 
-info "4) Second free consume"
+info "4) Second external consume"
 resp="$(request POST /api/license/consume "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
   "request_id":"${request_id_2}",
   "usage_type":"generate",
   "access_mode":"free",
+  "runtime_mode":"external",
   "commit_token":${commit_token_2}
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-if [[ "$FREE_LIMIT" -ge 2 ]]; then
-  assert_status "$status" "200" "Second free consume returns 200"
-else
-  assert_status "$status" "409" "Second free consume returns 409"
-fi
+assert_status "$status" "200" "Second external consume returns 200"
+assert_body_contains "$body" '"access_mode":"free"' "Second external consume returns free mode"
 
-info "5) Check again and verify blocking after free quota exhaustion"
+info "5) Check again and verify External Mode does not block after repeated consumes"
 resp="$(request POST /api/license/check "$(cat <<JSON
 {
   "fingerprint_hash":"${FINGERPRINT_HASH}",
   "request_nonce":"${FINGERPRINT_HASH}-nonce-overflow",
-  "action":"generate"
+  "action":"generate",
+  "runtime_mode":"external",
+  "document_type":"report"
 }
 JSON
 )")"
 status="$(extract_status "$resp")"
 body="$(extract_body "$resp")"
-assert_status "$status" "200" "Quota-exhausted check still returns 200"
-assert_body_contains "$body" '"allowed":false' "Quota-exhausted check returns blocked"
-assert_body_contains "$body" '"reason_code":"free_quota_exhausted"' "Quota-exhausted reason code is correct"
+assert_status "$status" "200" "Repeated external check returns 200"
+assert_body_contains "$body" '"allowed":true' "Repeated external check remains allowed"
+assert_body_contains "$body" 'External mode is free with unlimited generations' "Repeated external check explains free unlimited"
 
 info "6) Invalid JSON returns 400"
 tmp="$(mktemp)"

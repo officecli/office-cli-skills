@@ -36,9 +36,9 @@ const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
 const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
 
-const homeTitle = 'OfficeCLI | AI PPTX, DOCX, XLSX, REPORT, and IMG Generator with One-Command Online Publish'
+const homeTitle = 'OfficeCLI | External and Hosted AI PPTX, DOCX, XLSX, REPORT, and IMG Generator'
 const homeDescription =
-  'OfficeCLI is a local-first AI document generation CLI for PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs. Generate from your terminal with your own LLM endpoint, then publish a password-protected online preview link in one command — a share path other AI document CLIs do not ship out of the box.'
+  'OfficeCLI supports External Mode with free unlimited BYO LLM endpoint generation and Hosted Mode with OfficeCLI-managed runtime using hosted credits. Generate PPTX, DOCX, XLSX, REPORT, and IMG outputs from one dependency-free binary.'
 
 export const homeFAQs: FAQEntry[] = [
   {
@@ -275,13 +275,13 @@ export const routeSEO: Record<string, RouteSEO> = {
   ),
   '/download': buildRouteSEO(
     '/download',
-    'Install OfficeCLI | AI document generation CLI for macOS and Linux',
-    'Install OfficeCLI with Homebrew, npm, the official script, or manual binaries for macOS and Linux, then generate PPTX, DOCX, XLSX, REPORT, and standalone IMG outputs from the terminal.',
+    'Install OfficeCLI | External and Hosted AI document generation CLI',
+    'Install OfficeCLI with Homebrew, npm, the official script, or manual binaries for External Mode, Hosted Mode, BYO LLM endpoint generation, hosted credits, and dependency-free PPTX, DOCX, XLSX, REPORT, and IMG generation.',
   ),
   '/pricing': buildRouteSEO(
     '/pricing',
-    'OfficeCLI Pricing | Paid access for document automation workflows',
-    'See OfficeCLI pricing for platform access, billing-aware document automation workflows, and secure checkout for recurring team usage.',
+    'OfficeCLI Pricing | External free unlimited and Hosted credits',
+    'See OfficeCLI pricing: External Mode is free and unlimited, while Hosted Mode uses hosted credits for the OfficeCLI-managed runtime.',
   ),
   '/faq': buildRouteSEO(
     '/faq',

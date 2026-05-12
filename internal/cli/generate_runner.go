@@ -14,6 +14,9 @@ import (
 
 func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJob, isTTY bool, progress progressController, prompter Prompter) (GenerateResult, error) {
 	if job.DocumentType == engine.DocumentTypeIMG {
+		if job.RuntimeMode != RuntimeModeHosted {
+			return a.executeExternalImageJob(ctx, cfg, job, progress)
+		}
 		return a.executeHostedImageJob(ctx, cfg, job, progress)
 	}
 	if missing := missingLLMConfig(cfg); missing != "" {
@@ -92,6 +95,49 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		service.WithImageLLM(imageLLMClient)
 	}
 	executor := NewExecutor(service, publisher, manager)
+	executor.progress = progress
+	return executor.Run(ctx, job)
+}
+
+func (a *App) executeExternalImageJob(ctx context.Context, cfg Config, job GenerateJob, progress progressController) (GenerateResult, error) {
+	if missing := missingLLMConfig(cfg); missing != "" {
+		return GenerateResult{}, fmt.Errorf("generation service is not fully configured: missing %s. Run `officecli config set-generation` to finish setup", missing)
+	}
+	if job.RuntimeMode == "" {
+		job.RuntimeMode = RuntimeModeExternal
+	}
+	job.Mode = "fast"
+
+	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	job.LicenseCheck = licenseCheck
+	if len(job.ReferenceImageSources) > 0 {
+		references, err := resolveReferenceImages(ctx, job.ReferenceImageSources)
+		if err != nil {
+			return GenerateResult{}, err
+		}
+		job.ReferenceImages = references
+	}
+
+	llmClient, err := a.newLLMClient(cfg.LLM)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	publishCfg := cfg.Publish
+	if strings.TrimSpace(publishCfg.APIKey) == "" {
+		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
+	}
+	publisher, err := publishprovider.NewPublisher(publishCfg)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	manager, err := a.newLicenseService(cfg.License)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	executor := NewExecutor(runtime.NewService(llmClient, progress), publisher, manager)
 	executor.progress = progress
 	return executor.Run(ctx, job)
 }

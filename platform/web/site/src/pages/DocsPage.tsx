@@ -394,7 +394,7 @@ export default function DocsPage() {
             <SectionHeading
               id="pricing-rules"
               title="Pricing & Usage Rules"
-              description="Pricing and document-generation quota behavior are surfaced through the platform and can be validated from the public pricing API and billing workspace."
+              description="External Mode is free and unlimited with your own model endpoint. Hosted Mode uses hosted credits surfaced through the public pricing API and billing workspace."
             />
             <div className="grid gap-6 md:grid-cols-2 mb-10">
               {usageRules.map((rule) => (
@@ -426,7 +426,7 @@ export default function DocsPage() {
             <SectionHeading
               id="invite-rewards"
               title="Invite Rewards"
-              description="Use this flow when you want to invite a teammate, understand when reward quota is granted, and know where to verify each stage in the app."
+              description="Use this flow when you want to invite a teammate, understand when hosted credits are granted, and know where to verify each stage in the app."
             />
             <div className="grid gap-6 md:grid-cols-3 mb-10">
               {inviteRewardSteps.map((step) => (

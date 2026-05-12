@@ -7,6 +7,8 @@ export interface TrialPolicy {
 export interface AppOverview {
   api_key_count: number
   total_remaining: number
+  hosted_credit_balance?: number
+  signup_credit_bonus?: number
   reward_remaining: number
   invite_code?: string
   invite_limit: number

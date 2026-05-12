@@ -23,7 +23,7 @@ describe('billing page', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders external-only pricing and order history', async () => {
+  it('renders hosted pricing while preserving historical external order history', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/pricing') {
@@ -32,13 +32,13 @@ describe('billing page', () => {
           status: 200,
           json: async () => ({
             data: [{
-              code: 'external-100',
-              name: 'External 100',
-              description: '100 document generations for lightweight evaluation and individual workflows.',
+              code: 'hosted-300',
+              name: 'Hosted 300',
+              description: '300 hosted credits for OfficeCLI-managed generation.',
               currency: 'usd',
-              amount_total: 500,
-              quota_amount: 100,
-              pack_kind: 'external_generation',
+              amount_total: 300,
+              credit_amount: 300,
+              pack_kind: 'hosted_credits',
             }],
           }),
         }
@@ -73,12 +73,13 @@ describe('billing page', () => {
 
     renderPage()
 
-    expect((await screen.findAllByText('External 100')).length).toBeGreaterThan(0)
-    expect(screen.getByText(/100 document generations for lightweight evaluation and individual workflows\./i)).toBeInTheDocument()
-    expect(screen.getByText(/100 document generations per purchase/i)).toBeInTheDocument()
+    expect((await screen.findAllByText('Hosted 300')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/300 hosted credits for OfficeCLI-managed generation\./i)).toBeInTheDocument()
+    expect(screen.getByText(/300 credits/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Continue to Stripe Checkout/i })).toBeInTheDocument()
+    expect(screen.queryByText(/external-100/i)).not.toBeInTheDocument()
     expect(screen.getByText('pi_test_123')).toBeInTheDocument()
     expect(screen.getByText(/API key #7/i)).toBeInTheDocument()
-    expect(screen.queryByText(/hosted credits per purchase/i)).not.toBeInTheDocument()
   })
 
   it('posts checkout to the existing app endpoint and keeps Stripe copy explicit', async () => {
@@ -91,13 +92,13 @@ describe('billing page', () => {
           status: 200,
           json: async () => ({
             data: [{
-              code: 'external-100',
-              name: 'External 100',
-              description: '100 document generations for lightweight evaluation and individual workflows.',
+              code: 'hosted-300',
+              name: 'Hosted 300',
+              description: '300 hosted credits for platform-managed generation.',
               currency: 'usd',
-              amount_total: 500,
-              quota_amount: 100,
-              pack_kind: 'external_generation',
+              amount_total: 300,
+              credit_amount: 300,
+              pack_kind: 'hosted_credits',
             }],
           }),
         }
@@ -125,7 +126,7 @@ describe('billing page', () => {
       }
       if (url === '/api/app/checkout') {
         expect(init?.method).toBe('POST')
-        expect(init?.body).toBe(JSON.stringify({ pack_code: 'external-100', target_api_key_id: 7 }))
+        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300', target_api_key_id: 7 }))
         return {
           ok: true,
           status: 200,
@@ -143,7 +144,7 @@ describe('billing page', () => {
 
     renderPage()
 
-    expect(await screen.findByText('External 100')).toBeInTheDocument()
+    expect(await screen.findByText('Hosted 300')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
 
@@ -197,13 +198,13 @@ describe('billing page', () => {
           status: 200,
           json: async () => ({
             data: [{
-              code: 'external-100',
-              name: 'External 100',
-              description: '100 document generations for lightweight evaluation and individual workflows.',
+              code: 'hosted-300',
+              name: 'Hosted 300',
+              description: '300 hosted credits for platform-managed generation.',
               currency: 'usd',
-              amount_total: 500,
-              quota_amount: 100,
-              pack_kind: 'external_generation',
+              amount_total: 300,
+              credit_amount: 300,
+              pack_kind: 'hosted_credits',
             }],
           }),
         }

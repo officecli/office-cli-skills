@@ -23,6 +23,7 @@ type fakeStore struct {
 	rewardGrants   []model.RewardGrant
 	referrals      []model.UserReferral
 	discord        *model.DiscordConnection
+	creditGrants   map[string]*model.HostedCreditGrant
 }
 
 func (f *fakeStore) CountUserAPIKeys(_ context.Context, _ uint64) (int64, error) {
@@ -51,7 +52,45 @@ func (f *fakeStore) CreateAuditLog(_ context.Context, _, _, _, _ string) error {
 	return nil
 }
 func (f *fakeStore) AppCreateAPIKey(_ context.Context, userID uint64, planName, _, prefix, ciphertext string) (*model.APIKey, error) {
-	return &model.APIKey{ID: 1, OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext, Status: model.APIKeyStatusActive}, nil
+	key := model.APIKey{ID: uint64(len(f.apiKeysByOwner) + 1), OwnerUserID: &userID, PlanName: planName, KeyPrefix: prefix, KeyCiphertext: &ciphertext, Status: model.APIKeyStatusActive, AllowedModes: "external_only"}
+	f.apiKeysByOwner = append(f.apiKeysByOwner, key)
+	return &key, nil
+}
+func (f *fakeStore) FindHostedCreditGrantByIdempotencyKey(_ context.Context, key string) (*model.HostedCreditGrant, error) {
+	if f.creditGrants == nil {
+		return nil, nil
+	}
+	grant := f.creditGrants[key]
+	if grant == nil {
+		return nil, nil
+	}
+	copied := *grant
+	return &copied, nil
+}
+func (f *fakeStore) GrantHostedCreditsToAPIKey(_ context.Context, apiKeyID, userID uint64, source model.HostedCreditGrantSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.HostedCreditGrant, bool, error) {
+	if f.creditGrants == nil {
+		f.creditGrants = map[string]*model.HostedCreditGrant{}
+	}
+	if grant := f.creditGrants[idempotencyKey]; grant != nil {
+		copied := *grant
+		return &copied, false, nil
+	}
+	for i := range f.apiKeysByOwner {
+		if f.apiKeysByOwner[i].ID == apiKeyID {
+			f.apiKeysByOwner[i].CreditBalance += creditAmount
+			f.apiKeysByOwner[i].HostedEnabled = true
+			if f.apiKeysByOwner[i].AllowedModes == "" || f.apiKeysByOwner[i].AllowedModes == "external_only" {
+				f.apiKeysByOwner[i].AllowedModes = "hybrid"
+			}
+			defaultRuntimeMode := "hosted"
+			f.apiKeysByOwner[i].DefaultRuntimeMode = &defaultRuntimeMode
+			break
+		}
+	}
+	grant := &model.HostedCreditGrant{ID: uint64(len(f.creditGrants) + 1), UserID: userID, APIKeyID: apiKeyID, SourceType: source, IdempotencyKey: idempotencyKey, CreditAmount: creditAmount, Reason: reason, MetadataJSON: metadataJSON}
+	f.creditGrants[idempotencyKey] = grant
+	copied := *grant
+	return &copied, true, nil
 }
 func (f *fakeStore) UpdateAPIKey(_ context.Context, _ uint64, values map[string]any) error {
 	f.updateCalls++

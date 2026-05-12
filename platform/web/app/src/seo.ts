@@ -50,7 +50,7 @@ function buildRouteSEO(pathname: string, title: string, description: string): Ro
 
 const routeSEO: Record<string, RouteSEO> = {
   '/': buildRouteSEO('/', 'OfficeCLI App | Overview', 'Review workspace quota, invite growth, and key activity inside the OfficeCLI app workspace.'),
-  '/quota': buildRouteSEO('/quota', 'OfficeCLI App | Quota', 'Track reward quota, paid quota, and account-owned document capacity in the OfficeCLI app.'),
+  '/quota': buildRouteSEO('/quota', 'OfficeCLI App | Quota', 'Track legacy quota, hosted credit context, and account-owned document capacity in the OfficeCLI app.'),
   '/api-keys': buildRouteSEO('/api-keys', 'OfficeCLI App | API Keys', 'Manage OfficeCLI app API keys, quota posture, and key metadata from one workspace surface.'),
   '/billing': buildRouteSEO('/billing', 'OfficeCLI App | Billing', 'Review OfficeCLI app billing packs, checkout state, and order history for the current workspace.'),
   '/usage': buildRouteSEO('/usage', 'OfficeCLI App | Usage', 'Inspect recent OfficeCLI app usage events and policy outcomes for this workspace.'),

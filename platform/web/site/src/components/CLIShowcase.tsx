@@ -143,7 +143,7 @@ export default function CLIShowcase() {
               transition={{ delay: 1.1 }}
               className="text-outline-variant"
             >
-              Access: paid mode; 109 generations remaining; trial 10
+              Access: External Mode; free unlimited with your model endpoint
             </motion.div>
           </div>
         </motion.div>

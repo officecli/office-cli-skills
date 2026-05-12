@@ -14,7 +14,7 @@ export default function DownloadPage() {
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
         <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for AI document generation</h1>
         <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
-          Use Homebrew, npm, the official install script, or manual binaries to get started. The core local path stays simple: one binary plus your LLM endpoint for PPTX, DOCX, XLSX, and REPORT outputs.
+          Use Homebrew, npm, the official install script, or manual binaries to get started. Install one dependency-free binary, choose External or Hosted Mode, then generate PPTX, DOCX, XLSX, REPORT, and IMG outputs.
         </p>
       </section>
 
@@ -26,21 +26,21 @@ export default function DownloadPage() {
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">What you need</h2>
           <p className="text-outline-variant leading-relaxed">
-            For the core local workflow, OfficeCLI only needs the binary and an LLM endpoint. It does not require a cluster, Docker, Kubernetes, or a document backend service.
+            OfficeCLI does not require Python, LibreOffice, Microsoft Office, Docker, Kubernetes, or an AI agent. External Mode only needs your model endpoint; Hosted Mode uses OfficeCLI-managed runtime and hosted credits.
           </p>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Recommended sequence</h2>
           <ol className="space-y-3 text-sm text-outline-variant list-decimal list-inside">
             <li>Install OfficeCLI with Homebrew, npm, the script, or a manual binary.</li>
-            <li>Run <code>officecli config set-generation</code> to configure your LLM endpoint.</li>
-            <li>Use <code>officecli new ...</code> to generate documents, then <code>score</code> or <code>review</code> when needed.</li>
+            <li>Choose External Mode with <code>config set-generation</code>, or Hosted Mode with <code>config set-license</code>.</li>
+            <li>Use <code>officecli new ...</code> to generate files, then <code>score</code> or <code>review</code> when needed.</li>
           </ol>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Optional platform features</h2>
           <p className="text-outline-variant leading-relaxed mb-6">
-            Use platform to manage paid access, API keys, billing, and optional online preview publishing.
+            Use platform to manage hosted credits, API keys, billing, and optional online preview publishing. External Mode generation remains free and unlimited.
           </p>
           <div className="flex flex-wrap gap-4">
             <a className="inline-flex bg-gradient-to-br from-primary to-primary-container text-[#002e6b] px-6 py-3 rounded-md font-bold" href={platformAppHref} onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.downloadClick, { surface: 'site', placement: 'download-page', ...extractAttributionParams(location.search) })}>Open platform</a>

@@ -423,9 +423,9 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"notes":        "Overrides ratio when set; upstream model may snap to nearest supported tier.",
 				},
 				"notes": []string{
-					"Standalone image generation always goes through the OfficeCLI server.",
-					"Agent clients must not use local image provider configuration for document_type=img.",
-					"Successful standalone image generation consumes one generation count in external runtime mode, or hosted credits in hosted runtime mode.",
+					"Standalone image generation uses the configured local image provider in external runtime mode.",
+					"Hosted standalone image generation goes through the OfficeCLI server and consumes hosted credits.",
+					"Successful standalone image generation is free and unlimited in external runtime mode.",
 					"Standalone images publish online by default when publishing is configured; pass publish=false or --no-publish for local-only output.",
 				},
 			},
