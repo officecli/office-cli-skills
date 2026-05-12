@@ -20,7 +20,8 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	if job.DocumentType != engine.DocumentTypeIMG && strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, fmt.Errorf("platform access token is missing, so hosted generation is unavailable")
 	}
-	modelName := hostedModelName(job)
+	textModelName := hostedTextModelName(job)
+	imageModelName := hostedImageModelName(job)
 	var imageAccess *llmprovider.InternalImageAccess
 	if job.DocumentType == engine.DocumentTypeIMG && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
 		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
@@ -39,8 +40,8 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 		Provider:    "internal",
 		BaseURL:     baseURL + "/api/llm",
 		APIKey:      strings.TrimSpace(cfg.APIKey),
-		Model:       modelName,
-		ImageModel:  modelName,
+		Model:       textModelName,
+		ImageModel:  imageModelName,
 		TimeoutSec:  hostedTimeoutSec(cfg.TimeoutSec, job),
 		ImageAccess: imageAccess,
 	})
@@ -61,21 +62,15 @@ func newHostedImageLLMClient(cfg LicenseConfig) (GeneratorLLMClient, error) {
 	})
 }
 
-func hostedModelName(job GenerateJob) string {
-	profile := "docx-xlsx"
-	switch job.DocumentType {
-	case engine.DocumentTypeIMG:
-		profile = "img"
-	case engine.DocumentTypePPTX:
-		if job.EnableImages {
-			profile = "pptx-with-image"
-		} else {
-			profile = "pptx-no-image"
-		}
-	case engine.DocumentTypeDOCX, engine.DocumentTypeXLSX, engine.DocumentTypeReport:
-		profile = "docx-xlsx"
+func hostedTextModelName(job GenerateJob) string {
+	if job.DocumentType == engine.DocumentTypeIMG {
+		return "hosted/image"
 	}
-	return "hosted/" + profile
+	return "hosted/text"
+}
+
+func hostedImageModelName(_ GenerateJob) string {
+	return "hosted/image"
 }
 
 func (cfg Config) hostedRuntimeMode() RuntimeMode {

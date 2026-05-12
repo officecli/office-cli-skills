@@ -454,7 +454,7 @@ func TestInternalClient_GenerateImageReturnsCreditBalance(t *testing.T) {
 		Provider: "internal",
 		BaseURL:  server.URL,
 		APIKey:   "hosted-key",
-		Model:    "hosted/img",
+		Model:    "hosted/image",
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -587,7 +587,7 @@ func TestInternalClient_GenerateImageSendsReferenceImage(t *testing.T) {
 		Provider: "internal",
 		BaseURL:  server.URL,
 		APIKey:   "hosted-key",
-		Model:    "hosted/img",
+		Model:    "hosted/image",
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)

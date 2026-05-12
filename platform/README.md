@@ -112,7 +112,7 @@ Recommended production base URLs:
 - `HOSTED_LLM_TEXT_MODEL`: hosted text model
 - `HOSTED_LLM_IMAGE_MODEL`: hosted image model
 - `HOSTED_LLM_PROVIDER`: hosted upstream provider id
-- `HOSTED_PRICING_RULES_JSON`: hosted credit pricing rules
+- `HOSTED_PRICING_RULES_JSON`: hosted credit pricing rules; supported `document_profile` values are `text` and `image`
 - `AIGATEWAY_ADMIN_BASE_URL`: aigateway management base URL for creating per-user upstream API keys
 - `AIGATEWAY_ADMIN_API_KEY`: aigateway management bearer token; keep this secret out of code and logs
 - `AIGATEWAY_API_KEY_GROUP`: optional aigateway group assigned to generated per-user upstream API keys

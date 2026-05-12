@@ -334,7 +334,7 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 	}
 	return []model.HostedPricingRule{
 		{
-			DocumentProfile:       "docx-xlsx",
+			DocumentProfile:       "text",
 			Provider:              "openai",
 			Model:                 "gpt-4.1",
 			TextModelKey:          "text_default",
@@ -346,38 +346,13 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			MinimumChargeCredits:  2,
 		},
 		{
-			DocumentProfile:       "pptx-no-image",
-			Provider:              "openai",
-			Model:                 "gpt-4.1",
-			TextModelKey:          "text_default",
-			PromptPer1KCredits:    2,
-			OutputPer1KCredits:    3,
-			ReasoningPer1KCredits: 3,
-			ImagePerAssetCredits:  0,
-			ReservationCredits:    28,
-			MinimumChargeCredits:  6,
-		},
-		{
-			DocumentProfile:      "img",
+			DocumentProfile:      "image",
 			Provider:             "openai",
 			Model:                "gpt-image-2",
 			ImageModelKey:        "image_default",
 			ImagePerAssetCredits: 1,
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
-		},
-		{
-			DocumentProfile:       "pptx-with-image",
-			Provider:              "openai",
-			Model:                 "gpt-4.1",
-			TextModelKey:          "text_default",
-			ImageModelKey:         "image_default",
-			PromptPer1KCredits:    2,
-			OutputPer1KCredits:    4,
-			ReasoningPer1KCredits: 4,
-			ImagePerAssetCredits:  24,
-			ReservationCredits:    48,
-			MinimumChargeCredits:  12,
 		},
 	}
 }

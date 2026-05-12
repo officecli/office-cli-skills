@@ -646,7 +646,7 @@ func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 			if string(data) != string(imageBytes) {
 				t.Fatalf("image bytes = %q", string(data))
 			}
-			if gotPayload["model"] != "hosted/img" || gotPayload["aspect_ratio"] != 16.0/9.0 || gotPayload["commit_token"] == nil {
+			if gotPayload["model"] != "hosted/image" || gotPayload["aspect_ratio"] != 16.0/9.0 || gotPayload["commit_token"] == nil {
 				t.Fatalf("payload = %#v", gotPayload)
 			}
 			reference, ok := gotPayload["reference_image"].(map[string]any)

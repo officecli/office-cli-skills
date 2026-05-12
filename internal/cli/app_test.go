@@ -1407,7 +1407,7 @@ func TestExecuteGenerateJob_IMGUsesServerImageRouteAndGenerationQuota(t *testing
 	if gotAuth != "Bearer hosted-key" {
 		t.Fatalf("authorization = %q", gotAuth)
 	}
-	if gotPayload["model"] != "hosted/img" {
+	if gotPayload["model"] != "hosted/image" {
 		t.Fatalf("model = %#v", gotPayload["model"])
 	}
 	if gotPayload["aspect_ratio"] != 16.0/9.0 {
@@ -1702,7 +1702,7 @@ func TestExecuteGenerateJob_PPTXPremiumUsesHostedImageClientOnlyForImages(t *tes
 	if gotPayload == nil {
 		t.Fatalf("hosted image request was not sent")
 	}
-	if gotPayload["model"] != "hosted/img" {
+	if gotPayload["model"] != "hosted/image" {
 		t.Fatalf("model = %#v", gotPayload["model"])
 	}
 	if gotPayload["aspect_ratio"] == nil {

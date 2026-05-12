@@ -145,6 +145,9 @@ func (s *Service) HostedPricingRules() []model.HostedPricingRule {
 }
 
 func (s *Service) Complete(ctx context.Context, bearer string, req CompletionRequest) (*CompletionResponse, error) {
+	if err := validateHostedProfile(req.Model, false); err != nil {
+		return nil, err
+	}
 	key, hash, err := s.authorize(ctx, bearer)
 	if err != nil {
 		return nil, err
@@ -224,6 +227,9 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 }
 
 func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+	if err := validateHostedProfile(req.Model, true); err != nil {
+		return nil, err
+	}
 	if req.CommitToken != nil {
 		return s.generateQuotaImage(ctx, bearer, req)
 	}
@@ -294,6 +300,9 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 }
 
 func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+	if err := validateHostedProfile(req.Model, true); err != nil {
+		return nil, err
+	}
 	if s.quota == nil {
 		return nil, fmt.Errorf("generation quota service is unavailable")
 	}
@@ -633,7 +642,7 @@ func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequ
 
 func (s *Service) normalizeModel(ctx context.Context, value string, image bool) string {
 	model := strings.TrimSpace(value)
-	if model == "" || strings.HasPrefix(model, "hosted/") {
+	if model == "" || model == "text" || model == "image" || strings.HasPrefix(model, "hosted/") {
 		if rule, ok := s.matchRule(ctx, model); ok {
 			if config, ok := s.matchModelConfig(ctx, rule, image); ok && strings.TrimSpace(config.Model) != "" {
 				return strings.TrimSpace(config.Model)
@@ -658,10 +667,6 @@ func (s *Service) reserveCreditsForModel(ctx context.Context, modelName string, 
 	switch {
 	case image:
 		return 32
-	case strings.Contains(modelName, "pptx-with-image"):
-		return 48
-	case strings.Contains(modelName, "pptx-no-image"):
-		return 28
 	default:
 		return 16
 	}
@@ -892,16 +897,40 @@ func (s *Service) hostedModelPricingConfigs(ctx context.Context, enabledOnly boo
 }
 
 func normalizeProfile(modelName string) string {
+	trimmed := strings.TrimSpace(modelName)
 	switch {
-	case strings.Contains(modelName, "hosted/img") || strings.TrimSpace(modelName) == "img":
-		return "img"
-	case strings.Contains(modelName, "pptx-with-image"):
-		return "pptx-with-image"
-	case strings.Contains(modelName, "pptx-no-image"):
-		return "pptx-no-image"
+	case trimmed == "" || trimmed == "text" || trimmed == "hosted/text":
+		return "text"
+	case trimmed == "image" || trimmed == "hosted/image":
+		return "image"
+	case strings.HasPrefix(trimmed, "hosted/"):
+		return ""
 	default:
-		return "docx-xlsx"
+		return "text"
 	}
+}
+
+func validateHostedProfile(modelName string, image bool) error {
+	trimmed := strings.TrimSpace(modelName)
+	if trimmed == "" {
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "hosted/") {
+		if image && trimmed == "hosted/image" {
+			return nil
+		}
+		if !image && trimmed == "hosted/text" {
+			return nil
+		}
+		return fmt.Errorf("unsupported hosted pricing profile %q", strings.TrimPrefix(trimmed, "hosted/"))
+	}
+	if image && trimmed == "text" {
+		return fmt.Errorf("unsupported hosted pricing profile %q", trimmed)
+	}
+	if !image && trimmed == "image" {
+		return fmt.Errorf("unsupported hosted pricing profile %q", trimmed)
+	}
+	return nil
 }
 
 func pickImageSize(aspectRatio float64) string {

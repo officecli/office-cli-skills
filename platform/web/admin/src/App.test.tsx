@@ -7,6 +7,10 @@ import App from './App'
 
 const fetchMock = vi.fn()
 
+function requestBody(call: unknown[]) {
+  return JSON.parse(String((call[1] as RequestInit).body))
+}
+
 describe('platform admin shell', () => {
   afterEach(() => {
     fetchMock.mockReset()
@@ -117,7 +121,7 @@ describe('platform admin shell', () => {
                 { id: 4, key: 'text_default', kind: 'text', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1m_cost_microusd: 1000000, output_per_1m_cost_microusd: 2000000, reasoning_per_1m_cost_microusd: 4000000, prompt_per_1m_cost_credits: 100, output_per_1m_cost_credits: 200, reasoning_per_1m_cost_credits: 400, enabled: true },
                 { id: 5, key: 'image_default', kind: 'image', provider: 'aigateway', model: 'gpt-image-2', prompt_per_1m_cost_microusd: 8000000, output_per_1m_cost_microusd: 30000000, reasoning_per_1m_cost_microusd: 0, prompt_per_1m_cost_credits: 800, output_per_1m_cost_credits: 3000, reasoning_per_1m_cost_credits: 0, enabled: true },
               ],
-              rules: [{ id: 9, document_profile: 'docx-xlsx', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
+              rules: [{ id: 9, document_profile: 'text', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
               packs: [{ id: 3, code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, credit_amount: 300, enabled: true }],
             },
           }),
@@ -138,14 +142,27 @@ describe('platform admin shell', () => {
     expect(await screen.findByRole('heading', { name: /Hosted pricing controls/i })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: /Model pricing/i })).toBeInTheDocument()
     expect((await screen.findAllByText(/text_default \/ gpt-4\.1/i)).length).toBeGreaterThan(0)
-    expect(await screen.findByText(/prompt 100 \/ output 200 \/ reasoning 400 credits per 1M tokens/i)).toBeInTheDocument()
-    expect(await screen.findByText(/docx-xlsx \/ text text_default/i)).toBeInTheDocument()
+    expect(await screen.findByText(/prompt \$1\.00 \/ output \$2\.00 \/ reasoning \$4\.00 USD per 1M tokens/i)).toBeInTheDocument()
+    const promptUSDInput = screen.getByLabelText(/Prompt USD per 1M text_default/i) as HTMLInputElement
+    expect(promptUSDInput.value).toBe('1.00')
+    expect(screen.queryByLabelText(/Prompt credits per 1M text_default/i)).not.toBeInTheDocument()
+    expect(await screen.findByText(/Text generation \/ text text_default/i)).toBeInTheDocument()
+    const profileSelect = screen.getByLabelText(/Profile 9/i) as HTMLSelectElement
+    expect(profileSelect).toHaveValue('text')
+    expect(screen.getAllByRole('option', { name: /Text generation/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('option', { name: /Image generation/i }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText(/Text model 9/i)).toHaveValue('text_default')
     expect(screen.getAllByRole('option', { name: /None/i }).length).toBeGreaterThan(0)
     expect(screen.queryByText(/microUSD/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Price cents/i)).not.toBeInTheDocument()
     expect(await screen.findByText(/hosted-300/i)).toBeInTheDocument()
 
+    fireEvent.change(promptUSDInput, { target: { value: '0' } })
+    expect(promptUSDInput.value).toBe('0')
+    fireEvent.change(promptUSDInput, { target: { value: '0.' } })
+    expect(promptUSDInput.value).toBe('0.')
+    fireEvent.change(promptUSDInput, { target: { value: '0.36' } })
+    expect(promptUSDInput.value).toBe('0.36')
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted model pricing config text_default/i }))
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted pricing rule 9/i }))
     fireEvent.click(await screen.findByRole('button', { name: /Save hosted credit pack 3/i }))
@@ -156,7 +173,74 @@ describe('platform admin shell', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-credit-packs/3', expect.objectContaining({ method: 'PATCH' }))
     })
     const modelPatch = fetchMock.mock.calls.find(([url, init]) => url === '/api/admin/hosted-model-pricing-configs/4' && (init as RequestInit)?.method === 'PATCH')?.[1] as RequestInit
-    expect(JSON.parse(String(modelPatch.body))).toMatchObject({ prompt_per_1m_cost_credits: 100 })
+    expect(JSON.parse(String(modelPatch.body))).toMatchObject({ prompt_per_1m_cost_microusd: 360000, prompt_per_1m_cost_credits: 36 })
+  })
+
+  it('keeps hosted credit ratio locked and requires confirmation before saving changes', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/hosted-billing') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              settings: { id: 1, markup_bps: 3500, currency: 'usd', credits_per_usd: 100 },
+              model_configs: [],
+              rules: [],
+              packs: [],
+            },
+          }),
+        }
+      }
+      if (url === '/api/admin/hosted-pricing-settings') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 1, markup_bps: 3500, currency: 'usd', credits_per_usd: 200 } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const confirmMock = vi.fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+    vi.stubGlobal('confirm', confirmMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/hosted-pricing']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const ratioInput = await screen.findByLabelText(/Credits per USD/i)
+    expect(ratioInput).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Unlock credit ratio/i }))
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    expect(ratioInput).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Unlock credit ratio/i }))
+    expect(confirmMock).toHaveBeenCalledTimes(2)
+    expect(ratioInput).not.toBeDisabled()
+
+    fireEvent.change(ratioInput, { target: { value: '200' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save pricing settings/i }))
+    expect(confirmMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls.some(([url, init]) => url === '/api/admin/hosted-pricing-settings' && (init as RequestInit)?.method === 'PATCH')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: /Save pricing settings/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/hosted-pricing-settings', expect.objectContaining({ method: 'PATCH' }))
+    })
+    const settingsPatch = fetchMock.mock.calls.find(([url, init]) => url === '/api/admin/hosted-pricing-settings' && (init as RequestInit)?.method === 'PATCH')
+    expect(requestBody(settingsPatch!)).toMatchObject({ markup_bps: 3500, currency: 'usd', credits_per_usd: 200 })
   })
 
   it('renders the growth ledger route from the real growth API', async () => {

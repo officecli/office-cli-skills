@@ -263,7 +263,7 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 		AIGatewayKeyCipher:   testAIGatewayCipher(t),
 		AIGatewayAdminClient: adminClient,
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "docx-xlsx",
+			DocumentProfile:      "text",
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
@@ -272,7 +272,7 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-			Model:    "hosted/docx-xlsx",
+			Model:    "hosted/text",
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		})
 		require.NoError(t, err)
@@ -330,7 +330,7 @@ func TestCompleteUsesDifferentAIGatewayAPIKeysForDifferentUsers(t *testing.T) {
 		AIGatewayKeyCipher:   testAIGatewayCipher(t),
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"sk-user-42", "sk-user-43"}},
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "docx-xlsx",
+			DocumentProfile:      "text",
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
@@ -339,7 +339,7 @@ func TestCompleteUsesDifferentAIGatewayAPIKeysForDifferentUsers(t *testing.T) {
 
 	for _, bearer := range []string{"Bearer office-key-42", "Bearer office-key-43"} {
 		_, err := svc.Complete(context.Background(), bearer, CompletionRequest{
-			Model:    "hosted/docx-xlsx",
+			Model:    "hosted/text",
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		})
 		require.NoError(t, err)
@@ -366,12 +366,48 @@ func TestCompleteRejectsHostedOfficeKeyWithoutOwner(t *testing.T) {
 	svc := NewService(store, Config{BaseURL: "https://example.com", HashSalt: "salt", TextModel: "gpt-test", TimeoutSec: 5})
 
 	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-		Model:    "hosted/docx-xlsx",
+		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "hosted mode requires an owner user")
 	require.Empty(t, store.reservations)
+}
+
+func TestCompleteRejectsRemovedHostedPricingProfile(t *testing.T) {
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              "https://example.com",
+		HashSalt:             "salt",
+		TextModel:            "gpt-test",
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+		TimeoutSec:           5,
+	})
+
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/" + "docx-" + "xlsx",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported hosted pricing profile")
+	require.Empty(t, store.reservations)
+	require.Empty(t, store.userKeys)
 }
 
 func TestCompleteDoesNotReserveCreditsWhenAIGatewayKeyCreationFails(t *testing.T) {
@@ -400,7 +436,7 @@ func TestCompleteDoesNotReserveCreditsWhenAIGatewayKeyCreationFails(t *testing.T
 	})
 
 	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-		Model:    "hosted/docx-xlsx",
+		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
 	require.Error(t, err)
@@ -475,7 +511,7 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 		HashSalt:   "salt",
 		ImageModel: "gpt-image-test",
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "img",
+			DocumentProfile:      "image",
 			Provider:             "openai",
 			Model:                "gpt-image-test",
 			ImagePerAssetCredits: 1,
@@ -488,7 +524,7 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	})
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
-		Model:       "hosted/img",
+		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 16.0 / 9.0,
 	})
@@ -544,7 +580,7 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 		TimeoutSec: 5,
 		Rules: []model.HostedPricingRule{{
 			ID:                         ruleID,
-			DocumentProfile:            "docx-xlsx",
+			DocumentProfile:            "text",
 			Provider:                   "aigateway",
 			Model:                      "gpt-test",
 			PromptPer1KCostMicrousd:    10000,
@@ -560,7 +596,7 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 	})
 
 	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-		Model:    "hosted/docx-xlsx",
+		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
 
@@ -610,7 +646,7 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 		MarkupBPS:  0,
 		TimeoutSec: 5,
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:         "docx-xlsx",
+			DocumentProfile:         "text",
 			Model:                   "gpt-test",
 			PromptPer1KCostMicrousd: 100000,
 			ReservationCredits:      5,
@@ -622,7 +658,7 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 	})
 
 	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-		Model:    "hosted/docx-xlsx",
+		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
 
@@ -666,7 +702,7 @@ func TestCompleteUsesConfiguredCreditsPerUSDForHostedCharges(t *testing.T) {
 		}},
 		rules: []model.HostedPricingRule{{
 			ID:                   31,
-			DocumentProfile:      "docx-xlsx",
+			DocumentProfile:      "text",
 			TextModelKey:         "text_default",
 			MinimumChargeCredits: 0,
 			Enabled:              true,
@@ -683,7 +719,7 @@ func TestCompleteUsesConfiguredCreditsPerUSDForHostedCharges(t *testing.T) {
 	})
 
 	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
-		Model:    "hosted/docx-xlsx",
+		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
 
@@ -728,10 +764,14 @@ func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
 			ReasoningPer1MCostMicrousd: 3000000,
 			Enabled:                    true,
 		}},
-		rules: []model.HostedPricingRule{
-			{ID: 11, DocumentProfile: "docx-xlsx", TextModelKey: "text_default", ReservationCredits: 20, MinimumChargeCredits: 1, Enabled: true},
-			{ID: 12, DocumentProfile: "pptx-no-image", TextModelKey: "text_default", ReservationCredits: 28, MinimumChargeCredits: 1, Enabled: true},
-		},
+		rules: []model.HostedPricingRule{{
+			ID:                   11,
+			DocumentProfile:      "text",
+			TextModelKey:         "text_default",
+			ReservationCredits:   20,
+			MinimumChargeCredits: 1,
+			Enabled:              true,
+		}},
 	}
 	svc := NewService(store, Config{
 		BaseURL:              upstream.URL,
@@ -743,7 +783,7 @@ func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	for _, requested := range []string{"hosted/docx-xlsx", "hosted/pptx-no-image"} {
+	for _, requested := range []string{"", "text", "hosted/text"} {
 		_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
 			Model:    requested,
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
@@ -751,10 +791,11 @@ func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.Len(t, upstreamPayloads, 2)
+	require.Len(t, upstreamPayloads, 3)
 	require.Equal(t, "gpt-shared-text", upstreamPayloads[0]["model"])
 	require.Equal(t, "gpt-shared-text", upstreamPayloads[1]["model"])
-	require.Len(t, store.events, 2)
+	require.Equal(t, "gpt-shared-text", upstreamPayloads[2]["model"])
+	require.Len(t, store.events, 3)
 	for _, event := range store.events {
 		require.Equal(t, int64(8000), event.UpstreamCostMicrousd)
 		require.Equal(t, 1, event.SettledCredits)
@@ -796,7 +837,7 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 		}},
 		rules: []model.HostedPricingRule{{
 			ID:                   21,
-			DocumentProfile:      "img",
+			DocumentProfile:      "image",
 			ImageModelKey:        "image_default",
 			ImagePerAssetCredits: 99,
 			ReservationCredits:   12,
@@ -815,7 +856,7 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 	})
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
-		Model:       "hosted/img",
+		Model:       "image",
 		Prompt:      "A product image",
 		AspectRatio: 1,
 	})
@@ -874,7 +915,7 @@ func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 		HashSalt:   "salt",
 		ImageModel: "gpt-image-test",
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "img",
+			DocumentProfile:      "image",
 			Provider:             "openai",
 			Model:                "gpt-image-test",
 			ImagePerAssetCredits: 1,
@@ -887,7 +928,7 @@ func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 	})
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
-		Model:       "hosted/img",
+		Model:       "hosted/image",
 		Prompt:      "Use the uploaded reference image as visual context",
 		AspectRatio: 1,
 		ReferenceImage: &ImageReference{
@@ -931,7 +972,7 @@ func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
 		RequestID:       "req-img",
-		Model:           "hosted/img",
+		Model:           "hosted/image",
 		Prompt:          "A polished product launch hero image",
 		AspectRatio:     1,
 		FingerprintHash: "fp-img",
@@ -980,7 +1021,7 @@ func TestGenerateImageWithCommitTokenAndReferenceConsumesQuotaAfterEdit(t *testi
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
 		RequestID:       "req-img",
-		Model:           "hosted/img",
+		Model:           "hosted/image",
 		Prompt:          "Use the uploaded reference image as visual context",
 		AspectRatio:     1,
 		FingerprintHash: "fp-img",
@@ -1031,7 +1072,7 @@ func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {
 		HashSalt:   "salt",
 		ImageModel: "gpt-image-test",
 		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "img",
+			DocumentProfile:      "image",
 			ImagePerAssetCredits: 1,
 			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
@@ -1042,7 +1083,7 @@ func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {
 	})
 
 	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
-		Model:       "hosted/img",
+		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 1,
 	})

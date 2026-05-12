@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.53 - 2026-05-12
+
+### Changed
+
+- Hosted pricing profiles are now limited to `text` and `image`: document text generation uses `hosted/text`, while standalone images and PPT image assets use `hosted/image`.
+
 ## 0.2.52 - 2026-05-11
 
 ### Fixed

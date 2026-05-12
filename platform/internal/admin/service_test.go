@@ -202,7 +202,7 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.Equal(t, int64(100), modelConfig.PromptPer1MCostCredits)
 
 	rule, err := svc.CreateHostedPricingRule(context.Background(), UpsertHostedPricingRuleRequest{
-		DocumentProfile:            "docx-xlsx",
+		DocumentProfile:            "text",
 		Provider:                   "aigateway",
 		Model:                      "gpt-test",
 		TextModelKey:               "text_default",
