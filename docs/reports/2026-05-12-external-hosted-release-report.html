@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OfficeCLI External Free Unlimited + Hosted Release Report - 2026-05-12</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5b6475;
+      --border: #d9deea;
+      --pass: #16794c;
+      --warn: #a46100;
+      --fail: #b42318;
+      --code: #101828;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.48;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.2;
+    }
+    h1 {
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin-top: 28px;
+      font-size: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    h3 {
+      margin-top: 18px;
+      font-size: 16px;
+    }
+    p {
+      margin: 8px 0;
+      color: var(--muted);
+    }
+    section, .summary {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef2f8;
+      color: #263247;
+    }
+    code, pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+    pre {
+      overflow-x: auto;
+      background: #f2f4f7;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid currentColor;
+    }
+    .pass { color: var(--pass); }
+    .warn { color: var(--warn); }
+    .fail { color: var(--fail); }
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>OfficeCLI External Free Unlimited + Hosted Release Report</h1>
+  <p>Release date: 2026-05-12. Report generated after code commit, CLI release, npm publish, platform deploy, endpoint checks, and production database read-only inspection.</p>
+
+  <div class="summary">
+    <h2>Executive Summary</h2>
+    <div class="grid">
+      <div>
+        <h3><span class="badge pass">Released</span> External Mode</h3>
+        <p>External Mode is now free with unlimited generations for document and image workflows. External check returns the free-unlimited message and consume records usage without decrementing external quota.</p>
+      </div>
+      <div>
+        <h3><span class="badge pass">Released</span> Hosted Mode</h3>
+        <p>Hosted Mode remains credit based. Pricing and checkout surfaces expose hosted credit packs only, while historical external orders remain visible.</p>
+      </div>
+      <div>
+        <h3><span class="badge pass">Released</span> Growth Credits</h3>
+        <p>New users receive 30 hosted credits, and referral activation grants 20 hosted credits to the inviter. Grant paths use idempotency records.</p>
+      </div>
+      <div>
+        <h3><span class="badge pass">Released</span> Marketing Site</h3>
+        <p>Homepage, pricing, download, docs quickstart, SEO, and prerender fallback now present External and Hosted as the two primary modes.</p>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Version And Release Metadata</h2>
+    <table>
+      <tbody>
+      <tr><th>Source commit</th><td><code>9456080b1ee30bb8160e2669bfaf730f192023c9</code></td></tr>
+      <tr><th>Branch</th><td><code>codex/external-hosted-free</code>, merged fast-forward to <code>main</code></td></tr>
+      <tr><th>CLI release tag</th><td><code>v0.2.54</code></td></tr>
+      <tr><th>Platform deploy tag</th><td><code>v0.2.54-prod-20260512-1</code></td></tr>
+      <tr><th>NPM package</th><td><code>officecli@0.2.54</code></td></tr>
+      <tr><th>Platform deploy completed</th><td><code>2026-05-12T12:16:13Z</code></td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead>
+      <tr><th>Workflow</th><th>Run</th><th>Status</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+      <tr><td>CLI Release</td><td><code>25733008226</code></td><td><span class="badge warn">Transient failure</span></td><td>GoReleaser before hook hit a transient <code>TestAgentBridgeReviewTask</code> failure. The same test and full Go suite passed locally before retry.</td></tr>
+      <tr><td>CLI Release retry</td><td><code>25733116076</code></td><td><span class="badge pass">Success</span></td><td>Published OfficeCLI dist release <code>v0.2.54</code> with 5 assets.</td></tr>
+      <tr><td>NPM Publish</td><td><code>25733211341</code></td><td><span class="badge pass">Success</span></td><td>Triggered npm repository publish.</td></tr>
+      <tr><td>NPM downstream</td><td><code>25733226704</code></td><td><span class="badge pass">Success</span></td><td><code>npm view officecli version --json</code> returned <code>"0.2.54"</code>.</td></tr>
+      <tr><td>Platform Deploy</td><td><code>25733550731</code></td><td><span class="badge pass">Success</span></td><td>GitHub Actions ran the public <code>officecli/officecli-ci</code> deployment control plane and verified production endpoints.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Implementation Summary</h2>
+    <ul>
+      <li><code>runtime_mode=external</code> is allowed for PPTX, DOCX, XLSX, REPORT, and IMG without free, reward, or paid external quota consumption.</li>
+      <li>External license check returns <code>External mode is free with unlimited generations.</code> and signs a free access commit token.</li>
+      <li>External consume writes usage events only, with zero billed units and zero settled credits.</li>
+      <li>External IMG uses the local generation provider configured through <code>config set-generation</code>; hosted IMG keeps using the hosted image route and hosted credits.</li>
+      <li><code>/api/pricing</code> now returns hosted credit packs only. <code>/api/app/checkout</code> rejects external packs with <code>external mode is free and no longer sold as a paid pack</code>.</li>
+      <li>Signup and referral hosted credit grants were added through <code>hosted_credit_grants</code> with idempotency keys.</li>
+      <li>User app and admin surfaces were updated to expose hosted credits, growth grants, usage, orders, and referral context.</li>
+      <li>Site copy now leads with: <code>External: free unlimited with your own model endpoint</code> and <code>Hosted: OfficeCLI-managed runtime with hosted credits</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Unit And Build Verification</h2>
+    <table>
+      <thead>
+      <tr><th>Command</th><th>Result</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+      <tr><td><code>go test ./...</code></td><td><span class="badge pass">Pass</span></td><td>Root Go package tests passed.</td></tr>
+      <tr><td><code>cd platform &amp;&amp; go test ./...</code></td><td><span class="badge pass">Pass</span></td><td>Platform Go package tests passed.</td></tr>
+      <tr><td><code>cd platform/web/site &amp;&amp; npm test -- --run &amp;&amp; npm run build</code></td><td><span class="badge pass">Pass</span></td><td>Site tests and build passed. Vite emitted a chunk-size warning only.</td></tr>
+      <tr><td><code>cd platform/web/app &amp;&amp; npm test -- --run &amp;&amp; npm run build</code></td><td><span class="badge pass">Pass</span></td><td>User app tests and build passed.</td></tr>
+      <tr><td><code>cd platform/web/admin &amp;&amp; npm test -- --run &amp;&amp; npm run build</code></td><td><span class="badge pass">Pass</span></td><td>Admin tests and build passed.</td></tr>
+      <tr><td><code>packages/npm/officecli npm run check:release-version</code></td><td><span class="badge pass">Pass</span></td><td>NPM wrapper version matched the CLI release.</td></tr>
+      <tr><td><code>git diff --check</code></td><td><span class="badge pass">Pass</span></td><td>No whitespace errors before the feature commit.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>E2E And Product Verification</h2>
+    <table>
+      <thead>
+      <tr><th>Area</th><th>Result</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+      <tr><td>External document check and consume</td><td><span class="badge pass">Pass</span></td><td>Local isolated platform smoke passed with repeated external check/consume. Production DB shows <code>external_charge_violations_since_deploy=0</code>.</td></tr>
+      <tr><td>External pricing visibility</td><td><span class="badge pass">Pass</span></td><td>Production <code>/api/pricing</code> returned 5 packs, all <code>hosted_credits</code>.</td></tr>
+      <tr><td>External checkout rejection</td><td><span class="badge pass">Pass</span></td><td>Covered by billing tests. Direct production checkout requires an authenticated session, so no live write attempt was made against production.</td></tr>
+      <tr><td>External IMG local-provider path</td><td><span class="badge pass">Pass</span></td><td>Covered by CLI tests for local image provider routing. No production hosted image route is used for external runtime.</td></tr>
+      <tr><td>Hosted document and IMG billing</td><td><span class="badge pass">Pass</span></td><td>Covered by Go tests. Production DB contains hosted usage with <code>settled_credits=317</code> across historical hosted charged events.</td></tr>
+      <tr><td>Signup hosted credits</td><td><span class="badge pass">Code verified</span></td><td>Unit tests cover idempotent grant behavior. No new production signup was created during this release verification.</td></tr>
+      <tr><td>Referral hosted credits</td><td><span class="badge pass">Code verified</span></td><td>Unit tests cover referral activation and idempotency. Production currently has <code>user_referrals=0</code>, so no live referral sample exists yet.</td></tr>
+      <tr><td>NPM installed-binary smoke</td><td><span class="badge warn">Environment blocked</span></td><td>NPM registry version is <code>0.2.54</code>. Local install smoke was blocked by GitHub release-asset TLS timeout / postinstall download hang.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Production Endpoint Checks</h2>
+    <table>
+      <thead>
+      <tr><th>Endpoint</th><th>Observed result</th></tr>
+      </thead>
+      <tbody>
+      <tr><td><code>https://officecli.io/</code></td><td>HTTP 200. Homepage contains <code>External Mode</code>, <code>Hosted Mode</code>, and the required External/Hosted hero copy.</td></tr>
+      <tr><td><code>https://officecli.io/api/pricing</code></td><td>HTTP 200. Payload contains 5 packs and every <code>pack_kind</code> is <code>hosted_credits</code>.</td></tr>
+      <tr><td><code>https://platform.officecli.io/app/</code></td><td>HTTP 200 HTML shell.</td></tr>
+      <tr><td><code>https://platform.officecli.io/admin/</code></td><td>HTTP 200 HTML shell.</td></tr>
+      <tr><td><code>https://platform.officecli.io/healthz</code></td><td>HTTP 200 JSON with <code>data.status=ok</code>.</td></tr>
+      <tr><td><code>scripts/run-production-inspection.sh readonly</code></td><td><span class="badge pass">Pass</span> for site home, pricing API, app redirect, platform root redirect, app shell, admin shell, and healthz.</td></tr>
+      </tbody>
+    </table>
+    <pre>{
+  "pricing_count": 5,
+  "pricing_pack_kinds": ["hosted_credits", "hosted_credits", "hosted_credits", "hosted_credits", "hosted_credits"],
+  "healthz": {"data": {"status": "ok"}}
+}</pre>
+  </section>
+
+  <section>
+    <h2>Database Read-Only Inspection</h2>
+    <p>Production DB was queried through the production k3s Postgres pod using read-only <code>SELECT</code> statements. No secret values or API keys were selected.</p>
+    <h3>SQL</h3>
+    <pre>SELECT COUNT(*), SUM(credit_balance), SUM(credit_reserved), COUNT(*) FILTER (WHERE hosted_enabled) FROM api_keys;
+SELECT allowed_modes, default_runtime_mode, hosted_enabled, COUNT(*), SUM(credit_balance), SUM(credit_reserved) FROM api_keys GROUP BY allowed_modes, default_runtime_mode, hosted_enabled;
+SELECT runtime_mode, mode, charged, COUNT(*), SUM(billed_units), SUM(settled_credits) FROM usage_events GROUP BY runtime_mode, mode, charged;
+SELECT COUNT(*) FROM usage_events WHERE created_at &gt;= TIMESTAMPTZ '2026-05-12T12:16:13Z' AND runtime_mode = 'external' AND (charged = true OR billed_units &lt;&gt; 0 OR settled_credits &lt;&gt; 0 OR reserved_credits &lt;&gt; 0);
+SELECT pack_kind, status, COUNT(*), SUM(credit_amount), SUM(quota_amount) FROM orders GROUP BY pack_kind, status;
+SELECT COUNT(*) FROM orders WHERE created_at &gt;= TIMESTAMPTZ '2026-05-12T12:16:13Z' AND pack_kind = 'external_generation';
+SELECT COUNT(*), COUNT(*) FILTER (WHERE activated_at IS NOT NULL), COUNT(*) FILTER (WHERE reward_granted_at IS NOT NULL) FROM user_referrals;
+SELECT COUNT(*), SUM(credit_amount) FROM hosted_credit_grants;
+SELECT COUNT(*) FROM admin_audit_logs WHERE created_at &gt;= TIMESTAMPTZ '2026-05-12T12:16:13Z';</pre>
+    <h3>Result Summary</h3>
+    <table>
+      <thead>
+      <tr><th>Metric</th><th>Result</th><th>Interpretation</th></tr>
+      </thead>
+      <tbody>
+      <tr><td>API keys</td><td>56 total, 39 hosted-enabled, credit balance total 1,089,591, reserved 0</td><td>User/admin hosted credit fields are populated and queryable.</td></tr>
+      <tr><td>API keys by mode</td><td>16 external-only external keys, 1 external-only unset default, 9 hosted-only hosted keys, 30 hybrid hosted keys</td><td>Production has both External and Hosted key configurations.</td></tr>
+      <tr><td>External usage</td><td>324 external/free uncharged events and 268 external/paid uncharged events, all with billed units 0 and settled credits 0</td><td>External usage rows are present and not credited/settled as paid usage.</td></tr>
+      <tr><td>External violations after deploy</td><td>0</td><td>No post-deploy external event charged, billed units, reserved credits, or settled credits.</td></tr>
+      <tr><td>Hosted usage</td><td>72 hosted charged events with 317 billed units and 317 settled credits</td><td>Hosted credit accounting remains visible in production stats.</td></tr>
+      <tr><td>Orders</td><td>Historical external orders remain: 1 paid, 9 pending. Hosted pending orders: 1.</td><td>Historical external orders are preserved.</td></tr>
+      <tr><td>New external orders after deploy</td><td>0</td><td>No new external-generation order was created after this release deploy.</td></tr>
+      <tr><td>Referrals</td><td>0 total</td><td>No production referral sample exists yet.</td></tr>
+      <tr><td>Hosted credit grants</td><td>0 total</td><td>No production signup/referral grant has been triggered yet after migration.</td></tr>
+      <tr><td>Admin audit logs</td><td>73 total, 0 after deploy timestamp</td><td>Audit table is queryable; no post-deploy signup/referral/checkout/admin event occurred during verification.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Known Limits Of This Verification</h2>
+    <ul>
+      <li>No real production Google OAuth signup was created for the verification run, so signup grant behavior is covered by tests and code paths, not by a new live account sample.</li>
+      <li>No real production referral activation was performed, so referral grant behavior is covered by tests and code paths, not by a new live invited-user sample.</li>
+      <li>No real production Stripe checkout was created, because the release requirement was to disable external paid entry points and preserve hosted purchase capability; checkout behavior is covered by backend tests and live pricing read-only inspection.</li>
+      <li>Installed-binary smoke from npm was limited by local network/download behavior for GitHub release assets. The dist release assets and npm registry version were verified separately.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Conclusion</h2>
+    <p><span class="badge pass">Complete</span> The code, CLI release, npm publish, and platform deploy are complete. Production read-only checks confirm the new public pricing shape, deployed site copy, healthy app/admin routes, external no-charge invariant after deploy, and preserved historical external orders. The remaining live-only growth and Stripe paths require real authenticated production user actions to produce new rows; their code and tests are included in this release.</p>
+  </section>
+</main>
+</body>
+</html>
