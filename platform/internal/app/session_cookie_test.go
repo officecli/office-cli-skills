@@ -92,7 +92,7 @@ func (f *fakeAdminRouteService) Logout(_ context.Context, rawCookie string) erro
 func (f *fakeAdminRouteService) Overview(_ context.Context) (*model.OverviewStats, error) {
 	return &model.OverviewStats{}, nil
 }
-func (f *fakeAdminRouteService) ListAPIKeys(_ context.Context) ([]model.APIKey, error) {
+func (f *fakeAdminRouteService) ListAPIKeys(_ context.Context, _ *uint64) ([]model.APIKey, error) {
 	return nil, nil
 }
 func (f *fakeAdminRouteService) GetAPIKeyPlaintext(_ context.Context, _ uint64, _ string) (string, error) {
@@ -113,7 +113,9 @@ func (f *fakeAdminRouteService) UpdateFreeQuota(_ context.Context, id uint64, fr
 func (f *fakeAdminRouteService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
 }
-func (f *fakeAdminRouteService) ListUsers(_ context.Context) ([]model.User, error) { return nil, nil }
+func (f *fakeAdminRouteService) ListUsers(_ context.Context, _ string) ([]model.User, error) {
+	return nil, nil
+}
 func (f *fakeAdminRouteService) UpdateUser(_ context.Context, id uint64, req admin.UpdateUserRequest) error {
 	return nil
 }

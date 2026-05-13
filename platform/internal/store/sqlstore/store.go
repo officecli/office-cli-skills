@@ -1011,9 +1011,18 @@ func (s *Store) GetUserByID(ctx context.Context, id uint64) (*model.User, error)
 	return &user, nil
 }
 
-func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {
+func (s *Store) ListUsers(ctx context.Context, query string) ([]model.User, error) {
 	var users []model.User
-	if err := s.db.WithContext(ctx).Order("created_at desc").Find(&users).Error; err != nil {
+	db := s.db.WithContext(ctx).Model(&model.User{})
+	normalized := strings.TrimSpace(query)
+	if normalized != "" {
+		if id, err := strconv.ParseUint(normalized, 10, 64); err == nil {
+			db = db.Where("id = ?", id)
+		} else {
+			db = db.Where("email LIKE ?", "%"+normalized+"%")
+		}
+	}
+	if err := db.Order("created_at desc").Find(&users).Error; err != nil {
 		return nil, err
 	}
 	return users, nil

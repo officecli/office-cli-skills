@@ -71,7 +71,7 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	require.NotEmpty(t, result.PlaintextKey)
 	require.NotEmpty(t, result.KeyPrefix)
 
-	keys, err := svc.ListAPIKeys(context.Background())
+	keys, err := svc.ListAPIKeys(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, key.KeyPrefix, keys[0].KeyPrefix)
@@ -97,17 +97,20 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:create_hosted_only_key?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.AdminAuditLog{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
 	store := sqlstore.NewWithDB(db)
 	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
 	require.NoError(t, err)
 	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+	user := &model.User{GoogleSub: "hosted-owner", Email: "owner@example.com", Name: "Owner", InviteCode: "invite-owner", Status: model.UserStatusActive}
+	require.NoError(t, db.Create(user).Error)
 
 	allowedModes := "hosted_only"
 	hostedEnabled := true
 	defaultRuntimeMode := "hosted"
 	creditBalance := 120
 	result, key, err := svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		OwnerUserID:        &user.ID,
 		PlanName:           "Hosted",
 		AllowedModes:       &allowedModes,
 		HostedEnabled:      &hostedEnabled,
@@ -125,6 +128,74 @@ func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {
 	require.Equal(t, "hosted", *saved.DefaultRuntimeMode)
 	require.Equal(t, 120, saved.CreditBalance)
 	require.Nil(t, saved.QuotaTotal)
+}
+
+func TestCreateAPIKeyRequiresOwnerForHostedModes(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:create_hosted_key_requires_owner?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+
+	hostedOnly := "hosted_only"
+	hostedEnabled := true
+	_, _, err = svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		PlanName:      "Hosted",
+		AllowedModes:  &hostedOnly,
+		HostedEnabled: &hostedEnabled,
+	})
+	require.ErrorContains(t, err, "owner_user_id is required")
+
+	hybrid := "hybrid"
+	_, _, err = svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		PlanName:     "Hybrid",
+		AllowedModes: &hybrid,
+	})
+	require.ErrorContains(t, err, "owner_user_id is required")
+}
+
+func TestCreateAPIKeyRejectsMissingHostedOwnerUser(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:create_hosted_key_rejects_missing_owner?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+
+	missingUserID := uint64(404)
+	hostedOnly := "hosted_only"
+	hostedEnabled := true
+	_, _, err = svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		OwnerUserID:   &missingUserID,
+		PlanName:      "Hosted",
+		AllowedModes:  &hostedOnly,
+		HostedEnabled: &hostedEnabled,
+	})
+	require.ErrorContains(t, err, "owner user not found")
+}
+
+func TestCreateAPIKeyAllowsExternalWithoutOwner(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:create_external_key_without_owner?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+
+	externalOnly := "external_only"
+	hostedEnabled := false
+	result, key, err := svc.CreateAPIKey(context.Background(), CreateAPIKeyRequest{
+		PlanName:      "External",
+		AllowedModes:  &externalOnly,
+		HostedEnabled: &hostedEnabled,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.PlaintextKey)
+	require.Nil(t, key.OwnerUserID)
 }
 
 func TestUpdateAPIKeyPersistsHostedEntitlementFields(t *testing.T) {

@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, KeyRound, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react'
 import { ApiError, api } from '../api'
-import type { ApiKey } from '../types'
+import type { ApiKey, User } from '../types'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 type KeyType = 'hosted_only' | 'external_only' | 'hybrid'
@@ -83,24 +83,40 @@ function buildUpdatePayload(draft: KeyForm) {
   return payload
 }
 
+function userOptionLabel(user: User) {
+  return `UID ${user.id} / ${user.email}${user.name ? ` / ${user.name}` : ''}`
+}
+
 export default function ApiKeysPage() {
   const queryClient = useQueryClient()
-  const { data: keys = [] } = useQuery({ queryKey: ['admin-api-keys'], queryFn: api.apiKeys })
+  const { data: keys = [] } = useQuery({ queryKey: ['admin-api-keys'], queryFn: () => api.apiKeys() })
   const [showCreate, setShowCreate] = useState(false)
   const [showCreateAdvanced, setShowCreateAdvanced] = useState(false)
   const [createForm, setCreateForm] = useState(blankForm)
+  const [createUserSearch, setCreateUserSearch] = useState('')
+  const [selectedCreateUser, setSelectedCreateUser] = useState<User | null>(null)
+  const [createUserError, setCreateUserError] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showEditAdvanced, setShowEditAdvanced] = useState<Record<number, boolean>>({})
   const [revealedKey, setRevealedKey] = useState<string | null>(null)
   const [copyingKeyID, setCopyingKeyID] = useState<number | null>(null)
   const [copiedKeyID, setCopiedKeyID] = useState<number | null>(null)
   const [copyErrorByKey, setCopyErrorByKey] = useState<Record<number, string>>({})
+  const createRequiresUser = createForm.key_type !== 'external_only'
+  const { data: createUserOptions = [] } = useQuery({
+    queryKey: ['admin-users-search', createUserSearch],
+    queryFn: () => api.users(createUserSearch.trim()),
+    enabled: showCreate && createRequiresUser && createUserSearch.trim().length > 0,
+  })
 
   const create = useMutation({
     mutationFn: (payload: Record<string, unknown>) => api.createApiKey(payload),
     onSuccess: async (result) => {
       setRevealedKey(result.plaintext_key)
       setCreateForm(blankForm)
+      setCreateUserSearch('')
+      setSelectedCreateUser(null)
+      setCreateUserError('')
       setShowCreateAdvanced(false)
       setShowCreate(false)
       await queryClient.invalidateQueries({ queryKey: ['admin-api-keys'] })
@@ -166,6 +182,10 @@ export default function ApiKeysPage() {
         {showCreate ? (
           <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
             event.preventDefault()
+            if (createRequiresUser && !createForm.owner_user_id) {
+              setCreateUserError('Select a user before creating a hosted key.')
+              return
+            }
             create.mutate(buildCreatePayload(createForm))
           }}>
             <label className="text-sm text-outline">
@@ -176,6 +196,43 @@ export default function ApiKeysPage() {
                 <option value="hybrid">Hybrid</option>
               </select>
             </label>
+            {createRequiresUser ? (
+              <label className="relative text-sm text-outline">
+                User
+                <input
+                  className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40"
+                  placeholder="Search uid or email"
+                  value={createUserSearch}
+                  onChange={(event) => {
+                    setCreateUserSearch(event.target.value)
+                    setSelectedCreateUser(null)
+                    setCreateUserError('')
+                    setCreateForm((current) => ({ ...current, owner_user_id: '' }))
+                  }}
+                />
+                {createUserOptions.length ? (
+                  <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-high shadow-xl">
+                    {createUserOptions.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        className="block w-full px-4 py-3 text-left text-xs text-outline hover:bg-surface-container-highest hover:text-white"
+                        onClick={() => {
+                          setSelectedCreateUser(user)
+                          setCreateUserSearch(userOptionLabel(user))
+                          setCreateUserError('')
+                          setCreateForm((current) => ({ ...current, owner_user_id: String(user.id) }))
+                        }}
+                      >
+                        {userOptionLabel(user)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {selectedCreateUser ? <div className="mt-2 text-xs text-secondary">Selected {userOptionLabel(selectedCreateUser)}</div> : null}
+                {createUserError ? <div className="mt-2 text-xs text-rose-200">{createUserError}</div> : null}
+              </label>
+            ) : null}
             {createForm.key_type !== 'hosted_only' ? (
               <label className="text-sm text-outline">
                 External quota
@@ -198,10 +255,6 @@ export default function ApiKeysPage() {
                   <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} />
                 </label>
                 <label className="text-sm text-outline">
-                  Owner user ID
-                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={createForm.owner_user_id} onChange={(event) => setCreateForm((current) => ({ ...current, owner_user_id: event.target.value }))} />
-                </label>
-                <label className="text-sm text-outline">
                   Plan code
                   <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_code} onChange={(event) => setCreateForm((current) => ({ ...current, plan_code: event.target.value }))} />
                 </label>
@@ -216,10 +269,13 @@ export default function ApiKeysPage() {
               </div>
             ) : null}
             <div className="md:col-span-3 flex gap-3">
-              <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>
+              <button type="submit" className="tonal-button" disabled={create.isPending || (createRequiresUser && !createForm.owner_user_id)}>Create key</button>
               <button type="button" className="ghost-button" onClick={() => {
                 setShowCreate(false)
                 setShowCreateAdvanced(false)
+                setCreateUserSearch('')
+                setSelectedCreateUser(null)
+                setCreateUserError('')
               }}>Dismiss</button>
             </div>
           </form>

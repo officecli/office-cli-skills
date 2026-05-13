@@ -106,6 +106,11 @@ describe('admin api keys page', () => {
       if (url === '/api/admin/api-keys' && init?.method === 'POST') {
         return okResponse({ plaintext_key: 'cop_hosted_secret', key_prefix: 'cop_hosted' })
       }
+      if (url === '/api/admin/users?query=demo%40example.com') {
+        return okResponse([
+          { id: 42, email: 'demo@example.com', name: 'Demo User', status: 'active', created_at: '2026-04-01T00:00:00Z' },
+        ])
+      }
       if (url === '/api/admin/api-keys') {
         return apiKeysResponse()
       }
@@ -119,8 +124,12 @@ describe('admin api keys page', () => {
     expect(screen.getByLabelText(/key type/i)).toHaveValue('hosted_only')
     expect(screen.queryByLabelText(/^plan name/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/owner user id/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/external quota/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/note/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create key$/i })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/^user$/i), { target: { value: 'demo@example.com' } })
+    fireEvent.click(await screen.findByRole('button', { name: /uid 42/i }))
     fireEvent.change(screen.getByLabelText(/hosted credits/i), { target: { value: '120' } })
     fireEvent.click(screen.getByRole('button', { name: /^create key$/i }))
 
@@ -134,9 +143,30 @@ describe('admin api keys page', () => {
       allowed_modes: 'hosted_only',
       hosted_enabled: true,
       default_runtime_mode: 'hosted',
+      owner_user_id: 42,
       credit_balance: 120,
     })
     expect(requestBody(postCall!)).not.toHaveProperty('quota_total')
+  })
+
+  it('does not submit hosted or hybrid creation until a user is selected', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/api-keys') {
+        return apiKeysResponse()
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: /create api key/i }))
+    expect(screen.getByRole('button', { name: /^create key$/i })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/key type/i), { target: { value: 'hybrid' } })
+    expect(screen.getByRole('button', { name: /^create key$/i })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/key type/i), { target: { value: 'external_only' } })
+    expect(screen.getByRole('button', { name: /^create key$/i })).not.toBeDisabled()
   })
 
   it('keeps create advanced limited to optional metadata', async () => {
@@ -158,7 +188,7 @@ describe('admin api keys page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^advanced$/i }))
     expect(screen.getByLabelText(/plan name override/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/owner user id/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/owner user id/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/plan code/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/expires at/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/note/i)).toBeInTheDocument()
@@ -208,6 +238,11 @@ describe('admin api keys page', () => {
       if (url === '/api/admin/api-keys' && init?.method === 'POST') {
         return okResponse({ plaintext_key: 'cop_hybrid_secret', key_prefix: 'cop_hybrid' })
       }
+      if (url === '/api/admin/users?query=42') {
+        return okResponse([
+          { id: 42, email: 'demo@example.com', name: 'Demo User', status: 'active', created_at: '2026-04-01T00:00:00Z' },
+        ])
+      }
       if (url === '/api/admin/api-keys') {
         return apiKeysResponse()
       }
@@ -219,6 +254,8 @@ describe('admin api keys page', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /create api key/i }))
     fireEvent.change(screen.getByLabelText(/key type/i), { target: { value: 'hybrid' } })
+    fireEvent.change(screen.getByLabelText(/^user$/i), { target: { value: '42' } })
+    fireEvent.click(await screen.findByRole('button', { name: /uid 42/i }))
     fireEvent.change(screen.getByLabelText(/external quota/i), { target: { value: '40' } })
     fireEvent.change(screen.getByLabelText(/hosted credits/i), { target: { value: '80' } })
     fireEvent.click(screen.getByRole('button', { name: /^create key$/i }))
@@ -232,6 +269,7 @@ describe('admin api keys page', () => {
       allowed_modes: 'hybrid',
       hosted_enabled: true,
       default_runtime_mode: 'hosted',
+      owner_user_id: 42,
       quota_total: 40,
       credit_balance: 80,
     })
