@@ -2,6 +2,7 @@ package sqlstore
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -78,6 +79,37 @@ func TestSaveGoogleUserKeepsDisabledStatusForExistingUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.UserStatusDisabled, saved.Status)
 	require.Equal(t, "Renamed User", saved.Name)
+}
+
+func TestListUsersFiltersByIDAndEmail(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:list_users_filters_by_id_and_email?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+
+	users := []model.User{
+		{GoogleSub: "sub-1", Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
+		{GoogleSub: "sub-2", Email: "beta@example.com", Name: "Beta", InviteCode: "invite-beta", Status: model.UserStatusActive},
+		{GoogleSub: "sub-3", Email: "ops@example.org", Name: "Ops", InviteCode: "invite-ops", Status: model.UserStatusActive},
+	}
+	for i := range users {
+		require.NoError(t, db.Create(&users[i]).Error)
+	}
+
+	store := NewWithDB(db)
+	all, err := store.ListUsers(context.Background(), "")
+	require.NoError(t, err)
+	require.Len(t, all, 3)
+
+	byID, err := store.ListUsers(context.Background(), strconv.FormatUint(users[1].ID, 10))
+	require.NoError(t, err)
+	require.Len(t, byID, 1)
+	require.Equal(t, "beta@example.com", byID[0].Email)
+
+	byEmail, err := store.ListUsers(context.Background(), "example.com")
+	require.NoError(t, err)
+	require.Len(t, byEmail, 2)
+	require.Equal(t, "beta@example.com", byEmail[0].Email)
+	require.Equal(t, "alpha@example.com", byEmail[1].Email)
 }
 
 func TestCountReferralsByInviterUserID(t *testing.T) {

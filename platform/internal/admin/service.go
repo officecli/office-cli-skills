@@ -232,11 +232,17 @@ func (s *Service) Logout(ctx context.Context, rawCookie string) error {
 func (s *Service) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	return s.store.Overview(ctx)
 }
-func (s *Service) ListAPIKeys(ctx context.Context) ([]model.APIKey, error) {
+func (s *Service) ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error) {
+	if ownerUserID != nil {
+		return s.store.FindAPIKeysByOwner(ctx, *ownerUserID)
+	}
 	return s.store.ListAPIKeys(ctx)
 }
 
 func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, *model.APIKey, error) {
+	if err := s.validateAPIKeyOwner(ctx, req); err != nil {
+		return nil, nil, err
+	}
 	plain, prefix, hash, err := generateAPIKey(s.apiKeySalt)
 	if err != nil {
 		return nil, nil, err
@@ -274,6 +280,38 @@ func (s *Service) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*C
 	payload, _ := json.Marshal(key)
 	_ = s.store.CreateAuditLog(ctx, "api_key.create", "api_key", fmt.Sprintf("%d", key.ID), string(payload))
 	return &CreateAPIKeyResponse{PlaintextKey: plain, KeyPrefix: prefix}, key, nil
+}
+
+func (s *Service) validateAPIKeyOwner(ctx context.Context, req CreateAPIKeyRequest) error {
+	if !createAPIKeyRequiresOwner(req) {
+		return nil
+	}
+	if req.OwnerUserID == nil || *req.OwnerUserID == 0 {
+		return fmt.Errorf("owner_user_id is required for hosted API keys")
+	}
+	user, err := s.store.GetUserByID(ctx, *req.OwnerUserID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return fmt.Errorf("owner user not found: %d", *req.OwnerUserID)
+	}
+	return nil
+}
+
+func createAPIKeyRequiresOwner(req CreateAPIKeyRequest) bool {
+	if req.HostedEnabled != nil && *req.HostedEnabled {
+		return true
+	}
+	if req.AllowedModes == nil {
+		return false
+	}
+	switch strings.TrimSpace(*req.AllowedModes) {
+	case "hosted_only", "hybrid":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error) {
@@ -374,8 +412,8 @@ func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEven
 	return s.store.ListUsageEvents(ctx, filter)
 }
 
-func (s *Service) ListUsers(ctx context.Context) ([]model.User, error) {
-	return s.store.ListUsers(ctx)
+func (s *Service) ListUsers(ctx context.Context, query string) ([]model.User, error) {
+	return s.store.ListUsers(ctx, query)
 }
 
 func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserRequest) error {

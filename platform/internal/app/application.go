@@ -71,14 +71,14 @@ type adminRouteService interface {
 	CurrentIdentity(ctx context.Context, rawCookie string) (*admin.AdminIdentity, error)
 	Logout(ctx context.Context, rawCookie string) error
 	Overview(ctx context.Context) (*model.OverviewStats, error)
-	ListAPIKeys(ctx context.Context) ([]model.APIKey, error)
+	ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error)
 	GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error)
 	CreateAPIKey(ctx context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error)
 	UpdateAPIKey(ctx context.Context, id uint64, req admin.UpdateAPIKeyRequest) error
 	ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error)
 	UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error
 	ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error)
-	ListUsers(ctx context.Context) ([]model.User, error)
+	ListUsers(ctx context.Context, query string) ([]model.User, error)
 	UpdateUser(ctx context.Context, id uint64, req admin.UpdateUserRequest) error
 	ListOrders(ctx context.Context) ([]model.Order, error)
 	UpdateOrder(ctx context.Context, id uint64, req admin.UpdateOrderRequest) error
@@ -641,7 +641,14 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		httpapi.JSON(c, http.StatusOK, data)
 	})
 	protected.GET("/api-keys", func(c *gin.Context) {
-		data, err := adminSvc.ListAPIKeys(c.Request.Context())
+		var ownerUserID *uint64
+		if raw := c.Query("user_id"); raw != "" {
+			parsed, _ := strconv.ParseUint(raw, 10, 64)
+			if parsed > 0 {
+				ownerUserID = &parsed
+			}
+		}
+		data, err := adminSvc.ListAPIKeys(c.Request.Context(), ownerUserID)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
@@ -739,7 +746,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		httpapi.JSON(c, http.StatusOK, data)
 	})
 	protected.GET("/users", func(c *gin.Context) {
-		data, err := adminSvc.ListUsers(c.Request.Context())
+		data, err := adminSvc.ListUsers(c.Request.Context(), c.Query("query"))
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
