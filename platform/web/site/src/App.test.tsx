@@ -212,6 +212,15 @@ describe('site metadata and assets', () => {
     expect(useCasesSource).not.toContain('picsum.photos')
   })
 
+  it('keeps the home hero compact at default browser zoom', () => {
+    const heroSource = fs.readFileSync(path.resolve(__dirname, 'components/Hero.tsx'), 'utf8')
+
+    expect(heroSource).not.toContain('min-h-[90vh]')
+    expect(heroSource).not.toContain('md:text-8xl')
+    expect(heroSource).toContain('max-h-[min(34rem,calc(100vh-12rem))]')
+    expect(heroSource).toContain('overflow-y-auto')
+  })
+
   it('defines crawl assets for the marketing site', () => {
     const robots = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'robots.txt'), 'utf8')
     const sitemap = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'sitemap.xml'), 'utf8')

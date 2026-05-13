@@ -343,45 +343,45 @@ export default function Hero() {
   const current = terminalByTab[activeTab]
 
   return (
-    <section className="relative min-h-[90vh] flex items-center px-8 md:px-16 max-w-[1440px] mx-auto pt-20">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center w-full">
+    <section className="relative px-6 pt-24 pb-10 md:px-10 md:pt-24 md:pb-12 lg:px-16 lg:pb-14 max-w-[1440px] mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(28rem,1.05fr)] gap-8 lg:gap-10 items-center w-full">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
-          className="z-10"
+          className="z-10 max-w-3xl"
         >
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0d4c54]/40 text-[#8af3f7] text-xs font-headline uppercase tracking-widest mb-6 border border-[#0d4c54]/60">
+          <span className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full border border-[#0d4c54]/60 bg-[#0d4c54]/40 px-3 py-1 text-[11px] font-headline uppercase tracking-widest text-[#8af3f7]">
             <span className="w-2 h-2 rounded-full bg-tertiary terminal-pulse shadow-[0_0_8px_#00dce5]"></span>
             External + Hosted modes · One binary · No agent required
           </span>
-          <h1 className="font-headline text-6xl md:text-8xl font-bold tracking-tighter leading-[0.9] mb-8 text-white">
+          <h1 className="mb-5 font-headline text-4xl font-bold leading-[0.98] tracking-tight text-white sm:text-5xl lg:text-6xl">
             AI Document Generation in External or Hosted Mode
           </h1>
-          <p className="text-xl text-outline-variant max-w-xl mb-6 leading-relaxed font-light">
+          <p className="mb-5 max-w-2xl text-base leading-relaxed text-outline-variant sm:text-lg">
             External: free unlimited with your own model endpoint. Hosted: OfficeCLI-managed runtime with hosted credits. Both modes use the same dependency-free officecli binary for PPTX, DOCX, XLSX, REPORT, and IMG outputs.
           </p>
-          <div className="mb-10 grid gap-3 sm:grid-cols-2 max-w-2xl">
-            <div className="rounded-lg border border-tertiary/25 bg-tertiary/10 p-4">
-              <div className="font-headline text-sm uppercase tracking-widest text-tertiary">External Mode</div>
-              <p className="mt-2 text-sm leading-relaxed text-outline-variant">Free unlimited generations with your own LLM endpoint and local image provider.</p>
+          <div className="mb-7 grid max-w-2xl gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border border-tertiary/25 bg-tertiary/10 px-3 py-2.5">
+              <div className="font-headline text-[11px] uppercase tracking-widest text-tertiary">External Mode</div>
+              <p className="mt-1 text-xs leading-snug text-outline-variant">Free unlimited with your own LLM endpoint and local image provider.</p>
             </div>
-            <div className="rounded-lg border border-primary/25 bg-primary/10 p-4">
-              <div className="font-headline text-sm uppercase tracking-widest text-primary">Hosted Mode</div>
-              <p className="mt-2 text-sm leading-relaxed text-outline-variant">OfficeCLI-managed runtime using hosted credits when you do not want to operate model services.</p>
+            <div className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2.5">
+              <div className="font-headline text-[11px] uppercase tracking-widest text-primary">Hosted Mode</div>
+              <p className="mt-1 text-xs leading-snug text-outline-variant">Managed runtime with hosted credits when you do not want to run model services.</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3">
             <motion.a
               whileHover={{ scale: 0.95 }}
-              className="bg-gradient-to-br from-primary to-primary-container text-[#002e6b] px-8 py-4 rounded-md font-bold text-lg transition-all"
+              className="rounded-md bg-gradient-to-br from-primary to-primary-container px-6 py-3 text-base font-bold text-[#002e6b] transition-all"
               href={platformAppHref}
               onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.consoleOpen, { surface: 'site', placement: 'hero', ...extractAttributionParams(location.search) })}
             >
               Start Building for Free
             </motion.a>
             <motion.div whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
-              <Link className="border border-outline-variant/30 text-white px-8 py-4 rounded-md font-bold text-lg transition-all inline-flex" to="/download">
+              <Link className="inline-flex rounded-md border border-outline-variant/30 px-6 py-3 text-base font-bold text-white transition-all" to="/download">
                 Install the AI CLI
               </Link>
             </motion.div>
@@ -392,10 +392,10 @@ export default function Hero() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="relative group"
+          className="relative min-w-0 group"
         >
           <div className="absolute -inset-4 bg-primary/10 blur-3xl rounded-full opacity-30 group-hover:opacity-50 transition-opacity"></div>
-          <div className="relative bg-surface-low rounded-xl border border-outline-variant/20 overflow-hidden shadow-2xl">
+          <div className="relative flex max-h-[24rem] min-h-0 flex-col overflow-hidden rounded-xl border border-outline-variant/20 bg-surface-low shadow-2xl sm:max-h-[min(34rem,calc(100vh-12rem))]">
             <div className="flex items-center gap-2 px-4 py-3 bg-surface-high border-b border-outline-variant/10">
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-[#ff5f56]"></div>
@@ -430,9 +430,9 @@ export default function Hero() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25 }}
-              className="p-6 font-mono text-sm leading-relaxed"
+              className="min-h-0 flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed sm:p-5 sm:text-[13px]"
             >
-              <div className="flex gap-3 mb-4">
+              <div className="mb-4 flex gap-3">
                 <span className="text-tertiary shrink-0">$</span>
                 <HighlightedCommand command={current.command} />
               </div>
@@ -444,7 +444,27 @@ export default function Hero() {
                   {line}
                 </div>
               ))}
-              {current.output}
+              <div className="hidden sm:block">
+                {current.output}
+              </div>
+              <div className="space-y-3 sm:hidden">
+                <div className="text-white">
+                  Preview URL: <a href="https://officecli.io/p/xyz123" target="_blank" rel="noreferrer" className="text-primary hover:underline">officecli.io/p/xyz123</a>; password: abcdef
+                </div>
+                <div className="rounded-lg border border-primary/20 bg-surface-high p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-headline text-primary">
+                      {activeTab === 'img' ? 'LAUNCH_VISUAL.PNG' : `Q3_BOARD_REVIEW.${activeTab.toUpperCase()}`}
+                    </span>
+                    <span className="rounded border border-tertiary/25 bg-tertiary/10 px-2 py-0.5 text-[9px] font-headline uppercase tracking-wider text-tertiary">
+                      Success
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[10px] text-outline-variant">
+                    Access: External Mode; free unlimited with your model endpoint
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         </motion.div>
