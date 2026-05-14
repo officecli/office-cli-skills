@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.59 - 2026-05-14
+
+### Changed
+
+- Lowered the default PPT quality evaluation pass threshold to 60 for installed CLI E2E runs.
+
 ## 0.2.58 - 2026-05-14
 
 ### Changed
