@@ -2,6 +2,18 @@ package app
 
 import "testing"
 
+func TestLoadConfigDefaultsFreeTrialLimitToFive(t *testing.T) {
+	t.Setenv("DEFAULT_FREE_LIMIT", "")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if cfg.DefaultFreeLimit != 5 {
+		t.Fatalf("DefaultFreeLimit = %d, want 5", cfg.DefaultFreeLimit)
+	}
+}
+
 func TestDefaultHostedPricingRulesUseTextAndImageProfiles(t *testing.T) {
 	t.Setenv("HOSTED_PRICING_RULES_JSON", "")
 

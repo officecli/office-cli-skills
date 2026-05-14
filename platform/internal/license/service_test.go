@@ -247,16 +247,16 @@ func resignTestCommitToken(t *testing.T, svc *Service, token *CommitToken) {
 func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
 
 	resp, err := svc.Check(context.Background(), testCheckRequest("fp-1", "generate"))
 	require.NoError(t, err)
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, 10, resp.FreeLimit)
-	require.Equal(t, 10, resp.FreeRemaining)
+	require.Equal(t, 5, resp.FreeLimit)
+	require.Equal(t, 5, resp.FreeRemaining)
 	require.NotNil(t, resp.QuotaSnapshot)
-	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
+	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
 	require.True(t, resp.QuotaSnapshot.FreeTrialDaily.BinaryOnly)
 	require.NotNil(t, resp.CommitToken)
 	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
@@ -265,7 +265,7 @@ func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
 func TestHostedAnonymousCheckUsesLifetimeFreeQuota(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
 
 	req := testCheckRequest("fp-hosted-anon", "generate")
 	req.RuntimeMode = "hosted"
@@ -278,22 +278,22 @@ func TestHostedAnonymousCheckUsesLifetimeFreeQuota(t *testing.T) {
 	require.Equal(t, "hosted", resp.CommitToken.RuntimeMode)
 	require.NotNil(t, resp.QuotaSnapshot)
 	require.Equal(t, "lifetime", resp.QuotaSnapshot.FreeTrial.Scope)
-	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrial.Limit)
+	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrial.Limit)
 	require.Equal(t, 0, resp.QuotaSnapshot.FreeTrial.Used)
-	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrial.Remaining)
+	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrial.Remaining)
 }
 
 func TestIMGFreeQuotaUsesSameLifetimeLimit(t *testing.T) {
 	quotas := newFakeFreeQuotaStore()
 	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
 
 	docReq := testCheckRequest("fp-1", "generate")
 	docReq.DocumentType = "pptx"
 	docResp, err := svc.Check(context.Background(), docReq)
 	require.NoError(t, err)
-	require.Equal(t, 10, docResp.FreeLimit)
-	require.Equal(t, 10, docResp.FreeRemaining)
+	require.Equal(t, 5, docResp.FreeLimit)
+	require.Equal(t, 5, docResp.FreeRemaining)
 
 	imgReq := testCheckRequest("fp-1", "generate")
 	imgReq.DocumentType = "img"
@@ -301,8 +301,8 @@ func TestIMGFreeQuotaUsesSameLifetimeLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, imgResp.Allowed)
 	require.Equal(t, model.AccessModeFree, imgResp.AccessMode)
-	require.Equal(t, 10, imgResp.FreeLimit)
-	require.Equal(t, 10, imgResp.FreeRemaining)
+	require.Equal(t, 5, imgResp.FreeLimit)
+	require.Equal(t, 5, imgResp.FreeRemaining)
 
 	consumeResp, err := svc.Consume(context.Background(), ConsumeRequest{
 		FingerprintHash: imgResp.CommitToken.FingerprintHash,
@@ -312,11 +312,11 @@ func TestIMGFreeQuotaUsesSameLifetimeLimit(t *testing.T) {
 		CommitToken:     imgResp.CommitToken,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 9, consumeResp.FreeRemaining)
+	require.Equal(t, 4, consumeResp.FreeRemaining)
 
 	docResp, err = svc.Check(context.Background(), docReq)
 	require.NoError(t, err)
-	require.Equal(t, 9, docResp.FreeRemaining)
+	require.Equal(t, 4, docResp.FreeRemaining)
 }
 
 func TestCheckBlocksWhenFreeQuotaExhausted(t *testing.T) {

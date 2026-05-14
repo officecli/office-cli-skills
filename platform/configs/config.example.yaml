@@ -5,7 +5,7 @@ redis_addr: "127.0.0.1:6379"
 admin_login_rate_limit_per_minute: 60
 license_rate_limit_per_minute: 300
 rate_limit_visitor_ttl: "1m"
-default_free_limit: 10
+default_free_limit: 5
 # For local development only; replace with real secrets when APP_ENV=production
 admin_password: "admin123"
 session_secret: "change-me-change-me-change-me-123456"
