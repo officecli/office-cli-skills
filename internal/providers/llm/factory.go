@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"strings"
 	"time"
 
@@ -384,12 +386,28 @@ func resolveImageSize(req engine.ImageGenerationRequest) string {
 }
 
 func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]any) (string, error) {
-	body, err := c.post(ctx, c.baseURL+"/chat/completions", payload)
+	var lastErr error
+	for i, endpoint := range openAICompatibleEndpointCandidates(c.baseURL, "chat/completions") {
+		content, err := c.chatCompletionAt(ctx, endpoint, payload)
+		if err == nil {
+			return content, nil
+		}
+		lastErr = err
+		if i == 0 && shouldRetryV1Endpoint(err) {
+			continue
+		}
+		return "", err
+	}
+	return "", lastErr
+}
+
+func (c *openAIClient) chatCompletionAt(ctx context.Context, endpoint string, payload map[string]any) (string, error) {
+	body, err := c.post(ctx, endpoint, payload)
 	if err != nil {
 		if !requiresStreamingFallback(err) {
 			return "", err
 		}
-		return c.chatCompletionStream(ctx, payload)
+		return c.chatCompletionStream(ctx, endpoint, payload)
 	}
 	var resp struct {
 		Choices []struct {
@@ -408,7 +426,7 @@ func (c *openAIClient) chatCompletion(ctx context.Context, payload map[string]an
 	if strings.TrimSpace(content) != "" {
 		return content, nil
 	}
-	streamContent, err := c.chatCompletionStream(ctx, payload)
+	streamContent, err := c.chatCompletionStream(ctx, endpoint, payload)
 	if err != nil {
 		return "", fmt.Errorf("chat response is empty: %w", err)
 	}
@@ -422,14 +440,14 @@ func requiresStreamingFallback(err error) bool {
 	return strings.Contains(err.Error(), "Stream must be set to true")
 }
 
-func (c *openAIClient) chatCompletionStream(ctx context.Context, payload map[string]any) (string, error) {
+func (c *openAIClient) chatCompletionStream(ctx context.Context, endpoint string, payload map[string]any) (string, error) {
 	streamPayload := make(map[string]any, len(payload)+1)
 	for key, value := range payload {
 		streamPayload[key] = value
 	}
 	streamPayload["stream"] = true
 
-	resp, err := c.postStream(ctx, c.baseURL+"/chat/completions", streamPayload)
+	resp, err := c.postStream(ctx, endpoint, streamPayload)
 	if err != nil {
 		return "", err
 	}
@@ -768,8 +786,52 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 	return resp.Content, nil
 }
 
+func openAICompatibleEndpointCandidates(baseURL, endpointPath string) []string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	endpoints := []string{baseURL + "/" + strings.TrimLeft(endpointPath, "/")}
+	if shouldOfferV1Fallback(baseURL) {
+		endpoints = append(endpoints, baseURL+"/v1/"+strings.TrimLeft(endpointPath, "/"))
+	}
+	return endpoints
+}
+
+func shouldOfferV1Fallback(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	return strings.Trim(strings.TrimSpace(u.Path), "/") == ""
+}
+
+func shouldRetryV1Endpoint(err error) bool {
+	var invalidJSON *llmInvalidJSONError
+	if !errors.As(err, &invalidJSON) {
+		return false
+	}
+	return looksLikeHTMLResponse(invalidJSON.body)
+}
+
+func looksLikeHTMLResponse(body []byte) bool {
+	trimmed := strings.TrimSpace(string(body))
+	lower := strings.ToLower(trimmed)
+	return strings.HasPrefix(lower, "<!doctype html") || strings.HasPrefix(lower, "<html")
+}
+
+type llmInvalidJSONError struct {
+	body []byte
+	err  error
+}
+
+func (e *llmInvalidJSONError) Error() string {
+	return fmt.Sprintf("llm request failed: invalid json response: %v body=%s", e.err, strings.TrimSpace(string(e.body)))
+}
+
+func (e *llmInvalidJSONError) Unwrap() error {
+	return e.err
+}
+
 func llmInvalidJSONResponseError(body []byte, err error) error {
-	return fmt.Errorf("llm request failed: invalid json response: %w body=%s", err, strings.TrimSpace(string(body)))
+	return &llmInvalidJSONError{body: bytes.Clone(body), err: err}
 }
 
 func llmInvalidStreamingPayloadError(payload string, err error) error {

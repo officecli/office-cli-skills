@@ -61,7 +61,9 @@ export const quickstartChecklist: DocsChecklist[] = [
   {
     title: 'Install and verify',
     items: [
-      'Install OfficeCLI with Homebrew, npm, the Linux install script, or a manual binary.',
+      'Install OfficeCLI with Homebrew, npm, the Linux install script, or a manual binary. Use one install channel at a time.',
+      'If you already installed OfficeCLI with Homebrew, keep using Homebrew and do not install the npm wrapper on top of it.',
+      'To intentionally switch from Homebrew to npm, run `brew uninstall officecli/homebrew-officecli/officecli` first; if your install uses the short formula name, run `brew uninstall officecli`, then run `npm install -g officecli`.',
       'Run `officecli --version` to confirm the binary is on your PATH.',
     ],
   },
@@ -99,7 +101,7 @@ export const updateMethods: CommandExample[] = [
   {
     label: 'npm',
     command: 'npm install -g officecli',
-    detail: 'Refreshes the npm wrapper and the matching OfficeCLI binary.',
+    detail: 'Refreshes the npm wrapper and matching binary. Do not use this on top of a Homebrew install; uninstall Homebrew first if switching channels.',
   },
   {
     label: 'Linux install script',
@@ -112,7 +114,7 @@ export const uninstallMethods: CommandExample[] = [
   {
     label: 'Homebrew',
     command: 'brew uninstall officecli/homebrew-officecli/officecli',
-    detail: 'Use when OfficeCLI was installed from the official tap.',
+    detail: 'Use when OfficeCLI was installed from the official tap. If Homebrew reports the short formula name, run `brew uninstall officecli` instead.',
   },
   {
     label: 'npm',

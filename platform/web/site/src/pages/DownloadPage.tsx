@@ -14,7 +14,7 @@ export default function DownloadPage() {
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
         <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for AI document generation</h1>
         <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
-          Use Homebrew, npm, the official install script, or manual binaries to get started. Install one dependency-free binary, then generate PPTX, DOCX, XLSX, REPORT, and IMG outputs with hosted trial access by default.
+          Use Homebrew, npm, the official install script, or manual binaries to get started. Choose one install channel for the dependency-free binary, then generate PPTX, DOCX, XLSX, REPORT, and IMG outputs with hosted trial access by default.
         </p>
       </section>
 
@@ -32,7 +32,7 @@ export default function DownloadPage() {
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Recommended sequence</h2>
           <ol className="space-y-3 text-sm text-outline-variant list-decimal list-inside">
-            <li>Install OfficeCLI with Homebrew, npm, the script, or a manual binary.</li>
+            <li>Install OfficeCLI with one channel: Homebrew, npm, the script, or a manual binary.</li>
             <li>Run <code>officecli --version</code>, then copy one of the first-run generation commands.</li>
             <li>Use <code>officecli auth status</code> to check trial or hosted key access.</li>
           </ol>

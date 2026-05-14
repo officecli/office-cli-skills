@@ -18,6 +18,15 @@ Install details and runtime-specific entrypoints:
 - Claude Code: `https://officecli.io/officecli/claude-code`
 - OpenClaw: `https://officecli.io/officecli/openclaw`
 
+Install the `officecli` binary through one channel only. If a user already installed it with Homebrew, keep that install and use Homebrew for updates instead of adding `npm install -g officecli`. If they explicitly want to switch from Homebrew to npm, tell them to uninstall the Homebrew formula first:
+
+```bash
+brew uninstall officecli/homebrew-officecli/officecli
+# or, if installed with the short formula name:
+brew uninstall officecli
+npm install -g officecli
+```
+
 The public skill bundle is a routing layer, not a hosted execution backend. Final Office file generation
 still depends on a working local `officecli` installation.
 Hosted runtime still uses the user's OfficeCLI platform API key and hosted credits; aigateway keys are managed by the platform and are not exposed to users.

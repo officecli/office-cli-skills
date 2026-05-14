@@ -48,6 +48,15 @@ An initial npm wrapper package now lives at `packages/npm/officecli`.
 
 Its purpose is to install the published OfficeCLI binary from `officecli/officecli-dist` and expose it as an npm-installed `officecli` command. The wrapper does not replace the Go CLI implementation.
 
+Use one install channel at a time. If this machine already has OfficeCLI from Homebrew, keep using Homebrew for updates and do not install the npm wrapper on top of it. If you intentionally want to switch from Homebrew to npm, remove the Homebrew install first:
+
+```bash
+brew uninstall officecli/homebrew-officecli/officecli
+# If Homebrew reports the formula under the short name, use:
+brew uninstall officecli
+npm install -g officecli
+```
+
 After `npm install -g officecli`, the binary can generate through hosted anonymous trial access without a local model endpoint or API key. The one-time free quota is tied to the machine fingerprint; after it is used up, continue from https://officecli.io/pricing and then run `officecli auth set-key <api-key>`.
 
 For trusted publishing without exposing this private source repository on npmjs, the long-term target is a separate public repository, for example `officecli/officecli-npm`, that receives synced wrapper files and runs the actual npm publish workflow.
@@ -58,6 +67,14 @@ Install the published binary:
 
 ```bash
 npm install -g officecli
+```
+
+If you previously installed with Homebrew, do not run the npm install command above until you have removed the Homebrew version:
+
+```bash
+brew uninstall officecli/homebrew-officecli/officecli
+# or, for short-form installs:
+brew uninstall officecli
 ```
 
 Then start the persistent TUI. Hosted anonymous trial access is the default, so no local model endpoint or API key is required for the first run:
@@ -73,7 +90,7 @@ The default `officecli` command opens a persistent Codex-style TUI: the latest c
 
 Generated files are written to `./output` by default. For `PPTX`, OfficeCLI generates and embeds suitable images by default; add `--no-images` when you want a text-only deck.
 
-For scripts and automation, use `officecli exec new ...`. The older `officecli new ...` form remains available for compatibility.
+For scripts and automation, use `officecli new ...`.
 
 Check the current access mode:
 
@@ -92,49 +109,49 @@ officecli auth set-key <api-key>
 Generate a PPTX:
 
 ```bash
-officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
 ```
 
 Generate a DOCX:
 
 ```bash
-officecli exec new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
 ```
 
 Generate an XLSX:
 
 ```bash
-officecli exec new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 ```
 
 Generate a workbook-backed Report:
 
 ```bash
-officecli exec new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
+officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
 ```
 
 Generate without publishing:
 
 ```bash
-officecli exec new pptx "Internal Draft" --prompt "Create a short internal strategy update." --no-publish
+officecli new pptx "Internal Draft" --prompt "Create a short internal strategy update." --no-publish
 ```
 
 Generate from a prompt file:
 
 ```bash
-officecli exec new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt
 ```
 
 Run in higher-quality interactive mode:
 
 ```bash
-officecli exec new pptx "Enterprise Collaboration Platform" --mode best
+officecli new pptx "Enterprise Collaboration Platform" --mode best
 ```
 
 Generate a standalone image:
 
 ```bash
-officecli exec new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
+officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
 ```
 
 `new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and only charges hosted credits after a successful hosted image response. In `external` runtime mode it is free and unlimited and uses your configured image provider; in `hosted` runtime mode it consumes hosted credits. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
@@ -142,13 +159,13 @@ officecli exec new img "Launch Visual" --prompt "Create a polished product launc
 Write output to a custom directory:
 
 ```bash
-officecli exec new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --out ./dist
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --out ./dist
 ```
 
 Return JSON output:
 
 ```bash
-officecli exec new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --json
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --json
 ```
 
 Score a local PPTX:

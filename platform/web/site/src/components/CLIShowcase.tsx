@@ -112,7 +112,7 @@ export default function CLIShowcase() {
           </div>
           <div className="p-8 space-y-4">
             <div className="flex gap-4">
-              <span className="text-tertiary italic"># Install via Homebrew or npm</span>
+              <span className="text-tertiary italic"># Choose one install channel</span>
             </div>
             <CopyableCommand command="brew tap officecli/officecli && brew install officecli" />
             <CopyableCommand command="npm install -g officecli" />

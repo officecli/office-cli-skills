@@ -56,7 +56,7 @@ export const installTabs: InstallTabContent[] = [
     label: 'macOS',
     eyebrow: 'Recommended for Mac',
     title: 'Install OfficeCLI on macOS',
-    description: 'Use Homebrew for the fastest setup, or npm if you prefer a package-managed CLI workflow. Hosted trial access works immediately after install.',
+    description: 'Use Homebrew for the fastest setup, or npm if you prefer a Node-managed CLI workflow. Pick one channel and keep future updates on that same channel.',
     commands: [
       {
         label: 'Homebrew',
@@ -72,6 +72,7 @@ export const installTabs: InstallTabContent[] = [
     notes: [
       'Supported CPUs: Apple Silicon arm64 and Intel x64.',
       'The npm package installs the same published OfficeCLI binary.',
+      'If OfficeCLI was previously installed with Homebrew, do not run the npm install on top of it. To switch to npm, first run `brew uninstall officecli/homebrew-officecli/officecli` or `brew uninstall officecli`.',
     ],
   },
   {
@@ -79,7 +80,7 @@ export const installTabs: InstallTabContent[] = [
     label: 'Linux',
     eyebrow: 'Recommended for Linux',
     title: 'Install OfficeCLI on Linux',
-    description: 'Use the official stable install script for a direct binary install, or npm for Node-based environments. Hosted trial access works immediately after install.',
+    description: 'Use the official stable install script for a direct binary install, or npm for Node-based environments. Pick one channel and keep future updates on that same channel.',
     commands: [
       {
         label: 'Shell script',

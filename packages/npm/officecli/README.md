@@ -8,6 +8,16 @@ It does not reimplement the CLI in JavaScript. During `npm install`, it download
 
 ## Install
 
+Install OfficeCLI through one channel only. If you previously installed OfficeCLI with Homebrew, keep using Homebrew and do not install the npm wrapper on top of it. To intentionally switch from Homebrew to npm, uninstall the Homebrew formula first:
+
+```bash
+brew uninstall officecli/homebrew-officecli/officecli
+# If your Homebrew install uses the short formula name:
+brew uninstall officecli
+```
+
+Then install through npm:
+
 ```bash
 npm install -g officecli
 ```
@@ -23,7 +33,7 @@ officecli "Create a Q3 business review deck"
 
 The default command opens a persistent Codex-style TUI with the latest conversation and generation progress near the bottom input box. Use `--no-alt-screen` to keep terminal scrollback visible.
 
-For scripts and automation, use `officecli exec new ...`. The older `officecli new ...` form remains available for compatibility.
+For scripts and automation, use `officecli new ...`.
 
 The installed binary is usable without a local model endpoint or an API key. By default it uses OfficeCLI hosted anonymous trial access on `https://platform.officecli.io`; the one-time free quota is tied to this machine.
 

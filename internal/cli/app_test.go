@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -443,7 +442,7 @@ func TestAppRun_DefaultStartsTUIWhenTTY(t *testing.T) {
 	}
 }
 
-func TestAppRun_DefaultNonTTYAsksForExecOrNew(t *testing.T) {
+func TestAppRun_DefaultNonTTYAsksForNew(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	app := NewApp(&stdout, &stderr, bytes.NewBuffer(nil))
@@ -456,10 +455,13 @@ func TestAppRun_DefaultNonTTYAsksForExecOrNew(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected non-TTY default command to fail")
 	}
-	for _, needle := range []string{"requires a TTY", "officecli exec new", "officecli new"} {
+	for _, needle := range []string{"requires a TTY", "officecli new"} {
 		if !strings.Contains(err.Error(), needle) {
 			t.Fatalf("error missing %q: %v", needle, err)
 		}
+	}
+	if strings.Contains(err.Error(), "officecli exec") {
+		t.Fatalf("error should not mention exec: %v", err)
 	}
 }
 
@@ -504,36 +506,26 @@ func TestAppRun_NoAltScreenPassesTUIOption(t *testing.T) {
 
 func TestConsumeTopLevelTUIOptionsOnlyConsumesPrefix(t *testing.T) {
 	opts := TUIOptions{}
-	args := consumeTopLevelTUIOptions([]string{"exec", "new", "docx", "--prompt", "--no-alt-screen"}, &opts)
+	args := consumeTopLevelTUIOptions([]string{"new", "docx", "--prompt", "--no-alt-screen"}, &opts)
 	if opts.NoAltScreen {
 		t.Fatal("did not expect nested --no-alt-screen to be consumed")
 	}
-	if strings.Join(args, " ") != "exec new docx --prompt --no-alt-screen" {
+	if strings.Join(args, " ") != "new docx --prompt --no-alt-screen" {
 		t.Fatalf("args = %#v", args)
 	}
 }
 
-func TestAppRun_ExecNewUsesExistingNewFlow(t *testing.T) {
+func TestAppRun_ExecNewIsUnsupported(t *testing.T) {
 	var stdout bytes.Buffer
 	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	var gotCommand string
-	var gotArgs []string
 	app.officeTaskPreflight = func(ctx context.Context, command string, args []string) error {
-		gotCommand = command
-		gotArgs = append([]string(nil), args...)
-		return fmt.Errorf("stop after dispatch")
+		t.Fatalf("exec should not dispatch into preflight: %s %#v", command, args)
+		return nil
 	}
 
 	err := app.Run(t.Context(), []string{"exec", "new", "docx", "Launch Brief", "--prompt", "Create a short launch brief", "--json", "--no-publish"})
-	if err == nil || !strings.Contains(err.Error(), "stop after dispatch") {
-		t.Fatalf("expected preflight sentinel, got %v", err)
-	}
-	if gotCommand != "new" {
-		t.Fatalf("preflight command = %q", gotCommand)
-	}
-	wantArgs := []string{"docx", "Launch Brief", "--prompt", "Create a short launch brief", "--json", "--no-publish"}
-	if !reflect.DeepEqual(gotArgs, wantArgs) {
-		t.Fatalf("preflight args = %#v, want %#v", gotArgs, wantArgs)
+	if err == nil || !strings.Contains(err.Error(), "unsupported command: exec") {
+		t.Fatalf("expected exec to be unsupported, got %v", err)
 	}
 }
 
@@ -2084,13 +2076,12 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"Hosted trial access is the default",
 		"officecli \"Create a Q3 business review deck\"",
 		"Scripted usage:",
-		"officecli exec new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
-		"officecli exec new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
-		"officecli exec new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
+		"officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
+		"officecli new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
+		"officecli new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
 		"officecli auth status",
 		"officecli auth set-key <api-key>",
 		"Commands:",
-		"exec                    Run officecli non-interactively",
 		"officecli new --help",
 	} {
 		if !strings.Contains(output, needle) {
@@ -2098,6 +2089,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		}
 	}
 	for _, needle := range []string{
+		"officecli exec",
 		"--ratio <value>",
 		"Config file:",
 		"macOS   ~/Library/Application Support/officecli/config.json",
@@ -2122,10 +2114,9 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 	}{
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a hosted API key."}},
-		{args: []string{"exec", "--help"}, needles: []string{"officecli exec new <pptx|docx|xlsx|report|img>", "recommended command for scripts"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli exec new <pptx|docx|xlsx|report|img>", "officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli exec new pptx \"Q3 Business Review\""}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
@@ -2142,6 +2133,9 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 			}
 		}
 		if tc.args[0] == "new" {
+			if strings.Contains(out, "officecli exec") {
+				t.Fatalf("new help should not mention exec: %s", out)
+			}
 			for _, needle := range []string{
 				"premium",
 				"hosted image route",

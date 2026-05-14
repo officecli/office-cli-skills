@@ -27,6 +27,9 @@ export default function AgentSkillsInstallPage() {
           <p className="mt-5 max-w-4xl text-lg leading-relaxed text-outline-variant">
             `officecli` has three public install surfaces: Claude Code marketplace install, direct local install for Codex-style agents, and the OpenClaw-oriented installer. The right page should be one click away instead of buried in a long README.
           </p>
+          <p className="mt-4 max-w-4xl text-sm leading-relaxed text-outline-variant">
+            Install the local OfficeCLI binary through one channel only. If the binary was installed with Homebrew, keep Homebrew for updates; switch to npm only after running `brew uninstall officecli/homebrew-officecli/officecli` or `brew uninstall officecli`.
+          </p>
           <div className="mt-8">
             <AgentSkillsSecondaryNav currentPath="/officecli/install" />
           </div>

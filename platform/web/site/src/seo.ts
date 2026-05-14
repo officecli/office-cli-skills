@@ -71,7 +71,7 @@ export const homeFAQs: FAQEntry[] = [
   },
   {
     q: 'What install options are supported?',
-    a: 'Homebrew, npm, the official install script, and manual release binaries are all supported on macOS and Linux for x64 and arm64.',
+    a: 'Homebrew, npm, the official install script, and manual release binaries are all supported on macOS and Linux for x64 and arm64. Use one install channel at a time; do not add npm on top of an existing Homebrew install.',
   },
   {
     q: 'When do I need platform.officecli.io?',
@@ -276,7 +276,7 @@ export const routeSEO: Record<string, RouteSEO> = {
   '/download': buildRouteSEO(
     '/download',
     'Install OfficeCLI | External and Hosted AI document generation CLI',
-    'Install OfficeCLI with Homebrew, npm, the official script, or manual binaries for External Mode, Hosted Mode, BYO LLM endpoint generation, hosted credits, and dependency-free PPTX, DOCX, XLSX, REPORT, and IMG generation.',
+    'Install OfficeCLI with one channel: Homebrew, npm, the official script, or manual binaries for External Mode, Hosted Mode, BYO LLM endpoint generation, hosted credits, and dependency-free PPTX, DOCX, XLSX, REPORT, and IMG generation.',
   ),
   '/pricing': buildRouteSEO(
     '/pricing',

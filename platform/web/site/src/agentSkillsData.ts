@@ -62,10 +62,10 @@ export const agentSkillsRoutes: AgentSkillsRoute[] = [
     label: 'Install',
     title: 'Install officecli',
     description:
-      'Choose the correct installation path for Claude Code, Codex-style local agents, or OpenClaw and verify the local OfficeCLI runtime afterward.',
+      'Choose the correct installation path for Claude Code, Codex-style local agents, or OpenClaw, avoid mixing Homebrew and npm binary installs, and verify the local OfficeCLI runtime afterward.',
     seoTitle: 'Install officecli | Claude Code, Codex, and OpenClaw setup',
     seoDescription:
-      'Install officecli through the Claude Code marketplace, direct Codex-style local skill install, or the OpenClaw installer, then verify the local OfficeCLI runtime.',
+      'Install officecli through the Claude Code marketplace, direct Codex-style local skill install, or the OpenClaw installer, avoid mixing Homebrew and npm installs, then verify the local OfficeCLI runtime.',
   },
   {
     path: `${agentSkillsHubPath}/claude-code`,
@@ -145,14 +145,14 @@ export const installPaths: InstallPath[] = [
   },
   {
     title: 'Codex and local agent install',
-    intro: 'Use the direct installer when you want the public OfficeCLI skill files on a Codex-style local agent host without a marketplace dependency.',
+    intro: 'Use the direct installer when you want the public OfficeCLI skill files on a Codex-style local agent host without a marketplace dependency. Keep the OfficeCLI binary on its existing install channel; do not add npm on top of Homebrew.',
     command:
       'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-skill.sh | bash -s -- officecli',
   },
   {
     title: 'OpenClaw install',
     intro:
-      'Use the OpenClaw-oriented installer when the agent should generate Office files through `officecli agent-bridge` and return them to chat channels as attachments.',
+      'Use the OpenClaw-oriented installer when the agent should generate Office files through `officecli agent-bridge` and return them to chat channels as attachments. If the binary came from Homebrew, keep that channel unless you uninstall it first.',
     command:
       'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | bash',
   },

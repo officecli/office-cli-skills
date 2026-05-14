@@ -374,7 +374,7 @@ func (m tuiModel) handleCommandOrSubmit(value string) (tea.Model, tea.Cmd) {
 		m.refreshViewport()
 		return m, nil
 	case "/help":
-		m.append("assistant", "Describe the document you want to generate in natural language. Commands: /help, /clear, /exit. Ctrl+C clears the current input; press Ctrl+C again to exit. During generation, Ctrl+C cancels the current run. For scripts, use officecli exec new ...")
+		m.append("assistant", "Describe the document you want to generate in natural language. Commands: /help, /clear, /exit. Ctrl+C clears the current input; press Ctrl+C again to exit. During generation, Ctrl+C cancels the current run. For scripts, use officecli new ...")
 		return m, nil
 	default:
 		return m.submit(value)

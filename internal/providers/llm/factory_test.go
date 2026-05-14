@@ -146,7 +146,7 @@ func TestOpenAIClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testi
 
 	const responseBody = "<html><body>upstream unavailable</body></html>"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/completions" {
+		if r.URL.Path != "/custom/chat/completions" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "text/html")
@@ -156,7 +156,7 @@ func TestOpenAIClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testi
 
 	client, err := NewClient(Config{
 		Provider: "openai",
-		BaseURL:  server.URL,
+		BaseURL:  server.URL + "/custom",
 		Model:    "gpt-test",
 	})
 	if err != nil {
@@ -174,6 +174,50 @@ func TestOpenAIClient_CompleteJSONReturnsLLMRequestFailedForNonJSONBody(t *testi
 	}
 	if !strings.Contains(err.Error(), responseBody) {
 		t.Fatalf("expected full response body in error, got: %v", err)
+	}
+}
+
+func TestOpenAIClient_CompleteJSONRetriesV1WhenRootEndpointReturnsHTML(t *testing.T) {
+	t.Parallel()
+
+	var sawRoot bool
+	var sawV1 bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/chat/completions":
+			sawRoot = true
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = fmt.Fprint(w, `<!doctype html><html><head><title>New API</title></head><body><div id="root"></div></body></html>`)
+		case "/v1/chat/completions":
+			sawV1 = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"{\"ok\":true}"}}]}`)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "openai",
+		BaseURL:  server.URL,
+		Model:    "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	content, err := client.CompleteJSON(context.Background(), []engine.LLMMessage{
+		{Role: "user", Content: "Return JSON"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteJSON: %v", err)
+	}
+	if content != `{"ok":true}` {
+		t.Fatalf("unexpected content: %q", content)
+	}
+	if !sawRoot || !sawV1 {
+		t.Fatalf("expected root request then /v1 retry, sawRoot=%t sawV1=%t", sawRoot, sawV1)
 	}
 }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.61 - 2026-05-14
+
+### Changed
+
+- Removed the previously added non-interactive namespace and kept `officecli new ...` as the only generation command path.
+- External OpenAI-compatible generation now retries `/v1/chat/completions` when a root base URL returns an HTML app shell, matching New API-style gateways configured without `/v1`.
+
 ## 0.2.60 - 2026-05-14
 
 ### Changed

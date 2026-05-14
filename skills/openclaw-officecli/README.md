@@ -63,6 +63,15 @@ The install script places `config.yaml` in the skill directory. Default fields:
 
 If `officecli` is already on `PATH`, no extra changes are required by default.
 
+Use one OfficeCLI binary install channel at a time. If the existing `officecli` came from Homebrew, keep using Homebrew and do not add `npm install -g officecli` on top of it. If you intentionally want to switch from Homebrew to npm, uninstall the Homebrew formula first:
+
+```bash
+brew uninstall officecli/homebrew-officecli/officecli
+# or, if installed with the short formula name:
+brew uninstall officecli
+npm install -g officecli
+```
+
 ## Environment Checks and Repair
 
 The skill directory now includes two built-in scripts:
@@ -80,6 +89,7 @@ bash ~/.openclaw/skills/openclaw-officecli/fix-officecli-env.sh
 Behavior:
 
 - If `officecli` is not on `PATH`, the workflow will try to install it automatically
+- If `officecli` is already present from Homebrew, keep that binary; do not repair by layering a global npm install over it
 - If only generation or quota config is missing, the script fills in just the missing parts
 - If you need online preview, provide publish configuration as well
 - After a successful repair, `office_cli_path` and `agent_bridge_command` are written back to the skill `config.yaml`

@@ -97,7 +97,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	if args[0] == "exec" {
-		return a.runExec(ctx, args[1:])
+		return fmt.Errorf("unsupported command: exec")
 	}
 	if !isKnownCommand(args[0]) {
 		return a.startTUI(ctx, strings.TrimSpace(strings.Join(args, " ")), tuiOpts)
@@ -107,7 +107,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 func (a *App) startTUI(ctx context.Context, initialPrompt string, opts TUIOptions) error {
 	if !isTerminalReader(a.Stdin) || !isTerminalWriter(a.Stdout) {
-		return fmt.Errorf("officecli TUI requires a TTY. For scripts, use `officecli exec new ...` or the compatible `officecli new ...` command")
+		return fmt.Errorf("officecli TUI requires a TTY. For scripts, use `officecli new ...`")
 	}
 	cfg, err := LoadConfig("")
 	if err != nil {
@@ -131,20 +131,6 @@ func consumeTopLevelTUIOptions(args []string, opts *TUIOptions) []string {
 		args = args[1:]
 	}
 	return args
-}
-
-func (a *App) runExec(ctx context.Context, args []string) error {
-	if len(args) == 0 || isHelpArg(args[0]) {
-		_, err := io.WriteString(a.Stdout, ExecHelpText())
-		return err
-	}
-	if args[0] == "exec" {
-		return fmt.Errorf("nested exec is not supported")
-	}
-	if !isKnownCommand(args[0]) {
-		return fmt.Errorf("unsupported exec command: %s", args[0])
-	}
-	return a.runCommand(ctx, args)
 }
 
 func (a *App) runCommand(ctx context.Context, args []string) error {
@@ -346,12 +332,11 @@ Install, then start the persistent TUI:
   officecli "Create a Q3 business review deck"
 
 Scripted usage:
-  officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
-  officecli exec new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
-  officecli exec new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 
 Commands:
-  exec                    Run officecli non-interactively
   new                     Generate a PPTX, DOCX, XLSX, report, or image
   auth                    Check access or save a hosted API key
   config                  View or change runtime settings
@@ -361,17 +346,6 @@ Useful checks:
   officecli auth status
   officecli new --help
   officecli auth set-key <api-key>   # after buying or creating a hosted key
-`
-}
-
-func ExecHelpText() string {
-	return `Usage:
-  officecli exec new <pptx|docx|xlsx|report|img> <topic> [brief]
-  officecli exec score pptx <file>
-  officecli exec review pptx <file>
-
-Description:
-  Run OfficeCLI non-interactively. The compatible ` + "`officecli new ...`" + ` form remains available, but ` + "`officecli exec new ...`" + ` is the recommended command for scripts and automation.
 `
 }
 
@@ -402,7 +376,6 @@ Description:
 
 func NewHelpText() string {
 	return `Usage:
-  officecli exec new <pptx|docx|xlsx|report|img> <topic> [brief]
   officecli new <pptx|docx|xlsx|report|img> <topic> [brief]
 
 Common options:
@@ -421,14 +394,13 @@ Common options:
   --json                  Output JSON
 
 Copy-paste examples:
-  officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
-  officecli exec new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
-  officecli exec new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
-  officecli exec new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
+  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+  officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
 
 Description:
   - Hosted trial access is the default when no local generation config exists.
-  - ` + "`officecli new ...`" + ` remains available for compatibility; scripts should prefer ` + "`officecli exec new ...`" + `.
   - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
   - report requires --file <xlsx-path> and creates an HTML report from workbook data.
   - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.

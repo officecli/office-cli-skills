@@ -164,7 +164,7 @@ export default function DocsPage() {
               <InstallTabs
                 compact
                 headline="Install OfficeCLI on macOS or Linux"
-                intro="Use Homebrew, npm, the Linux install script, or manual release archives. Pick the channel you want to keep using for future updates."
+                intro="Use Homebrew, npm, the Linux install script, or manual release archives. Pick one channel and keep using it for future updates."
               />
             </div>
             <div className="grid gap-8 lg:grid-cols-2">
