@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.55 - 2026-05-14
+
+### Changed
+
+- The npm-installed CLI now defaults to hosted anonymous trial access, so first-run generation works without a local model endpoint or hosted API key.
+- Anonymous hosted trial quota now uses the lifetime machine fingerprint quota and reports `quota_snapshot.free_trial` with `scope=lifetime`.
+- Hosted text, JSON, and structured requests accept valid anonymous commit tokens, while final quota is consumed only after a successful artifact is written.
+
 ## 0.2.54 - 2026-05-12
 
 ### Changed
