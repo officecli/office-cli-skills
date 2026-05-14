@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,9 +70,14 @@ func (d dynamicLicenseManager) Consume(_ context.Context, token UsageCommitToken
 }
 
 const testLicenseProofSeed = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA"
+const testOverrideLicenseProofSeed = "cHJvZC1saWNlbnNlLXByb29mLXNlZWQtMTIzNDU2Nzg"
 
 func signTestCommitToken(req LicenseCheckRequest, accessMode LicenseAccessMode, existing UsageCommitToken) UsageCommitToken {
-	seed, err := base64.RawURLEncoding.DecodeString(testLicenseProofSeed)
+	return signTestCommitTokenWithSeed(req, testLicenseProofSeed, accessMode, existing)
+}
+
+func signTestCommitTokenWithSeed(req LicenseCheckRequest, seedValue string, accessMode LicenseAccessMode, existing UsageCommitToken) UsageCommitToken {
+	seed, err := base64.RawURLEncoding.DecodeString(seedValue)
 	if err != nil {
 		panic(err)
 	}
@@ -410,6 +416,124 @@ func TestRenderProgress_TTYAnimatesAndFinalizesStage(t *testing.T) {
 	history := strings.Join(out.History(), "\n")
 	if !strings.Contains(history, "✔ Generated document content") {
 		t.Fatalf("expected finalized success line, got %q", history)
+	}
+}
+
+func TestAppRun_DefaultStartsTUIWhenTTY(t *testing.T) {
+	var stdout terminalBuffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("")})
+	var called bool
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		called = true
+		if initialPrompt != "" {
+			t.Fatalf("initialPrompt = %q, want empty", initialPrompt)
+		}
+		return nil
+	}
+
+	if err := app.Run(t.Context(), nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !called {
+		t.Fatal("expected default command to start TUI")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAppRun_DefaultNonTTYAsksForExecOrNew(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, bytes.NewBuffer(nil))
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		t.Fatal("TUI should not start without a TTY")
+		return nil
+	}
+
+	err := app.Run(t.Context(), nil)
+	if err == nil {
+		t.Fatal("expected non-TTY default command to fail")
+	}
+	for _, needle := range []string{"requires a TTY", "officecli exec new", "officecli new"} {
+		if !strings.Contains(err.Error(), needle) {
+			t.Fatalf("error missing %q: %v", needle, err)
+		}
+	}
+}
+
+func TestAppRun_InitialPromptStartsTUIWhenTTY(t *testing.T) {
+	var stdout terminalBuffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("")})
+	var gotInitial string
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		gotInitial = initialPrompt
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"做一个 Q3 复盘 PPT"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if gotInitial != "做一个 Q3 复盘 PPT" {
+		t.Fatalf("initialPrompt = %q", gotInitial)
+	}
+}
+
+func TestAppRun_NoAltScreenPassesTUIOption(t *testing.T) {
+	var stdout terminalBuffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("")})
+	var gotInitial string
+	var gotOpts TUIOptions
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		gotInitial = initialPrompt
+		gotOpts = opts
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"--no-alt-screen", "做一个 Q3 复盘 PPT"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if gotInitial != "做一个 Q3 复盘 PPT" {
+		t.Fatalf("initialPrompt = %q", gotInitial)
+	}
+	if !gotOpts.NoAltScreen {
+		t.Fatal("expected --no-alt-screen to be passed into TUI options")
+	}
+}
+
+func TestConsumeTopLevelTUIOptionsOnlyConsumesPrefix(t *testing.T) {
+	opts := TUIOptions{}
+	args := consumeTopLevelTUIOptions([]string{"exec", "new", "docx", "--prompt", "--no-alt-screen"}, &opts)
+	if opts.NoAltScreen {
+		t.Fatal("did not expect nested --no-alt-screen to be consumed")
+	}
+	if strings.Join(args, " ") != "exec new docx --prompt --no-alt-screen" {
+		t.Fatalf("args = %#v", args)
+	}
+}
+
+func TestAppRun_ExecNewUsesExistingNewFlow(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	var gotCommand string
+	var gotArgs []string
+	app.officeTaskPreflight = func(ctx context.Context, command string, args []string) error {
+		gotCommand = command
+		gotArgs = append([]string(nil), args...)
+		return fmt.Errorf("stop after dispatch")
+	}
+
+	err := app.Run(t.Context(), []string{"exec", "new", "docx", "Launch Brief", "--prompt", "Create a short launch brief", "--json", "--no-publish"})
+	if err == nil || !strings.Contains(err.Error(), "stop after dispatch") {
+		t.Fatalf("expected preflight sentinel, got %v", err)
+	}
+	if gotCommand != "new" {
+		t.Fatalf("preflight command = %q", gotCommand)
+	}
+	wantArgs := []string{"docx", "Launch Brief", "--prompt", "Create a short launch brief", "--json", "--no-publish"}
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("preflight args = %#v, want %#v", gotArgs, wantArgs)
 	}
 }
 
@@ -1956,14 +2080,17 @@ func TestAppRun_HelpOutput(t *testing.T) {
 	output := stdout.String()
 	for _, needle := range []string{
 		"officecli",
-		"Install, then run your first file:",
+		"Install, then start the persistent TUI:",
 		"Hosted trial access is the default",
-		"officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
-		"officecli new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
-		"officecli new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
+		"officecli \"Create a Q3 business review deck\"",
+		"Scripted usage:",
+		"officecli exec new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
+		"officecli exec new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
+		"officecli exec new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
 		"officecli auth status",
 		"officecli auth set-key <api-key>",
 		"Commands:",
+		"exec                    Run officecli non-interactively",
 		"officecli new --help",
 	} {
 		if !strings.Contains(output, needle) {
@@ -1995,9 +2122,10 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 	}{
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a hosted API key."}},
+		{args: []string{"exec", "--help"}, needles: []string{"officecli exec new <pptx|docx|xlsx|report|img>", "recommended command for scripts"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli exec new <pptx|docx|xlsx|report|img>", "officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli exec new pptx \"Q3 Business Review\""}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
@@ -3093,6 +3221,74 @@ func TestCheckLicenseAcceptsLegacyPlatformToken(t *testing.T) {
 	}
 	if result == nil || result.AccessMode != LicenseAccessModePaid {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestCheckLicenseDevBuildAllowsMatchingProofWithDifferentSigningKey(t *testing.T) {
+	oldVersion := Version
+	oldBuildDate := BuildDate
+	Version = "dev"
+	BuildDate = "unknown"
+	defer func() {
+		Version = oldVersion
+		BuildDate = oldBuildDate
+	}()
+	var stderr bytes.Buffer
+	app := NewApp(bytes.NewBuffer(nil), &stderr, bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				token := signTestCommitTokenWithSeed(req, testOverrideLicenseProofSeed, LicenseAccessModePaid, UsageCommitToken{})
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModePaid,
+					CommitToken: token,
+				}, nil
+			},
+		}, nil
+	}
+
+	result, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
+	if err != nil {
+		t.Fatalf("checkLicense() error = %v", err)
+	}
+	if result == nil || result.AccessMode != LicenseAccessModePaid {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if !strings.Contains(stderr.String(), "local dev build") {
+		t.Fatalf("stderr missing dev-build warning: %q", stderr.String())
+	}
+}
+
+func TestCheckLicenseReleaseBuildRejectsMatchingProofWithDifferentSigningKey(t *testing.T) {
+	oldVersion := Version
+	oldBuildDate := BuildDate
+	Version = "v9.9.9"
+	BuildDate = "2026-05-14T00:00:00Z"
+	defer func() {
+		Version = oldVersion
+		BuildDate = oldBuildDate
+	}()
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				token := signTestCommitTokenWithSeed(req, testOverrideLicenseProofSeed, LicenseAccessModePaid, UsageCommitToken{})
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModePaid,
+					CommitToken: token,
+				}, nil
+			},
+		}, nil
+	}
+
+	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "license proof validation failed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

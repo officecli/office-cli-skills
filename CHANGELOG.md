@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.60 - 2026-05-14
+
+### Changed
+
+- Added the Bubble Tea based Codex-style `officecli` TUI for continuous natural-language document generation, including `--no-alt-screen` for scrollback-friendly sessions.
+- Added `officecli exec ...` as the recommended non-interactive command namespace while keeping `officecli new ...` compatible.
+- Added a local MIT-licensed `go-localereader` replacement for darwin/linux TUI builds so dependency scans do not rely on an upstream module without a standalone LICENSE file.
 
 ## 0.2.59 - 2026-05-14
 

@@ -10,7 +10,7 @@ import (
 	llmprovider "github.com/officecli/officecli-internal/internal/providers/llm"
 )
 
-const hostedImageTimeoutSec = 1200
+const hostedGenerationTimeoutSec = 1200
 
 func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
@@ -45,8 +45,8 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 }
 
 func hostedTimeoutSec(configured int, job GenerateJob) int {
-	if job.DocumentType == engine.DocumentTypeIMG && configured < hostedImageTimeoutSec {
-		return hostedImageTimeoutSec
+	if configured < hostedGenerationTimeoutSec {
+		return hostedGenerationTimeoutSec
 	}
 	return configured
 }

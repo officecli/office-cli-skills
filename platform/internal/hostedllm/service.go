@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -195,6 +196,18 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	}
 
 	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
+	if err != nil && isUpstreamAuthError(err) {
+		_, _ = s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
+		upstreamAPIKey, rotateErr := s.rotateUserAIGatewayAPIKey(ctx, key, err)
+		if rotateErr != nil {
+			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
+		}
+		key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+		if err != nil {
+			return nil, err
+		}
+		body, usage, err = s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
+	}
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
 		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
@@ -312,6 +325,18 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		"response_format": "b64_json",
 	}
 	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
+	if err != nil && isUpstreamAuthError(err) {
+		_, _ = s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
+		upstreamAPIKey, rotateErr := s.rotateUserAIGatewayAPIKey(ctx, key, err)
+		if rotateErr != nil {
+			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
+		}
+		key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+		if err != nil {
+			return nil, err
+		}
+		body, usage, err = s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
+	}
 	if err != nil {
 		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
 		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
@@ -417,6 +442,20 @@ type usageSummary struct {
 	ImageCount       int
 }
 
+type upstreamHTTPError struct {
+	statusCode int
+	body       string
+}
+
+func (e upstreamHTTPError) Error() string {
+	return fmt.Sprintf("hosted upstream request failed: status=%d body=%s", e.statusCode, strings.TrimSpace(e.body))
+}
+
+func isUpstreamAuthError(err error) bool {
+	var upstreamErr upstreamHTTPError
+	return errors.As(err, &upstreamErr) && (upstreamErr.statusCode == http.StatusUnauthorized || upstreamErr.statusCode == http.StatusForbidden)
+}
+
 func (s *Service) post(ctx context.Context, url string, payload map[string]any, upstreamAPIKey string) ([]byte, usageSummary, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -440,7 +479,7 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any, 
 		return nil, usageSummary{}, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, usageSummary{}, fmt.Errorf("hosted upstream request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, usageSummary{}, upstreamHTTPError{statusCode: resp.StatusCode, body: string(body)}
 	}
 	var envelope struct {
 		Usage struct {
@@ -519,7 +558,7 @@ func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[s
 		return nil, usageSummary{}, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, usageSummary{}, fmt.Errorf("hosted upstream request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, usageSummary{}, upstreamHTTPError{statusCode: resp.StatusCode, body: string(respBody)}
 	}
 	var envelope struct {
 		Usage struct {
@@ -634,6 +673,22 @@ func (s *Service) upstreamAPIKeyForOfficeKey(ctx context.Context, key *model.API
 		return "", err
 	}
 	return plain, nil
+}
+
+func (s *Service) rotateUserAIGatewayAPIKey(ctx context.Context, key *model.APIKey, cause error) (string, error) {
+	if key == nil || key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		return "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+	}
+	userID := *key.OwnerUserID
+	upstreamName := fmt.Sprintf("officecli-user-%d", userID)
+	message := "upstream credential rejected"
+	if cause != nil {
+		message = cause.Error()
+	}
+	if _, err := s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, message); err != nil {
+		return "", err
+	}
+	return s.upstreamAPIKeyForOfficeKey(ctx, key)
 }
 
 func (s *Service) decryptUserAIGatewayAPIKey(key *model.UserAIGatewayAPIKey) (string, error) {

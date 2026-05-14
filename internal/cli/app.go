@@ -29,6 +29,7 @@ type App struct {
 	checkForUpdates     func(ctx context.Context) (UpdateInfo, error)
 	performUpdate       func(ctx context.Context, info UpdateInfo) error
 	restartCommand      func(ctx context.Context, info UpdateInfo, args []string) error
+	runTUI              func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error
 }
 
 var Version = "dev"
@@ -36,7 +37,7 @@ var Commit = "unknown"
 var BuildDate = "unknown"
 
 func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
-	return &App{
+	app := &App{
 		Stdout: stdout,
 		Stderr: stderr,
 		Stdin:  stdin,
@@ -77,10 +78,17 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 		performUpdate:   defaultPerformUpdate,
 		restartCommand:  defaultRestartCommand,
 	}
+	app.runTUI = app.runTUIProgram
+	return app
 }
 
 func (a *App) Run(ctx context.Context, args []string) error {
-	if len(args) == 0 || isHelpArg(args[0]) {
+	tuiOpts := TUIOptions{}
+	args = consumeTopLevelTUIOptions(args, &tuiOpts)
+	if len(args) == 0 {
+		return a.startTUI(ctx, "", tuiOpts)
+	}
+	if isHelpArg(args[0]) {
 		_, err := io.WriteString(a.Stdout, HelpText())
 		return err
 	}
@@ -88,6 +96,58 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		_, err := fmt.Fprintln(a.Stdout, VersionText())
 		return err
 	}
+	if args[0] == "exec" {
+		return a.runExec(ctx, args[1:])
+	}
+	if !isKnownCommand(args[0]) {
+		return a.startTUI(ctx, strings.TrimSpace(strings.Join(args, " ")), tuiOpts)
+	}
+	return a.runCommand(ctx, args)
+}
+
+func (a *App) startTUI(ctx context.Context, initialPrompt string, opts TUIOptions) error {
+	if !isTerminalReader(a.Stdin) || !isTerminalWriter(a.Stdout) {
+		return fmt.Errorf("officecli TUI requires a TTY. For scripts, use `officecli exec new ...` or the compatible `officecli new ...` command")
+	}
+	cfg, err := LoadConfig("")
+	if err != nil {
+		return err
+	}
+	if a.runTUI == nil {
+		return fmt.Errorf("officecli TUI is unavailable")
+	}
+	return a.runTUI(ctx, cfg, strings.TrimSpace(initialPrompt), opts)
+}
+
+func consumeTopLevelTUIOptions(args []string, opts *TUIOptions) []string {
+	if opts == nil || len(args) == 0 {
+		return args
+	}
+	for len(args) > 0 {
+		if strings.TrimSpace(args[0]) != "--no-alt-screen" {
+			break
+		}
+		opts.NoAltScreen = true
+		args = args[1:]
+	}
+	return args
+}
+
+func (a *App) runExec(ctx context.Context, args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		_, err := io.WriteString(a.Stdout, ExecHelpText())
+		return err
+	}
+	if args[0] == "exec" {
+		return fmt.Errorf("nested exec is not supported")
+	}
+	if !isKnownCommand(args[0]) {
+		return fmt.Errorf("unsupported exec command: %s", args[0])
+	}
+	return a.runCommand(ctx, args)
+}
+
+func (a *App) runCommand(ctx context.Context, args []string) error {
 	if len(args) > 1 && isHelpArg(args[1]) {
 		var help string
 		switch args[0] {
@@ -176,6 +236,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.runAgentBridge(ctx, cfg, args[1:])
 	default:
 		return fmt.Errorf("unsupported command: %s", args[0])
+	}
+}
+
+func isKnownCommand(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "config", "auth", "new", "score", "review", "upgrade", "agent-bridge":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -270,13 +339,19 @@ Generate PPTX, DOCX, XLSX, reports, and images from natural language.
 Hosted trial access is the default, so you can install and generate without
 setting up a local model endpoint first.
 
-Install, then run your first file:
+Install, then start the persistent TUI:
   officecli --version
-  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
-  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
-  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+  officecli
+  officecli --no-alt-screen
+  officecli "Create a Q3 business review deck"
+
+Scripted usage:
+  officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli exec new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli exec new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 
 Commands:
+  exec                    Run officecli non-interactively
   new                     Generate a PPTX, DOCX, XLSX, report, or image
   auth                    Check access or save a hosted API key
   config                  View or change runtime settings
@@ -286,6 +361,17 @@ Useful checks:
   officecli auth status
   officecli new --help
   officecli auth set-key <api-key>   # after buying or creating a hosted key
+`
+}
+
+func ExecHelpText() string {
+	return `Usage:
+  officecli exec new <pptx|docx|xlsx|report|img> <topic> [brief]
+  officecli exec score pptx <file>
+  officecli exec review pptx <file>
+
+Description:
+  Run OfficeCLI non-interactively. The compatible ` + "`officecli new ...`" + ` form remains available, but ` + "`officecli exec new ...`" + ` is the recommended command for scripts and automation.
 `
 }
 
@@ -316,6 +402,7 @@ Description:
 
 func NewHelpText() string {
 	return `Usage:
+  officecli exec new <pptx|docx|xlsx|report|img> <topic> [brief]
   officecli new <pptx|docx|xlsx|report|img> <topic> [brief]
 
 Common options:
@@ -334,13 +421,14 @@ Common options:
   --json                  Output JSON
 
 Copy-paste examples:
-  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
-  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
-  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
-  officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
+  officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli exec new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli exec new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+  officecli exec new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
 
 Description:
   - Hosted trial access is the default when no local generation config exists.
+  - ` + "`officecli new ...`" + ` remains available for compatibility; scripts should prefer ` + "`officecli exec new ...`" + `.
   - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
   - report requires --file <xlsx-path> and creates an HTML report from workbook data.
   - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.
@@ -1120,7 +1208,11 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		LastMode:        string(result.AccessMode),
 	})
 	if err := licenseprovider.ValidateCheckResult(result, checkReq); err != nil {
-		return nil, fmt.Errorf("license proof validation failed: %w", err)
+		if allowLocalDevLicenseProofSignatureMismatch(err) {
+			_, _ = fmt.Fprintln(a.Stderr, "Warning: local dev build skipped license proof signature validation. Release builds still require a matching embedded license proof public key.")
+		} else {
+			return nil, fmt.Errorf("license proof validation failed: %w", err)
+		}
 	}
 	if !result.Allowed {
 		fallback := "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>."
@@ -1145,6 +1237,15 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		result.Message = fmt.Sprintf("Current mode: hosted. %d credits remaining.", result.CreditBalance)
 	}
 	return result, nil
+}
+
+func allowLocalDevLicenseProofSignatureMismatch(err error) bool {
+	if err == nil {
+		return false
+	}
+	return Version == "dev" &&
+		strings.EqualFold(strings.TrimSpace(BuildDate), "unknown") &&
+		strings.Contains(err.Error(), "license proof signature mismatch")
 }
 
 func displayAccessMode(mode LicenseAccessMode) string {

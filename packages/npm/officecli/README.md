@@ -16,10 +16,14 @@ Run it after install:
 
 ```bash
 officecli --version
-officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
-officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
-officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+officecli
+officecli --no-alt-screen
+officecli "Create a Q3 business review deck"
 ```
+
+The default command opens a persistent Codex-style TUI with the latest conversation and generation progress near the bottom input box. Use `--no-alt-screen` to keep terminal scrollback visible.
+
+For scripts and automation, use `officecli exec new ...`. The older `officecli new ...` form remains available for compatibility.
 
 The installed binary is usable without a local model endpoint or an API key. By default it uses OfficeCLI hosted anonymous trial access on `https://platform.officecli.io`; the one-time free quota is tied to this machine.
 

@@ -64,8 +64,9 @@ test("install next steps show copy-paste hosted examples", () => {
 
   assert.match(output, /Try OfficeCLI now:/);
   assert.match(output, /officecli --version/);
-  assert.match(output, /officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review\. Cover growth, retention, risks, and next-quarter actions\."/);
-  assert.match(output, /officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps\."/);
+  assert.match(output, /^  officecli$/m);
+  assert.match(output, /officecli "Create a Q3 business review deck"/);
+  assert.match(output, /officecli exec new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review\. Cover growth, retention, risks, and next-quarter actions\."/);
   assert.match(output, /officecli auth status/);
   assert.match(output, /officecli auth set-key <api-key>/);
 });

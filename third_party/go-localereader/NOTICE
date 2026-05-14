@@ -1,0 +1,8 @@
+This local module replaces github.com/mattn/go-localereader for OfficeCLI's
+darwin/linux release targets.
+
+The upstream v0.0.1 module declares MIT license terms in README.md but does
+not ship a standalone LICENSE file. OfficeCLI only publishes darwin/linux CLI
+archives, where go-localereader is a no-op reader. This replacement preserves
+that no-op API surface and includes the MIT license text for dependency
+scanners.

@@ -290,6 +290,77 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 	require.NotContains(t, store.userKeys[userID].KeyCiphertext, "sk-user-42")
 }
 
+func TestCompleteRotatesStoredUserAIGatewayAPIKeyAfterUpstreamAuthFailure(t *testing.T) {
+	var upstreamAuth []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/chat/completions", r.URL.Path)
+		auth := r.Header.Get("Authorization")
+		upstreamAuth = append(upstreamAuth, auth)
+		if auth == "Bearer stale-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"invalid token"}}`)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	cipher := testAIGatewayCipher(t)
+	staleCiphertext, err := cipher.Encrypt("stale-key")
+	require.NoError(t, err)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+		userKeys: map[uint64]*model.UserAIGatewayAPIKey{
+			userID: {
+				ID:            1,
+				UserID:        userID,
+				Status:        model.UserAIGatewayAPIKeyStatusActive,
+				KeyCiphertext: staleCiphertext,
+				KeyPrefix:     "stale-key",
+				UpstreamName:  "officecli-user-42",
+			},
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		HashSalt:             "salt",
+		TextModel:            "gpt-test",
+		AIGatewayKeyCipher:   cipher,
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"fresh-key"}},
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "text",
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+		}},
+		TimeoutSec: 5,
+	})
+
+	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Content)
+	require.Equal(t, []string{"Bearer stale-key", "Bearer fresh-key"}, upstreamAuth)
+	require.Equal(t, model.UserAIGatewayAPIKeyStatusActive, store.userKeys[userID].Status)
+	require.Equal(t, "fresh-key", store.userKeys[userID].KeyPrefix)
+	require.Equal(t, []int{1}, store.releases)
+	require.Equal(t, []int{1}, store.settlements)
+}
+
 func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
 	var upstreamAuth []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
