@@ -428,7 +428,7 @@ the flow with a configured OfficeCLI runtime.
 | OfficeCLI Skills customer brief | ![OfficeCLI Skills customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-skills-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
 | Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
 | Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
-| OfficeCLI Skills hero image | ![OfficeCLI Skills hero image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
 
 See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 

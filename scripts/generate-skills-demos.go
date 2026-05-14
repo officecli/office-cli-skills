@@ -234,18 +234,27 @@ func buildReport(root string) {
 
 func buildStandaloneIMG(root string) {
 	const slug = "standalone-img"
-	const prompt = "Create a landscape product hero image for OfficeCLI Skills showing AI agents turning prompts into Office files and a visual preview gallery."
+	const title = "OfficeCLI deadline automation image"
+	const artifact = "officecli-skills-hero-image.png"
+	const command = "officecli new img \"OfficeCLI deadline automation image\" --prompt-file ./prompt.md --ratio landscape --no-publish"
+	const source = "scripts/assets/skills-demos/standalone-img/officecli-office-automation-scene.png"
+	const prompt = `Create a cinematic, photorealistic office scene showing the contrast between manual document chaos and OfficeCLI automation.
+
+A modern open-plan office is under deadline pressure. Many people in the background and midground look stressed while hand-writing or annotating piles of documents: PPT slide drafts, Word-style report pages, Excel-style spreadsheet printouts, charts, and printed reports. Desks are crowded with paper stacks, pens, sticky notes, laptops, coffee cups, and scattered document drafts.
+
+In the foreground, the clear main character is calm and focused, using a laptop terminal to run OfficeCLI. Around the laptop screen, subtle floating visual previews show different generated outputs: PPTX slides, DOCX report pages, XLSX dashboard tables/charts, a report preview, and an image preview. The generated outputs should look crisp and organized, contrasting with the messy handwritten workflow around them.
+
+Use a wide 16:9 horizontal frame, high-detail realistic editorial lighting, natural office colors, and professional SaaS/product hero quality. Avoid readable brand logos or copyrighted marks. If terminal text appears, keep it short and clean, such as "officecli new" or "OfficeCLI".`
 	dir := demoDir(root, slug)
-	artifact := "officecli-skills-hero-image.png"
-	data, err := demoImagePNG(prompt)
-	must(err)
+	data := readBytes(source)
 	writeBytes(filepath.Join(dir, artifact), data)
 	writeBytes(filepath.Join(dir, "preview.png"), data)
-	writeText(filepath.Join(dir, "prompt.md"), promptMarkdown("OfficeCLI Skills hero image", prompt, "officecli new img \"OfficeCLI Skills hero image\" --prompt-file ./prompt.md --ratio landscape --no-publish"))
-	meta := baseMeta("OfficeCLI Skills hero image", "img", "officecli new img \"OfficeCLI Skills hero image\" --prompt-file ./prompt.md --ratio landscape --no-publish", artifact)
+	writeText(filepath.Join(dir, "prompt.md"), promptMarkdown(title, prompt, command))
+	meta := baseMeta(title, "img", command, artifact)
+	meta.GeneratedWith = "OfficeCLI standalone image generation demo asset checked into this repository"
 	meta.Notes = []string{
-		"Checked-in image is a deterministic documentation fixture so the public repo can be validated without a private image-generation key.",
-		"Use the command above with configured external or hosted image generation to reproduce a live generated image.",
+		"Preview and artifact use a real generated image selected for the public gallery.",
+		"Use the command above with configured external or hosted image generation to reproduce the prompt with the active image provider.",
 	}
 	writeMeta(dir, meta)
 }
@@ -321,6 +330,12 @@ func writeText(path, value string) {
 func writeBytes(path string, data []byte) {
 	must(os.MkdirAll(filepath.Dir(path), 0o755))
 	must(os.WriteFile(path, data, 0o644))
+}
+
+func readBytes(path string) []byte {
+	data, err := os.ReadFile(path)
+	must(err)
+	return data
 }
 
 func sha256File(path string) string {

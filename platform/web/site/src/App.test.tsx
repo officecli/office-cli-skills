@@ -117,6 +117,7 @@ describe('marketing site shell', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Generation demos/i, level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Image-rich strategy deck/i, level: 3 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /OfficeCLI deadline automation image/i, level: 3 })).toBeInTheDocument()
     expect(screen.getAllByText(/Download PPTX/i).length).toBeGreaterThan(0)
     expect(document.title).toContain('officecli-skills')
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/officecli-skills')
@@ -253,6 +254,7 @@ describe('site metadata and assets', () => {
     expect(html).toContain('Primary entrypoints')
     expect(html).toContain('Generation demos')
     expect(html).toContain('Image-rich strategy deck')
+    expect(html).toContain('OfficeCLI deadline automation image')
   })
 
   it('renders prerendered child skills pages with unique headings', () => {

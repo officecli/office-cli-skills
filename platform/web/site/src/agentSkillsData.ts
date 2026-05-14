@@ -241,15 +241,15 @@ export const generationDemos: GenerationDemo[] = [
     command: 'officecli new report "Demo program readiness report" --file ./demo-program-source-workbook.xlsx --prompt-file ./prompt.md --no-publish',
   },
   {
-    title: 'OfficeCLI Skills hero image',
+    title: 'OfficeCLI deadline automation image',
     type: 'IMG',
-    description: 'A standalone image example with the same prompt, metadata, and file-link pattern as document demos.',
+    description: 'A cinematic office scene showing teams hand-writing PPT, Word, and Excel work while the foreground user generates organized outputs with OfficeCLI.',
     previewSrc: `${demoRawBaseURL}/standalone-img/preview.png`,
     artifactHref: `${demoBaseURL}/standalone-img/officecli-skills-hero-image.png`,
     artifactLabel: 'Download PNG',
     promptHref: `${demoBaseURL}/standalone-img/prompt.md`,
     metadataHref: `${demoBaseURL}/standalone-img/metadata.json`,
-    command: 'officecli new img "OfficeCLI Skills hero image" --prompt-file ./prompt.md --ratio landscape --no-publish',
+    command: 'officecli new img "OfficeCLI deadline automation image" --prompt-file ./prompt.md --ratio landscape --no-publish',
   },
 ]
 
