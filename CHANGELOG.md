@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.57 - 2026-05-14
+
+### Changed
+
+- Made the official website URL visible in the npm package README link text.
+
 ## 0.2.56 - 2026-05-14
 
 ### Changed

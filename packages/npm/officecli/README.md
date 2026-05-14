@@ -1,6 +1,6 @@
 # officecli
 
-[Official website](https://officecli.io/)
+[Official website: https://officecli.io/](https://officecli.io/)
 
 `officecli` is an npm wrapper package for the OfficeCLI binary.
 
@@ -30,7 +30,7 @@ officecli config set-generation
 
 ## Version Mapping
 
-- npm package version `0.2.56` downloads OfficeCLI release `v0.2.56`
+- npm package version `0.2.57` downloads OfficeCLI release `v0.2.57`
 - the wrapper installs only the current stable binary that matches the package version
 
 ## Supported Platforms
