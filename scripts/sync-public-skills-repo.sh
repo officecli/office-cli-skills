@@ -365,20 +365,15 @@ INSTALLER
 chmod +x scripts/install-openclaw-skill.sh
 
 cat > README.md <<'README'
-# OfficeCLI for Claude Code, Codex, and AI Agents
+# OfficeCLI
 
-`officecli` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
-Claude Code, Codex, and other AI agents run local Office document workflows. Use this repository when
-you need an AI agent skill for `pptx`, `docx`, `xlsx`, workbook-backed `report`, or standalone `img`
-tasks. Document generation stays on the same machine through a local `officecli` runtime; standalone
-image generation is routed through the OfficeCLI server provider.
+OfficeCLI is a command-line tool for generating Office files and standalone images from natural-language
+prompts. Use the `officecli` binary directly when you want to create `PPTX`, `DOCX`, `XLSX`,
+workbook-backed `Report`, or `img` outputs from a terminal, script, CI job, or local automation flow.
 
-This repository is the public distribution surface for:
-
-- Claude Code marketplace metadata
-- the `officecli` skill for general Office document workflows
-- the `openclaw-officecli` package for OpenClaw-oriented integrations
-- direct install scripts for local Codex-style skill installs
+This repository is the public installation and documentation surface for the OfficeCLI binary. It also
+includes optional AI-agent skill wrappers for Claude Code, Codex-style local agents, and OpenClaw, but
+those integrations are secondary to the CLI itself.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
@@ -407,16 +402,130 @@ Related product page:
 
 - `https://officecli.io/officecli`
 
-## What OfficeCLI supports
+## Install with npm
 
-The public `officecli` skill is designed for agent workflows such as:
+npm is the recommended install path for most users:
+
+```bash
+npm install -g officecli
+```
+
+Verify the installed binary:
+
+```bash
+officecli --version
+officecli auth status
+```
+
+Alternative install paths are available when npm is not a good fit.
+
+Install the latest release binary directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash
+```
+
+Or install with Homebrew:
+
+```bash
+brew tap officecli/officecli
+brew install officecli
+```
+
+## Generate files from the CLI
+
+Hosted anonymous trial access is available by default, so the first run does not require a local model
+endpoint or API key.
+
+Generate a PPTX deck:
+
+```bash
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+```
+
+Generate a DOCX:
+
+```bash
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+```
+
+Generate an XLSX workbook:
+
+```bash
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+```
+
+Generate a workbook-backed report:
+
+```bash
+officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
+```
+
+Generate a standalone image:
+
+```bash
+officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
+```
+
+Generated files are written to `./output` by default. Use `--out <dir>` to choose another directory,
+`--json` for machine-readable output, and `--no-publish` when you want local-only output.
+
+For `PPTX`, OfficeCLI generates and embeds suitable images by default. Use `--no-images` for a
+text-only deck.
+
+## Runtime and access modes
+
+Check the current access mode:
+
+```bash
+officecli auth status
+```
+
+When the hosted trial is used up, create or purchase a hosted key from https://officecli.io/pricing,
+then save it:
+
+```bash
+officecli auth set-key <api-key>
+```
+
+To use your own model endpoint instead of Hosted Mode, switch to External Mode and initialize
+generation:
+
+```bash
+officecli config set-runtime external
+officecli config set-generation
+```
+
+Configure optional online publishing:
+
+```bash
+officecli config set-publish
+```
+
+Inspect the current config:
+
+```bash
+officecli config status
+```
+
+## What the binary supports
+
+The `officecli` binary supports:
 
 - AI PPTX generation for decks, proposals, and executive briefings
 - AI DOCX drafting for retrospectives, memos, and customer-facing documents
 - AI XLSX generation for workbooks, trackers, and analysis sheets
-- report workflows routed through OfficeCLI when a workbook-backed report artifact is needed
-- standalone image generation through `office.generate` with server-controlled provider settings
-- capability checks before execution so the agent can decide whether OfficeCLI supports the request
+- workbook-backed reports
+- standalone image generation with `--ratio square|landscape|portrait`
+- optional reference images for standalone `img` output
+- local-only generation with `--no-publish`
+- structural PPTX scoring with `officecli score pptx <file>`
+
+The compatibility alias remains available:
+
+```bash
+officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx
+```
 
 ## Generation demos
 
@@ -435,7 +544,11 @@ the flow with a configured OfficeCLI runtime.
 
 See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
-## Supported agent runtimes
+## Optional AI agent integrations
+
+AI agents can use OfficeCLI through public skills when you want the agent to route Office tasks into the
+local binary instead of calling the CLI manually. This is optional: the primary interface is still the
+`officecli` command.
 
 ### Claude Code
 
@@ -507,9 +620,9 @@ curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKI
 ## Requirements
 
 - a local `officecli` binary
-- local OfficeCLI generation and license configuration
-- standalone image generation requires license configuration and does not use local generation image provider settings
-- permission for the agent client to invoke local commands on the same machine
+- OfficeCLI access through hosted trial, hosted key, or External Mode configuration
+- optional publishing configuration when you want online preview URLs
+- for agent integrations, permission for the agent client to invoke local commands on the same machine
 
 Quick verification after installation:
 
@@ -526,30 +639,35 @@ officecli agent-bridge
 
 ## How OfficeCLI and officecli fit together
 
-- `OfficeCLI` is the local Office document engine
-- `officecli` is the public GitHub repository for skills, plugin wrappers, and installers
-- `officecli` is the general skill for Claude Code, Codex, and other local agents
+- `officecli` is the command-line binary you use to generate Office files and images
+- this repository is the public install, docs, demos, and integration surface for that binary
+- `officecli` is also the general optional skill for Claude Code, Codex, and other local agents
 - `openclaw-officecli` is the OpenClaw-oriented package
 
 ## FAQ
 
 ### Is this repository a hosted SaaS plugin backend?
 
-No. This repository distributes local skill wrappers, not a hosted plugin backend.
+No. This repository distributes binary install docs, demos, scripts, and optional local skill wrappers.
 
-### Can Claude Code create PPTX, DOCX, XLSX, report, or img outputs with this repository?
+### Does the CLI require an AI agent?
+
+No. The main workflow is direct CLI usage through commands like `officecli new pptx`, `officecli new
+docx`, `officecli new xlsx`, `officecli new report`, and `officecli new img`.
+
+### Can AI agents create PPTX, DOCX, XLSX, report, or img outputs with this repository?
 
 Yes, when the local `officecli` runtime is installed and configured. The repository tells the agent how
-to route supported Office and image tasks into OfficeCLI.
+to route supported Office and image tasks into the local OfficeCLI binary.
 
 ### Why does this repository mention Codex as well as Claude Code?
 
 Because marketplace install is only one entrypoint. This repository also distributes direct skill files
 for Codex-style local agents and other agent runtimes.
 
-### Does this repository contain the OfficeCLI implementation?
+### Does this repository contain the full OfficeCLI implementation?
 
-No. It contains public skill definitions, plugin wrappers, examples, and install scripts only.
+No. It contains public install docs, demos, scripts, skill definitions, and plugin wrappers.
 
 ## Layout
 
@@ -580,21 +698,43 @@ path.write_text(content)
 PY
 
 cat > README.zh-CN.md <<'README'
-# OfficeCLI：面向 Claude Code、Codex 和 AI Agent 的 Office 技能
+# OfficeCLI
 
-`officecli` 是 OfficeCLI 的公开 GitHub 仓库，用来分发技能、插件封装、安装脚本和示例，方便 Claude Code、Codex、OpenClaw 以及其他本地 Agent 调用 OfficeCLI 生成 Office 文件。
+OfficeCLI 是一个命令行工具，可以用自然语言 prompt 生成 Office 文件和独立图片。直接使用 `officecli` 二进制即可在终端、脚本、CI 或本地自动化流程中生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。
+
+这个仓库是 OfficeCLI 二进制的公开安装和文档入口，同时也包含 Claude Code、Codex 风格本地 Agent 和 OpenClaw 的可选 skill 封装。AI Agent 使用 OfficeCLI 是非重点功能；主入口仍然是 `officecli` 命令本身。
 
 主 README 仍然使用英文：[README.md](./README.md)
 
-## 这个仓库提供什么
+## 使用 npm 安装
 
-- Claude Code marketplace 元数据和插件封装
-- 面向通用 Office 文档工作流的 `officecli` skill
-- 面向 OpenClaw 集成的 `openclaw-officecli` skill
-- Codex 等本地 Agent 可直接使用的安装脚本
-- 可复现的生成示例，包括预览图、prompt、元数据和输出文件
+npm 是大多数用户的推荐安装方式：
 
-这个仓库不是托管式 SaaS 插件后端，也不包含私有的 OfficeCLI 引擎源码。最终的 `pptx`、`docx`、`xlsx`、`report` 和 `img` 输出仍然由本机安装的 `officecli` runtime 生成。
+```bash
+npm install -g officecli
+```
+
+验证二进制：
+
+```bash
+officecli --version
+officecli auth status
+```
+
+如果不适合使用 npm，可以选择其它安装方式。
+
+直接安装最新 release 二进制：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash
+```
+
+或者使用 Homebrew：
+
+```bash
+brew tap officecli/officecli
+brew install officecli
+```
 
 ## 快速链接
 
@@ -616,16 +756,101 @@ cat > README.zh-CN.md <<'README'
 - [OpenClaw 安装](./openclaw/README.md)
 - [FAQ](./faq/README.md)
 
-## 支持的工作流
+## 用 CLI 生成文件
 
-公开的 `officecli` skill 面向这些 Agent 工作流：
+默认提供 Hosted anonymous trial access，首次运行不需要本地模型 endpoint 或 API key。
+
+生成 PPTX：
+
+```bash
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+```
+
+生成 DOCX：
+
+```bash
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+```
+
+生成 XLSX：
+
+```bash
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+```
+
+基于工作簿生成 Report：
+
+```bash
+officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
+```
+
+生成独立图片：
+
+```bash
+officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
+```
+
+生成文件默认写入 `./output`。可以用 `--out <dir>` 指定输出目录，用 `--json` 输出机器可读结果，用 `--no-publish` 关闭在线发布。
+
+生成 `PPTX` 时，OfficeCLI 会默认生成并嵌入合适的图片；如果只想要纯文本 deck，使用 `--no-images`。
+
+## Runtime 和访问模式
+
+查看当前访问模式：
+
+```bash
+officecli auth status
+```
+
+Hosted trial 用完后，可以从 https://officecli.io/pricing 创建或购买 hosted key，然后保存：
+
+```bash
+officecli auth set-key <api-key>
+```
+
+如果要使用自己的模型 endpoint，可以切换到 External Mode 并初始化生成配置：
+
+```bash
+officecli config set-runtime external
+officecli config set-generation
+```
+
+配置可选在线发布：
+
+```bash
+officecli config set-publish
+```
+
+查看当前配置：
+
+```bash
+officecli config status
+```
+
+## 二进制支持的能力
 
 - 生成 PPTX：演示文稿、方案、汇报和管理层简报
 - 生成 DOCX：复盘、备忘录、客户文档和结构化草稿
 - 生成 XLSX：表格、跟踪器、分析工作簿和数据模板
 - 生成 report：基于工作簿生成报告类产物
-- 生成 img：通过 `office.generate` 生成独立图片
-- 执行前读取能力信息，让 Agent 判断 OfficeCLI 是否支持当前请求
+- 生成 img：支持 `--ratio square|landscape|portrait`
+- 独立图片支持 `--reference-image`
+- 使用 `--no-publish` 只保留本地输出
+- 使用 `officecli score pptx <file>` 对本地 PPTX 做结构评分
+
+兼容别名仍然可用：
+
+```bash
+officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx
+```
+
+## 生成示例
+
+示例目录见 [demos/README.md](./demos/README.md)。每个示例都包含预览图、输出文件、`prompt.md`、`metadata.json` 和可复现命令，方便确认实际生成效果。
+
+## 可选 AI Agent 集成
+
+当你希望 AI Agent 自动把 Office 任务路由到本地 OfficeCLI 二进制时，可以安装 public skills。这是可选能力；主使用方式仍然是直接执行 `officecli` 命令。
 
 ## Claude Code 安装
 
@@ -663,9 +888,9 @@ curl -fsSL https://raw.githubusercontent.com/__PUBLIC_SKILLS_REPO__/__PUBLIC_SKI
 ## 本机要求
 
 - 已安装本地 `officecli` 二进制
-- 已完成 OfficeCLI generation 和 license 配置
-- Agent 客户端有权限在同一台机器上调用本地命令
-- OpenClaw 用户需要配置 `officecli agent-bridge`
+- 通过 hosted trial、hosted key 或 External Mode 获得 OfficeCLI 访问能力
+- 如果需要在线预览，配置 publish
+- 如果使用 Agent 集成，Agent 客户端需要有权限在同一台机器上调用本地命令
 
 安装后可以这样验证：
 
@@ -675,23 +900,23 @@ officecli config status
 officecli agent-bridge
 ```
 
-## 生成示例
-
-示例目录见 [demos/README.md](./demos/README.md)。每个示例都包含预览图、输出文件、`prompt.md`、`metadata.json` 和可复现命令，方便确认实际生成效果。
-
 ## 常见问题
 
-### 这个仓库是不是 OfficeCLI 的完整源码？
+### 必须通过 AI Agent 才能用 OfficeCLI 吗？
 
-不是。这个公开仓库只分发 skill、插件封装、安装脚本和示例。OfficeCLI 的本地 runtime 负责实际生成文件。
+不需要。主流程是直接使用 `officecli new pptx`、`officecli new docx`、`officecli new xlsx`、`officecli new report` 和 `officecli new img`。
 
 ### 安装这个仓库后就能直接生成文件吗？
 
-需要本机存在可用的 `officecli` runtime，并完成必要配置。安装脚本会尝试安装二进制，但最终是否能生成取决于本机 runtime 和配置状态。
+需要本机存在可用的 `officecli` 二进制，并具备 hosted trial、hosted key 或 External Mode 配置。Agent skills 只是把任务路由到本地二进制。
 
 ### Claude Code marketplace 和直接安装有什么区别？
 
-Claude Code marketplace 是插件安装路径；Codex 等本地 Agent 可以直接使用脚本安装 skill 文件。两者最终都把 Office 任务路由到本机 OfficeCLI。
+Claude Code marketplace 是可选插件安装路径；Codex 等本地 Agent 可以直接使用脚本安装 skill 文件。两者最终都把 Office 任务路由到本机 OfficeCLI。
+
+### 这个仓库是不是 OfficeCLI 的完整源码？
+
+不是。这个公开仓库包含安装文档、示例、脚本、skill 定义和插件封装。
 README
 
 PUBLIC_SKILLS_REPO="${PUBLIC_SKILLS_REPO}" PUBLIC_SKILLS_DEFAULT_BRANCH="${PUBLIC_SKILLS_DEFAULT_BRANCH}" python3 - <<'PY'
@@ -708,22 +933,46 @@ PY
 mkdir -p install claude-code codex openclaw faq
 
 cat > install/README.md <<'README'
-# Install officecli
+# Install OfficeCLI
 
-Use this guide when the search intent is specifically about how to install `officecli`.
+Use this guide when the search intent is specifically about how to install the `officecli` binary.
 
 Main page:
 
 - `https://officecli.io/officecli/install`
 
-Choose the install path that matches the runtime:
+Recommended install path:
+
+```bash
+npm install -g officecli
+```
+
+Verify after install:
+
+```bash
+officecli --version
+officecli auth status
+```
+
+Alternative binary install paths:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash
+```
+
+```bash
+brew tap officecli/officecli
+brew install officecli
+```
+
+Optional AI-agent skill install guides:
 
 - [Claude Code](../claude-code/README.md)
 - [Codex](../codex/README.md)
 - [OpenClaw](../openclaw/README.md)
 
-The public repository only distributes skill wrappers and installers. Final Office file generation still
-depends on a working local `officecli` runtime.
+The public repository documents the CLI install path first. Skill wrappers are optional integrations
+that route agent tasks into the same local `officecli` binary.
 
 Quick verification:
 
