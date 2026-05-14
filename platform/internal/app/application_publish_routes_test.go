@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	publishsvc "github.com/officecli/officecli/platform/internal/publish"
+	publishsvc "github.com/officecli/officecli-internal/platform/internal/publish"
 )
 
 type fakePublishService struct {

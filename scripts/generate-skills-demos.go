@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
-	appruntime "github.com/officecli/officecli/internal/runtime"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	appruntime "github.com/officecli/officecli-internal/internal/runtime"
 )
 
 const verifiedAt = "2026-05-14T00:00:00Z"
@@ -134,28 +134,28 @@ func buildPPTXTextOnly(root string) {
 
 func buildDOCX(root string) {
 	const slug = "docx-brief"
-	const prompt = "Draft a customer-facing DOCX brief introducing OfficeCLI Skills to an automation team. Include a decision callout and a compact rollout table."
+	const prompt = "Draft a customer-facing DOCX brief introducing OfficeCLI to an automation team. Include a decision callout and a compact rollout table."
 	const payload = `{
-  "title":"OfficeCLI Skills customer brief",
+  "title":"OfficeCLI customer brief",
   "subtitle":"Local Office generation for agent workflows",
   "theme":{"preset":"executive"},
   "blocks":[
     {"type":"heading","level":1,"text":"Why this skill exists"},
-    {"type":"paragraph","text":"officecli-skills gives local agents a repeatable way to decide when OfficeCLI should handle PPTX, DOCX, XLSX, report, or standalone image work."},
+    {"type":"paragraph","text":"officecli gives local agents a repeatable way to decide when OfficeCLI should handle PPTX, DOCX, XLSX, report, or standalone image work."},
     {"type":"callout","title":"Recommended use","text":"Install the skill beside the OfficeCLI binary, then let the agent check capabilities before it writes any final Office artifact."},
     {"type":"heading","level":1,"text":"Rollout checklist"},
     {"type":"table","title":"Adoption plan","columns":["Step","Owner","Evidence"],"rows":[["Install skill","Automation lead","officecli --version"],["Configure runtime","Platform owner","officecli config status"],["Generate artifact","Agent user","Local file plus preview"]]}
   ]
 }`
 	dir := demoDir(root, slug)
-	writeText(filepath.Join(dir, "prompt.md"), promptMarkdown("OfficeCLI Skills customer brief", prompt, "officecli new docx \"OfficeCLI Skills customer brief\" --prompt-file ./prompt.md --local-preview --no-publish"))
+	writeText(filepath.Join(dir, "prompt.md"), promptMarkdown("OfficeCLI customer brief", prompt, "officecli new docx \"OfficeCLI customer brief\" --prompt-file ./prompt.md --local-preview --no-publish"))
 	fileBytes, fileName, previewHTML, previewJSON, err := generateengine.BuildDOCXArtifactFromJSON(payload, prompt, "formal", true)
 	must(err)
-	artifact := "officecli-skills-customer-brief.docx"
+	artifact := "officecli-customer-brief.docx"
 	writeBytes(filepath.Join(dir, artifact), fileBytes)
 	writeBytes(filepath.Join(dir, "preview.html"), previewHTML)
 	writeBytes(filepath.Join(dir, "preview.json"), previewJSON)
-	meta := baseMeta("OfficeCLI Skills customer brief", "docx", "officecli new docx \"OfficeCLI Skills customer brief\" --prompt-file ./prompt.md --local-preview --no-publish", artifact)
+	meta := baseMeta("OfficeCLI customer brief", "docx", "officecli new docx \"OfficeCLI customer brief\" --prompt-file ./prompt.md --local-preview --no-publish", artifact)
 	meta.Notes = []string{fmt.Sprintf("OfficeCLI renderer suggested file name: %s.", fileName)}
 	writeMeta(dir, meta)
 }
@@ -235,7 +235,7 @@ func buildReport(root string) {
 func buildStandaloneIMG(root string) {
 	const slug = "standalone-img"
 	const title = "OfficeCLI deadline automation image"
-	const artifact = "officecli-skills-hero-image.png"
+	const artifact = "officecli-hero-image.png"
 	const command = "officecli new img \"OfficeCLI deadline automation image\" --prompt-file ./prompt.md --ratio landscape --no-publish"
 	const source = "scripts/assets/skills-demos/standalone-img/officecli-office-automation-scene.png"
 	const prompt = `Create a cinematic, photorealistic office scene showing the contrast between manual document chaos and OfficeCLI automation.

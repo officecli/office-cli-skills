@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli-internal/engine"
 )
 
 type boolValue struct {

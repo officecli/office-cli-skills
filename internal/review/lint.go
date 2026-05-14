@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli/pkg/ooxmledit"
+	"github.com/officecli/officecli-internal/pkg/ooxmledit"
 )
 
 var (

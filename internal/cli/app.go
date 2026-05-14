@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli/engine"
-	planengine "github.com/officecli/officecli/engine/plan"
-	licenseprovider "github.com/officecli/officecli/internal/license"
-	llmprovider "github.com/officecli/officecli/internal/providers/llm"
-	publishprovider "github.com/officecli/officecli/internal/providers/publish"
-	reviewprovider "github.com/officecli/officecli/internal/review"
+	"github.com/officecli/officecli-internal/engine"
+	planengine "github.com/officecli/officecli-internal/engine/plan"
+	licenseprovider "github.com/officecli/officecli-internal/internal/license"
+	llmprovider "github.com/officecli/officecli-internal/internal/providers/llm"
+	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli-internal/internal/review"
 )
 
 type App struct {

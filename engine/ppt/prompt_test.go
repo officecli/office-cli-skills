@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli/pkg/officegen"
+	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
 func TestBuildModifyPrompt_IncludesContext(t *testing.T) {

@@ -8,7 +8,7 @@ DIST_DIR ?= dist
 CLI_EMBEDDED_PUBLISH_BASE_URL ?=
 CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID ?=
 CLI_EMBEDDED_PUBLISH_AUTH_KEY ?=
-LDFLAGS := -X github.com/officecli/officecli/internal/cli.Version=$(VERSION) -X github.com/officecli/officecli/internal/cli.Commit=$(COMMIT) -X github.com/officecli/officecli/internal/cli.BuildDate=$(BUILD_DATE) -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishBaseURL=$(CLI_EMBEDDED_PUBLISH_BASE_URL) -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKeyID=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID) -X github.com/officecli/officecli/internal/providers/publish.EmbeddedPublishAuthKey=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY)
+LDFLAGS := -X github.com/officecli/officecli-internal/internal/cli.Version=$(VERSION) -X github.com/officecli/officecli-internal/internal/cli.Commit=$(COMMIT) -X github.com/officecli/officecli-internal/internal/cli.BuildDate=$(BUILD_DATE) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishBaseURL=$(CLI_EMBEDDED_PUBLISH_BASE_URL) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKeyID=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKey=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY)
 
 .PHONY: help build test test-fast test-full test-smoke test-local fmt install uninstall run-help demo release release-darwin-amd64 release-darwin-arm64 release-linux-amd64 release-linux-arm64 demo-ppt demo-docx demo-xlsx usage-limits-smoke
 

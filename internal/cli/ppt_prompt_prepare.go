@@ -8,8 +8,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
 )
 
 const pptPromptEnrichmentSchema = `{

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	generateengine "github.com/officecli/officecli/engine/generate"
-	"github.com/officecli/officecli/pkg/officegen"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
 type semanticPPTXDeck struct {

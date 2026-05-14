@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/officecli/officecli/pkg/officegen"
-	"github.com/officecli/officecli/pkg/ooxmledit"
+	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli-internal/pkg/ooxmledit"
 )
 
 type ModifyRequest struct {

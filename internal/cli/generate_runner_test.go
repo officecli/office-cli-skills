@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli-internal/engine"
 )
 
 func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.T) {

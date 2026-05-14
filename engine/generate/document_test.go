@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli/pkg/ooxmledit"
+	"github.com/officecli/officecli-internal/pkg/ooxmledit"
 )
 
 func TestBuildDOCXPrompt_AndBuildDOCXFromJSON(t *testing.T) {

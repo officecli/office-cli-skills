@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/officecli/officecli/engine"
-	licenseprovider "github.com/officecli/officecli/internal/license"
-	publishprovider "github.com/officecli/officecli/internal/providers/publish"
-	reviewprovider "github.com/officecli/officecli/internal/review"
-	"github.com/officecli/officecli/internal/runtime"
+	"github.com/officecli/officecli-internal/engine"
+	licenseprovider "github.com/officecli/officecli-internal/internal/license"
+	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli-internal/internal/review"
+	"github.com/officecli/officecli-internal/internal/runtime"
 )
 
 type Config struct {

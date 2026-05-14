@@ -8,7 +8,7 @@
     {
       "type": "paragraph",
       "level": 2,
-      "text": "officecli-skills gives local agents a repeatable way to decide when OfficeCLI should handle PPTX, DOCX, XLSX, report, or standalone image work."
+      "text": "officecli gives local agents a repeatable way to decide when OfficeCLI should handle PPTX, DOCX, XLSX, report, or standalone image work."
     },
     {
       "type": "callout",
@@ -64,5 +64,5 @@
     "fontFamily": "Aptos",
     "eaFontFamily": "Microsoft YaHei"
   },
-  "title": "OfficeCLI Skills customer brief"
+  "title": "OfficeCLI customer brief"
 }

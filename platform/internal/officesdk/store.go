@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
 )
 
 const (

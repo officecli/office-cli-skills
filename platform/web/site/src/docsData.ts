@@ -103,7 +103,7 @@ export const updateMethods: CommandExample[] = [
   },
   {
     label: 'Linux install script',
-    command: 'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-officecli.sh | bash',
+    command: 'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash',
     detail: 'Re-runs the public installer and fetches the latest stable release.',
   },
 ]
@@ -349,9 +349,9 @@ export const agentSkillHighlights: DocsChecklist[] = [
   {
     title: 'Claude Code',
     items: [
-      'Marketplace repository target: `officecli/officecli-skills`.',
-      'Install the general Office skill with `/plugin install officecli@officecli-skills` after adding the marketplace.',
-      'Install the OpenClaw-oriented variant with `/plugin install openclaw-officecli@officecli-skills` when you want the OpenClaw package as well.',
+      'Marketplace repository target: `officecli/officecli`.',
+      'Install the general Office skill with `/plugin install officecli@officecli` after adding the marketplace.',
+      'Install the OpenClaw-oriented variant with `/plugin install openclaw-officecli@officecli` when you want the OpenClaw package as well.',
     ],
   },
 ]

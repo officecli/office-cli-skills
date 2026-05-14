@@ -17,9 +17,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/officecli/officecli/platform/internal/billing"
-	growthsvc "github.com/officecli/officecli/platform/internal/growth"
-	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli-internal/platform/internal/billing"
+	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 type Store struct {

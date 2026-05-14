@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	growthsvc "github.com/officecli/officecli/platform/internal/growth"
-	"github.com/officecli/officecli/platform/internal/model"
+	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 type fakeClient struct {

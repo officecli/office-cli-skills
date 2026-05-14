@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli-internal/engine"
 )
 
 type Config struct {

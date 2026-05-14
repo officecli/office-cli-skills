@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli-internal/engine"
 )
 
 func TestNewProvider_OpenAICompatible(t *testing.T) {

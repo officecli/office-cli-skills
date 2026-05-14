@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli/engine"
-	licenseprovider "github.com/officecli/officecli/internal/license"
+	"github.com/officecli/officecli-internal/engine"
+	licenseprovider "github.com/officecli/officecli-internal/internal/license"
 )
 
 type fakeGenerator struct{}

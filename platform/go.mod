@@ -1,4 +1,4 @@
-module github.com/officecli/officecli/platform
+module github.com/officecli/officecli-internal/platform
 
 go 1.25.0
 

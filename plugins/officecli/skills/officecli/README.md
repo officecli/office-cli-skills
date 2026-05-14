@@ -12,11 +12,11 @@ Use this skill when the request is about:
 
 Install details and runtime-specific entrypoints:
 
-- Overview: `https://officecli.io/officecli-skills`
-- Install: `https://officecli.io/officecli-skills/install`
-- Codex: `https://officecli.io/officecli-skills/codex`
-- Claude Code: `https://officecli.io/officecli-skills/claude-code`
-- OpenClaw: `https://officecli.io/officecli-skills/openclaw`
+- Overview: `https://officecli.io/officecli`
+- Install: `https://officecli.io/officecli/install`
+- Codex: `https://officecli.io/officecli/codex`
+- Claude Code: `https://officecli.io/officecli/claude-code`
+- OpenClaw: `https://officecli.io/officecli/openclaw`
 
 The public skill bundle is a routing layer, not a hosted execution backend. Final Office file generation
 still depends on a working local `officecli` installation.

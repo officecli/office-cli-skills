@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
-	"github.com/officecli/officecli/pkg/officegen"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
 type PrepareParams struct {

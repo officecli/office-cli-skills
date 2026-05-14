@@ -34,7 +34,7 @@ export const siteBaseURL = 'https://officecli.io'
 const siteName = 'OfficeCLI'
 const defaultRobots = 'index,follow'
 const defaultImage = `${siteBaseURL}/og-cover.svg`
-const skillsImage = `${siteBaseURL}/social-preview-officecli-skills.png`
+const skillsImage = `${siteBaseURL}/social-preview-officecli.png`
 
 const homeTitle = 'OfficeCLI | External and Hosted AI PPTX, DOCX, XLSX, REPORT, and IMG Generator'
 const homeDescription =
@@ -151,13 +151,13 @@ function buildSkillsBreadcrumbItems(pathname: string) {
   if (route.path === agentSkillsHubPath) {
     return [
       { name: 'Home', path: '/' },
-      { name: 'officecli-skills', path: agentSkillsHubPath },
+      { name: 'officecli', path: agentSkillsHubPath },
     ]
   }
 
   return [
     { name: 'Home', path: '/' },
-    { name: 'officecli-skills', path: agentSkillsHubPath },
+    { name: 'officecli', path: agentSkillsHubPath },
     { name: route.label, path: route.path },
   ]
 }
@@ -169,7 +169,7 @@ function buildSkillsCollectionJSONLD() {
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: 'officecli-skills',
+    name: 'officecli',
     url: buildCanonical(agentSkillsHubPath),
     description: hubRoute.seoDescription,
     isPartOf: {

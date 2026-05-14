@@ -3,7 +3,7 @@ package admin
 import (
 	"time"
 
-	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 type LoginRequest struct {

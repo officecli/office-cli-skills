@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/officecli/officecli/platform/internal/auth"
+	"github.com/officecli/officecli-internal/platform/internal/auth"
 )
 
 func main() {

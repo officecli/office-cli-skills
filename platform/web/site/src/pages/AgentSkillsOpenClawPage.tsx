@@ -5,7 +5,7 @@ import AgentSkillsSecondaryNav from '../components/AgentSkillsSecondaryNav'
 import { getAgentSkillsBreadcrumbs, githubRepoURL } from '../agentSkillsData'
 
 const openClawInstallCommand =
-  'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash'
+  'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | bash'
 const openClawConfigSnippet = `agents:
   office-bot:
     model: openai/gpt-4o
@@ -17,10 +17,10 @@ export default function AgentSkillsOpenClawPage() {
   return (
     <main className="overflow-x-hidden px-8 pt-24 pb-18 md:px-16 md:pt-28 md:pb-24">
       <div className="mx-auto max-w-[1440px]">
-        <AgentSkillsBreadcrumbs items={getAgentSkillsBreadcrumbs('/officecli-skills/openclaw')} />
+        <AgentSkillsBreadcrumbs items={getAgentSkillsBreadcrumbs('/officecli/openclaw')} />
         <section className="rounded-[36px] border border-outline-variant/10 bg-surface-low px-8 py-10 shadow-[0_24px_70px_rgba(0,0,0,0.24)] md:px-10">
           <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-4 py-2 font-headline text-xs uppercase tracking-[0.28em] text-primary">
-            officecli-skills for OpenClaw
+            officecli for OpenClaw
           </span>
           <h1 className="mt-6 max-w-4xl font-headline text-5xl font-bold tracking-tight text-white md:text-6xl">
             Structured Office workflows through officecli agent-bridge
@@ -29,7 +29,7 @@ export default function AgentSkillsOpenClawPage() {
             This path is for OpenClaw users who need channel-based Office generation and should land on the OpenClaw-specific installer instead of a generic skill page or random bridge file.
           </p>
           <div className="mt-8">
-            <AgentSkillsSecondaryNav currentPath="/officecli-skills/openclaw" />
+            <AgentSkillsSecondaryNav currentPath="/officecli/openclaw" />
           </div>
         </section>
 
@@ -64,12 +64,12 @@ export default function AgentSkillsOpenClawPage() {
           <article className="rounded-3xl border border-outline-variant/10 bg-surface-low p-6">
             <h2 className="font-headline text-2xl font-bold text-white">GitHub repository</h2>
             <a className="mt-4 block text-sm leading-relaxed text-primary transition-colors hover:text-tertiary" href={githubRepoURL}>
-              officecli/officecli-skills on GitHub
+              officecli/officecli on GitHub
             </a>
           </article>
           <article className="rounded-3xl border border-outline-variant/10 bg-surface-low p-6">
             <h2 className="font-headline text-2xl font-bold text-white">Related page</h2>
-            <Link className="mt-4 block text-sm leading-relaxed text-primary transition-colors hover:text-tertiary" to="/officecli-skills/install">
+            <Link className="mt-4 block text-sm leading-relaxed text-primary transition-colors hover:text-tertiary" to="/officecli/install">
               Compare install routes and verification
             </Link>
           </article>

@@ -14,9 +14,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli/platform/internal/apikey"
-	licensesvc "github.com/officecli/officecli/platform/internal/license"
-	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 type fakeAPIKeyStore struct {

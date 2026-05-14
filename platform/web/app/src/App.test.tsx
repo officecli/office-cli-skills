@@ -210,7 +210,7 @@ describe('platform app shell', () => {
     expect(await screen.findByRole('heading', { name: /Install OfficeCLI for document operations/i })).toBeInTheDocument()
     expect(screen.getByText(/brew tap officecli\/officecli && brew install officecli/i)).toBeInTheDocument()
     expect(screen.getByText(/npm install -g officecli/i)).toBeInTheDocument()
-    expect(screen.getByText(/raw\.githubusercontent\.com\/officecli\/officecli\/main\/scripts\/install-officecli\.sh/i)).toBeInTheDocument()
+    expect(screen.getByText(/raw\.githubusercontent\.com\/officecli\/officecli-dist\/main\/scripts\/install-officecli\.sh/i)).toBeInTheDocument()
     expect(screen.queryByText(/officecli\.io\/install\.sh/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Sign in with Google from the terminal/i)).not.toBeInTheDocument()
   })

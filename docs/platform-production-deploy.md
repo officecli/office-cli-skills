@@ -27,7 +27,7 @@ The private-repository script [`scripts/deploy-platform-prod.sh`](/home/ubuntu/w
 
 ## Recommended Release Flow
 
-1. merge the target platform change into `officecli/officecli`
+1. merge the target platform change into `officecli/officecli-internal`
 2. create and push a production deploy tag such as `v0.2.0-prod-20260417-1`
 3. dispatch `Platform Deploy` in `officecli/officecli-ci`
 4. let the workflow check out the tagged private source tree and run [`scripts/deploy-platform-prod.sh`](/home/ubuntu/workspace/officecli/scripts/deploy-platform-prod.sh)
@@ -69,7 +69,7 @@ For preview or route changes, also validate:
 
 - confirm the current Deployment state on the server
 - confirm the active Nginx site configuration for `officecli.io` and `platform.officecli.io`
-- confirm the target production tag exists in `officecli/officecli`
+- confirm the target production tag exists in `officecli/officecli-internal`
 - confirm required `officecli/officecli-ci` secrets and variables are present
 - confirm rollback artifacts are still available
 

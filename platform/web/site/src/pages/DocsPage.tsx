@@ -351,7 +351,7 @@ export default function DocsPage() {
               <p className="max-w-3xl text-sm leading-relaxed text-outline-variant">
                 Need the public landing page for search-driven installs and GitHub repository context? Visit{' '}
                 <Link className="text-primary transition-colors hover:text-tertiary" to="/claude-code-codex-office-skills">
-                  OfficeCLI Skills for Claude Code, Codex, and AI agents
+                  OfficeCLI for Claude Code, Codex, and AI agents
                 </Link>
                 .
               </p>

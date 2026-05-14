@@ -15,19 +15,19 @@ This repository also contains the publishable wrapper for Claude Code marketplac
 
 Recommended public marketplace repository name:
 
-- `officecli/officecli-skills`
+- `officecli/officecli`
 
 When that repository is publicly reachable, Claude Code users can install the plugin like this:
 
 ```text
-/plugin marketplace add officecli/officecli-skills
-/plugin install officecli@officecli-skills
+/plugin marketplace add officecli/officecli
+/plugin install officecli@officecli
 ```
 
 To install the OpenClaw variant:
 
 ```text
-/plugin install openclaw-officecli@officecli-skills
+/plugin install openclaw-officecli@officecli
 ```
 
 Key marketplace files in this repository:

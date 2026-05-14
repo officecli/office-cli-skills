@@ -14,7 +14,7 @@ const commands = [
   },
   {
     title: 'Stable shell install on Linux',
-    command: 'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-officecli.sh | bash',
+    command: 'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash',
     detail: 'Installs the latest stable public release directly.',
   },
 ]

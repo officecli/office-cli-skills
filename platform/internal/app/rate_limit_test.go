@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	licensesvc "github.com/officecli/officecli/platform/internal/license"
-	"github.com/officecli/officecli/platform/internal/model"
+	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 func TestRegisterAdminRoutesRateLimitsLogin(t *testing.T) {

@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/officecli/officecli/platform/internal/apikey"
-	"github.com/officecli/officecli/platform/internal/auth"
-	"github.com/officecli/officecli/platform/internal/model"
-	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
-	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	"github.com/officecli/officecli-internal/platform/internal/auth"
+	"github.com/officecli/officecli-internal/platform/internal/model"
+	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
 )
 
 type SessionPayload struct {

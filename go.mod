@@ -1,3 +1,3 @@
-module github.com/officecli/officecli
+module github.com/officecli/officecli-internal
 
 go 1.24.0

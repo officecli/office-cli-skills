@@ -40,8 +40,8 @@ export interface FAQEntry {
   a: string
 }
 
-export const githubRepoURL = 'https://github.com/officecli/officecli-skills'
-export const agentSkillsHubPath = '/officecli-skills'
+export const githubRepoURL = 'https://github.com/officecli/officecli'
+export const agentSkillsHubPath = '/officecli'
 export const legacyAgentSkillsPath = '/claude-code-codex-office-skills'
 export const productDocsPath = '/docs'
 export const downloadPath = '/download'
@@ -50,69 +50,69 @@ export const agentSkillsRoutes: AgentSkillsRoute[] = [
   {
     path: agentSkillsHubPath,
     label: 'Overview',
-    title: 'officecli-skills overview',
+    title: 'officecli overview',
     description:
-      'Understand what officecli-skills is, which agent runtimes it supports, and which subpages cover install, Claude Code, Codex, OpenClaw, and FAQ topics.',
-    seoTitle: 'officecli-skills | Public GitHub Repository for Claude Code, Codex, and AI Agents',
+      'Understand what officecli is, which agent runtimes it supports, and which subpages cover install, Claude Code, Codex, OpenClaw, and FAQ topics.',
+    seoTitle: 'officecli | Public GitHub Repository for Claude Code, Codex, and AI Agents',
     seoDescription:
-      'officecli-skills is the public GitHub repository for Claude Code, Codex, OpenClaw, and AI agent Office workflows. Explore install, runtime-specific setup, and FAQ pages for local PPTX, DOCX, XLSX, and report automation.',
+      'officecli is the public GitHub repository for Claude Code, Codex, OpenClaw, and AI agent Office workflows. Explore install, runtime-specific setup, and FAQ pages for local PPTX, DOCX, XLSX, and report automation.',
   },
   {
     path: `${agentSkillsHubPath}/install`,
     label: 'Install',
-    title: 'Install officecli-skills',
+    title: 'Install officecli',
     description:
       'Choose the correct installation path for Claude Code, Codex-style local agents, or OpenClaw and verify the local OfficeCLI runtime afterward.',
-    seoTitle: 'Install officecli-skills | Claude Code, Codex, and OpenClaw setup',
+    seoTitle: 'Install officecli | Claude Code, Codex, and OpenClaw setup',
     seoDescription:
-      'Install officecli-skills through the Claude Code marketplace, direct Codex-style local skill install, or the OpenClaw installer, then verify the local OfficeCLI runtime.',
+      'Install officecli through the Claude Code marketplace, direct Codex-style local skill install, or the OpenClaw installer, then verify the local OfficeCLI runtime.',
   },
   {
     path: `${agentSkillsHubPath}/claude-code`,
     label: 'Claude Code',
-    title: 'officecli-skills for Claude Code',
+    title: 'officecli for Claude Code',
     description:
       'Use the public marketplace repository to install the OfficeCLI plugin in Claude Code and keep Office generation on the same machine.',
-    seoTitle: 'officecli-skills for Claude Code | Marketplace install and local Office workflows',
+    seoTitle: 'officecli for Claude Code | Marketplace install and local Office workflows',
     seoDescription:
-      'Learn how officecli-skills integrates with Claude Code through marketplace install, local OfficeCLI routing, and same-machine document generation for PPTX, DOCX, XLSX, and report tasks.',
+      'Learn how officecli integrates with Claude Code through marketplace install, local OfficeCLI routing, and same-machine document generation for PPTX, DOCX, XLSX, and report tasks.',
   },
   {
     path: `${agentSkillsHubPath}/codex`,
     label: 'Codex',
-    title: 'officecli-skills for Codex',
+    title: 'officecli for Codex',
     description:
       'Install the public skill bundle directly on Codex-style local agent hosts without relying on a marketplace layer.',
-    seoTitle: 'officecli-skills for Codex | Direct local skill install for OfficeCLI',
+    seoTitle: 'officecli for Codex | Direct local skill install for OfficeCLI',
     seoDescription:
-      'Install officecli-skills directly on Codex-style local agents, refresh the local bundle, and route supported Office document tasks into OfficeCLI.',
+      'Install officecli directly on Codex-style local agents, refresh the local bundle, and route supported Office document tasks into OfficeCLI.',
   },
   {
     path: `${agentSkillsHubPath}/openclaw`,
     label: 'OpenClaw',
-    title: 'officecli-skills for OpenClaw',
+    title: 'officecli for OpenClaw',
     description:
       'Use the OpenClaw-oriented installer and officecli agent-bridge for structured, channel-based Office document generation.',
-    seoTitle: 'officecli-skills for OpenClaw | officecli agent-bridge setup',
+    seoTitle: 'officecli for OpenClaw | officecli agent-bridge setup',
     seoDescription:
-      'Set up officecli-skills for OpenClaw with the public installer, officecli agent-bridge, and local channel-based Office document workflows.',
+      'Set up officecli for OpenClaw with the public installer, officecli agent-bridge, and local channel-based Office document workflows.',
   },
   {
     path: `${agentSkillsHubPath}/faq`,
     label: 'FAQ',
-    title: 'officecli-skills FAQ',
+    title: 'officecli FAQ',
     description:
-      'Read the most common questions about officecli-skills, the OfficeCLI runtime, supported agent runtimes, and hosted versus local execution.',
-    seoTitle: 'officecli-skills FAQ | Public repo, local runtime, and install answers',
+      'Read the most common questions about officecli, the OfficeCLI runtime, supported agent runtimes, and hosted versus local execution.',
+    seoTitle: 'officecli FAQ | Public repo, local runtime, and install answers',
     seoDescription:
-      'Read the officecli-skills FAQ covering the public GitHub repository, local OfficeCLI runtime requirements, Claude Code, Codex, OpenClaw, and local-first Office generation.',
+      'Read the officecli FAQ covering the public GitHub repository, local OfficeCLI runtime requirements, Claude Code, Codex, OpenClaw, and local-first Office generation.',
   },
 ]
 
 export const agentSkillsSubpages = agentSkillsRoutes.filter((route) => route.path !== agentSkillsHubPath)
 export const agentSkillsPrerenderRoutes = [agentSkillsHubPath, ...agentSkillsSubpages.map((route) => route.path), legacyAgentSkillsPath]
 
-export const keywordChips = ['officecli-skills', 'Claude Code', 'Codex', 'OpenClaw', 'PPTX', 'DOCX', 'XLSX', 'Report', 'IMG']
+export const keywordChips = ['officecli', 'Claude Code', 'Codex', 'OpenClaw', 'PPTX', 'DOCX', 'XLSX', 'Report', 'IMG']
 
 export const workflowCards: WorkflowCard[] = [
   {
@@ -141,20 +141,20 @@ export const installPaths: InstallPath[] = [
   {
     title: 'Claude Code marketplace install',
     intro: 'Use the public marketplace source when Claude Code should discover the OfficeCLI skill through the plugin flow.',
-    command: '/plugin marketplace add officecli/officecli-skills\n/plugin install officecli@officecli-skills',
+    command: '/plugin marketplace add officecli/officecli\n/plugin install officecli@officecli',
   },
   {
     title: 'Codex and local agent install',
     intro: 'Use the direct installer when you want the public OfficeCLI skill files on a Codex-style local agent host without a marketplace dependency.',
     command:
-      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | bash -s -- officecli',
+      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-skill.sh | bash -s -- officecli',
   },
   {
     title: 'OpenClaw install',
     intro:
       'Use the OpenClaw-oriented installer when the agent should generate Office files through `officecli agent-bridge` and return them to chat channels as attachments.',
     command:
-      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash',
+      'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | bash',
   },
 ]
 
@@ -182,7 +182,7 @@ export const repoArtifacts: RepoArtifact[] = [
 ]
 
 const demoBaseURL = `${githubRepoURL}/blob/main/demos`
-const demoRawBaseURL = 'https://raw.githubusercontent.com/officecli/officecli-skills/main/demos'
+const demoRawBaseURL = 'https://raw.githubusercontent.com/officecli/officecli/main/demos'
 
 export const generationDemos: GenerationDemo[] = [
   {
@@ -208,15 +208,15 @@ export const generationDemos: GenerationDemo[] = [
     command: 'officecli new pptx "Text-only executive briefing" --prompt-file ./prompt.md --local-preview --no-publish --no-images',
   },
   {
-    title: 'OfficeCLI Skills customer brief',
+    title: 'OfficeCLI customer brief',
     type: 'DOCX',
     description: 'A customer-facing brief with headings, a decision callout, and a rollout table.',
     previewSrc: `${demoRawBaseURL}/docx-brief/preview.png`,
-    artifactHref: `${demoBaseURL}/docx-brief/officecli-skills-customer-brief.docx`,
+    artifactHref: `${demoBaseURL}/docx-brief/officecli-customer-brief.docx`,
     artifactLabel: 'Download DOCX',
     promptHref: `${demoBaseURL}/docx-brief/prompt.md`,
     metadataHref: `${demoBaseURL}/docx-brief/metadata.json`,
-    command: 'officecli new docx "OfficeCLI Skills customer brief" --prompt-file ./prompt.md --local-preview --no-publish',
+    command: 'officecli new docx "OfficeCLI customer brief" --prompt-file ./prompt.md --local-preview --no-publish',
   },
   {
     title: 'Demo adoption dashboard',
@@ -245,7 +245,7 @@ export const generationDemos: GenerationDemo[] = [
     type: 'IMG',
     description: 'A cinematic office scene showing teams hand-writing PPT, Word, and Excel work while the foreground user generates organized outputs with OfficeCLI.',
     previewSrc: `${demoRawBaseURL}/standalone-img/preview.png`,
-    artifactHref: `${demoBaseURL}/standalone-img/officecli-skills-hero-image.png`,
+    artifactHref: `${demoBaseURL}/standalone-img/officecli-hero-image.png`,
     artifactLabel: 'Download PNG',
     promptHref: `${demoBaseURL}/standalone-img/prompt.md`,
     metadataHref: `${demoBaseURL}/standalone-img/metadata.json`,
@@ -255,8 +255,8 @@ export const generationDemos: GenerationDemo[] = [
 
 export const agentSkillsFAQs: FAQEntry[] = [
   {
-    q: 'What is the difference between OfficeCLI and officecli-skills?',
-    a: 'OfficeCLI is the local document engine. `officecli-skills` is the public repository that distributes the skill definitions, plugin wrappers, and install scripts for agent clients.',
+    q: 'What is the public officecli repository for?',
+    a: '`officecli` is the public repository that distributes skill definitions, plugin wrappers, demos, and install scripts for agent clients. The private OfficeCLI engine source lives separately.',
   },
   {
     q: 'Can Claude Code create PPTX, DOCX, XLSX, or report outputs with this repo?',
@@ -271,7 +271,7 @@ export const agentSkillsFAQs: FAQEntry[] = [
     a: 'No. The public skills repo distributes local wrappers and setup logic. Document generation still runs through the user-managed OfficeCLI runtime on the local machine.',
   },
   {
-    q: 'Why create multiple officecli-skills pages instead of one long landing page?',
+    q: 'Why create multiple officecli pages instead of one long landing page?',
     a: 'Because clear child pages give users and search engines distinct entrypoints for install, Claude Code, Codex, OpenClaw, and FAQ intent instead of forcing every query onto one generic page.',
   },
 ]
@@ -319,13 +319,13 @@ export function getAgentSkillsBreadcrumbs(pathname: string) {
   if (route.path === agentSkillsHubPath) {
     return [
       { label: 'Home', to: '/' },
-      { label: 'officecli-skills' },
+      { label: 'officecli' },
     ]
   }
 
   return [
     { label: 'Home', to: '/' },
-    { label: 'officecli-skills', to: agentSkillsHubPath },
+    { label: 'officecli', to: agentSkillsHubPath },
     { label: route.label },
   ]
 }

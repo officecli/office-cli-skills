@@ -133,20 +133,20 @@ describe('marketing site shell', () => {
 
   it('renders the agent skills landing page with route-specific metadata', () => {
     render(
-      <MemoryRouter initialEntries={['/officecli-skills']}>
+      <MemoryRouter initialEntries={['/officecli']}>
         <App />
       </MemoryRouter>,
     )
 
     expect(
-      screen.getByRole('heading', { name: /officecli-skills for Claude Code, Codex, and AI Agents/i, level: 1 }),
+      screen.getByRole('heading', { name: /officecli for Claude Code, Codex, and AI Agents/i, level: 1 }),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Generation demos/i, level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Image-rich strategy deck/i, level: 3 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /OfficeCLI deadline automation image/i, level: 3 })).toBeInTheDocument()
     expect(screen.getAllByText(/Download PPTX/i).length).toBeGreaterThan(0)
-    expect(document.title).toContain('officecli-skills')
-    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/officecli-skills')
+    expect(document.title).toContain('officecli')
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/officecli')
   })
 
   it('uses the new canonical skills hub for the legacy agent skills path', () => {
@@ -156,20 +156,33 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/officecli-skills')
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://officecli.io/officecli')
+  })
+
+  it('redirects old officecli-skills child paths to the new officecli path', () => {
+    render(
+      <MemoryRouter initialEntries={['/officecli-skills/codex']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: /Direct local skill install without a marketplace layer/i, level: 1 })).toBeInTheDocument()
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      'https://officecli.io/officecli/codex',
+    )
   })
 
   it('renders the install child page with route-specific metadata', () => {
     render(
-      <MemoryRouter initialEntries={['/officecli-skills/install']}>
+      <MemoryRouter initialEntries={['/officecli/install']}>
         <App />
       </MemoryRouter>,
     )
 
     expect(screen.getByRole('heading', { name: /Choose the install path that matches the agent runtime/i, level: 1 })).toBeInTheDocument()
-    expect(document.title).toContain('Install officecli-skills')
+    expect(document.title).toContain('Install officecli')
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
-      'https://officecli.io/officecli-skills/install',
+      'https://officecli.io/officecli/install',
     )
   })
 
@@ -272,9 +285,9 @@ describe('site metadata and assets', () => {
 
     expect(robots).toContain('Sitemap: https://officecli.io/sitemap.xml')
     expect(sitemap).toContain('<loc>https://officecli.io/docs</loc>')
-    expect(sitemap).toContain('<loc>https://officecli.io/officecli-skills</loc>')
-    expect(sitemap).toContain('<loc>https://officecli.io/officecli-skills/install</loc>')
-    expect(sitemap).toContain('<loc>https://officecli.io/officecli-skills/codex</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/officecli</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/officecli/install</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/officecli/codex</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/claude-code-codex-office-skills</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/download</loc>')
   })
@@ -289,9 +302,9 @@ describe('site metadata and assets', () => {
   })
 
   it('renders prerendered agent skills html with search-focused copy', () => {
-    const html = renderRouteApp('/officecli-skills')
+    const html = renderRouteApp('/officecli')
 
-    expect(html).toContain('officecli-skills for Claude Code, Codex, and AI Agents')
+    expect(html).toContain('officecli for Claude Code, Codex, and AI Agents')
     expect(html).toContain('Primary entrypoints')
     expect(html).toContain('Generation demos')
     expect(html).toContain('Image-rich strategy deck')
@@ -299,9 +312,9 @@ describe('site metadata and assets', () => {
   })
 
   it('renders prerendered child skills pages with unique headings', () => {
-    const html = renderRouteApp('/officecli-skills/openclaw')
+    const html = renderRouteApp('/officecli/openclaw')
 
-    expect(html).toContain('officecli-skills for OpenClaw')
+    expect(html).toContain('officecli for OpenClaw')
     expect(html).toContain('structured, channel-based Office document generation')
   })
 })

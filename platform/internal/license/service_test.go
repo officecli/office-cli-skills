@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	growthsvc "github.com/officecli/officecli/platform/internal/growth"
-	"github.com/officecli/officecli/platform/internal/model"
-	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
+	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
+	"github.com/officecli/officecli-internal/platform/internal/model"
+	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
 )
 
 type fakeAPIKeyStore struct {

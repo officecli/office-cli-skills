@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	licenseprovider "github.com/officecli/officecli/internal/license"
-	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	licenseprovider "github.com/officecli/officecli-internal/internal/license"
+	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
 )
 
 func LoadConfig(path string) (Config, error) {

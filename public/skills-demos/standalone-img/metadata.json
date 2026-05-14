@@ -2,7 +2,7 @@
   "title": "OfficeCLI deadline automation image",
   "type": "img",
   "command": "officecli new img \"OfficeCLI deadline automation image\" --prompt-file ./prompt.md --ratio landscape --no-publish",
-  "artifact": "officecli-skills-hero-image.png",
+  "artifact": "officecli-hero-image.png",
   "preview": "preview.png",
   "prompt_file": "prompt.md",
   "verified_at": "2026-05-14T00:00:00Z",
@@ -17,7 +17,7 @@
     "Use the command above with configured external or hosted image generation to reproduce the prompt with the active image provider."
   ],
   "sha256": {
-    "officecli-skills-hero-image.png": "9a67de6312e03a61f75223ff9f9281af7c58543a3e992c0bd493738bc20135fc",
+    "officecli-hero-image.png": "9a67de6312e03a61f75223ff9f9281af7c58543a3e992c0bd493738bc20135fc",
     "preview.png": "9a67de6312e03a61f75223ff9f9281af7c58543a3e992c0bd493738bc20135fc",
     "prompt.md": "918f0d82b2b699d21100c79cdf95d76e14b9e3a70101e57e460e824bbddf2c5e"
   }

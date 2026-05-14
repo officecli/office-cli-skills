@@ -40,7 +40,7 @@ for dir in "${ROOT}"/*; do
       --window-size=1280,900 \
       --screenshot="${dir}/preview.png" \
       "file://${html_path}" >/dev/null 2>&1
-  elif [[ -f "${dir}/officecli-skills-hero-image.png" ]]; then
-    cp "${dir}/officecli-skills-hero-image.png" "${dir}/preview.png"
+  elif [[ -f "${dir}/officecli-hero-image.png" ]]; then
+    cp "${dir}/officecli-hero-image.png" "${dir}/preview.png"
   fi
 done

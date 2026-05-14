@@ -22,7 +22,7 @@ export interface InstallTabContent {
 }
 
 export const stableInstallScript =
-  'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-officecli.sh | bash'
+  'curl -fsSL https://raw.githubusercontent.com/officecli/officecli-dist/main/scripts/install-officecli.sh | bash'
 
 export const firstRunCommands: FirstRunCommand[] = [
   {

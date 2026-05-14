@@ -22,7 +22,7 @@ if [[ -z "${PUBLIC_SKILLS_DRY_RUN_DIR}" && ( -z "${GH_TOKEN:-}" || -z "${PUBLIC_
   exit 1
 fi
 if [[ -n "${PUBLIC_SKILLS_DRY_RUN_DIR}" && -z "${PUBLIC_SKILLS_REPO}" ]]; then
-  PUBLIC_SKILLS_REPO="officecli/officecli-skills"
+  PUBLIC_SKILLS_REPO="officecli/officecli"
 fi
 
 tmpdir="$(mktemp -d)"
@@ -62,7 +62,7 @@ cat > scripts/install-skill.sh <<'INSTALLER'
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/officecli/officecli-skills.git}"
+REPO_URL="${REPO_URL:-https://github.com/officecli/officecli.git}"
 SKILL_NAME="${1:-officecli}"
 DEST_ROOT="${DEST_ROOT:-${HOME}/.codex/skills}"
 AUTO_INSTALL_BINARY="${AUTO_INSTALL_BINARY:-1}"
@@ -198,7 +198,7 @@ cat > scripts/install-openclaw-skill.sh <<'INSTALLER'
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/officecli/officecli-skills.git}"
+REPO_URL="${REPO_URL:-https://github.com/officecli/officecli.git}"
 SKILL_NAME="${SKILL_NAME:-openclaw-officecli}"
 OPENCLAW_HOME="${OPENCLAW_HOME:-${HOME}/.openclaw}"
 DEST_ROOT="${OPENCLAW_HOME}/skills"
@@ -365,9 +365,9 @@ INSTALLER
 chmod +x scripts/install-openclaw-skill.sh
 
 cat > README.md <<'README'
-# OfficeCLI Skills for Claude Code, Codex, and AI Agents
+# OfficeCLI for Claude Code, Codex, and AI Agents
 
-`officecli-skills` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
+`officecli` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
 Claude Code, Codex, and other AI agents run local Office document workflows. Use this repository when
 you need an AI agent skill for `pptx`, `docx`, `xlsx`, workbook-backed `report`, or standalone `img`
 tasks. Document generation stays on the same machine through a local `officecli` runtime; standalone
@@ -384,12 +384,12 @@ This repository is the public distribution surface for:
 
 Site pages:
 
-- [Overview](https://officecli.io/officecli-skills)
-- [Install](https://officecli.io/officecli-skills/install)
-- [Claude Code](https://officecli.io/officecli-skills/claude-code)
-- [Codex](https://officecli.io/officecli-skills/codex)
-- [OpenClaw](https://officecli.io/officecli-skills/openclaw)
-- [FAQ](https://officecli.io/officecli-skills/faq)
+- [Overview](https://officecli.io/officecli)
+- [Install](https://officecli.io/officecli/install)
+- [Claude Code](https://officecli.io/officecli/claude-code)
+- [Codex](https://officecli.io/officecli/codex)
+- [OpenClaw](https://officecli.io/officecli/openclaw)
+- [FAQ](https://officecli.io/officecli/faq)
 
 GitHub guides in this repository:
 
@@ -402,9 +402,9 @@ GitHub guides in this repository:
 
 Related product page:
 
-- `https://officecli.io/officecli-skills`
+- `https://officecli.io/officecli`
 
-## What OfficeCLI Skills supports
+## What OfficeCLI supports
 
 The public `officecli` skill is designed for agent workflows such as:
 
@@ -425,10 +425,10 @@ the flow with a configured OfficeCLI runtime.
 | --- | --- | --- |
 | Image-rich strategy deck | ![Image-rich strategy deck](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
 | Text-only executive briefing | ![Text-only executive briefing](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
-| OfficeCLI Skills customer brief | ![OfficeCLI Skills customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-skills-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| OfficeCLI customer brief | ![OfficeCLI customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
 | Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
 | Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
-| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
 
 See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
@@ -447,7 +447,7 @@ Add the OfficeCLI marketplace source:
 Install the primary plugin:
 
 ```text
-/plugin install officecli@officecli-skills
+/plugin install officecli@officecli
 ```
 
 ### Codex and other local agents
@@ -521,10 +521,10 @@ For OpenClaw, also verify:
 officecli agent-bridge
 ```
 
-## How OfficeCLI and officecli-skills fit together
+## How OfficeCLI and officecli fit together
 
 - `OfficeCLI` is the local Office document engine
-- `officecli-skills` is the public GitHub repository for skills, plugin wrappers, and installers
+- `officecli` is the public GitHub repository for skills, plugin wrappers, and installers
 - `officecli` is the general skill for Claude Code, Codex, and other local agents
 - `openclaw-officecli` is the OpenClaw-oriented package
 
@@ -579,13 +579,13 @@ PY
 mkdir -p install claude-code codex openclaw faq
 
 cat > install/README.md <<'README'
-# Install officecli-skills
+# Install officecli
 
-Use this guide when the search intent is specifically about how to install `officecli-skills`.
+Use this guide when the search intent is specifically about how to install `officecli`.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/install`
+- `https://officecli.io/officecli/install`
 
 Choose the install path that matches the runtime:
 
@@ -606,32 +606,32 @@ officecli agent-bridge
 README
 
 cat > claude-code/README.md <<'README'
-# officecli-skills for Claude Code
+# officecli for Claude Code
 
-Use this guide when you want the Claude Code marketplace installation path for `officecli-skills`.
+Use this guide when you want the Claude Code marketplace installation path for `officecli`.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/claude-code`
+- `https://officecli.io/officecli/claude-code`
 
 Marketplace install:
 
 ```text
 /plugin marketplace add __PUBLIC_SKILLS_REPO__
-/plugin install officecli@officecli-skills
+/plugin install officecli@officecli
 ```
 
 This path is for local Office workflows through Claude Code. It is not a hosted plugin backend.
 README
 
 cat > codex/README.md <<'README'
-# officecli-skills for Codex
+# officecli for Codex
 
 Use this guide when you want the direct local installer for Codex-style agents.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/codex`
+- `https://officecli.io/officecli/codex`
 
 Direct install:
 
@@ -643,13 +643,13 @@ This path installs the public skill bundle directly on the local machine without
 README
 
 cat > openclaw/README.md <<'README'
-# officecli-skills for OpenClaw
+# officecli for OpenClaw
 
 Use this guide when you want the OpenClaw-oriented package and `officecli agent-bridge`.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/openclaw`
+- `https://officecli.io/officecli/openclaw`
 
 Install:
 
@@ -665,17 +665,17 @@ officecli agent-bridge
 README
 
 cat > faq/README.md <<'README'
-# officecli-skills FAQ
+# officecli FAQ
 
-Use this guide when the question is not installation itself, but whether `officecli-skills` is the right entrypoint.
+Use this guide when the question is not installation itself, but whether `officecli` is the right entrypoint.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/faq`
+- `https://officecli.io/officecli/faq`
 
 Key answers:
 
-- `officecli-skills` is the public repository for wrappers, skills, and installers
+- `officecli` is the public repository for wrappers, skills, and installers
 - `officecli` is the local runtime that produces the final Office file
 - marketplace install is only one path; direct local install is another
 - this repository is not a hosted SaaS plugin backend
@@ -711,7 +711,7 @@ if demo_root.is_dir():
 
 if rows:
     lines = [
-        "# officecli-skills generation demos",
+        "# officecli generation demos",
         "",
         "Each demo includes a preview image, generated artifact, prompt, metadata, and a reproducible OfficeCLI command.",
         "",
@@ -759,7 +759,7 @@ if rows:
         )
     ref_lines.extend([
         "",
-        "Public repository: https://github.com/officecli/officecli-skills",
+        "Public repository: https://github.com/officecli/officecli",
         "",
     ])
     for target in [

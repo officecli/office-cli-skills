@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli/engine"
-	llmprovider "github.com/officecli/officecli/internal/providers/llm"
+	"github.com/officecli/officecli-internal/engine"
+	llmprovider "github.com/officecli/officecli-internal/internal/providers/llm"
 )
 
 const hostedImageTimeoutSec = 1200

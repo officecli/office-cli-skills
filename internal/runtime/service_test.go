@@ -15,10 +15,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
-	"github.com/officecli/officecli/pkg/officegen"
-	"github.com/officecli/officecli/pkg/ooxmledit"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli-internal/pkg/ooxmledit"
 )
 
 type fakeLLMClient struct {

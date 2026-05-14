@@ -9,9 +9,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
-	"github.com/officecli/officecli/pkg/officegen"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
 type GenerateParams struct {

@@ -11,12 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/officecli/officecli/platform/internal/apikey"
-	"github.com/officecli/officecli/platform/internal/appuser"
-	"github.com/officecli/officecli/platform/internal/auth"
-	"github.com/officecli/officecli/platform/internal/discordoauth"
-	growthsvc "github.com/officecli/officecli/platform/internal/growth"
-	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	"github.com/officecli/officecli-internal/platform/internal/appuser"
+	"github.com/officecli/officecli-internal/platform/internal/auth"
+	"github.com/officecli/officecli-internal/platform/internal/discordoauth"
+	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
+	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
 type overviewRouteStore struct {

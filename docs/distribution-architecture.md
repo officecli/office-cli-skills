@@ -37,7 +37,7 @@ It should own:
 
 ### Public skills repository
 
-Suggested repository: `officecli/officecli-skills`
+Suggested repository: `officecli/officecli`
 
 It should own:
 
@@ -102,7 +102,7 @@ Current stable retention flow:
 - `PUBLIC_DIST_DEFAULT_BRANCH=main`
 - `HOMEBREW_TAP_REPO=officecli/homebrew-officecli`
 - `HOMEBREW_TAP_DEFAULT_BRANCH=main`
-- `PUBLIC_SKILLS_REPO=officecli/officecli-skills`
+- `PUBLIC_SKILLS_REPO=officecli/officecli`
 - `PUBLIC_SKILLS_DEFAULT_BRANCH=main`
 - `PUBLIC_NPM_REPO=officecli/officecli-npm`
 - `PUBLIC_NPM_DEFAULT_BRANCH=main`

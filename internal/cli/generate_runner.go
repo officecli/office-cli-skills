@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/officecli/officecli/engine"
-	generateengine "github.com/officecli/officecli/engine/generate"
-	publishprovider "github.com/officecli/officecli/internal/providers/publish"
-	"github.com/officecli/officecli/internal/runtime"
+	"github.com/officecli/officecli-internal/engine"
+	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
+	"github.com/officecli/officecli-internal/internal/runtime"
 )
 
 func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJob, isTTY bool, progress progressController, prompter Prompter) (GenerateResult, error) {

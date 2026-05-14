@@ -98,7 +98,7 @@ drawText('SHARE', 1062, 498, 2, colors.secondary)
 const outputArg = process.argv[2]
 const outputPath = outputArg
   ? path.resolve(outputArg)
-  : path.resolve(import.meta.dirname, '../public/social-preview-officecli-skills.png')
+  : path.resolve(import.meta.dirname, '../public/social-preview-officecli.png')
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true })
 fs.writeFileSync(outputPath, encodePNG(WIDTH, HEIGHT, canvas))

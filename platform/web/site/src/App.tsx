@@ -17,6 +17,12 @@ import AgentSkillsOpenClawPage from './pages/AgentSkillsOpenClawPage'
 import AgentSkillsFAQPage from './pages/AgentSkillsFAQPage'
 import { applyDocumentSEO, getRouteSEO } from './seo'
 
+function LegacyAgentSkillsRedirect() {
+  const location = useLocation()
+  const target = `${location.pathname.replace(/^\/officecli-skills/, '/officecli')}${location.search}${location.hash}`
+  return <Navigate to={target} replace />
+}
+
 function SiteShell() {
   const location = useLocation()
 
@@ -40,12 +46,13 @@ function SiteShell() {
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/docs" element={<DocsPage />} />
-        <Route path="/officecli-skills" element={<AgentSkillsPage />} />
-        <Route path="/officecli-skills/install" element={<AgentSkillsInstallPage />} />
-        <Route path="/officecli-skills/claude-code" element={<AgentSkillsClaudeCodePage />} />
-        <Route path="/officecli-skills/codex" element={<AgentSkillsCodexPage />} />
-        <Route path="/officecli-skills/openclaw" element={<AgentSkillsOpenClawPage />} />
-        <Route path="/officecli-skills/faq" element={<AgentSkillsFAQPage />} />
+        <Route path="/officecli" element={<AgentSkillsPage />} />
+        <Route path="/officecli/install" element={<AgentSkillsInstallPage />} />
+        <Route path="/officecli/claude-code" element={<AgentSkillsClaudeCodePage />} />
+        <Route path="/officecli/codex" element={<AgentSkillsCodexPage />} />
+        <Route path="/officecli/openclaw" element={<AgentSkillsOpenClawPage />} />
+        <Route path="/officecli/faq" element={<AgentSkillsFAQPage />} />
+        <Route path="/officecli-skills/*" element={<LegacyAgentSkillsRedirect />} />
         <Route path="/claude-code-codex-office-skills" element={<AgentSkillsPage />} />
         <Route path="/faq" element={<FAQPage />} />
         <Route path="/login" element={<LoginPage />} />

@@ -10,10 +10,10 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/officecli/officecli/platform/internal/apikey"
-	"github.com/officecli/officecli/platform/internal/model"
-	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
-	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	"github.com/officecli/officecli-internal/platform/internal/model"
+	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
 )
 
 type fakeCodec struct{}

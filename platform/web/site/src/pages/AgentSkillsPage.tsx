@@ -24,13 +24,13 @@ export default function AgentSkillsPage() {
         <div className="relative mx-auto grid max-w-[1440px] gap-10 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)] lg:items-start">
           <div>
             <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-4 py-2 font-headline text-xs uppercase tracking-[0.28em] text-primary">
-              officecli-skills public repository
+              officecli public repository
             </span>
             <h1 className="max-w-5xl font-headline text-5xl font-bold tracking-tight text-white md:text-6xl lg:text-7xl">
-              officecli-skills for Claude Code, Codex, and AI Agents
+              officecli for Claude Code, Codex, and AI Agents
             </h1>
             <p className="mt-6 max-w-4xl text-lg leading-relaxed text-outline-variant md:text-xl">
-              <strong className="text-white">officecli-skills</strong> is the public GitHub repository and install surface for Claude Code,
+              <strong className="text-white">officecli</strong> is the public GitHub repository and install surface for Claude Code,
               Codex, OpenClaw, and other AI agents that need local <strong className="text-white">PPTX</strong>,{' '}
               <strong className="text-white">DOCX</strong>, <strong className="text-white">XLSX</strong>, and workbook-backed{' '}
               <strong className="text-white">report</strong> workflows. It packages marketplace metadata, public skill bundles, install scripts,
@@ -237,7 +237,7 @@ export default function AgentSkillsPage() {
               <h3 className="font-headline text-2xl font-bold text-white">Related entrypoints</h3>
               <div className="mt-5 space-y-4 text-sm leading-relaxed">
                 <a className="block text-primary transition-colors hover:text-tertiary" href={githubRepoURL}>
-                  GitHub: officecli/officecli-skills
+                  GitHub: officecli/officecli
                 </a>
                 <Link className="block text-primary transition-colors hover:text-tertiary" to={`${agentSkillsHubPath}/claude-code`}>
                   Claude Code marketplace install

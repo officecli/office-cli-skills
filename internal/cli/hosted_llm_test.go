@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli-internal/engine"
 )
 
 func TestHostedModelNamesUseModalityProfiles(t *testing.T) {
