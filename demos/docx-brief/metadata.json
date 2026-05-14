@@ -1,8 +1,8 @@
 {
-  "title": "OfficeCLI Skills customer brief",
+  "title": "OfficeCLI customer brief",
   "type": "docx",
-  "command": "officecli new docx \"OfficeCLI Skills customer brief\" --prompt-file ./prompt.md --local-preview --no-publish",
-  "artifact": "officecli-skills-customer-brief.docx",
+  "command": "officecli new docx \"OfficeCLI customer brief\" --prompt-file ./prompt.md --local-preview --no-publish",
+  "artifact": "officecli-customer-brief.docx",
   "preview": "preview.png",
   "prompt_file": "prompt.md",
   "verified_at": "2026-05-14T00:00:00Z",
@@ -16,7 +16,7 @@
     "OfficeCLI renderer suggested file name: OfficeCLI_Skills_customer_brief.docx."
   ],
   "sha256": {
-    "officecli-skills-customer-brief.docx": "1c6dcfa1218ddc24126ca0217e5872265c88727106d2ba59af4d8b730b497084",
+    "officecli-customer-brief.docx": "1c6dcfa1218ddc24126ca0217e5872265c88727106d2ba59af4d8b730b497084",
     "prompt.md": "dfb5172c913a10c257e95c01810bceabbec813621786e23c04239f3f9e9e370b"
   }
 }

@@ -1,16 +1,16 @@
-# officecli-skills for Claude Code
+# officecli for Claude Code
 
-Use this guide when you want the Claude Code marketplace installation path for `officecli-skills`.
+Use this guide when you want the Claude Code marketplace installation path for `officecli`.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/claude-code`
+- `https://officecli.io/officecli/claude-code`
 
 Marketplace install:
 
 ```text
-/plugin marketplace add officecli/officecli-skills
-/plugin install officecli@officecli-skills
+/plugin marketplace add officecli/officecli
+/plugin install officecli@officecli
 ```
 
 This path is for local Office workflows through Claude Code. It is not a hosted plugin backend.

@@ -1,10 +1,10 @@
-# Install officecli-skills
+# Install officecli
 
-Use this guide when the search intent is specifically about how to install `officecli-skills`.
+Use this guide when the search intent is specifically about how to install `officecli`.
 
 Main page:
 
-- `https://officecli.io/officecli-skills/install`
+- `https://officecli.io/officecli/install`
 
 Choose the install path that matches the runtime:
 

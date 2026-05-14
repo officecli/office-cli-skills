@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/officecli/officecli-skills.git}"
+REPO_URL="${REPO_URL:-https://github.com/officecli/officecli.git}"
 SKILL_NAME="${1:-officecli}"
 DEST_ROOT="${DEST_ROOT:-${HOME}/.codex/skills}"
 AUTO_INSTALL_BINARY="${AUTO_INSTALL_BINARY:-1}"

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/officecli/officecli-skills.git}"
+REPO_URL="${REPO_URL:-https://github.com/officecli/officecli.git}"
 SKILL_NAME="${SKILL_NAME:-openclaw-officecli}"
 OPENCLAW_HOME="${OPENCLAW_HOME:-${HOME}/.openclaw}"
 DEST_ROOT="${OPENCLAW_HOME}/skills"

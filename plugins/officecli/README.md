@@ -34,7 +34,7 @@ The plugin adds the `officecli` skill to Claude Code so the agent can:
 
 This plugin is distributed through the OfficeCLI marketplace repository:
 
-- `https://github.com/officecli/officecli-skills`
+- `https://github.com/officecli/officecli`
 
 ## Basic verification
 

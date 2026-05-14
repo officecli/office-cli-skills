@@ -1,6 +1,6 @@
-# OfficeCLI Skills for Claude Code, Codex, and AI Agents
+# OfficeCLI for Claude Code, Codex, and AI Agents
 
-`officecli-skills` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
+`officecli` is the public GitHub repository for OfficeCLI skills and plugin wrappers that help
 Claude Code, Codex, and other AI agents run local Office document workflows. Use this repository when
 you need an AI agent skill for `pptx`, `docx`, `xlsx`, workbook-backed `report`, or standalone `img`
 tasks. Document generation stays on the same machine through a local `officecli` runtime; standalone
@@ -17,12 +17,12 @@ This repository is the public distribution surface for:
 
 Site pages:
 
-- [Overview](https://officecli.io/officecli-skills)
-- [Install](https://officecli.io/officecli-skills/install)
-- [Claude Code](https://officecli.io/officecli-skills/claude-code)
-- [Codex](https://officecli.io/officecli-skills/codex)
-- [OpenClaw](https://officecli.io/officecli-skills/openclaw)
-- [FAQ](https://officecli.io/officecli-skills/faq)
+- [Overview](https://officecli.io/officecli)
+- [Install](https://officecli.io/officecli/install)
+- [Claude Code](https://officecli.io/officecli/claude-code)
+- [Codex](https://officecli.io/officecli/codex)
+- [OpenClaw](https://officecli.io/officecli/openclaw)
+- [FAQ](https://officecli.io/officecli/faq)
 
 GitHub guides in this repository:
 
@@ -35,9 +35,9 @@ GitHub guides in this repository:
 
 Related product page:
 
-- `https://officecli.io/officecli-skills`
+- `https://officecli.io/officecli`
 
-## What OfficeCLI Skills supports
+## What OfficeCLI supports
 
 The public `officecli` skill is designed for agent workflows such as:
 
@@ -58,10 +58,10 @@ the flow with a configured OfficeCLI runtime.
 | --- | --- | --- |
 | Image-rich strategy deck | ![Image-rich strategy deck](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
 | Text-only executive briefing | ![Text-only executive briefing](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
-| OfficeCLI Skills customer brief | ![OfficeCLI Skills customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-skills-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| OfficeCLI customer brief | ![OfficeCLI customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
 | Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
 | Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
-| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
 
 See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
@@ -74,13 +74,13 @@ Use the marketplace source when you want Claude Code to install the OfficeCLI pl
 Add the OfficeCLI marketplace source:
 
 ```text
-/plugin marketplace add officecli/officecli-skills
+/plugin marketplace add officecli/officecli
 ```
 
 Install the primary plugin:
 
 ```text
-/plugin install officecli@officecli-skills
+/plugin install officecli@officecli
 ```
 
 ### Codex and other local agents
@@ -90,19 +90,19 @@ Use the direct installer when you want the public skill files without marketplac
 Use `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | bash -s -- officecli
+wget -qO- https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-skill.sh | bash -s -- officecli
 ```
 
 Or use `curl`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | bash -s -- officecli
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-skill.sh | bash -s -- officecli
 ```
 
 If you only want the skill and do not want to auto-install the binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-skill.sh | AUTO_INSTALL_BINARY=0 bash -s -- officecli
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-skill.sh | AUTO_INSTALL_BINARY=0 bash -s -- officecli
 ```
 
 ### OpenClaw
@@ -113,13 +113,13 @@ other channels, install the OpenClaw-facing skill package.
 Use `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash
+wget -qO- https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | bash
 ```
 
 Or use `curl`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | bash
 ```
 
 The OpenClaw installer will:
@@ -131,7 +131,7 @@ The OpenClaw installer will:
 If you only want the OpenClaw skill and do not want to auto-install the binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/officecli/officecli-skills/main/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
+curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-openclaw-skill.sh | AUTO_INSTALL_BINARY=0 bash
 ```
 
 ## Requirements
@@ -154,10 +154,10 @@ For OpenClaw, also verify:
 officecli agent-bridge
 ```
 
-## How OfficeCLI and officecli-skills fit together
+## How OfficeCLI and officecli fit together
 
 - `OfficeCLI` is the local Office document engine
-- `officecli-skills` is the public GitHub repository for skills, plugin wrappers, and installers
+- `officecli` is the public GitHub repository for skills, plugin wrappers, and installers
 - `officecli` is the general skill for Claude Code, Codex, and other local agents
 - `openclaw-officecli` is the OpenClaw-oriented package
 
