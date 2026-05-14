@@ -9,22 +9,35 @@ PUBLIC_SKILL_NAME="officecli"
 OPENCLAW_SKILL_NAME="openclaw-officecli"
 CLAUDE_MARKETPLACE_DIR=".claude-plugin"
 CLAUDE_PLUGIN_ROOT="plugins"
+PUBLIC_DEMOS_SOURCE_DIR="public/skills-demos"
 DIST_REPO="${DIST_REPO:-officecli/officecli-dist}"
 HOMEBREW_TAP_REPO="${HOMEBREW_TAP_REPO:-officecli/homebrew-officecli}"
 HOMEBREW_TAP_NAME="${HOMEBREW_TAP_NAME:-officecli/officecli}"
 HOMEBREW_FORMULA="${HOMEBREW_FORMULA:-officecli}"
 
-if [[ -z "${GH_TOKEN:-}" || -z "${PUBLIC_SKILLS_REPO}" ]]; then
+PUBLIC_SKILLS_DRY_RUN_DIR="${PUBLIC_SKILLS_DRY_RUN_DIR:-}"
+
+if [[ -z "${PUBLIC_SKILLS_DRY_RUN_DIR}" && ( -z "${GH_TOKEN:-}" || -z "${PUBLIC_SKILLS_REPO}" ) ]]; then
   echo "GH_TOKEN and PUBLIC_SKILLS_REPO are required" >&2
   exit 1
+fi
+if [[ -n "${PUBLIC_SKILLS_DRY_RUN_DIR}" && -z "${PUBLIC_SKILLS_REPO}" ]]; then
+  PUBLIC_SKILLS_REPO="officecli/officecli-skills"
 fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-git clone "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_SKILLS_REPO}.git" "${tmpdir}/skills-repo"
-cd "${tmpdir}/skills-repo"
-git checkout "${PUBLIC_SKILLS_DEFAULT_BRANCH}"
+if [[ -n "${PUBLIC_SKILLS_DRY_RUN_DIR}" ]]; then
+  rm -rf "${PUBLIC_SKILLS_DRY_RUN_DIR}"
+  mkdir -p "${PUBLIC_SKILLS_DRY_RUN_DIR}"
+  cd "${PUBLIC_SKILLS_DRY_RUN_DIR}"
+  git init -q
+else
+  git clone "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_SKILLS_REPO}.git" "${tmpdir}/skills-repo"
+  cd "${tmpdir}/skills-repo"
+  git checkout "${PUBLIC_SKILLS_DEFAULT_BRANCH}"
+fi
 
 find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 mkdir -p "skills/${PUBLIC_SKILL_NAME}" "skills/${OPENCLAW_SKILL_NAME}"
@@ -37,6 +50,10 @@ fi
 if [[ -d "${SOURCE_REPO_ROOT}/${CLAUDE_PLUGIN_ROOT}" ]]; then
   mkdir -p "${CLAUDE_PLUGIN_ROOT}"
   cp -R "${SOURCE_REPO_ROOT}/${CLAUDE_PLUGIN_ROOT}/." "./${CLAUDE_PLUGIN_ROOT}/"
+fi
+if [[ -d "${SOURCE_REPO_ROOT}/${PUBLIC_DEMOS_SOURCE_DIR}" ]]; then
+  mkdir -p demos
+  cp -R "${SOURCE_REPO_ROOT}/${PUBLIC_DEMOS_SOURCE_DIR}/." "./demos/"
 fi
 mkdir -p scripts
 
@@ -377,6 +394,7 @@ Site pages:
 GitHub guides in this repository:
 
 - [Install](./install/README.md)
+- [Generation demos](./demos/README.md)
 - [Claude Code](./claude-code/README.md)
 - [Codex](./codex/README.md)
 - [OpenClaw](./openclaw/README.md)
@@ -396,6 +414,23 @@ The public `officecli` skill is designed for agent workflows such as:
 - report workflows routed through OfficeCLI when a workbook-backed report artifact is needed
 - standalone image generation through `office.generate` with server-controlled provider settings
 - capability checks before execution so the agent can decide whether OfficeCLI supports the request
+
+## Generation demos
+
+These checked-in demos show the visible result and the reproducible inputs together. Each demo includes
+a preview image, the generated artifact, `prompt.md`, `metadata.json`, and the command used to reproduce
+the flow with a configured OfficeCLI runtime.
+
+| Demo | Preview | Files |
+| --- | --- | --- |
+| Image-rich strategy deck | ![Image-rich strategy deck](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
+| Text-only executive briefing | ![Text-only executive briefing](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
+| OfficeCLI Skills customer brief | ![OfficeCLI Skills customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-skills-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
+| Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
+| OfficeCLI Skills hero image | ![OfficeCLI Skills hero image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+
+See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
 ## Supported agent runtimes
 
@@ -521,6 +556,7 @@ No. It contains public skill definitions, plugin wrappers, examples, and install
 - `openclaw/README.md`: OpenClaw installer and bridge guide
 - `faq/README.md`: FAQ entrypoint
 - `.claude-plugin/marketplace.json`: Claude Code marketplace definition
+- `demos/`: reproducible demo gallery with preview images, prompts, metadata, and generated files
 - `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
 - `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
 - `skills/officecli/`: public OfficeCLI skill definition
@@ -661,6 +697,79 @@ for path in paths:
     path.write_text(content)
 PY
 
+python3 - <<'PY'
+from pathlib import Path
+import json
+
+demo_root = Path("demos")
+rows = []
+if demo_root.is_dir():
+    for meta_path in sorted(demo_root.glob("*/metadata.json")):
+        meta = json.loads(meta_path.read_text())
+        slug = meta_path.parent.name
+        rows.append((slug, meta))
+
+if rows:
+    lines = [
+        "# officecli-skills generation demos",
+        "",
+        "Each demo includes a preview image, generated artifact, prompt, metadata, and a reproducible OfficeCLI command.",
+        "",
+        "| Demo | Type | Preview | Artifact | Reproduce |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for slug, meta in rows:
+        title = meta["title"]
+        typ = meta["type"]
+        artifact = meta["artifact"]
+        prompt = meta["prompt_file"]
+        preview = meta["preview"]
+        command = meta["command"].replace("|", "\\|")
+        lines.append(
+            f"| {title} | `{typ}` | [preview](./{slug}/{preview}) | "
+            f"[{artifact}](./{slug}/{artifact}) | `{command}` with [prompt](./{slug}/{prompt}) |"
+        )
+    lines.extend([
+        "",
+        "## Verification",
+        "",
+        "The source repository validates this directory with:",
+        "",
+        "```bash",
+        "scripts/validate-skills-demos.py public/skills-demos",
+        "```",
+        "",
+        "Every artifact is kept under 3MB so the public skills repository stays lightweight.",
+        "",
+    ])
+    demo_root.joinpath("README.md").write_text("\n".join(lines))
+
+    ref_lines = [
+        "# OfficeCLI demo gallery reference",
+        "",
+        "Use this reference when a user asks what OfficeCLI-generated outputs look like or wants a reproducible example.",
+        "",
+        "| Demo | Type | Public files |",
+        "| --- | --- | --- |",
+    ]
+    for slug, meta in rows:
+        ref_lines.append(
+            f"| {meta['title']} | `{meta['type']}` | "
+            f"`demos/{slug}/{meta['preview']}`, `demos/{slug}/{meta['artifact']}`, `demos/{slug}/{meta['prompt_file']}` |"
+        )
+    ref_lines.extend([
+        "",
+        "Public repository: https://github.com/officecli/officecli-skills",
+        "",
+    ])
+    for target in [
+        Path("skills/officecli/references/demos.md"),
+        Path("plugins/officecli/skills/officecli/references/demos.md"),
+    ]:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("\n".join(ref_lines))
+PY
+
 cat > LICENSE <<'LICENSE'
 MIT License
 
@@ -684,6 +793,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 LICENSE
+
+if [[ -n "${PUBLIC_SKILLS_DRY_RUN_DIR}" ]]; then
+  echo "public skills dry run ready: ${PUBLIC_SKILLS_DRY_RUN_DIR}"
+  exit 0
+fi
 
 if git diff --quiet; then
   echo "public skills repository already up to date"

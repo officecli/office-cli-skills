@@ -1,0 +1,26 @@
+{
+  "title": "Demo program readiness report",
+  "type": "report",
+  "command": "officecli new report \"Demo program readiness report\" --file ./demo-program-source-workbook.xlsx --prompt-file ./prompt.md --no-publish",
+  "artifact": "demo-program-readiness-report.html",
+  "preview": "preview.png",
+  "prompt_file": "prompt.md",
+  "verified_at": "2026-05-14T00:00:00Z",
+  "generated_with": "OfficeCLI renderer from this repository",
+  "verification": [
+    "metadata schema validated by scripts/validate-skills-demos.py",
+    "artifact exists and is under 3MB",
+    "preview image exists and is a valid PNG"
+  ],
+  "notes": [
+    "OfficeCLI renderer suggested file name: Demo_program_readiness_report.html."
+  ],
+  "additional_files": {
+    "source_workbook": "demo-program-source-workbook.xlsx"
+  },
+  "sha256": {
+    "demo-program-readiness-report.html": "571dffe60d26008cec81c44ad99043a93b68edf23f3855dc37686cd59dbc695a",
+    "demo-program-source-workbook.xlsx": "8694090441005ac4e4e4c3b7c9aebb7f8fac88b8e4226f4a6aa72f241cc62090",
+    "prompt.md": "c5e227212fd91b4d40305eef7731424b1faa1975dbab72196514f388468a7252"
+  }
+}

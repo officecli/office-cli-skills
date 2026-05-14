@@ -1,0 +1,22 @@
+{
+  "title": "Demo adoption dashboard",
+  "type": "xlsx",
+  "command": "officecli new xlsx \"Demo adoption dashboard\" --prompt-file ./prompt.md --local-preview --no-publish",
+  "artifact": "demo-adoption-dashboard.xlsx",
+  "preview": "preview.png",
+  "prompt_file": "prompt.md",
+  "verified_at": "2026-05-14T00:00:00Z",
+  "generated_with": "OfficeCLI renderer from this repository",
+  "verification": [
+    "metadata schema validated by scripts/validate-skills-demos.py",
+    "artifact exists and is under 3MB",
+    "preview image exists and is a valid PNG"
+  ],
+  "notes": [
+    "OfficeCLI renderer suggested file name: Demo_adoption_dashboard.xlsx."
+  ],
+  "sha256": {
+    "demo-adoption-dashboard.xlsx": "d45097f86db19dd2bd8ca6bd8ee9bf2ed312b3d10d709f774813147c065dc697",
+    "prompt.md": "2b66a5284b908f57c47a02c1eaedd9d6e39475aa1deeb2fdc8226e8d314e340e"
+  }
+}

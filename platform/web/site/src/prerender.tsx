@@ -1,4 +1,4 @@
-import { agentSkillsHubPath, agentSkillsRoutes, getAgentSkillsRoute, legacyAgentSkillsPath } from './agentSkillsData'
+import { agentSkillsHubPath, agentSkillsRoutes, generationDemos, getAgentSkillsRoute, legacyAgentSkillsPath } from './agentSkillsData'
 
 function compact(lines: string[]) {
   return lines.join('\n').trim()
@@ -23,6 +23,11 @@ function renderAgentSkillsRoute(pathname: string) {
       '    <section class="px-8 md:px-16 py-6 max-w-[1440px] mx-auto">',
       '      <h2 class="font-headline text-4xl font-bold text-white mb-4">Primary entrypoints</h2>',
       '      <p class="text-outline-variant text-lg leading-relaxed max-w-3xl">Use the install, Claude Code, Codex, OpenClaw, and FAQ pages as stable child pages for search and onboarding instead of relying on random raw file URLs.</p>',
+      '    </section>',
+      '    <section class="px-8 md:px-16 py-12 max-w-[1440px] mx-auto">',
+      '      <h2 class="font-headline text-4xl font-bold text-white mb-4">Generation demos</h2>',
+      '      <p class="text-outline-variant text-lg leading-relaxed max-w-3xl">Preview images, generated files, prompts, commands, and metadata live together in the public repository.</p>',
+      ...generationDemos.slice(0, 3).map((demo) => `      <p class="text-outline-variant text-sm leading-relaxed">${demo.title}: ${demo.artifactLabel}</p>`),
       '    </section>',
       '    <section class="px-8 md:px-16 py-12 max-w-[1440px] mx-auto">',
       '      <h2 class="font-headline text-4xl font-bold text-white mb-4">Install paths</h2>',

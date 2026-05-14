@@ -23,6 +23,18 @@ export interface RepoArtifact {
   detail: string
 }
 
+export interface GenerationDemo {
+  title: string
+  type: string
+  description: string
+  previewSrc: string
+  artifactHref: string
+  artifactLabel: string
+  promptHref: string
+  metadataHref: string
+  command: string
+}
+
 export interface FAQEntry {
   q: string
   a: string
@@ -166,6 +178,78 @@ export const repoArtifacts: RepoArtifact[] = [
     title: 'OpenClaw package',
     detail:
       'The OpenClaw-facing package keeps channel-based Office file generation on the same host through `officecli agent-bridge` instead of scraping human CLI output.',
+  },
+]
+
+const demoBaseURL = `${githubRepoURL}/blob/main/demos`
+const demoRawBaseURL = 'https://raw.githubusercontent.com/officecli/officecli-skills/main/demos'
+
+export const generationDemos: GenerationDemo[] = [
+  {
+    title: 'Image-rich strategy deck',
+    type: 'PPTX',
+    description: 'A visual strategy deck that demonstrates PPTX generation with embedded image assets and local preview sidecars.',
+    previewSrc: `${demoRawBaseURL}/pptx-image-rich/preview.png`,
+    artifactHref: `${demoBaseURL}/pptx-image-rich/image-rich-strategy-deck.pptx`,
+    artifactLabel: 'Download PPTX',
+    promptHref: `${demoBaseURL}/pptx-image-rich/prompt.md`,
+    metadataHref: `${demoBaseURL}/pptx-image-rich/metadata.json`,
+    command: 'officecli new pptx "Image-rich strategy deck" --prompt-file ./prompt.md --local-preview --no-publish',
+  },
+  {
+    title: 'Text-only executive briefing',
+    type: 'PPTX',
+    description: 'A compact executive deck that shows the reproducible text-only path with `--no-images`.',
+    previewSrc: `${demoRawBaseURL}/pptx-text-only/preview.png`,
+    artifactHref: `${demoBaseURL}/pptx-text-only/text-only-executive-briefing.pptx`,
+    artifactLabel: 'Download PPTX',
+    promptHref: `${demoBaseURL}/pptx-text-only/prompt.md`,
+    metadataHref: `${demoBaseURL}/pptx-text-only/metadata.json`,
+    command: 'officecli new pptx "Text-only executive briefing" --prompt-file ./prompt.md --local-preview --no-publish --no-images',
+  },
+  {
+    title: 'OfficeCLI Skills customer brief',
+    type: 'DOCX',
+    description: 'A customer-facing brief with headings, a decision callout, and a rollout table.',
+    previewSrc: `${demoRawBaseURL}/docx-brief/preview.png`,
+    artifactHref: `${demoBaseURL}/docx-brief/officecli-skills-customer-brief.docx`,
+    artifactLabel: 'Download DOCX',
+    promptHref: `${demoBaseURL}/docx-brief/prompt.md`,
+    metadataHref: `${demoBaseURL}/docx-brief/metadata.json`,
+    command: 'officecli new docx "OfficeCLI Skills customer brief" --prompt-file ./prompt.md --local-preview --no-publish',
+  },
+  {
+    title: 'Demo adoption dashboard',
+    type: 'XLSX',
+    description: 'A structured workbook showing demo coverage and readiness fields for operations tracking.',
+    previewSrc: `${demoRawBaseURL}/xlsx-dashboard/preview.png`,
+    artifactHref: `${demoBaseURL}/xlsx-dashboard/demo-adoption-dashboard.xlsx`,
+    artifactLabel: 'Download XLSX',
+    promptHref: `${demoBaseURL}/xlsx-dashboard/prompt.md`,
+    metadataHref: `${demoBaseURL}/xlsx-dashboard/metadata.json`,
+    command: 'officecli new xlsx "Demo adoption dashboard" --prompt-file ./prompt.md --local-preview --no-publish',
+  },
+  {
+    title: 'Demo program readiness report',
+    type: 'REPORT',
+    description: 'A workbook-backed HTML report with KPI cards, findings, chart evidence, and a source XLSX file.',
+    previewSrc: `${demoRawBaseURL}/report-workbook/preview.png`,
+    artifactHref: `${demoBaseURL}/report-workbook/demo-program-readiness-report.html`,
+    artifactLabel: 'Open HTML report',
+    promptHref: `${demoBaseURL}/report-workbook/prompt.md`,
+    metadataHref: `${demoBaseURL}/report-workbook/metadata.json`,
+    command: 'officecli new report "Demo program readiness report" --file ./demo-program-source-workbook.xlsx --prompt-file ./prompt.md --no-publish',
+  },
+  {
+    title: 'OfficeCLI Skills hero image',
+    type: 'IMG',
+    description: 'A standalone image example with the same prompt, metadata, and file-link pattern as document demos.',
+    previewSrc: `${demoRawBaseURL}/standalone-img/preview.png`,
+    artifactHref: `${demoBaseURL}/standalone-img/officecli-skills-hero-image.png`,
+    artifactLabel: 'Download PNG',
+    promptHref: `${demoBaseURL}/standalone-img/prompt.md`,
+    metadataHref: `${demoBaseURL}/standalone-img/metadata.json`,
+    command: 'officecli new img "OfficeCLI Skills hero image" --prompt-file ./prompt.md --ratio landscape --no-publish',
   },
 ]
 

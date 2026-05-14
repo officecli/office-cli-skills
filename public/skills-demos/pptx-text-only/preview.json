@@ -1,0 +1,177 @@
+{
+  "slides": [
+    {
+      "title": "Text-only executive briefing",
+      "content": "",
+      "isTitle": true,
+      "layout": "title",
+      "variant": "title-center",
+      "narrativeRole": "cover",
+      "subtitle": "Governance, auditability, and operator trust"
+    },
+    {
+      "title": "Contents",
+      "content": "",
+      "isTitle": false,
+      "layout": "toc",
+      "variant": "toc",
+      "narrativeRole": "toc",
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Review the structure before diving into the content.",
+      "sections": [
+        {
+          "heading": "01",
+          "detail": "Core Storyline"
+        },
+        {
+          "heading": "02",
+          "detail": "Executive Summary"
+        },
+        {
+          "heading": "03",
+          "detail": "Why text-only still matters"
+        },
+        {
+          "heading": "04",
+          "detail": "Operating model"
+        },
+        {
+          "heading": "05",
+          "detail": "Decision and Next Steps"
+        },
+        {
+          "heading": "06",
+          "detail": "Recommendation"
+        }
+      ]
+    },
+    {
+      "title": "Core Storyline",
+      "content": "",
+      "isTitle": false,
+      "layout": "chapter",
+      "variant": "chapter",
+      "narrativeRole": "chapter",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Use this section to shift the story before the next cluster of slides."
+    },
+    {
+      "title": "Executive Summary",
+      "content": "",
+      "isTitle": false,
+      "layout": "content",
+      "variant": "bullets",
+      "narrativeRole": "summary",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Lead with the decision, then support it slide by slide",
+      "points": [
+        "Core Insight: State.",
+        "Why It Matters: Summarize the impact, risk, or upside behind the conclusion",
+        "Decision: Clarify what should happen next and who needs to move"
+      ]
+    },
+    {
+      "title": "Why text-only still matters",
+      "content": "",
+      "isTitle": false,
+      "layout": "content",
+      "variant": "sections-grid",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Some workflows prefer compact, reviewable copy",
+      "sections": [
+        {
+          "heading": "Controls",
+          "detail": "No generated media in regulated review loops"
+        },
+        {
+          "heading": "Speed",
+          "detail": "Smaller files for quick operational sharing"
+        },
+        {
+          "heading": "Audit",
+          "detail": "Every claim remains visible in text"
+        }
+      ]
+    },
+    {
+      "title": "Operating model",
+      "content": "",
+      "isTitle": false,
+      "layout": "timeline",
+      "variant": "timeline",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "A staged rollout keeps ownership clear",
+      "sections": [
+        {
+          "heading": "Step 1",
+          "detail": "Define approved templates"
+        },
+        {
+          "heading": "Step 2",
+          "detail": "Render locally with --no-images"
+        },
+        {
+          "heading": "Step 3",
+          "detail": "Publish only after human review"
+        }
+      ]
+    },
+    {
+      "title": "Decision and Next Steps",
+      "content": "",
+      "isTitle": false,
+      "layout": "chapter",
+      "variant": "chapter",
+      "narrativeRole": "chapter",
+      "sectionIndex": 2,
+      "sectionTitle": "Decision and Next Steps",
+      "subtitle": "Use this section to shift the story before the next cluster of slides."
+    },
+    {
+      "title": "Recommendation",
+      "content": "",
+      "isTitle": false,
+      "layout": "closing",
+      "variant": "closing-decision-banner",
+      "narrativeRole": "closing",
+      "sectionIndex": 2,
+      "sectionTitle": "Decision and Next Steps",
+      "subtitle": "Use --no-images when reviewability matters more than visual richness",
+      "sections": [
+        {
+          "heading": "Step 1",
+          "detail": "Document the default"
+        },
+        {
+          "heading": "Step 2",
+          "detail": "Keep prompts with artifacts"
+        },
+        {
+          "heading": "Step 3",
+          "detail": "Use scoring only when requested"
+        }
+      ]
+    }
+  ],
+  "stylePreset": "editorial-light",
+  "theme": {
+    "primaryColor": "7C2D12",
+    "accentColor": "D97706",
+    "highlightColor": "B45309",
+    "backgroundType": "solid",
+    "bgColor1": "F8F5EF",
+    "bgColor2": "F8F5EF",
+    "textColor": "292524",
+    "titleTextColor": "1C1917",
+    "fontFamily": "Georgia",
+    "eaFontFamily": "Noto Serif CJK SC"
+  },
+  "title": "Text-only executive briefing",
+  "warnings": []
+}

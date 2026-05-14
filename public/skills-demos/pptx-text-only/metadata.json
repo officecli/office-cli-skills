@@ -1,0 +1,22 @@
+{
+  "title": "Text-only executive briefing",
+  "type": "pptx",
+  "command": "officecli new pptx \"Text-only executive briefing\" --prompt-file ./prompt.md --local-preview --no-publish --no-images",
+  "artifact": "text-only-executive-briefing.pptx",
+  "preview": "preview.png",
+  "prompt_file": "prompt.md",
+  "verified_at": "2026-05-14T00:00:00Z",
+  "generated_with": "OfficeCLI renderer from this repository",
+  "verification": [
+    "metadata schema validated by scripts/validate-skills-demos.py",
+    "artifact exists and is under 3MB",
+    "preview image exists and is a valid PNG"
+  ],
+  "notes": [
+    "OfficeCLI renderer suggested file name: Text-only_executive_briefing.pptx."
+  ],
+  "sha256": {
+    "prompt.md": "0f79819bc21b744aec5ba11eb5add89d655cb25ea10bbc571216150fff41be6b",
+    "text-only-executive-briefing.pptx": "ed13156cd208aee8a7e6803fea9c735799610f12d773b0cd02863b9d580ba08f"
+  }
+}

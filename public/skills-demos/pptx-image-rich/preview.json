@@ -1,0 +1,195 @@
+{
+  "slides": [
+    {
+      "title": "Image-rich strategy deck",
+      "content": "",
+      "isTitle": true,
+      "layout": "title",
+      "variant": "title-center",
+      "narrativeRole": "cover",
+      "subtitle": "Prompt to published Office artifact",
+      "hasImage": true,
+      "imagePrompt": "A premium workstation showing PPTX, DOCX, XLSX, report, and image outputs arranged around a command line",
+      "imagePos": "background"
+    },
+    {
+      "title": "Contents",
+      "content": "",
+      "isTitle": false,
+      "layout": "toc",
+      "variant": "toc",
+      "narrativeRole": "toc",
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Review the structure before diving into the content.",
+      "sections": [
+        {
+          "heading": "01",
+          "detail": "Core Storyline"
+        },
+        {
+          "heading": "02",
+          "detail": "Executive Summary"
+        },
+        {
+          "heading": "03",
+          "detail": "Workflow at a glance"
+        },
+        {
+          "heading": "04",
+          "detail": "Generated output gallery"
+        },
+        {
+          "heading": "05",
+          "detail": "Agent contract"
+        },
+        {
+          "heading": "06",
+          "detail": "Decision and Next Steps"
+        }
+      ]
+    },
+    {
+      "title": "Core Storyline",
+      "content": "",
+      "isTitle": false,
+      "layout": "chapter",
+      "variant": "chapter",
+      "narrativeRole": "chapter",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Use this section to shift the story before the next cluster of slides."
+    },
+    {
+      "title": "Executive Summary",
+      "content": "",
+      "isTitle": false,
+      "layout": "content",
+      "variant": "bullets",
+      "narrativeRole": "summary",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Lead with the decision, then support it slide by slide",
+      "points": [
+        "Core Insight: State.",
+        "Why It Matters: Summarize the impact, risk, or upside behind the conclusion",
+        "Decision: Clarify what should happen next and who needs to move"
+      ]
+    },
+    {
+      "title": "Workflow at a glance",
+      "content": "",
+      "isTitle": false,
+      "layout": "content",
+      "variant": "sections-grid",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Agents keep the loop reproducible",
+      "sections": [
+        {
+          "heading": "Plan",
+          "detail": "The agent converts intent into a typed payload"
+        },
+        {
+          "heading": "Render",
+          "detail": "OfficeCLI assembles the file locally"
+        },
+        {
+          "heading": "Publish",
+          "detail": "Configured runs return online preview links"
+        }
+      ]
+    },
+    {
+      "title": "Generated output gallery",
+      "content": "",
+      "isTitle": false,
+      "layout": "gallery",
+      "variant": "gallery",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Visuals travel with the deck when image support is enabled",
+      "visuals": [
+        {
+          "label": "Deck",
+          "prompt": "A clean presentation canvas with generated images and charts",
+          "caption": "PPTX visual narrative"
+        },
+        {
+          "label": "Report",
+          "prompt": "An HTML report preview with charts and highlighted findings",
+          "caption": "Workbook-backed report"
+        },
+        {
+          "label": "Image",
+          "prompt": "A standalone generated product hero image",
+          "caption": "IMG output"
+        }
+      ]
+    },
+    {
+      "title": "Agent contract",
+      "content": "",
+      "isTitle": false,
+      "layout": "comparison",
+      "variant": "comparison",
+      "narrativeRole": "analysis",
+      "sectionIndex": 1,
+      "sectionTitle": "Core Storyline",
+      "subtitle": "Structured tools avoid scraping CLI progress",
+      "sections": [
+        {
+          "heading": "office.prepare",
+          "detail": "Returns schemas and workbook context"
+        },
+        {
+          "heading": "office.render",
+          "detail": "Validates and writes final Office files"
+        }
+      ]
+    },
+    {
+      "title": "Decision and Next Steps",
+      "content": "",
+      "isTitle": false,
+      "layout": "chapter",
+      "variant": "chapter",
+      "narrativeRole": "chapter",
+      "sectionIndex": 2,
+      "sectionTitle": "Decision and Next Steps",
+      "subtitle": "Use this section to shift the story before the next cluster of slides."
+    },
+    {
+      "title": "Decision",
+      "content": "",
+      "isTitle": false,
+      "layout": "closing",
+      "variant": "closing-decision-banner",
+      "narrativeRole": "closing",
+      "sectionIndex": 2,
+      "sectionTitle": "Decision and Next Steps",
+      "subtitle": "Use the public skills repo as the reproducible demo surface",
+      "points": [
+        "Ship demo files next to prompts and commands",
+        "Keep generated previews visible in GitHub",
+        "Route agents through OfficeCLI when supported"
+      ]
+    }
+  ],
+  "stylePreset": "executive-dark",
+  "theme": {
+    "primaryColor": "1F2937",
+    "accentColor": "F97316",
+    "highlightColor": "FDBA74",
+    "backgroundType": "dark",
+    "bgColor1": "0B1020",
+    "bgColor2": "111827",
+    "textColor": "E5E7EB",
+    "titleTextColor": "FFFFFF",
+    "fontFamily": "Aptos",
+    "eaFontFamily": "Microsoft YaHei"
+  },
+  "title": "Image-rich strategy deck",
+  "warnings": []
+}

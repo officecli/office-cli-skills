@@ -5,6 +5,7 @@ import {
   agentSkillsFAQs,
   agentSkillsHubPath,
   downloadPath,
+  generationDemos,
   githubRepoURL,
   installPaths,
   keywordChips,
@@ -113,6 +114,46 @@ export default function AgentSkillsPage() {
               <p className="mt-4 text-sm leading-relaxed text-outline-variant">{item.detail}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="px-8 py-14 md:px-16 md:py-20">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="mb-10 max-w-3xl">
+            <span className="mb-4 block font-headline text-xs uppercase tracking-[0.24em] text-tertiary">Visible outputs</span>
+            <h2 className="font-headline text-4xl font-bold tracking-tight text-white md:text-5xl">Generation demos</h2>
+            <p className="mt-4 text-lg leading-relaxed text-outline-variant">
+              The public skills repo now carries the preview image, generated file, prompt, command, and metadata together so users can inspect the result and reproduce the flow.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {generationDemos.map((demo) => (
+              <article key={demo.title} className="overflow-hidden rounded-3xl border border-outline-variant/10 bg-surface-low">
+                <img className="aspect-[16/10] w-full bg-background object-cover" src={demo.previewSrc} alt={`${demo.title} preview`} loading="lazy" />
+                <div className="p-6">
+                  <div className="mb-3 inline-flex rounded-full border border-primary/20 px-3 py-1 font-headline text-xs uppercase tracking-[0.2em] text-primary">
+                    {demo.type}
+                  </div>
+                  <h3 className="font-headline text-2xl font-bold text-white">{demo.title}</h3>
+                  <p className="mt-4 text-sm leading-relaxed text-outline-variant">{demo.description}</p>
+                  <div className="mt-5 flex flex-wrap gap-3 text-sm">
+                    <a className="text-primary transition-colors hover:text-tertiary" href={demo.artifactHref}>
+                      {demo.artifactLabel}
+                    </a>
+                    <a className="text-primary transition-colors hover:text-tertiary" href={demo.promptHref}>
+                      Prompt
+                    </a>
+                    <a className="text-primary transition-colors hover:text-tertiary" href={demo.metadataHref}>
+                      Metadata
+                    </a>
+                  </div>
+                  <div className="mt-5">
+                    <CodeBlock command={demo.command} />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 

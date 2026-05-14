@@ -1,0 +1,23 @@
+{
+  "title": "Image-rich strategy deck",
+  "type": "pptx",
+  "command": "officecli new pptx \"Image-rich strategy deck\" --prompt-file ./prompt.md --local-preview --no-publish",
+  "artifact": "image-rich-strategy-deck.pptx",
+  "preview": "preview.png",
+  "prompt_file": "prompt.md",
+  "verified_at": "2026-05-14T00:00:00Z",
+  "generated_with": "OfficeCLI renderer from this repository",
+  "verification": [
+    "metadata schema validated by scripts/validate-skills-demos.py",
+    "artifact exists and is under 3MB",
+    "preview image exists and is a valid PNG"
+  ],
+  "notes": [
+    "Generated through OfficeCLI PPTX rendering code with deterministic demo image assets so the public repository is reproducible.",
+    "OfficeCLI renderer suggested file name: Image-rich_strategy_deck.pptx."
+  ],
+  "sha256": {
+    "image-rich-strategy-deck.pptx": "1799223305e44c4409e585d32d0d45269ef880e826ee3e51684388f05131ba5d",
+    "prompt.md": "cf75df468fce23a723368e50c0dc27cdda7595b658653f7d1e294e6e65e507e6"
+  }
+}
