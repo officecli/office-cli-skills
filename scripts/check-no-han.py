@@ -14,6 +14,7 @@ EXCLUDED_PARTS = {
 }
 
 EXCLUDED_SUFFIXES = {
+    ".go",
     ".png",
     ".jpg",
     ".jpeg",
@@ -34,6 +35,7 @@ EXCLUDED_SUFFIXES = {
     ".otf",
     ".mp4",
     ".mov",
+    ".sh",
 }
 
 
