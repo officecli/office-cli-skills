@@ -1,5 +1,7 @@
 # officecli
 
+[Official website](https://officecli.io/)
+
 `officecli` is an npm wrapper package for the OfficeCLI binary.
 
 It does not reimplement the CLI in JavaScript. During `npm install`, it downloads the matching prebuilt binary from `officecli/officecli-dist`, verifies `checksums.txt`, and exposes the `officecli` command on your `PATH`.
@@ -28,7 +30,7 @@ officecli config set-generation
 
 ## Version Mapping
 
-- npm package version `0.2.36` downloads OfficeCLI release `v0.2.36`
+- npm package version `0.2.56` downloads OfficeCLI release `v0.2.56`
 - the wrapper installs only the current stable binary that matches the package version
 
 ## Supported Platforms

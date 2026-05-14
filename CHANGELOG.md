@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.56 - 2026-05-14
+
+### Changed
+
+- Added the official website link to the top of the npm package README.
+
 ## 0.2.55 - 2026-05-14
 
 ### Changed
