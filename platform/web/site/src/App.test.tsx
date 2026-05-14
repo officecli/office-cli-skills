@@ -51,6 +51,32 @@ describe('marketing site shell', () => {
     expect(writeText).toHaveBeenCalledWith('support@officecli.io')
   })
 
+  it('links the contact Discord entry to the public invite', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const discordLink = screen.getByRole('link', { name: /Discord/i })
+    expect(discordLink).toHaveAttribute('href', 'https://discord.gg/ezAHMkdG')
+    expect(discordLink).toHaveAttribute('target', '_blank')
+    expect(discordLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
+  it('links the contact X entry to the official account', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const xLink = screen.getByRole('link', { name: /^X$/i })
+    expect(xLink).toHaveAttribute('href', 'https://x.com/officecli')
+    expect(xLink).toHaveAttribute('target', '_blank')
+    expect(xLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
   it('shows a non-price placeholder when the pricing api fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network error'))
 

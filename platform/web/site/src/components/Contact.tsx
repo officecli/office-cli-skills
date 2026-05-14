@@ -2,17 +2,21 @@ import { useEffect, useState } from 'react'
 import { CheckCheck, Copy, Mail, MessageSquare, Megaphone } from 'lucide-react'
 
 const supportEmail = 'support@officecli.io'
+const discordInviteURL = 'https://discord.gg/ezAHMkdG'
+const xProfileURL = 'https://x.com/officecli'
 
 const socialPlaceholders = [
   {
     label: 'Discord',
     description: 'Community room and product discussion.',
     icon: MessageSquare,
+    href: discordInviteURL,
   },
   {
     label: 'X',
     description: 'Product updates and release highlights.',
     icon: Megaphone,
+    href: xProfileURL,
   },
 ]
 
@@ -78,18 +82,41 @@ export default function Contact() {
           <div className="grid gap-4">
             {socialPlaceholders.map((item) => {
               const Icon = item.icon
-              return (
-                <div key={item.label} className="rounded-3xl border border-outline-variant/10 bg-background/70 p-6">
+              const cardClassName =
+                'rounded-3xl border border-outline-variant/10 bg-background/70 p-6 transition-colors'
+              const cardContent = (
+                <>
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div className="inline-flex items-center gap-3 text-white">
                       <Icon size={18} className="text-tertiary" />
                       <span className="font-semibold">{item.label}</span>
                     </div>
                     <span className="rounded-full border border-outline-variant/15 px-3 py-1 text-[10px] font-headline uppercase tracking-widest text-outline-variant">
-                      Coming soon
+                      {item.href ? 'Join now' : 'Coming soon'}
                     </span>
                   </div>
                   <p className="text-sm leading-relaxed text-outline-variant">{item.description}</p>
+                </>
+              )
+
+              if (item.href) {
+                return (
+                  <a
+                    key={item.label}
+                    className={`${cardClassName} block hover:border-primary/30 hover:bg-background`}
+                    href={item.href}
+                    aria-label={item.label}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {cardContent}
+                  </a>
+                )
+              }
+
+              return (
+                <div key={item.label} className={cardClassName}>
+                  {cardContent}
                 </div>
               )
             })}
