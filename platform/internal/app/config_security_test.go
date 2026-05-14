@@ -106,6 +106,37 @@ func TestLoadConfigProductionAcceptsExplicitValues(t *testing.T) {
 	if cfg.AppEnv != "production" {
 		t.Fatalf("AppEnv = %q", cfg.AppEnv)
 	}
+	if cfg.HostedLLMBaseURL != defaultHostedLLMBaseURL {
+		t.Fatalf("HostedLLMBaseURL = %q", cfg.HostedLLMBaseURL)
+	}
+}
+
+func TestLoadConfigProductionRejectsDeprecatedHostedLLMBaseURL(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("HOSTED_LLM_BASE_URL", "https://4zapi.com/v1")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "HOSTED_LLM_BASE_URL must point to aigateway.claudeoffice.com in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
+}
+
+func TestLoadConfigProductionRejectsNonAIGatewayHostedLLMBaseURL(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("HOSTED_LLM_BASE_URL", "https://api.openai.com/v1")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "HOSTED_LLM_BASE_URL must point to aigateway.claudeoffice.com in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
 }
 
 func TestLoadConfigRejectsInvalidAPIKeyEncryptionKey(t *testing.T) {

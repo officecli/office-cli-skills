@@ -126,6 +126,20 @@ require_env_keys_in_file() {
   fi
 }
 
+validate_hosted_llm_upstream() {
+  local base_url="${HOSTED_LLM_BASE_URL:-}"
+  if [[ -z "${base_url}" ]]; then
+    return
+  fi
+  case "${base_url}" in
+    https://aigateway.claudeoffice.com|https://aigateway.claudeoffice.com/*)
+      ;;
+    *)
+      die "HOSTED_LLM_BASE_URL must point to https://aigateway.claudeoffice.com/v1; got ${base_url}"
+      ;;
+  esac
+}
+
 detect_base_version() {
   local package_json="${PLATFORM_DIR}/web/app/package.json"
   if command -v python3 >/dev/null 2>&1; then
@@ -163,6 +177,8 @@ detect_next_tag() {
 }
 
 run_local_builds() {
+  validate_hosted_llm_upstream
+
   log "Running Go tests"
   (cd "$PLATFORM_DIR" && go test ./...)
 

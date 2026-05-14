@@ -82,6 +82,8 @@ type Config struct {
 	PricingPacks                 []model.PricingPack
 }
 
+const defaultHostedLLMBaseURL = "https://aigateway.claudeoffice.com/v1"
+
 func LoadConfig() (Config, error) {
 	cfg := Config{
 		AppEnv:                       normalizeAppEnv(mustEnvDefault("APP_ENV", "development")),
@@ -117,7 +119,7 @@ func LoadConfig() (Config, error) {
 		DiscordRedirectURL:           mustEnvDefault("DISCORD_REDIRECT_URL", "https://platform.officecli.io/api/app/discord/callback"),
 		DiscordGuildID:               os.Getenv("DISCORD_GUILD_ID"),
 		DiscordBotToken:              os.Getenv("DISCORD_BOT_TOKEN"),
-		HostedLLMBaseURL:             mustEnvDefault("HOSTED_LLM_BASE_URL", "https://api.openai.com/v1"),
+		HostedLLMBaseURL:             mustEnvDefault("HOSTED_LLM_BASE_URL", defaultHostedLLMBaseURL),
 		HostedLLMAPIKey:              os.Getenv("HOSTED_LLM_API_KEY"),
 		HostedLLMTextModel:           mustEnvDefault("HOSTED_LLM_TEXT_MODEL", "gpt-4.1"),
 		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-2"),
@@ -399,6 +401,17 @@ func validateProductionSecrets(cfg Config) error {
 	}
 	if err := validateLicenseProofSeed(cfg.LicenseProofSeed); err != nil {
 		return err
+	}
+	if err := validateProductionHostedLLMBaseURL(cfg.HostedLLMBaseURL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateProductionHostedLLMBaseURL(raw string) error {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	if !strings.HasPrefix(normalized, "https://aigateway.claudeoffice.com/") && normalized != "https://aigateway.claudeoffice.com" {
+		return fmt.Errorf("HOSTED_LLM_BASE_URL must point to aigateway.claudeoffice.com in production")
 	}
 	return nil
 }

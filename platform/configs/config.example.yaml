@@ -37,7 +37,7 @@ preview_object_use_ssl: true
 officesdk_host: ""
 officesdk_endpoint: "https://officecli.io/sdk/turbo-ai"
 officesdk_jwt_secret: ""
-hosted_llm_base_url: "https://api.openai.com/v1"
+hosted_llm_base_url: "https://aigateway.claudeoffice.com/v1"
 hosted_llm_api_key: ""
 hosted_llm_text_model: "gpt-4.1"
 hosted_llm_image_model: "gpt-image-2"

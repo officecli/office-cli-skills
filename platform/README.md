@@ -107,7 +107,7 @@ Recommended production base URLs:
 - `STRIPE_CANCEL_URL`: Stripe cancel redirect
 - `EXTERNAL_UNIT_PRICE_CENTS`: base external price per document, in cents
 - `EXTERNAL_500_PRICE_RATIO`: discounted price ratio applied to the 500-document external pack
-- `HOSTED_LLM_BASE_URL`: hosted LLM upstream base URL
+- `HOSTED_LLM_BASE_URL`: hosted LLM upstream base URL; production must use `https://aigateway.claudeoffice.com/v1`
 - `HOSTED_LLM_API_KEY`: hosted LLM upstream API key
 - `HOSTED_LLM_TEXT_MODEL`: hosted text model
 - `HOSTED_LLM_IMAGE_MODEL`: hosted image model
