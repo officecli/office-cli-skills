@@ -3,6 +3,7 @@ package app
 import "testing"
 
 func TestLoadConfigDefaultsFreeTrialLimitToFive(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
 	t.Setenv("DEFAULT_FREE_LIMIT", "")
 
 	cfg, err := LoadConfig()
