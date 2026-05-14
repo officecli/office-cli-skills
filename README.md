@@ -13,6 +13,8 @@ This repository is the public distribution surface for:
 - the `openclaw-officecli` package for OpenClaw-oriented integrations
 - direct install scripts for local Codex-style skill installs
 
+Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
+
 ## Fast links
 
 Site pages:
@@ -26,6 +28,7 @@ Site pages:
 
 GitHub guides in this repository:
 
+- [中文文档](./README.zh-CN.md)
 - [Install](./install/README.md)
 - [Generation demos](./demos/README.md)
 - [Claude Code](./claude-code/README.md)
