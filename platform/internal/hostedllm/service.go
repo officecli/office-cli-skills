@@ -499,7 +499,14 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any, 
 func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any, upstreamAPIKey string) ([]byte, usageSummary, error) {
 	refs := effectiveReferenceImages(req)
 	if len(refs) == 0 {
-		return s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload, upstreamAPIKey)
+		body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/generations", payload, upstreamAPIKey)
+		if err == nil {
+			return body, usage, nil
+		}
+		if !shouldFallbackToResponsesImage(err) {
+			return nil, usageSummary{}, err
+		}
+		return s.postResponsesImageRequest(ctx, modelName, req, upstreamAPIKey)
 	}
 	fields := map[string]string{
 		"model":  modelName,
@@ -507,6 +514,53 @@ func (s *Service) postImageRequest(ctx context.Context, modelName string, req Im
 		"size":   effectiveImageSize(req),
 	}
 	return s.postImageEdit(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/images/edits", fields, refs, upstreamAPIKey)
+}
+
+func shouldFallbackToResponsesImage(err error) bool {
+	var upstreamErr upstreamHTTPError
+	if !errors.As(err, &upstreamErr) {
+		return false
+	}
+	switch upstreamErr.statusCode {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusBadGateway, http.StatusServiceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) postResponsesImageRequest(ctx context.Context, modelName string, req ImageRequest, upstreamAPIKey string) ([]byte, usageSummary, error) {
+	payload := map[string]any{
+		"model": modelName,
+		"input": req.Prompt,
+		"tools": []map[string]any{{"type": "image_generation"}},
+	}
+	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/responses", payload, upstreamAPIKey)
+	if err != nil {
+		return nil, usageSummary{}, err
+	}
+	var resp struct {
+		Output []struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, usageSummary{}, fmt.Errorf("decode hosted responses image: %w", err)
+	}
+	for _, item := range resp.Output {
+		if item.Type != "image_generation_call" || strings.TrimSpace(item.Result) == "" {
+			continue
+		}
+		normalized, err := json.Marshal(map[string]any{
+			"data": []map[string]string{{"b64_json": item.Result}},
+		})
+		if err != nil {
+			return nil, usageSummary{}, err
+		}
+		return normalized, usage, nil
+	}
+	return nil, usageSummary{}, fmt.Errorf("hosted responses image is empty")
 }
 
 func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[string]string, refs []ImageReference, upstreamAPIKey string) ([]byte, usageSummary, error) {

@@ -700,6 +700,66 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
 }
 
+func TestGenerateImageFallsBackToResponsesWhenImageEndpointFails(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var sawImages bool
+	var sawResponses bool
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/images/generations":
+			sawImages = true
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = fmt.Fprint(w, "<html><body>bad gateway</body></html>")
+		case "/responses":
+			sawResponses = true
+			require.Equal(t, "Bearer upstream-key", r.Header.Get("Authorization"))
+			var payload map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			require.Equal(t, "gpt-image-test", payload["model"])
+			require.Equal(t, "A polished product launch hero image", payload["input"])
+			_, _ = fmt.Fprintf(w, `{"output":[{"type":"image_generation_call","result":"%s"}],"usage":{"prompt_tokens":3000,"completion_tokens":1000}}`, imageData)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		HashSalt:             "salt",
+		ImageModel:           "gpt-image-test",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "A polished product launch hero image",
+		AspectRatio: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.True(t, sawImages)
+	require.True(t, sawResponses)
+	require.Len(t, store.events, 1)
+}
+
 func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *testing.T) {
 	var upstreamPayload map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
