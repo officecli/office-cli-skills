@@ -266,88 +266,26 @@ func isVersionArg(value string) bool {
 func HelpText() string {
 	return `officecli
 
-Generate Office documents and images from natural language.
+Generate PPTX, DOCX, XLSX, reports, and images from natural language.
+Hosted trial access is the default, so you can install and generate without
+setting up a local model endpoint first.
+
+Install, then run your first file:
+  officecli --version
+  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 
 Commands:
-  config                  View or update local configuration
-  auth                    View or update access settings
-  new                     Generate a new PPTX / DOCX / XLSX / Report file or image
-  score                   Run PPTX scoring on demand
-  review                  Review the quality of a local PPTX file
-  upgrade                 Check for updates and upgrade officecli
-  agent-bridge            Expose an agent interface over JSON-RPC via stdio
+  new                     Generate a PPTX, DOCX, XLSX, report, or image
+  auth                    Check access or save a hosted API key
+  config                  View or change runtime settings
+  upgrade                 Check for a newer officecli version
 
-Usage:
-  officecli new <pptx|docx|xlsx|report|img> <topic> [brief]
-  officecli config status
+Useful checks:
   officecli auth status
-  officecli auth set-key <api-key>
-  officecli upgrade
-  officecli score pptx ./deck.pptx
-  officecli review pptx ./deck.pptx
-
-Common options:
-  --prompt <text>         Provide the full prompt directly
-  --prompt-file <path>    Read the prompt from a file
-  --mode fast|best        Choose fast generation or interactive refinement
-  --lang <value>          Set the output language
-  --style <value>         Set the style
-  --audience <value>      Set the audience
-  --out <dir>             Set the output directory
-  --file <path>           Provide the input workbook file (report only)
-  --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
-  --size <WxH>            Set explicit image pixel size, e.g. 1280x768 (img only; overrides --ratio)
-  --reference-image <path-or-url>
-                          Provide a reference image for img generation; repeat to upload multiple
-  --image-quality <value> Set PPT image quality: standard or premium (pptx only)
-  --local-preview         Generate local HTML/JSON preview sidecars
-  --debug                 Print generation diagnostics to stderr
-  --publish               Force online preview publishing
-  --no-publish            Disable online preview publishing
-  --no-images             Disable automatic PPT images
-  --json                  Output JSON
-  --version               Show the current version
-
-Default behavior:
-  - Default output directory: ./output
-  - Default mode: fast
-  - With no local generation config, OfficeCLI defaults to hosted anonymous trial access
-  - External Mode remains available with ` + "`officecli config set-runtime external`" + ` and ` + "`officecli config set-generation`" + `
-  - If access checks are enabled, availability is verified before generation
-  - If defaults.publish=true and publishing is configured, document output is published automatically
-  - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
-  - If publishing is not configured, files are saved locally and online preview is skipped
-  - Standalone img uses the local image provider in external mode, or hosted credits in hosted mode
-  - Standalone img accepts one or more reference images with repeated --reference-image <path-or-url>
-  - Standalone img local preview sidecars are not supported
-
-Config file:
-  macOS   ~/Library/Application Support/officecli/config.json
-  Linux   ~/.config/officecli/config.json
-  Windows %AppData%\officecli\config.json
-
-Examples:
-  officecli config status
-  officecli config set-generation
-  officecli config set-license
-  officecli config set-publish
-  officecli config set-defaults
-  officecli auth status
-  officecli auth --help
-  officecli auth set-key <your-api-key>
-  officecli upgrade
-  officecli upgrade --help
-  officecli new pptx "Enterprise Collaboration Platform Overview" "Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform"
-  officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png
-  officecli score pptx ./output/enterprise_collaboration_platform_overview.pptx
-  officecli review pptx ./output/enterprise_collaboration_platform_overview.pptx
   officecli new --help
-  officecli score --help
-  officecli review --help
-  officecli new docx "Quarterly Review" --prompt-file ./examples/prompt.txt
-  officecli new xlsx "Sales Analysis" --json
-  officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --audience "Board and investors"
-  officecli --version
+  officecli auth set-key <api-key>   # after buying or creating a hosted key
 `
 }
 
@@ -389,27 +327,23 @@ Common options:
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
-  --ratio <value>         Set image ratio: square, landscape, or portrait (img only)
-  --size <WxH>            Set explicit image pixel size, e.g. 1280x768 (img only; overrides --ratio)
-  --reference-image <path-or-url>
-                          Provide a reference image for img generation; repeat to upload multiple
-  --image-quality <value> Set PPT image quality: standard or premium (pptx only)
   --local-preview         Generate local HTML/JSON preview sidecars
-  --debug                 Print generation diagnostics to stderr
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
-  --no-images             Disable automatic PPT images
+  --no-images             Generate a text-only PPTX
   --json                  Output JSON
 
+Copy-paste examples:
+  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+  officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
+
 Description:
-  - ` + "`pptx`" + ` generation tries to add images and embed them in the final file by default
-  - ` + "`pptx --image-quality premium`" + ` uses the hosted image route for PPT visual assets and consumes hosted image credits only for successful image assets
-  - For a text-only PPT, pass ` + "`--no-images`" + `
-  - If images never appear, run ` + "`officecli config set-generation`" + ` and check the image model URL, credentials, and model name
-  - ` + "`report`" + ` requires ` + "`--file <xlsx-path>`" + ` and generates a single local HTML report file from workbook data
-  - ` + "`img`" + ` generates one local image through your configured image provider in external mode, or the hosted image route in hosted mode
-  - ` + "`img`" + ` supports ` + "`--ratio square|landscape|portrait`" + `, ` + "`--size <WxH>`" + `, repeated ` + "`--reference-image <path-or-url>`" + `, and publishing by default when configured
-  - ` + "`img`" + ` does not support best mode, source files, or local preview
+  - Hosted trial access is the default when no local generation config exists.
+  - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
+  - report requires --file <xlsx-path> and creates an HTML report from workbook data.
+  - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.
 `
 }
 

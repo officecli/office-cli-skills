@@ -66,20 +66,21 @@ export const quickstartChecklist: DocsChecklist[] = [
     ],
   },
   {
-    title: 'Configure generation and access',
+    title: 'Generate immediately',
     items: [
-      'For External Mode, run `officecli config set-generation` to configure your LLM endpoint. External Mode is free and unlimited.',
-      'For Hosted Mode, run `officecli config set-license` and use hosted credits for OfficeCLI-managed runtime.',
-      'Run `officecli config set-publish` to turn on one-command online publish — every successful generation will return a password-protected preview URL you can share without uploading or hosting anything else.',
+      'Hosted trial access is the default, so first-run document commands do not require a local model endpoint or a config file.',
+      'Run `officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."`.',
+      'Run `officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."`.',
+      'Run `officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."`.',
     ],
   },
   {
-    title: 'Generate the first file',
+    title: 'Check access or go advanced',
     items: [
-      'Use `officecli new pptx|docx|xlsx|report ...` for file generation.',
+      'Run `officecli auth status` to check hosted trial, hosted key, or External Mode access.',
+      'When the hosted trial is used up, create or purchase a hosted key and run `officecli auth set-key <api-key>`.',
+      'For External Mode, run `officecli config set-runtime external` and `officecli config set-generation` to configure your own LLM endpoint. External Mode is free and unlimited.',
       'For `pptx`, images are enabled by default when the plan benefits from visuals; add `--no-images` for a text-only deck.',
-      'Use `officecli new img <title> --prompt ...` for standalone image generation. External IMG uses the configured local image provider; Hosted IMG uses hosted credits.',
-      'Once `set-publish` is configured, every successful generation prints a `Preview URL` plus an auto-generated access password — share that line with stakeholders. Add `--no-publish` to any single run for fully local output.',
     ],
   },
 ]
@@ -173,17 +174,17 @@ export const commandGroups: CommandGroup[] = [
     examples: [
       {
         label: 'PPT with a direct prompt',
-        command: 'officecli new pptx "Enterprise Collaboration Platform" --prompt "Create a six-slide executive deck for mid-market and enterprise buyers. Focus on collaboration workflows, permission control, knowledge retention, and security posture."',
+        command: 'officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."',
         detail: 'Use `--no-images` if you want a text-only presentation.',
       },
       {
-        label: 'DOCX from a prompt file',
-        command: 'officecli new docx "Quarterly Review" --prompt-file ./examples/docx-prompt.txt',
-        detail: 'Best for longer narrative instructions and reusable document patterns.',
+        label: 'DOCX with a direct prompt',
+        command: 'officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."',
+        detail: 'Best for narrative first drafts that need a clear editable structure.',
       },
       {
         label: 'XLSX from a direct prompt',
-        command: 'officecli new xlsx "Sales Analysis" --prompt "Generate a quarterly sales analysis workbook with summary and regional sheets. Include region, revenue, year-over-year growth, owner, and target attainment."',
+        command: 'officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."',
         detail: 'Be explicit about sheets, headers, and sample-data constraints.',
       },
       {

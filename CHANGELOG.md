@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.58 - 2026-05-14
+
+### Changed
+
+- Simplified `officecli --help` and `officecli new --help` around hosted-first copy-paste examples for first-time users.
+- Added post-install next steps to the npm wrapper and shell installer.
+- Reworked README, npm README, download page, and docs quickstart so hosted trial generation is the default first-run path.
+
 ## 0.2.57 - 2026-05-14
 
 ### Changed

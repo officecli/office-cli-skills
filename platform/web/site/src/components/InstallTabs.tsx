@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Copy, CheckCheck } from 'lucide-react'
-import { detectOperatingSystem, installTabs, type InstallTabID } from '../installData'
+import { detectOperatingSystem, firstRunCommands, installTabs, type InstallTabID } from '../installData'
 
 interface InstallTabsProps {
   compact?: boolean
@@ -11,7 +11,7 @@ interface InstallTabsProps {
 export default function InstallTabs({
   compact = false,
   headline = 'Install OfficeCLI',
-  intro = 'Choose the installation method that matches your environment. OfficeCLI stays lightweight: one binary, plus your LLM endpoint for the core local workflow.',
+  intro = 'Choose the installation method that matches your environment. OfficeCLI installs as one binary and can use hosted trial access immediately.',
 }: InstallTabsProps) {
   const [activeTab, setActiveTab] = useState<InstallTabID>('manual')
   const [copiedValue, setCopiedValue] = useState<string>('')
@@ -104,6 +104,36 @@ export default function InstallTabs({
                 <li key={note} className="bg-background/70 border border-outline-variant/10 rounded-xl px-4 py-3">{note}</li>
               ))}
             </ul>
+
+            <div className="mt-10 border-t border-outline-variant/10 pt-8">
+              <div className="text-xs font-headline uppercase tracking-widest text-tertiary mb-3">Run after install</div>
+              <p className="text-sm text-outline-variant leading-relaxed max-w-2xl mb-5">
+                Hosted trial access is the default. These examples do not require a local model endpoint or a config file.
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                {firstRunCommands.map((item) => {
+                  const copied = copiedValue === item.command
+                  return (
+                    <div key={item.label} className="bg-background border border-outline-variant/10 rounded-xl p-4">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="text-xs font-headline uppercase tracking-widest text-primary mb-2">{item.label}</div>
+                          <code className="block font-mono text-sm text-white break-all">{item.command}</code>
+                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex shrink-0 items-center gap-2 border border-outline-variant/20 rounded-full px-4 py-2 text-sm font-semibold text-white hover:border-primary/30 hover:text-primary"
+                          onClick={() => copyCommand(item.command)}
+                        >
+                          {copied ? <CheckCheck size={16} /> : <Copy size={16} />}
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>

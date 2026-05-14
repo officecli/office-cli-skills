@@ -6,6 +6,11 @@ export interface InstallCommand {
   detail: string
 }
 
+export interface FirstRunCommand {
+  label: string
+  command: string
+}
+
 export interface InstallTabContent {
   id: InstallTabID
   label: string
@@ -19,13 +24,39 @@ export interface InstallTabContent {
 export const stableInstallScript =
   'curl -fsSL https://raw.githubusercontent.com/officecli/officecli/main/scripts/install-officecli.sh | bash'
 
+export const firstRunCommands: FirstRunCommand[] = [
+  {
+    label: 'Verify',
+    command: 'officecli --version',
+  },
+  {
+    label: 'PPTX',
+    command:
+      'officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."',
+  },
+  {
+    label: 'DOCX',
+    command:
+      'officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."',
+  },
+  {
+    label: 'XLSX',
+    command:
+      'officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."',
+  },
+  {
+    label: 'Access',
+    command: 'officecli auth status',
+  },
+]
+
 export const installTabs: InstallTabContent[] = [
   {
     id: 'macos',
     label: 'macOS',
     eyebrow: 'Recommended for Mac',
     title: 'Install OfficeCLI on macOS',
-    description: 'Use Homebrew for the fastest setup, or npm if you prefer a package-managed CLI workflow.',
+    description: 'Use Homebrew for the fastest setup, or npm if you prefer a package-managed CLI workflow. Hosted trial access works immediately after install.',
     commands: [
       {
         label: 'Homebrew',
@@ -48,7 +79,7 @@ export const installTabs: InstallTabContent[] = [
     label: 'Linux',
     eyebrow: 'Recommended for Linux',
     title: 'Install OfficeCLI on Linux',
-    description: 'Use the official stable install script for a direct binary install, or npm for Node-based environments.',
+    description: 'Use the official stable install script for a direct binary install, or npm for Node-based environments. Hosted trial access works immediately after install.',
     commands: [
       {
         label: 'Shell script',
@@ -71,7 +102,7 @@ export const installTabs: InstallTabContent[] = [
     label: 'Manual',
     eyebrow: 'Manual binaries',
     title: 'Download a release archive directly',
-    description: 'Use the public GitHub release assets if you want a manual install or need full control over the binary location.',
+    description: 'Use the public GitHub release assets if you want a manual install or need full control over the binary location. Once the binary is on PATH, run the same first commands below.',
     commands: [
       {
         label: 'Release page',

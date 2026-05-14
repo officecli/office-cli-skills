@@ -111,6 +111,21 @@ shell_profile_hint() {
   esac
 }
 
+print_next_steps() {
+  cat <<'EOF'
+
+Try OfficeCLI now:
+  officecli --version
+  officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+  officecli auth status
+
+Hosted trial access is the default. When you have a hosted key, save it with:
+  officecli auth set-key <api-key>
+
+EOF
+}
+
 need_cmd curl
 need_cmd tar
 need_cmd install
@@ -168,3 +183,5 @@ else
   echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
   shell_profile_hint
 fi
+
+print_next_steps

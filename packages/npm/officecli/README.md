@@ -16,10 +16,20 @@ Run it after install:
 
 ```bash
 officecli --version
-officecli new docx "Product launch brief" --no-publish
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 ```
 
-The installed binary is usable without a local model endpoint or an API key. By default it uses OfficeCLI hosted anonymous trial access on `https://platform.officecli.io`; the one-time free quota is tied to this machine. When the free quota is used up, run `officecli auth set-key <api-key>` after purchasing or creating a hosted key from https://officecli.io/pricing.
+The installed binary is usable without a local model endpoint or an API key. By default it uses OfficeCLI hosted anonymous trial access on `https://platform.officecli.io`; the one-time free quota is tied to this machine.
+
+Check access at any time:
+
+```bash
+officecli auth status
+```
+
+When the free quota is used up, run `officecli auth set-key <api-key>` after purchasing or creating a hosted key from https://officecli.io/pricing.
 
 To use your own model endpoint instead, switch to External Mode:
 

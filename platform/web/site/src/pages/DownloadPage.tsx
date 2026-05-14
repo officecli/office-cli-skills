@@ -14,27 +14,27 @@ export default function DownloadPage() {
         <span className="text-primary font-headline text-xs uppercase tracking-widest mb-4 block">Download</span>
         <h1 className="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">Install OfficeCLI for AI document generation</h1>
         <p className="text-outline-variant text-lg leading-relaxed max-w-3xl">
-          Use Homebrew, npm, the official install script, or manual binaries to get started. Install one dependency-free binary, choose External or Hosted Mode, then generate PPTX, DOCX, XLSX, REPORT, and IMG outputs.
+          Use Homebrew, npm, the official install script, or manual binaries to get started. Install one dependency-free binary, then generate PPTX, DOCX, XLSX, REPORT, and IMG outputs with hosted trial access by default.
         </p>
       </section>
 
       <div className="mt-16">
-        <InstallTabs compact headline="Choose the install path that matches your machine" intro="OfficeCLI supports macOS and Linux on x64 and arm64. Pick the setup that fits your workstation or CI environment." />
+        <InstallTabs compact headline="Choose the install path that matches your machine" intro="OfficeCLI supports macOS and Linux on x64 and arm64. Pick the setup that fits your workstation or CI environment, then copy a first-run command below." />
       </div>
 
       <section className="mt-16 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">What you need</h2>
           <p className="text-outline-variant leading-relaxed">
-            OfficeCLI does not require Python, LibreOffice, Microsoft Office, Docker, Kubernetes, or an AI agent. External Mode only needs your model endpoint; Hosted Mode uses OfficeCLI-managed runtime and hosted credits.
+            OfficeCLI does not require Python, LibreOffice, Microsoft Office, Docker, Kubernetes, or an AI agent. Hosted Mode works first; External Mode remains available when you want to use your own model endpoint.
           </p>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">
           <h2 className="font-headline text-2xl font-bold text-white mb-4">Recommended sequence</h2>
           <ol className="space-y-3 text-sm text-outline-variant list-decimal list-inside">
             <li>Install OfficeCLI with Homebrew, npm, the script, or a manual binary.</li>
-            <li>Choose External Mode with <code>config set-generation</code>, or Hosted Mode with <code>config set-license</code>.</li>
-            <li>Use <code>officecli new ...</code> to generate files, then <code>score</code> or <code>review</code> when needed.</li>
+            <li>Run <code>officecli --version</code>, then copy one of the first-run generation commands.</li>
+            <li>Use <code>officecli auth status</code> to check trial or hosted key access.</li>
           </ol>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">

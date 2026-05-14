@@ -423,6 +423,21 @@ async function saveMetadata(metadata) {
   await fsp.writeFile(METADATA_PATH, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
 }
 
+function nextStepsText() {
+  return [
+    "",
+    "Try OfficeCLI now:",
+    "  officecli --version",
+    "  officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
+    "  officecli new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
+    "  officecli auth status",
+    "",
+    "Hosted trial access is the default. When you have a hosted key, save it with:",
+    "  officecli auth set-key <api-key>",
+    ""
+  ].join("\n");
+}
+
 async function installBinary({ verbose = true } = {}) {
   const { platform, arch } = resolvePlatform();
   const distRepo = resolveDistRepo();
@@ -467,6 +482,7 @@ async function installBinary({ verbose = true } = {}) {
     });
     if (verbose) {
       console.log(`installed officecli ${requestedVersion} to ${BINARY_PATH}`);
+      console.log(nextStepsText());
     }
   } finally {
     await fsp.rm(tempDir, { recursive: true, force: true });
@@ -499,6 +515,7 @@ module.exports = {
   archiveName,
   detectPackageManager,
   ensureInstalled,
+  nextStepsText,
   getBinaryPath,
   installBinary,
   loadMetadata,

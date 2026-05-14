@@ -54,38 +54,138 @@ For trusted publishing without exposing this private source repository on npmjs,
 
 ## Quick Start
 
-Build the binary:
+Install the published binary:
 
 ```bash
-go build -o officecli ./cmd/officecli
+npm install -g officecli
 ```
 
-By default, OfficeCLI uses hosted anonymous trial access. To use your own model endpoint, switch to External Mode and initialize configuration:
+Then generate a file immediately. Hosted anonymous trial access is the default, so no local model endpoint or API key is required for the first run:
 
 ```bash
-./officecli config set-runtime external
-./officecli config set-generation
-./officecli config set-license
-./officecli config set-publish   # optional for documents, required for standalone image preview links
-./officecli config set-defaults  # optional
+officecli --version
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
 ```
 
-External Mode is free and unlimited for standalone image generation and uses the image provider configured by `config set-generation`. In `hosted` runtime mode, a successful standalone image consumes hosted credits:
+Generated files are written to `./output` by default. For `PPTX`, OfficeCLI generates and embeds suitable images by default; add `--no-images` when you want a text-only deck.
+
+Check the current access mode:
 
 ```bash
-./officecli new img "Launch Visual" --prompt "A polished product launch hero image" --ratio landscape --reference-image ./reference.png
+officecli auth status
 ```
 
-`config set-generation` also configures PPT image assets. It does not configure standalone `new img` generation:
+When the hosted trial is used up, create or purchase a hosted key from https://officecli.io/pricing, then save it:
 
-- It first tries to reuse the text-generation provider for image creation.
-- If the text model does not expose image endpoints, switch to a dedicated image provider.
-- A dedicated image provider requires its own `url`, `ak`, and model name.
+```bash
+officecli auth set-key <api-key>
+```
+
+## Command Cheatsheet
+
+Generate a PPTX:
+
+```bash
+officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+```
+
+Generate a DOCX:
+
+```bash
+officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
+```
+
+Generate an XLSX:
+
+```bash
+officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
+```
+
+Generate a workbook-backed Report:
+
+```bash
+officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
+```
+
+Generate without publishing:
+
+```bash
+officecli new pptx "Internal Draft" --prompt "Create a short internal strategy update." --no-publish
+```
+
+Generate from a prompt file:
+
+```bash
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt
+```
+
+Run in higher-quality interactive mode:
+
+```bash
+officecli new pptx "Enterprise Collaboration Platform" --mode best
+```
+
+Generate a standalone image:
+
+```bash
+officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
+```
+
+`new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and only charges hosted credits after a successful hosted image response. In `external` runtime mode it is free and unlimited and uses your configured image provider; in `hosted` runtime mode it consumes hosted credits. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
+
+Write output to a custom directory:
+
+```bash
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --out ./dist
+```
+
+Return JSON output:
+
+```bash
+officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --json
+```
+
+Score a local PPTX:
+
+```bash
+officecli score pptx ./output/Enterprise-Collaboration-Platform.pptx
+```
+
+The compatibility alias remains available:
+
+```bash
+officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx
+```
+
+## Advanced Configuration
+
+To use your own model endpoint instead of Hosted Mode, switch to External Mode and initialize generation:
+
+```bash
+officecli config set-runtime external
+officecli config set-generation
+```
+
+External Mode is free and unlimited for standalone image generation and uses the image provider configured by `config set-generation`.
+
+Configure optional online publishing:
+
+```bash
+officecli config set-publish
+```
 
 Inspect the current config at any time:
 
 ```bash
-./officecli config status
+officecli config status
+```
+
+Build the binary from source:
+
+```bash
+go build -o officecli ./cmd/officecli
 ```
 
 You can also bootstrap the config manually:
@@ -97,124 +197,18 @@ cp ./examples/config.example.json ~/.config/officecli/config.json
 
 Then update the service URLs, credentials, quota settings, and publish settings for your environment.
 
-Generate a PPTX:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" "Introduce the product capabilities, customer value, and usage scenarios of this enterprise collaboration platform."
-```
-
-By default, generated files are written to `./output`.
-
-If publish is configured and enabled, OfficeCLI also returns an online access URL and password. Standalone `new img` publishes by default; pass `--no-publish` to keep it local-only.
-
-To validate local generation only:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" "Introduce the product capabilities, customer value, and usage scenarios of this enterprise collaboration platform." --no-publish
-```
-
-You can also use the convenience commands:
-
-```bash
-make build
-officecli config status
-make run-help
-```
-
-## Command Cheatsheet
-
-Generate a PPTX:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" "Introduce the product capabilities, customer value, and usage scenarios of this enterprise collaboration platform."
-```
-
-Generate without publishing:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" "Introduce the product capabilities, customer value, and usage scenarios of this enterprise collaboration platform." --no-publish
-```
-
-Generate from a prompt file:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt
-```
-
-Run in higher-quality interactive mode:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" --mode best
-```
-
-Generate a DOCX:
-
-```bash
-./officecli new docx "Quarterly Review" "Write a quarterly project review for leadership, focusing on outcomes, issues, and the next-step plan."
-```
-
-Generate an XLSX:
-
-```bash
-./officecli new xlsx "Sales Analysis" "Generate a quarterly sales analysis sheet with region, revenue, year-over-year change, and owner columns."
-```
-
-Generate a workbook-backed Report:
-
-```bash
-./officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize regional revenue shifts and the board-level decision points."
-```
-
-Generate a standalone image:
-
-```bash
-./officecli new img "Launch Visual" --prompt "Create a polished product launch hero image for an enterprise collaboration platform." --ratio landscape --reference-image ./reference.png
-```
-
-`new img` supports `--ratio square|landscape|portrait` and one `--reference-image <path-or-url>`, defaults to `square`, saves one local image, publishes an online image preview by default when publishing is configured, and only charges hosted credits after a successful hosted image response. In `external` runtime mode it is free and unlimited and uses your configured image provider; in `hosted` runtime mode it consumes hosted credits. Use `--no-publish` for local-only output. Local preview sidecars are not supported for standalone images.
-
-Write output to a custom directory:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" "Introduce the product capabilities, customer value, and usage scenarios of this enterprise collaboration platform." --out ./dist
-```
-
-Return JSON output:
-
-```bash
-./officecli new pptx "Enterprise Collaboration Platform" --prompt-file ./examples/prompt.txt --json
-```
-
-Score a local PPTX:
-
-```bash
-./officecli score pptx ./output/Enterprise-Collaboration-Platform.pptx
-```
-
-The compatibility alias remains available:
-
-```bash
-./officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx
-```
-
 By default, scoring performs structural checks first. If LibreOffice (`soffice`) is installed, OfficeCLI also adds a PDF-based visual review pass.
 
 Run structural checks only:
 
 ```bash
-./officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx --no-visual
+officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx --no-visual
 ```
 
 Start the JSON-RPC bridge for agents:
 
 ```bash
-./officecli agent-bridge
-```
-
-Check the current license status:
-
-```bash
-./officecli auth status
+officecli agent-bridge
 ```
 
 ## Development Notes

@@ -178,8 +178,23 @@ describe('marketing site shell', () => {
     expect(screen.getAllByText('Pricing & Usage Rules').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Invite Rewards').length).toBeGreaterThan(0)
     expect(screen.getByText(/Each activated referral adds 20 hosted credits/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Hosted trial access is the default/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/officecli new pptx "Q3 Business Review"/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/--prompt-file/i).length).toBeGreaterThan(0)
     expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
+  })
+
+  it('shows first-run hosted examples on the download page', () => {
+    render(
+      <MemoryRouter initialEntries={['/download']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText(/hosted trial access by default/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Run after install/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/officecli new pptx "Q3 Business Review"/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/officecli auth status/i).length).toBeGreaterThan(0)
   })
 })
 

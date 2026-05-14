@@ -1956,27 +1956,31 @@ func TestAppRun_HelpOutput(t *testing.T) {
 	output := stdout.String()
 	for _, needle := range []string{
 		"officecli",
-		"config                  View or update local configuration",
-		"auth                    View or update access settings",
-		"score                   Run PPTX scoring on demand",
-		"upgrade                 Check for updates and upgrade officecli",
-		"new <pptx|docx|xlsx|report|img> <topic> [brief]",
-		"--ratio <value>",
-		"officecli config status",
-		"officecli upgrade --help",
-		"officecli score --help",
-		"officecli auth --help",
-		"officecli new --help",
+		"Install, then run your first file:",
+		"Hosted trial access is the default",
+		"officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
+		"officecli new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
+		"officecli new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
+		"officecli auth status",
+		"officecli auth set-key <api-key>",
 		"Commands:",
-		"Default behavior:",
-		"Config file:",
-		"macOS   ~/Library/Application Support/officecli/config.json",
-		"Linux   ~/.config/officecli/config.json",
-		"officecli new pptx \"Enterprise Collaboration Platform Overview\" \"Explain the product capabilities, customer value, and use cases of this enterprise collaboration platform\"",
-		"officecli new img \"Launch Visual\"",
+		"officecli new --help",
 	} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("help output missing %q: %s", needle, output)
+		}
+	}
+	for _, needle := range []string{
+		"--ratio <value>",
+		"Config file:",
+		"macOS   ~/Library/Application Support/officecli/config.json",
+		"External Mode remains available",
+		"Standalone img local preview sidecars are not supported",
+		"agent-bridge            Expose an agent interface",
+		"score                   Run PPTX scoring on demand",
+	} {
+		if strings.Contains(output, needle) {
+			t.Fatalf("help output should not include advanced detail %q: %s", needle, output)
 		}
 	}
 	if stderr.Len() != 0 {
@@ -1993,7 +1997,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a hosted API key."}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--ratio <value>", "automatic PPT images", "officecli config set-generation", "requires `--file <xlsx-path>`", "hosted image route"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
@@ -2007,6 +2011,17 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		for _, needle := range tc.needles {
 			if !strings.Contains(out, needle) {
 				t.Fatalf("help(%v) missing %q: %s", tc.args, needle, out)
+			}
+		}
+		if tc.args[0] == "new" {
+			for _, needle := range []string{
+				"premium",
+				"hosted image route",
+				"officecli config set-generation",
+			} {
+				if strings.Contains(out, needle) {
+					t.Fatalf("new help should stay concise and omit %q: %s", needle, out)
+				}
 			}
 		}
 	}
