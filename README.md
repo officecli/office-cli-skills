@@ -27,6 +27,7 @@ Site pages:
 GitHub guides in this repository:
 
 - [Install](./install/README.md)
+- [Generation demos](./demos/README.md)
 - [Claude Code](./claude-code/README.md)
 - [Codex](./codex/README.md)
 - [OpenClaw](./openclaw/README.md)
@@ -46,6 +47,23 @@ The public `officecli` skill is designed for agent workflows such as:
 - report workflows routed through OfficeCLI when a workbook-backed report artifact is needed
 - standalone image generation through `office.generate` with server-controlled provider settings
 - capability checks before execution so the agent can decide whether OfficeCLI supports the request
+
+## Generation demos
+
+These checked-in demos show the visible result and the reproducible inputs together. Each demo includes
+a preview image, the generated artifact, `prompt.md`, `metadata.json`, and the command used to reproduce
+the flow with a configured OfficeCLI runtime.
+
+| Demo | Preview | Files |
+| --- | --- | --- |
+| Image-rich strategy deck | ![Image-rich strategy deck](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
+| Text-only executive briefing | ![Text-only executive briefing](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
+| OfficeCLI Skills customer brief | ![OfficeCLI Skills customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-skills-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
+| Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
+| OfficeCLI Skills hero image | ![OfficeCLI Skills hero image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-skills-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+
+See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
 ## Supported agent runtimes
 
@@ -171,6 +189,7 @@ No. It contains public skill definitions, plugin wrappers, examples, and install
 - `openclaw/README.md`: OpenClaw installer and bridge guide
 - `faq/README.md`: FAQ entrypoint
 - `.claude-plugin/marketplace.json`: Claude Code marketplace definition
+- `demos/`: reproducible demo gallery with preview images, prompts, metadata, and generated files
 - `plugins/officecli/`: Claude Code plugin wrapper for the `officecli` skill
 - `plugins/openclaw-officecli/`: Claude Code plugin wrapper for the `openclaw-officecli` skill
 - `skills/officecli/`: public OfficeCLI skill definition

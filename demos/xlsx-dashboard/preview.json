@@ -1,0 +1,92 @@
+{
+  "sheets": [
+    {
+      "name": "Demos",
+      "purpose": "Track public demo coverage and readiness",
+      "columns": [
+        {
+          "label": "Artifact",
+          "type": "string"
+        },
+        {
+          "label": "Audience",
+          "type": "string"
+        },
+        {
+          "label": "Status",
+          "type": "string"
+        },
+        {
+          "label": "Priority",
+          "type": "number"
+        }
+      ],
+      "rows": [
+        [
+          "PPTX image-rich",
+          "Product leadership",
+          "Ready",
+          "1"
+        ],
+        [
+          "PPTX text-only",
+          "Operations",
+          "Ready",
+          "2"
+        ],
+        [
+          "DOCX brief",
+          "Automation team",
+          "Ready",
+          "3"
+        ],
+        [
+          "XLSX dashboard",
+          "RevOps",
+          "Ready",
+          "4"
+        ],
+        [
+          "Report workbook",
+          "Board",
+          "Ready",
+          "5"
+        ],
+        [
+          "Standalone IMG",
+          "Marketing",
+          "Ready",
+          "6"
+        ]
+      ],
+      "summary": [
+        {
+          "label": "Demo count",
+          "value": "6"
+        },
+        {
+          "label": "Coverage",
+          "value": "PPTX DOCX XLSX REPORT IMG"
+        }
+      ],
+      "autoFilter": true,
+      "showTotals": true
+    }
+  ],
+  "subtitle": "Public skill examples by artifact type",
+  "theme": {
+    "preset": "analysis",
+    "primaryColor": "1D4ED8",
+    "accentColor": "0F766E",
+    "accentSoft": "D1FAE5",
+    "backgroundColor": "F8FAFC",
+    "surfaceColor": "FFFFFF",
+    "borderColor": "DCE4F2",
+    "textColor": "0F172A",
+    "mutedColor": "64748B",
+    "titleColor": "020617",
+    "fontFamily": "Aptos",
+    "eaFontFamily": "Microsoft YaHei"
+  },
+  "title": "Demo adoption dashboard"
+}

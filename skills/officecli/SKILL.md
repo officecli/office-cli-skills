@@ -31,7 +31,7 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - `--no-images` disables image generation for `pptx`
 - standalone `img` generation always goes through the OfficeCLI server and requires platform/license config
 - standalone `img` does not use local `llm.image_base_url`, `llm.image_api_key`, or `llm.image_model` settings
-- standalone `img` supports `ratio=square|landscape|portrait` and one `reference_image` / `--reference-image <path-or-url>`; one image generation count is consumed only after a successful image response
+- standalone `img` supports `ratio=square|landscape|portrait` and one `reference_image` / `--reference-image <path-or-url>`; charging happens only after a successful image response, using one image generation count in `external` runtime mode or hosted credits in `hosted` runtime mode
 - free standalone `img` usage has a separate 3-per-day bucket from the 10-per-day free document bucket
 - standalone `img` publishes online by default when publishing is configured; pass `publish=false` or `--no-publish` for local-only output
 - when using `agent-bridge`, agents should treat `capabilities/get -> document_generation.pptx.image_support` as the authoritative machine-readable contract for PPT image behavior

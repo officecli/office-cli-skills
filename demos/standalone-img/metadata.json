@@ -1,0 +1,24 @@
+{
+  "title": "OfficeCLI Skills hero image",
+  "type": "img",
+  "command": "officecli new img \"OfficeCLI Skills hero image\" --prompt-file ./prompt.md --ratio landscape --no-publish",
+  "artifact": "officecli-skills-hero-image.png",
+  "preview": "preview.png",
+  "prompt_file": "prompt.md",
+  "verified_at": "2026-05-14T00:00:00Z",
+  "generated_with": "OfficeCLI renderer from this repository",
+  "verification": [
+    "metadata schema validated by scripts/validate-skills-demos.py",
+    "artifact exists and is under 3MB",
+    "preview image exists and is a valid PNG"
+  ],
+  "notes": [
+    "Checked-in image is a deterministic documentation fixture so the public repo can be validated without a private image-generation key.",
+    "Use the command above with configured external or hosted image generation to reproduce a live generated image."
+  ],
+  "sha256": {
+    "officecli-skills-hero-image.png": "3f1cca85623e76a48094e4815800b0b833b868002e01a7bd9c0b41eb3c078162",
+    "preview.png": "3f1cca85623e76a48094e4815800b0b833b868002e01a7bd9c0b41eb3c078162",
+    "prompt.md": "960684aa4e52ada39b2d42195ca86dc995a126e6f28c7ef98bc46328e9786236"
+  }
+}

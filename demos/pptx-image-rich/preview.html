@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image-rich strategy deck Preview</title>
+  <style>
+    :root {
+      --bg1: #0B1020;
+      --bg2: #111827;
+      --primary: #1F2937;
+      --accent: #F97316;
+      --text: #E5E7EB;
+      --title: #FFFFFF;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Aptos", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      padding: 24px;
+    }
+    header { margin-bottom: 20px; }
+    .deck { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+    .slide {
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(15,23,42,0.08);
+      border-radius: 18px;
+      min-height: 220px;
+      padding: 20px;
+      box-shadow: 0 18px 50px rgba(15,23,42,0.08);
+      position: relative;
+    }
+    .slide-no {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    h1, h2 { color: var(--title); margin: 0 0 8px; }
+    .meta, .subtitle, .source, em, span { display: block; color: #475569; }
+    ul { margin: 10px 0 0 18px; padding: 0; }
+    .sections, .metrics { display: grid; gap: 10px; margin-top: 10px; }
+    .section, .metric {
+      border-left: 4px solid var(--accent);
+      padding-left: 10px;
+      background: rgba(255,255,255,0.55);
+    }
+    .warnings {
+      margin-top: 20px;
+      background: rgba(15,23,42,0.08);
+      border-radius: 16px;
+      padding: 16px 18px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Image-rich strategy deck</h1>
+    <p>Preset: executive-dark</p>
+  </header>
+  <main class="deck"><section class="slide"><div class="slide-no">01</div><h2>Image-rich strategy deck</h2><p class="meta">layout=title / variant=title-center</p><p class="subtitle">Prompt to published Office artifact</p><p class="meta">role=cover / section=</p></section><section class="slide"><div class="slide-no">02</div><h2>Contents</h2><p class="meta">layout=toc / variant=toc</p><p class="subtitle">Review the structure before diving into the content.</p><p class="meta">role=toc / section=Core Storyline</p><div class="sections"><div class="section"><strong>01</strong><span>Core Storyline</span></div><div class="section"><strong>02</strong><span>Executive Summary</span></div><div class="section"><strong>03</strong><span>Workflow at a glance</span></div><div class="section"><strong>04</strong><span>Generated output gallery</span></div><div class="section"><strong>05</strong><span>Agent contract</span></div><div class="section"><strong>06</strong><span>Decision and Next Steps</span></div></div></section><section class="slide"><div class="slide-no">03</div><h2>Core Storyline</h2><p class="meta">layout=chapter / variant=chapter</p><p class="subtitle">Use this section to shift the story before the next cluster of slides.</p><p class="meta">role=chapter / section=Core Storyline</p></section><section class="slide"><div class="slide-no">04</div><h2>Executive Summary</h2><p class="meta">layout=content / variant=bullets</p><p class="subtitle">Lead with the decision, then support it slide by slide</p><p class="meta">role=summary / section=Core Storyline</p><ul><li>Core Insight: State.</li><li>Why It Matters: Summarize the impact, risk, or upside behind the conclusion</li><li>Decision: Clarify what should happen next and who needs to move</li></ul></section><section class="slide"><div class="slide-no">05</div><h2>Workflow at a glance</h2><p class="meta">layout=content / variant=sections-grid</p><p class="subtitle">Agents keep the loop reproducible</p><p class="meta">role=analysis / section=Core Storyline</p><div class="sections"><div class="section"><strong>Plan</strong><span>The agent converts intent into a typed payload</span></div><div class="section"><strong>Render</strong><span>OfficeCLI assembles the file locally</span></div><div class="section"><strong>Publish</strong><span>Configured runs return online preview links</span></div></div></section><section class="slide"><div class="slide-no">06</div><h2>Generated output gallery</h2><p class="meta">layout=gallery / variant=gallery</p><p class="subtitle">Visuals travel with the deck when image support is enabled</p><p class="meta">role=analysis / section=Core Storyline</p><div class="sections"><div class="section"><strong>Deck</strong><span>PPTX visual narrative</span></div><div class="section"><strong>Report</strong><span>Workbook-backed report</span></div><div class="section"><strong>Image</strong><span>IMG output</span></div></div></section><section class="slide"><div class="slide-no">07</div><h2>Agent contract</h2><p class="meta">layout=comparison / variant=comparison</p><p class="subtitle">Structured tools avoid scraping CLI progress</p><p class="meta">role=analysis / section=Core Storyline</p><div class="sections"><div class="section"><strong>office.prepare</strong><span>Returns schemas and workbook context</span></div><div class="section"><strong>office.render</strong><span>Validates and writes final Office files</span></div></div></section><section class="slide"><div class="slide-no">08</div><h2>Decision and Next Steps</h2><p class="meta">layout=chapter / variant=chapter</p><p class="subtitle">Use this section to shift the story before the next cluster of slides.</p><p class="meta">role=chapter / section=Decision and Next Steps</p></section><section class="slide"><div class="slide-no">09</div><h2>Decision</h2><p class="meta">layout=closing / variant=closing-decision-banner</p><p class="subtitle">Use the public skills repo as the reproducible demo surface</p><p class="meta">role=closing / section=Decision and Next Steps</p><ul><li>Ship demo files next to prompts and commands</li><li>Keep generated previews visible in GitHub</li><li>Route agents through OfficeCLI when supported</li></ul></section></main>
+  
+</body>
+</html>

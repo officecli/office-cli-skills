@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo adoption dashboard Preview</title>
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --border: #DCE4F2;
+      --text: #0F172A;
+      --muted: #64748B;
+      --accent: #0F766E;
+      --accent-soft: #D1FAE5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Aptos", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #fff 0%, var(--bg) 100%);
+      padding: 28px 16px 40px;
+    }
+    .shell { max-width: 1180px; margin: 0 auto; }
+    .hero {
+      padding: 28px 30px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, var(--accent) 0%, #1D4ED8 100%);
+      color: #fff;
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.12);
+    }
+    .hero p { margin: 0; opacity: 0.9; }
+    .hero h1 { margin: 10px 0 8px; font-size: 42px; }
+    .sheet {
+      margin-top: 22px;
+      padding: 22px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+    }
+    .sheet-chip {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 700;
+    }
+    h2 { margin: 0 0 8px; }
+    .purpose { margin: 0 0 16px; color: var(--muted); }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .summary-item {
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--accent-soft);
+    }
+    .summary-item span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .summary-item strong { display: block; margin-top: 8px; font-size: 24px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 620px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { background: var(--accent-soft); text-transform: uppercase; font-size: 12px; letter-spacing: 0.05em; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p>XLSX Preview</p>
+      <h1>Demo adoption dashboard</h1>
+      <p>Public skill examples by artifact type</p>
+    </section>
+    <section class="sheet"><div class="sheet-chip">Sheet 01</div><h2>Demos</h2><p class="purpose">Track public demo coverage and readiness</p><div class="summary-grid"><article class="summary-item"><span>Demo count</span><strong>6</strong></article><article class="summary-item"><span>Coverage</span><strong>PPTX DOCX XLSX REPORT IMG</strong></article></div><div class="table-wrap"><table><thead><tr><th>Artifact</th><th>Audience</th><th>Status</th><th>Priority</th></tr></thead><tbody><tr><td>PPTX image-rich</td><td>Product leadership</td><td>Ready</td><td>1</td></tr><tr><td>PPTX text-only</td><td>Operations</td><td>Ready</td><td>2</td></tr><tr><td>DOCX brief</td><td>Automation team</td><td>Ready</td><td>3</td></tr><tr><td>XLSX dashboard</td><td>RevOps</td><td>Ready</td><td>4</td></tr><tr><td>Report workbook</td><td>Board</td><td>Ready</td><td>5</td></tr><tr><td>Standalone IMG</td><td>Marketing</td><td>Ready</td><td>6</td></tr></tbody></table></div></section>
+  </main>
+</body>
+</html>

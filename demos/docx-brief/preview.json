@@ -1,0 +1,68 @@
+{
+  "blocks": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "Why this skill exists"
+    },
+    {
+      "type": "paragraph",
+      "level": 2,
+      "text": "officecli-skills gives local agents a repeatable way to decide when OfficeCLI should handle PPTX, DOCX, XLSX, report, or standalone image work."
+    },
+    {
+      "type": "callout",
+      "level": 2,
+      "text": "Install the skill beside the OfficeCLI binary, then let the agent check capabilities before it writes any final Office artifact.",
+      "title": "Recommended use"
+    },
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "Rollout checklist"
+    },
+    {
+      "type": "table",
+      "level": 2,
+      "title": "Adoption plan",
+      "columns": [
+        "Step",
+        "Owner",
+        "Evidence"
+      ],
+      "rows": [
+        [
+          "Install skill",
+          "Automation lead",
+          "officecli --version"
+        ],
+        [
+          "Configure runtime",
+          "Platform owner",
+          "officecli config status"
+        ],
+        [
+          "Generate artifact",
+          "Agent user",
+          "Local file plus preview"
+        ]
+      ]
+    }
+  ],
+  "subtitle": "Local Office generation for agent workflows",
+  "theme": {
+    "preset": "executive",
+    "primaryColor": "0F172A",
+    "accentColor": "F97316",
+    "accentSoft": "FFEDD5",
+    "backgroundColor": "F8FAFC",
+    "surfaceColor": "FFFFFF",
+    "borderColor": "CBD5E1",
+    "textColor": "1E293B",
+    "mutedColor": "64748B",
+    "titleColor": "020617",
+    "fontFamily": "Aptos",
+    "eaFontFamily": "Microsoft YaHei"
+  },
+  "title": "OfficeCLI Skills customer brief"
+}
