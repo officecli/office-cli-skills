@@ -321,7 +321,7 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 	if !strings.Contains(warnings, "Current mode: free. 3 document generations remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
-	if !strings.Contains(warnings, "Trial today on this machine: 3 remaining.") {
+	if !strings.Contains(warnings, "Free trial quota on this machine: 3 remaining.") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeFree) {

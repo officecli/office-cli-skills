@@ -4,7 +4,7 @@ This document lists the main test cases for licensing, free quota, paid quota, c
 
 ## Platform-Side Cases
 
-- `UL-PLAT-001`: first free check on a new fingerprint creates quota and returns `access_mode=free`
+- `UL-PLAT-001`: first free check on a new fingerprint creates one-time quota and returns `access_mode=free`
 - `UL-PLAT-002`: exhausted free quota returns `reason_code=free_quota_exhausted`
 - `UL-PLAT-003`: valid paid key returns `access_mode=paid`
 - `UL-PLAT-004`: missing paid key returns `reason_code=invalid_api_key`
@@ -15,7 +15,8 @@ This document lists the main test cases for licensing, free quota, paid quota, c
 - `UL-PLAT-009`: successful paid consume decrements remaining quota
 - `UL-PLAT-010`: repeated consume with the same `request_id` is idempotent
 - `UL-PLAT-011`: concurrent free consume does not over-decrement
-- `UL-PLAT-012`: admin-side quota adjustment affects the next check result
+- `UL-PLAT-012`: one-time free quota does not reset across UTC days
+- `UL-PLAT-013`: admin-side quota adjustment affects the next check result
 
 ## CLI-Side Cases
 
@@ -23,7 +24,7 @@ This document lists the main test cases for licensing, free quota, paid quota, c
 - `UL-CLI-002`: `auth set-key` writes a validated paid key successfully
 - `UL-CLI-003`: `auth set-key` prompts when the argument is missing
 - `UL-CLI-004`: failed key validation does not overwrite the previous config
-- `UL-CLI-005`: `auth status` shows free mode and remaining free quota
+- `UL-CLI-005`: `auth status` shows free mode and remaining one-time free quota
 - `UL-CLI-006`: `auth status` shows paid mode and remaining paid quota
 - `UL-CLI-007`: exhausted paid quota shows a clear quota-exhausted message
 - `UL-CLI-008`: generation success plus failed consume keeps the file result but adds a warning

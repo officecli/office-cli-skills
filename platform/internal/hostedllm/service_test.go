@@ -187,10 +187,14 @@ type fakeGenerationQuotaManager struct {
 	validations []licensesvc.ConsumeRequest
 	consumes    []licensesvc.ConsumeRequest
 	result      *licensesvc.ConsumeResponse
+	validateErr error
 }
 
 func (f *fakeGenerationQuotaManager) ValidateCommitToken(req licensesvc.ConsumeRequest) error {
 	f.validations = append(f.validations, req)
+	if f.validateErr != nil {
+		return f.validateErr
+	}
 	return nil
 }
 
@@ -284,6 +288,87 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 	require.Equal(t, model.UserAIGatewayAPIKeyStatusActive, store.userKeys[userID].Status)
 	require.Equal(t, "sk-user-42", store.userKeys[userID].KeyPrefix)
 	require.NotContains(t, store.userKeys[userID].KeyCiphertext, "sk-user-42")
+}
+
+func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
+	var upstreamAuth []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/chat/completions", r.URL.Path)
+		upstreamAuth = append(upstreamAuth, r.Header.Get("Authorization"))
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer upstream.Close()
+
+	quota := &fakeGenerationQuotaManager{}
+	store := &fakeAPIKeyStore{}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "platform-upstream-key",
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		TimeoutSec: 5,
+	}, quota)
+
+	resp, err := svc.Complete(context.Background(), "", CompletionRequest{
+		Model:           "hosted/text",
+		Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
+		FingerprintHash: "fp-anon",
+		AccessMode:      model.AccessModeFree,
+		CommitToken: &licensesvc.CommitToken{
+			FingerprintHash: "fp-anon",
+			RequestID:       "req-anon",
+			AccessMode:      model.AccessModeFree,
+			RuntimeMode:     "hosted",
+			Action:          "generate",
+			DocumentType:    "docx",
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Content)
+	require.Equal(t, []string{"Bearer platform-upstream-key"}, upstreamAuth)
+	require.Len(t, quota.validations, 1)
+	require.Empty(t, quota.consumes)
+	require.Empty(t, store.reservations)
+	require.Empty(t, store.settlements)
+}
+
+func TestCompleteWithInvalidCommitTokenRejectsBeforeUpstream(t *testing.T) {
+	upstreamCalls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+		t.Fatalf("upstream should not be called for invalid commit token")
+	}))
+	defer upstream.Close()
+
+	quota := &fakeGenerationQuotaManager{validateErr: fmt.Errorf("invalid commit_token: license proof runtime mode mismatch")}
+	svc := NewService(&fakeAPIKeyStore{}, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "platform-upstream-key",
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		TimeoutSec: 5,
+	}, quota)
+
+	_, err := svc.Complete(context.Background(), "", CompletionRequest{
+		Model:           "hosted/text",
+		Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
+		FingerprintHash: "fp-anon",
+		AccessMode:      model.AccessModeFree,
+		CommitToken: &licensesvc.CommitToken{
+			FingerprintHash: "fp-anon",
+			RequestID:       "req-anon",
+			AccessMode:      model.AccessModeFree,
+			RuntimeMode:     "external",
+			Action:          "generate",
+			DocumentType:    "docx",
+		},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "runtime mode mismatch")
+	require.Len(t, quota.validations, 1)
+	require.Equal(t, 0, upstreamCalls)
 }
 
 func TestCompleteUsesDifferentAIGatewayAPIKeysForDifferentUsers(t *testing.T) {

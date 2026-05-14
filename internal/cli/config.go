@@ -14,13 +14,35 @@ import (
 
 func LoadConfig(path string) (Config, error) {
 	cfg := Config{}
+	licenseEnabledSet := false
 	configPath := ResolveConfigPath(path)
 	if configPath != "" {
 		if data, err := os.ReadFile(configPath); err == nil {
 			_ = json.Unmarshal(data, &cfg)
+			var probe struct {
+				License struct {
+					Enabled *bool `json:"enabled"`
+				} `json:"license"`
+			}
+			if json.Unmarshal(data, &probe) == nil && probe.License.Enabled != nil {
+				licenseEnabledSet = true
+			}
 		}
 	}
 	applyEnvOverrides(&cfg)
+	if os.Getenv("OFFICE_CLI_LICENSE_ENABLED") != "" {
+		licenseEnabledSet = true
+	}
+	defaults := defaultInitConfig()
+	if strings.TrimSpace(cfg.License.BaseURL) == "" {
+		cfg.License.BaseURL = defaults.License.BaseURL
+	}
+	if cfg.License.TimeoutSec <= 0 {
+		cfg.License.TimeoutSec = defaults.License.TimeoutSec
+	}
+	if !licenseEnabledSet {
+		cfg.License.Enabled = true
+	}
 	return cfg, nil
 }
 
@@ -47,7 +69,7 @@ func WriteDefaultConfig(path string) (string, error) {
 			PPTXStylePreset: "tech-contrast",
 		},
 		Runtime: RuntimeConfig{
-			Mode: RuntimeModeExternal,
+			Mode: RuntimeModeHosted,
 		},
 		LLM: LLMConfig{
 			Provider:     "openai",

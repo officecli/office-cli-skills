@@ -740,6 +740,15 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 		"model":    c.model,
 		"messages": messages,
 	}
+	if c.imageAccess != nil {
+		payload["fingerprint_hash"] = c.imageAccess.FingerprintHash
+		payload["user_id"] = c.imageAccess.UserID
+		payload["api_key"] = c.imageAccess.APIKey
+		payload["access_mode"] = c.imageAccess.AccessMode
+		if len(c.imageAccess.CommitToken) > 0 {
+			payload["commit_token"] = c.imageAccess.CommitToken
+		}
+	}
 	for k, v := range extra {
 		payload[k] = v
 	}

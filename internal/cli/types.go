@@ -47,7 +47,10 @@ func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
 	if cfg.Runtime.Mode != "" {
 		return cfg.Runtime.Mode
 	}
-	return RuntimeModeExternal
+	if hasGenerationConfig(cfg) {
+		return RuntimeModeExternal
+	}
+	return RuntimeModeHosted
 }
 
 type LLMConfig struct {
@@ -69,31 +72,31 @@ type InputSources struct {
 }
 
 type GenerateJob struct {
-	DocumentType         engine.DocumentType
-	Topic                string
-	Brief                string
-	OriginalPrompt       string
-	Prompt               string
-	SourceFilePath       string
-	RuntimeMode          RuntimeMode
-	Mode                 string
-	Language             string
-	Style                string
-	StyleSpecified       bool
-	Audience             string
-	EnableImages         bool
-	ImageQuality         string
+	DocumentType          engine.DocumentType
+	Topic                 string
+	Brief                 string
+	OriginalPrompt        string
+	Prompt                string
+	SourceFilePath        string
+	RuntimeMode           RuntimeMode
+	Mode                  string
+	Language              string
+	Style                 string
+	StyleSpecified        bool
+	Audience              string
+	EnableImages          bool
+	ImageQuality          string
 	ImageRatio            string
 	ImageSize             string
 	ReferenceImageSources []string
 	ReferenceImages       []engine.ImageReference
-	LocalPreview         bool
-	OutputDir            string
-	Publish              bool
-	Debug                bool
-	JSONOutput           bool
-	Warnings             []engine.GenerateIssue
-	LicenseCheck         *LicenseCheckResult
+	LocalPreview          bool
+	OutputDir             string
+	Publish               bool
+	Debug                 bool
+	JSONOutput            bool
+	Warnings              []engine.GenerateIssue
+	LicenseCheck          *LicenseCheckResult
 }
 
 type GenerateResult struct {

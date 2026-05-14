@@ -57,6 +57,14 @@ type FreeTrialDailySnapshot struct {
 	IncludedInAccountTotals bool   `json:"included_in_account_totals,omitempty"`
 }
 
+type FreeTrialSnapshot struct {
+	Scope      string `json:"scope,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Used       int    `json:"used,omitempty"`
+	Remaining  int    `json:"remaining,omitempty"`
+	BinaryOnly bool   `json:"binary_only,omitempty"`
+}
+
 type RewardQuotaSnapshot struct {
 	Remaining int `json:"remaining,omitempty"`
 }
@@ -69,6 +77,7 @@ type PaidExternalQuotaSnapshot struct {
 }
 
 type QuotaSnapshot struct {
+	FreeTrial         FreeTrialSnapshot         `json:"free_trial,omitempty"`
 	FreeTrialDaily    FreeTrialDailySnapshot    `json:"free_trial_daily,omitempty"`
 	RewardQuota       RewardQuotaSnapshot       `json:"reward_quota,omitempty"`
 	PaidExternalQuota PaidExternalQuotaSnapshot `json:"paid_external_quota,omitempty"`

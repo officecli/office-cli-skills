@@ -17,16 +17,13 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	if baseURL == "" {
 		return nil, fmt.Errorf("platform service URL is missing, so hosted generation is unavailable")
 	}
-	if job.DocumentType != engine.DocumentTypeIMG && strings.TrimSpace(cfg.APIKey) == "" {
-		return nil, fmt.Errorf("platform access token is missing, so hosted generation is unavailable")
-	}
 	textModelName := hostedTextModelName(job)
 	imageModelName := hostedImageModelName(job)
 	var imageAccess *llmprovider.InternalImageAccess
-	if job.DocumentType == engine.DocumentTypeIMG && job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
+	if job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
 		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
 		if err != nil {
-			return nil, fmt.Errorf("marshal image access token: %w", err)
+			return nil, fmt.Errorf("marshal hosted access token: %w", err)
 		}
 		imageAccess = &llmprovider.InternalImageAccess{
 			FingerprintHash: job.LicenseCheck.CommitToken.FingerprintHash,
@@ -79,7 +76,7 @@ func (cfg Config) hostedRuntimeMode() RuntimeMode {
 
 func runtimeModeLabel(mode RuntimeMode) string {
 	if mode == "" {
-		return string(RuntimeModeExternal)
+		return string(RuntimeModeHosted)
 	}
 	return string(mode)
 }

@@ -14,6 +14,16 @@ Run it after install:
 
 ```bash
 officecli --version
+officecli new docx "Product launch brief" --no-publish
+```
+
+The installed binary is usable without a local model endpoint or an API key. By default it uses OfficeCLI hosted anonymous trial access on `https://platform.officecli.io`; the one-time free quota is tied to this machine. When the free quota is used up, run `officecli auth set-key <api-key>` after purchasing or creating a hosted key from https://officecli.io/pricing.
+
+To use your own model endpoint instead, switch to External Mode:
+
+```bash
+officecli config set-runtime external
+officecli config set-generation
 ```
 
 ## Version Mapping

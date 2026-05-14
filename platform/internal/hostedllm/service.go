@@ -70,14 +70,19 @@ type Service struct {
 }
 
 type CompletionRequest struct {
-	RequestID  string          `json:"request_id,omitempty"`
-	Model      string          `json:"model"`
-	Messages   []ChatMessage   `json:"messages"`
-	Kind       string          `json:"-"`
-	JSONMode   bool            `json:"-"`
-	SchemaName string          `json:"schema_name,omitempty"`
-	Strict     bool            `json:"strict,omitempty"`
-	Schema     json.RawMessage `json:"schema,omitempty"`
+	RequestID       string                  `json:"request_id,omitempty"`
+	Model           string                  `json:"model"`
+	Messages        []ChatMessage           `json:"messages"`
+	Kind            string                  `json:"-"`
+	JSONMode        bool                    `json:"-"`
+	SchemaName      string                  `json:"schema_name,omitempty"`
+	Strict          bool                    `json:"strict,omitempty"`
+	Schema          json.RawMessage         `json:"schema,omitempty"`
+	FingerprintHash string                  `json:"fingerprint_hash,omitempty"`
+	UserID          uint64                  `json:"user_id,omitempty"`
+	APIKey          string                  `json:"api_key,omitempty"`
+	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
+	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
 }
 
 type ChatMessage struct {
@@ -147,6 +152,9 @@ func (s *Service) HostedPricingRules() []model.HostedPricingRule {
 func (s *Service) Complete(ctx context.Context, bearer string, req CompletionRequest) (*CompletionResponse, error) {
 	if err := validateHostedProfile(req.Model, false); err != nil {
 		return nil, err
+	}
+	if req.CommitToken != nil {
+		return s.completeQuotaText(ctx, req)
 	}
 	key, hash, err := s.authorize(ctx, bearer)
 	if err != nil {
@@ -224,6 +232,56 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 		Content:       resp.Choices[0].Message.Content,
 		CreditBalance: creditBalance(updatedKey),
 	}, nil
+}
+
+func (s *Service) completeQuotaText(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+	if s.quota == nil {
+		return nil, fmt.Errorf("generation quota service is unavailable")
+	}
+	consumeReq := textConsumeRequest(req)
+	if err := s.quota.ValidateCommitToken(consumeReq); err != nil {
+		return nil, err
+	}
+	modelName := s.normalizeModel(ctx, req.Model, false)
+	payload := map[string]any{
+		"model":    modelName,
+		"messages": req.Messages,
+	}
+	if req.JSONMode {
+		payload["response_format"] = map[string]any{"type": "json_object"}
+	}
+	if len(req.Schema) > 0 {
+		var schema map[string]any
+		if err := json.Unmarshal(req.Schema, &schema); err != nil {
+			return nil, fmt.Errorf("parse schema: %w", err)
+		}
+		payload["response_format"] = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   req.SchemaName,
+				"strict": req.Strict,
+				"schema": schema,
+			},
+		}
+	}
+	body, _, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, strings.TrimSpace(s.cfg.APIKey))
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode hosted completion: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("hosted completion is empty")
+	}
+	return &CompletionResponse{Content: resp.Choices[0].Message.Content}, nil
 }
 
 func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
@@ -613,6 +671,35 @@ func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequ
 	if apiKey == "" {
 		apiKey = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
 	}
+	accessMode := req.AccessMode
+	if accessMode == "" && req.CommitToken != nil {
+		accessMode = req.CommitToken.AccessMode
+	}
+	requestID := req.RequestID
+	if requestID == "" && req.CommitToken != nil {
+		requestID = req.CommitToken.RequestID
+	}
+	fingerprint := strings.TrimSpace(req.FingerprintHash)
+	if fingerprint == "" && req.CommitToken != nil {
+		fingerprint = req.CommitToken.FingerprintHash
+	}
+	userID := req.UserID
+	if userID == 0 && req.CommitToken != nil {
+		userID = req.CommitToken.UserID
+	}
+	return licensesvc.ConsumeRequest{
+		FingerprintHash: fingerprint,
+		UserID:          userID,
+		RequestID:       requestID,
+		UsageType:       string(model.UsageActionGenerate),
+		AccessMode:      accessMode,
+		APIKey:          apiKey,
+		CommitToken:     req.CommitToken,
+	}
+}
+
+func textConsumeRequest(req CompletionRequest) licensesvc.ConsumeRequest {
+	apiKey := strings.TrimSpace(req.APIKey)
 	accessMode := req.AccessMode
 	if accessMode == "" && req.CommitToken != nil {
 		accessMode = req.CommitToken.AccessMode

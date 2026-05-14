@@ -48,6 +48,8 @@ An initial npm wrapper package now lives at `packages/npm/officecli`.
 
 Its purpose is to install the published OfficeCLI binary from `officecli/officecli-dist` and expose it as an npm-installed `officecli` command. The wrapper does not replace the Go CLI implementation.
 
+After `npm install -g officecli`, the binary can generate through hosted anonymous trial access without a local model endpoint or API key. The one-time free quota is tied to the machine fingerprint; after it is used up, continue from https://officecli.io/pricing and then run `officecli auth set-key <api-key>`.
+
 For trusted publishing without exposing this private source repository on npmjs, the long-term target is a separate public repository, for example `officecli/officecli-npm`, that receives synced wrapper files and runs the actual npm publish workflow.
 
 ## Quick Start
@@ -58,9 +60,10 @@ Build the binary:
 go build -o officecli ./cmd/officecli
 ```
 
-Initialize configuration:
+By default, OfficeCLI uses hosted anonymous trial access. To use your own model endpoint, switch to External Mode and initialize configuration:
 
 ```bash
+./officecli config set-runtime external
 ./officecli config set-generation
 ./officecli config set-license
 ./officecli config set-publish   # optional for documents, required for standalone image preview links

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,75 @@ import (
 
 	"github.com/officecli/officecli/engine"
 )
+
+func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.T) {
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("anonymous hosted request should not send Authorization, got %q", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"content":"{\"title\":\"Anonymous Trial\",\"sections\":[{\"heading\":\"Summary\",\"level\":1,\"paragraphs\":[\"Hosted anonymous generation works.\"]}]}"}`)
+	}))
+	defer server.Close()
+
+	var actions []string
+	consumes := 0
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return countingLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				actions = append(actions, req.Action)
+				return &LicenseCheckResult{
+					Allowed:       true,
+					AccessMode:    LicenseAccessModeFree,
+					FreeRemaining: 10,
+					CommitToken:   signTestCommitToken(req, LicenseAccessModeFree, UsageCommitToken{}),
+				}, nil
+			},
+			consume: func(token UsageCommitToken) (*UsageConsumeResult, error) {
+				consumes++
+				return &UsageConsumeResult{AccessMode: LicenseAccessModeFree, Remaining: 9, FreeRemaining: 9}, nil
+			},
+		}, nil
+	}
+
+	outputDir := t.TempDir()
+	result, err := app.executeGenerateJob(context.Background(), Config{
+		Defaults: DefaultsConfig{OutputDir: outputDir, Publish: false, Mode: "fast"},
+		License:  LicenseConfig{BaseURL: server.URL, Enabled: true, TimeoutSec: 5},
+		Publish:  disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeDOCX,
+		Topic:        "Anonymous Trial",
+		Prompt:       "Write a short status note",
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "fast",
+		OutputDir:    outputDir,
+	}, false, noopProgressController{}, nil)
+
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if result.AccessMode != "free" || result.FreeRemaining != 9 {
+		t.Fatalf("result = %+v", result)
+	}
+	if !reflect.DeepEqual(actions, []string{"generate"}) {
+		t.Fatalf("license actions = %#v", actions)
+	}
+	if consumes != 1 {
+		t.Fatalf("license consumes = %d", consumes)
+	}
+	if gotPayload["commit_token"] == nil || gotPayload["access_mode"] != "free" || gotPayload["fingerprint_hash"] == "" {
+		t.Fatalf("anonymous access payload = %#v", gotPayload)
+	}
+}
 
 func TestExecuteGenerateJobRefreshesAccessAfterBestModeQuestions(t *testing.T) {
 	app := NewApp(nil, nil, nil)

@@ -76,8 +76,7 @@ func TestRegisterLicenseRoutesRateLimitsConsume(t *testing.T) {
 	router := gin.New()
 	api := router.Group("/api")
 	quotas := newTestFreeQuotaStore()
-	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-1|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-1", UsageDate: today, DailyLimit: 100, DailyUsed: 0}
+	quotas.quotas["fp-1"] = &model.FreeQuota{FingerprintHash: "fp-1", FreeLimit: 100, FreeUsed: 0}
 	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 100, time.Hour)
 	registerLicenseRoutes(api, lic)
 

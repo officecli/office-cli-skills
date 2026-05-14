@@ -198,9 +198,6 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 		if strings.TrimSpace(cfg.License.BaseURL) == "" {
 			missing = append(missing, "OFFICE_CLI_LICENSE_BASE_URL")
 		}
-		if strings.TrimSpace(cfg.License.APIKey) == "" {
-			missing = append(missing, "OFFICE_CLI_LICENSE_API_KEY")
-		}
 	}
 	if len(missing) > 0 {
 		if cfg.RuntimeModeOrDefault() == RuntimeModeHosted {
@@ -224,7 +221,7 @@ func defaultInitConfig() Config {
 			PPTXStylePreset: "tech-contrast",
 		},
 		Runtime: RuntimeConfig{
-			Mode: RuntimeModeExternal,
+			Mode: RuntimeModeHosted,
 		},
 		LLM: LLMConfig{
 			Provider:    "openai",
@@ -314,6 +311,8 @@ Common options:
 Default behavior:
   - Default output directory: ./output
   - Default mode: fast
+  - With no local generation config, OfficeCLI defaults to hosted anonymous trial access
+  - External Mode remains available with ` + "`officecli config set-runtime external`" + ` and ` + "`officecli config set-generation`" + `
   - If access checks are enabled, availability is verified before generation
   - If defaults.publish=true and publishing is configured, document output is published automatically
   - Standalone img publishes online by default when publishing is configured; use --no-publish for local-only output
@@ -770,8 +769,6 @@ func missingHostedConfig(cfg Config) string {
 	switch {
 	case strings.TrimSpace(cfg.License.BaseURL) == "":
 		return "platform service URL"
-	case strings.TrimSpace(cfg.License.APIKey) == "":
-		return "platform service credential"
 	default:
 		return ""
 	}
@@ -1050,7 +1047,7 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 		return err
 	}
 	freeTrial, rewardQuota, paidQuota := quotaSnapshotSections(result)
-	if _, err := fmt.Fprintf(a.Stdout, "Free trial today (this machine, UTC): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Free trial quota (this machine, lifetime): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Reward quota remaining: %d\n", rewardQuota.Remaining); err != nil {
@@ -1094,7 +1091,10 @@ func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.FreeTria
 	if result.QuotaSnapshot == nil {
 		return freeTrial, rewardQuota, paidQuota
 	}
-	if snapshot := result.QuotaSnapshot.FreeTrialDaily; snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0 {
+	if snapshot := result.QuotaSnapshot.FreeTrial; snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0 {
+		freeTrial = licenseprovider.FreeTrialDailySnapshot{Limit: snapshot.Limit, Used: snapshot.Used, Remaining: snapshot.Remaining, BinaryOnly: snapshot.BinaryOnly}
+	}
+	if snapshot := result.QuotaSnapshot.FreeTrialDaily; freeTrial.Limit == 0 && freeTrial.Used == 0 && freeTrial.Remaining == 0 && (snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0) {
 		freeTrial = snapshot
 	}
 	if snapshot := result.QuotaSnapshot.RewardQuota; snapshot.Remaining > 0 || result.RewardRemaining == 0 {
@@ -1189,7 +1189,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		return nil, fmt.Errorf("license proof validation failed: %w", err)
 	}
 	if !result.Allowed {
-		fallback := "Free quota is exhausted. Add license.api_key to the config file and try again."
+		fallback := "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>."
 		if result.ReasonCode == "hosted_credit_exhausted" {
 			fallback = "Hosted credits are exhausted. Please top up credits first."
 		}

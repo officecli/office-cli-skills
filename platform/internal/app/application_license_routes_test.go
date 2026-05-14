@@ -38,31 +38,30 @@ func (testAPIKeyStore) ConsumePaidByHash(_ context.Context, _ string) (*model.AP
 
 type testFreeQuotaStore struct {
 	mu     sync.Mutex
-	quotas map[string]*model.DailyFreeQuota
+	quotas map[string]*model.FreeQuota
 }
 
 func newTestFreeQuotaStore() *testFreeQuotaStore {
-	return &testFreeQuotaStore{quotas: map[string]*model.DailyFreeQuota{}}
+	return &testFreeQuotaStore{quotas: map[string]*model.FreeQuota{}}
 }
 
-func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
+func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := fingerprint + "|" + usageDate + "|" + documentType
-	if quota, ok := f.quotas[key]; ok {
+	if quota, ok := f.quotas[fingerprint]; ok {
 		copied := *quota
 		return &copied, false, nil
 	}
-	quota := &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DocumentType: documentType, DailyLimit: defaultLimit}
-	f.quotas[key] = quota
+	quota := &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit}
+	f.quotas[fingerprint] = quota
 	copied := *quota
 	return &copied, true, nil
 }
 
-func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
+func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string) (*model.FreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint+"|"+usageDate+"|"+documentType]
+	quota := f.quotas[fingerprint]
 	if quota == nil {
 		return nil, nil
 	}
@@ -70,19 +69,18 @@ func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint str
 	return &copied, nil
 }
 
-func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
+func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := fingerprint + "|" + usageDate + "|" + documentType
-	quota := f.quotas[key]
+	quota := f.quotas[fingerprint]
 	if quota == nil {
-		quota = &model.DailyFreeQuota{FingerprintHash: fingerprint, UsageDate: usageDate, DocumentType: documentType, DailyLimit: defaultLimit}
-		f.quotas[key] = quota
+		quota = &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit}
+		f.quotas[fingerprint] = quota
 	}
-	if quota.DailyUsed >= quota.DailyLimit {
+	if quota.FreeUsed >= quota.FreeLimit {
 		return nil, licensesvc.ErrQuotaExhausted
 	}
-	quota.DailyUsed++
+	quota.FreeUsed++
 	copied := *quota
 	return &copied, nil
 }
@@ -235,8 +233,7 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnFreeQuotaExhausted(t *test
 	router := gin.New()
 	api := router.Group("/api")
 	quotas := newTestFreeQuotaStore()
-	today := time.Now().UTC().Format("2006-01-02")
-	quotas.quotas["fp-1|"+today+"|document"] = &model.DailyFreeQuota{FingerprintHash: "fp-1", UsageDate: today, DailyLimit: 1, DailyUsed: 1}
+	quotas.quotas["fp-1"] = &model.FreeQuota{FingerprintHash: "fp-1", FreeLimit: 1, FreeUsed: 1}
 	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
 	registerLicenseRoutes(api, lic)
 	token := issueRouteCommitToken(t, lic, "fp-1", model.AccessModeFree, nil)

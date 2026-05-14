@@ -475,6 +475,55 @@ func TestInternalClient_GenerateImageReturnsCreditBalance(t *testing.T) {
 	}
 }
 
+func TestInternalClient_CompleteSendsAnonymousAccessFields(t *testing.T) {
+	t.Parallel()
+
+	var payload struct {
+		Model           string          `json:"model"`
+		FingerprintHash string          `json:"fingerprint_hash"`
+		AccessMode      string          `json:"access_mode"`
+		CommitToken     json.RawMessage `json:"commit_token"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("anonymous request should not send Authorization, got %q", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		_, _ = fmt.Fprint(w, `{"content":"{\"ok\":true}"}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "internal",
+		BaseURL:  server.URL,
+		Model:    "hosted/text",
+		ImageAccess: &InternalImageAccess{
+			FingerprintHash: "fp-anon",
+			AccessMode:      "free",
+			CommitToken:     json.RawMessage(`{"request_id":"req-anon"}`),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{{Role: "user", Content: "Return JSON"}})
+	if err != nil {
+		t.Fatalf("CompleteJSON: %v", err)
+	}
+	if payload.Model != "hosted/text" || payload.FingerprintHash != "fp-anon" || payload.AccessMode != "free" {
+		t.Fatalf("payload = %+v", payload)
+	}
+	if !strings.Contains(string(payload.CommitToken), "req-anon") {
+		t.Fatalf("commit token = %s", string(payload.CommitToken))
+	}
+}
+
 func TestOpenAIClient_GenerateImageWithReferenceUsesImageEditMultipart(t *testing.T) {
 	t.Parallel()
 

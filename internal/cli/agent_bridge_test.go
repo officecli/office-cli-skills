@@ -60,6 +60,7 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	writeTestPreflightScript(t, filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n: > \""+markerPath+"\"\n")
 	_, err := WriteConfig("", Config{
 		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		Runtime:  RuntimeConfig{Mode: RuntimeModeExternal},
 		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
 		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
 		Publish:  disabledPublishConfig(),

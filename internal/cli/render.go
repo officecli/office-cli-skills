@@ -168,7 +168,7 @@ func isQuotaWarning(warning string) bool {
 	}
 	for _, prefix := range []string{
 		"Current mode: ",
-		"Trial today on this machine: ",
+		"Free trial quota on this machine: ",
 		"Reward quota: ",
 		"Paid quota on current key: ",
 	} {

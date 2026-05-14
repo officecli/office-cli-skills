@@ -92,7 +92,7 @@ Recommended production base URLs:
 - `HTTP_ADDR`: HTTP listen address
 - `POSTGRES_DSN`: PostgreSQL DSN
 - `REDIS_ADDR`: Redis address
-- `DEFAULT_FREE_LIMIT`: default anonymous free quota per machine
+- `DEFAULT_FREE_LIMIT`: default one-time anonymous free quota per machine fingerprint
 - `ADMIN_PASSWORD`: admin password
 - `SESSION_SECRET`: admin session signing secret
 - `APP_SESSION_SECRET`: app session signing secret

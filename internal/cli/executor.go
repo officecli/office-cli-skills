@@ -121,11 +121,14 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: free. %d document generations remaining.", consumeResult.Remaining))
 			}
 			if snapshot := job.LicenseCheck.QuotaSnapshot; snapshot != nil {
-				freeRemaining := snapshot.FreeTrialDaily.Remaining
+				freeRemaining := snapshot.FreeTrial.Remaining
+				if freeRemaining == 0 {
+					freeRemaining = snapshot.FreeTrialDaily.Remaining
+				}
 				if job.LicenseCheck.AccessMode == LicenseAccessModeFree {
 					freeRemaining = consumeResult.Remaining
 				}
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Trial today on this machine: %d remaining.", freeRemaining))
+				result.Warnings = append(result.Warnings, fmt.Sprintf("Free trial quota on this machine: %d remaining.", freeRemaining))
 
 				rewardRemaining := snapshot.RewardQuota.Remaining
 				if job.LicenseCheck.AccessMode == LicenseAccessModeReward {

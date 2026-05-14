@@ -21,9 +21,9 @@ type APIKeyStore interface {
 }
 
 type FreeQuotaStore interface {
-	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error)
-	GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error)
-	Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error)
+	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error)
+	GetByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error)
+	Consume(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error)
 }
 
 type UsageEventStore interface {
@@ -60,8 +60,6 @@ type Service struct {
 	clock            func() time.Time
 	proof            *proofSigner
 }
-
-const defaultImageFreeLimit = 3
 
 func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
 	proofCfg := ProofConfig{}
@@ -103,16 +101,6 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 	}
 	if req.Action != string(model.UsageActionGenerate) && req.Action != string(model.UsageActionStatus) {
 		return nil, ErrInvalidAction
-	}
-	if strings.TrimSpace(req.APIKey) == "" && strings.TrimSpace(req.RuntimeMode) == "hosted" {
-		return &CheckResponse{
-			Allowed:             false,
-			AccessMode:          model.AccessModeBlocked,
-			ReasonCode:          "hosted_requires_api_key",
-			Message:             "Hosted mode requires a valid officecli API key to be configured first.",
-			AllowedModes:        []string{"external"},
-			SelectedRuntimeMode: "hosted",
-		}, nil
 	}
 	if isExternalRuntime(req.RuntimeMode) {
 		return s.checkExternalFree(ctx, req)
@@ -234,18 +222,16 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 }
 
 func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
-	usageDate := s.currentUsageDate()
-	quotaType := quotaDocumentType(req.DocumentType)
 	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
-	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, usageDate, quotaType, freeLimit)
+	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, freeLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &CheckResponse{FreeLimit: quota.DailyLimit, FreeUsed: quota.DailyUsed, FreeRemaining: quota.Remaining()}
+	response := &CheckResponse{FreeLimit: quota.FreeLimit, FreeUsed: quota.FreeUsed, FreeRemaining: quota.FreeRemaining()}
 	response.AllowedModes = []string{"external"}
-	response.SelectedRuntimeMode = "external"
-	if quota.DailyUsed < quota.DailyLimit {
+	response.SelectedRuntimeMode = selectedFreeRuntimeMode(req)
+	if quota.FreeUsed < quota.FreeLimit {
 		response.Allowed = true
 		response.AccessMode = model.AccessModeFree
 		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeFree, "")
@@ -256,7 +242,7 @@ func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckRespon
 		response.Allowed = false
 		response.AccessMode = model.AccessModeBlocked
 		response.ReasonCode = "free_quota_exhausted"
-		response.Message = "free quota is exhausted; configure an API key to continue"
+		response.Message = "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>."
 	}
 
 	event := buildUsageEvent(req, model.UsageModeFree, response, nil)
@@ -402,23 +388,18 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 			}
 			return resp, nil
 		}
-		usageDate := s.currentUsageDate()
-		if !existing.CreatedAt.IsZero() {
-			usageDate = existing.CreatedAt.UTC().Format("2006-01-02")
-		}
-		documentType := ""
-		if existing.DocumentType != nil {
-			documentType = *existing.DocumentType
-		}
-		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, usageDate, quotaDocumentType(documentType))
+		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash)
 		if err != nil {
 			return nil, err
 		}
+		if quota == nil {
+			quota = &model.FreeQuota{FingerprintHash: req.FingerprintHash, FreeLimit: s.defaultFreeLimit}
+		}
 		resp := &ConsumeResponse{
 			AccessMode:    model.AccessModeFree,
-			FreeUsed:      quota.DailyUsed,
-			FreeRemaining: quota.Remaining(),
-			Remaining:     quota.Remaining(),
+			FreeUsed:      quota.FreeUsed,
+			FreeRemaining: quota.FreeRemaining(),
+			Remaining:     quota.FreeRemaining(),
 		}
 		if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
 			return nil, err
@@ -459,7 +440,7 @@ func (s *Service) consumeExternalFree(ctx context.Context, req ConsumeRequest) (
 
 func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
 	documentType := consumeDocumentType(req)
-	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.currentUsageDate(), quotaDocumentType(documentType), s.freeLimitForDocumentType(documentType))
+	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.freeLimitForDocumentType(documentType))
 	if err != nil {
 		return nil, err
 	}
@@ -484,9 +465,9 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 	}
 	resp := &ConsumeResponse{
 		AccessMode:    model.AccessModeFree,
-		FreeUsed:      quota.DailyUsed,
-		FreeRemaining: quota.Remaining(),
-		Remaining:     quota.Remaining(),
+		FreeUsed:      quota.FreeUsed,
+		FreeRemaining: quota.FreeRemaining(),
+		Remaining:     quota.FreeRemaining(),
 	}
 	if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
 		return nil, err
@@ -604,9 +585,17 @@ func (s *Service) rewardBalanceResponse(ctx context.Context, userID uint64) (*Co
 	return resp, nil
 }
 
-func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, freeQuota *model.DailyFreeQuota, rewardRemaining int) (*QuotaSnapshot, error) {
+func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, freeQuota *model.FreeQuota, rewardRemaining int) (*QuotaSnapshot, error) {
 	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
+	freeTrial := FreeTrialSnapshot{
+		Scope:      "lifetime",
+		Limit:      freeLimit,
+		Used:       0,
+		Remaining:  freeLimit,
+		BinaryOnly: true,
+	}
 	snapshot := &QuotaSnapshot{
+		FreeTrial: freeTrial,
 		FreeTrialDaily: FreeTrialDailySnapshot{
 			UsageDate:               s.currentUsageDate(),
 			Limit:                   freeLimit,
@@ -622,16 +611,22 @@ func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key 
 
 	if freeQuota == nil && s.freeQuotas != nil {
 		var err error
-		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash, snapshot.FreeTrialDaily.UsageDate, quotaDocumentType(req.DocumentType))
+		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if freeQuota != nil {
-		snapshot.FreeTrialDaily.UsageDate = freeQuota.UsageDate
-		snapshot.FreeTrialDaily.Limit = freeQuota.DailyLimit
-		snapshot.FreeTrialDaily.Used = freeQuota.DailyUsed
-		snapshot.FreeTrialDaily.Remaining = freeQuota.Remaining()
+		snapshot.FreeTrial = FreeTrialSnapshot{
+			Scope:      "lifetime",
+			Limit:      freeQuota.FreeLimit,
+			Used:       freeQuota.FreeUsed,
+			Remaining:  freeQuota.FreeRemaining(),
+			BinaryOnly: true,
+		}
+		snapshot.FreeTrialDaily.Limit = freeQuota.FreeLimit
+		snapshot.FreeTrialDaily.Used = freeQuota.FreeUsed
+		snapshot.FreeTrialDaily.Remaining = freeQuota.FreeRemaining()
 	}
 
 	if snapshot.RewardQuota.Remaining == 0 && s.rewards != nil && req.UserID != 0 {
@@ -742,10 +737,15 @@ func selectedRuntimeMode(req CheckRequest, key *model.APIKey) string {
 }
 
 func (s *Service) freeLimitForDocumentType(documentType string) int {
-	if quotaDocumentType(documentType) == "img" {
-		return defaultImageFreeLimit
-	}
 	return s.defaultFreeLimit
+}
+
+func selectedFreeRuntimeMode(req CheckRequest) string {
+	runtimeMode := strings.TrimSpace(req.RuntimeMode)
+	if runtimeMode != "" {
+		return runtimeMode
+	}
+	return "hosted"
 }
 
 func quotaDocumentType(documentType string) string {

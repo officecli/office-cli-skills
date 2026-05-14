@@ -186,12 +186,12 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 
 	selectedRuntimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(runtimeMode)))
 	if documentType == engine.DocumentTypeIMG && selectedRuntimeMode == "" {
-		selectedRuntimeMode = cfg.Runtime.Mode
+		selectedRuntimeMode = cfg.RuntimeModeOrDefault()
 	} else if selectedRuntimeMode == "" {
-		selectedRuntimeMode = cfg.Runtime.Mode
+		selectedRuntimeMode = cfg.RuntimeModeOrDefault()
 	}
 	if selectedRuntimeMode == "" {
-		selectedRuntimeMode = RuntimeModeExternal
+		selectedRuntimeMode = RuntimeModeHosted
 	}
 	switch selectedRuntimeMode {
 	case RuntimeModeExternal, RuntimeModeHosted:

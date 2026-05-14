@@ -940,6 +940,19 @@ func TestBuildGenerateJob_PromptPrecedence(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_EmptyConfigDefaultsToHostedRuntime(t *testing.T) {
+	job, err := BuildGenerateJob([]string{
+		"docx",
+		"Anonymous trial",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.RuntimeMode != RuntimeModeHosted {
+		t.Fatalf("runtime mode = %q, want hosted", job.RuntimeMode)
+	}
+}
+
 func TestBuildGenerateJob_UsesPromptFileBeforeStdinAndPositionals(t *testing.T) {
 	tmpDir := t.TempDir()
 	promptFile := filepath.Join(tmpDir, "prompt.txt")
@@ -1035,7 +1048,7 @@ func TestBuildGenerateJob_PPTXImageQualityDefaultsAndPremium(t *testing.T) {
 	}
 }
 
-func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
+func TestBuildGenerateJob_IMGDefaultsToHostedRuntime(t *testing.T) {
 	cfg := Config{Defaults: DefaultsConfig{Publish: false, Mode: "best"}}
 
 	job, err := BuildGenerateJob([]string{
@@ -1049,7 +1062,7 @@ func TestBuildGenerateJob_IMGDefaultsToServerImageRuntime(t *testing.T) {
 	if job.DocumentType != engine.DocumentTypeIMG {
 		t.Fatalf("document type = %q", job.DocumentType)
 	}
-	if job.RuntimeMode != RuntimeModeExternal {
+	if job.RuntimeMode != RuntimeModeHosted {
 		t.Fatalf("runtime mode = %q", job.RuntimeMode)
 	}
 	if job.Mode != "fast" {
@@ -1861,7 +1874,7 @@ func TestRenderResult_HumanSummarizesQuotaInSingleLine(t *testing.T) {
 		PaidQuotaRemaining: 109,
 		Warnings: []string{
 			"Current mode: paid. 109 document generations remaining.",
-			"Trial today on this machine: 10 remaining.",
+			"Free trial quota on this machine: 10 remaining.",
 			"Reward quota: 0 remaining.",
 			"Paid quota on current key: 109 remaining.",
 			"Publishing is not configured, so online preview publishing was skipped.",
@@ -1878,7 +1891,7 @@ func TestRenderResult_HumanSummarizesQuotaInSingleLine(t *testing.T) {
 	}
 	for _, needle := range []string{
 		"Warning: Current mode: paid.",
-		"Warning: Trial today on this machine:",
+		"Warning: Free trial quota on this machine:",
 		"Warning: Reward quota:",
 		"Warning: Paid quota on current key:",
 	} {
@@ -2693,10 +2706,13 @@ func TestAppRun_ConfigStatusShowsProductState(t *testing.T) {
 	}
 }
 
-func TestAppRun_MissingGenerationConfigShowsConfigGuidance(t *testing.T) {
+func TestAppRun_ExternalMissingGenerationConfigShowsConfigGuidance(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "missing.json")
 	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	if _, err := WriteConfig("", Config{Runtime: RuntimeConfig{Mode: RuntimeModeExternal}}, true); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -2740,7 +2756,7 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 				Allowed:       false,
 				AccessMode:    LicenseAccessModeBlocked,
 				FreeRemaining: 0,
-				Message:       "Free quota is exhausted. Add license.api_key to the config file and try again.",
+				Message:       "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>.",
 			},
 		}, nil
 	}
@@ -2753,7 +2769,7 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "Free quota is exhausted") {
+	if !strings.Contains(err.Error(), "https://officecli.io/pricing") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if llmCalled {
@@ -2919,7 +2935,7 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
+	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial quota (this machine, lifetime): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -2966,7 +2982,7 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") || !strings.Contains(output, "Free trial today (this machine, UTC): 10 total / 0 used / 10 remaining") {
+	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") || !strings.Contains(output, "Free trial quota (this machine, lifetime): 10 total / 0 used / 10 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -2986,6 +3002,29 @@ func TestCheckLicensePaidQuotaExhaustedShowsPaidMessage(t *testing.T) {
 	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
 	if err == nil || !strings.Contains(err.Error(), "out of quota") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCheckLicenseFreeQuotaExhaustedGuidesToWebsite(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{
+			checkResult: &LicenseCheckResult{
+				Allowed:    false,
+				AccessMode: LicenseAccessModeBlocked,
+				ReasonCode: "free_quota_exhausted",
+			},
+		}, nil
+	}
+
+	_, err := app.checkLicenseWithRuntime(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://platform.officecli.io"}, RuntimeModeHosted, "docx", "generate")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, needle := range []string{"Free trial quota is used up", "https://officecli.io/pricing", "officecli auth set-key"} {
+		if !strings.Contains(err.Error(), needle) {
+			t.Fatalf("err = %v, want %q", err, needle)
+		}
 	}
 }
 
@@ -3317,7 +3356,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	if !strings.Contains(output, "Current access mode: free") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "Free trial today (this machine, UTC): 5 total / 2 used / 3 remaining") {
+	if !strings.Contains(output, "Free trial quota (this machine, lifetime): 5 total / 2 used / 3 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 	if !strings.Contains(output, "Access checks enabled: true") {

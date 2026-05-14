@@ -1685,14 +1685,17 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 
 type freeQuotaRepo struct{ store *sqlstore.Store }
 
-func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
-	return r.store.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
+func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
+	return r.store.GetOrCreateFreeQuota(ctx, fingerprint, defaultLimit)
 }
-func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
-	return r.store.GetDailyFreeQuota(ctx, fingerprint, usageDate, documentType)
+func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error) {
+	return r.store.GetFreeQuotaByFingerprint(ctx, fingerprint)
 }
-func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
-	quota, err := r.store.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
+func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error) {
+	if _, _, err := r.store.GetOrCreateFreeQuota(ctx, fingerprint, defaultLimit); err != nil {
+		return nil, err
+	}
+	quota, err := r.store.ConsumeFreeQuota(ctx, fingerprint)
 	if err != nil && strings.Contains(err.Error(), "quota exhausted") {
 		return nil, licensesvc.ErrQuotaExhausted
 	}

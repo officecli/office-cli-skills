@@ -30,12 +30,19 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		}
 	}
 
-	if _, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "status", "Checking access status", progress); err != nil {
+	initialAccessAction := "status"
+	if job.RuntimeMode == RuntimeModeHosted {
+		initialAccessAction = "generate"
+	}
+	initialLicenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), initialAccessAction, "Checking access status", progress)
+	if err != nil {
 		return GenerateResult{}, err
+	}
+	if job.RuntimeMode == RuntimeModeHosted {
+		job.LicenseCheck = initialLicenseCheck
 	}
 
 	var (
-		err       error
 		llmClient GeneratorLLMClient
 	)
 	if job.RuntimeMode == RuntimeModeHosted {
@@ -72,11 +79,13 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 			return GenerateResult{}, err
 		}
 	}
-	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Refreshing access status before generation", progress)
-	if err != nil {
-		return GenerateResult{}, err
+	if job.LicenseCheck == nil {
+		licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Refreshing access status before generation", progress)
+		if err != nil {
+			return GenerateResult{}, err
+		}
+		job.LicenseCheck = licenseCheck
 	}
-	job.LicenseCheck = licenseCheck
 
 	publishCfg := cfg.Publish
 	if strings.TrimSpace(publishCfg.APIKey) == "" {
@@ -251,12 +260,12 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 
 	runtimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(req.Args.RuntimeMode)))
 	if documentType == engine.DocumentTypeIMG && runtimeMode == "" {
-		runtimeMode = cfg.Runtime.Mode
+		runtimeMode = cfg.RuntimeModeOrDefault()
 	} else if runtimeMode == "" {
-		runtimeMode = cfg.Runtime.Mode
+		runtimeMode = cfg.RuntimeModeOrDefault()
 	}
 	if runtimeMode == "" {
-		runtimeMode = RuntimeModeExternal
+		runtimeMode = RuntimeModeHosted
 	}
 	switch runtimeMode {
 	case RuntimeModeExternal, RuntimeModeHosted:
