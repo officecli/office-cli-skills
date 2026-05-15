@@ -15,21 +15,41 @@ import (
 func LoadConfig(path string) (Config, error) {
 	cfg := Config{}
 	licenseEnabledSet := false
+	configLoaded := false
+	defaultPublishSet := false
+	publishEnabledSet := false
 	configPath := ResolveConfigPath(path)
 	if configPath != "" {
 		if data, err := os.ReadFile(configPath); err == nil {
+			configLoaded = true
 			_ = json.Unmarshal(data, &cfg)
 			var probe struct {
+				Defaults struct {
+					Publish *bool `json:"publish"`
+				} `json:"defaults"`
 				License struct {
 					Enabled *bool `json:"enabled"`
 				} `json:"license"`
+				Publish struct {
+					Enabled *bool `json:"enabled"`
+				} `json:"publish"`
 			}
-			if json.Unmarshal(data, &probe) == nil && probe.License.Enabled != nil {
-				licenseEnabledSet = true
+			if json.Unmarshal(data, &probe) == nil {
+				if probe.License.Enabled != nil {
+					licenseEnabledSet = true
+				}
+				defaultPublishSet = probe.Defaults.Publish != nil
+				publishEnabledSet = probe.Publish.Enabled != nil
 			}
 		}
 	}
+	if !configLoaded {
+		cfg = defaultInitConfig()
+	}
 	applyEnvOverrides(&cfg)
+	if configLoaded && !defaultPublishSet && publishEnabledSet && os.Getenv("OFFICE_CLI_DEFAULT_PUBLISH") == "" {
+		cfg.Defaults.Publish = cfg.Publish.Enabled
+	}
 	if os.Getenv("OFFICE_CLI_LICENSE_ENABLED") != "" {
 		licenseEnabledSet = true
 	}

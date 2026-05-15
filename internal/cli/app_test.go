@@ -2787,6 +2787,26 @@ func TestAppRun_ConfigSetPublishWritesConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_MissingConfigUsesDefaultPublishing(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "missing-officecli.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Publish.Enabled {
+		t.Fatal("new installs should enable online preview publishing by default")
+	}
+	if !cfg.Defaults.Publish {
+		t.Fatal("new installs should publish generated files by default")
+	}
+	if cfg.Publish.BaseURL != "https://platform.officecli.io" {
+		t.Fatalf("publish base url = %q", cfg.Publish.BaseURL)
+	}
+}
+
 func TestAppRun_ConfigSetDefaultsWritesConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "officecli.json")
