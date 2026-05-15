@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.65 - 2026-05-15
+
+### Changed
+
+- Enabled online preview publishing by default for new installs with no existing config file.
+- Updated OpenClaw OfficeCLI skill templates so newly generated skill config also defaults to publishing previews.
+
 ## 0.2.64 - 2026-05-15
 
 ### Fixed
