@@ -17,6 +17,21 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
+func TestPostgresMigrationVersionsAreUnique(t *testing.T) {
+	migrationPaths, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "postgres", "*.sql"))
+	require.NoError(t, err)
+	require.NotEmpty(t, migrationPaths)
+
+	seen := map[string]string{}
+	for _, migrationPath := range migrationPaths {
+		version := migrationVersion(migrationPath)
+		if previous, ok := seen[version]; ok {
+			t.Fatalf("duplicate migration version %s: %s and %s", version, filepath.Base(previous), filepath.Base(migrationPath))
+		}
+		seen[version] = migrationPath
+	}
+}
+
 func TestUserHostedCreditLedgerMigrationsIncludeRuntimeColumns(t *testing.T) {
 	requiredColumns := []string{"usage_event_id", "order_id"}
 	migrationPaths := []string{

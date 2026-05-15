@@ -1,6 +1,6 @@
 SET @add_usage_events_client_ip := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'client_ip'
   ),
   'SELECT 1',
@@ -11,8 +11,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_forwarded_for := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'forwarded_for'
   ),
   'SELECT 1',
@@ -23,8 +23,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_user_agent := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'user_agent'
   ),
   'SELECT 1',
@@ -35,8 +35,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_request_host := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'request_host'
   ),
   'SELECT 1',
@@ -47,8 +47,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_request_path := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'request_path'
   ),
   'SELECT 1',
@@ -59,8 +59,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_request_method := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.COLUMNS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND COLUMN_NAME = 'request_method'
   ),
   'SELECT 1',
@@ -71,8 +71,8 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 SET @add_usage_events_client_ip_index := IF(
-  EXISTS(
-    SELECT 1 FROM information_schema.STATISTICS
+  EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usage_events' AND INDEX_NAME = 'idx_usage_events_client_ip'
   ),
   'SELECT 1',
