@@ -40,6 +40,7 @@ type Store interface {
 	RevokeCLISession(ctx context.Context, id uint64, revokedAt time.Time) error
 	RevokeCLISessionsByUser(ctx context.Context, userID uint64, revokedAt time.Time) error
 	ListCLISessionsByUser(ctx context.Context, userID uint64) ([]model.CLISession, error)
+	GetUserByID(ctx context.Context, id uint64) (*model.User, error)
 }
 
 type Service struct {
@@ -71,6 +72,7 @@ type ExchangeResponse struct {
 	Token       string    `json:"token"`
 	TokenPrefix string    `json:"token_prefix"`
 	UserID      uint64    `json:"user_id"`
+	UserEmail   string    `json:"user_email,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
@@ -165,7 +167,15 @@ func (s *Service) Exchange(ctx context.Context, req ExchangeRequest) (*ExchangeR
 	if err := s.store.ConsumeCLILoginChallenge(ctx, challenge.ChallengeID, s.clock().UTC()); err != nil {
 		return nil, err
 	}
-	return &ExchangeResponse{Token: token, TokenPrefix: session.TokenPrefix, UserID: session.UserID, ExpiresAt: expiresAt}, nil
+	user, err := s.store.GetUserByID(ctx, session.UserID)
+	if err != nil {
+		return nil, err
+	}
+	userEmail := ""
+	if user != nil {
+		userEmail = strings.TrimSpace(user.Email)
+	}
+	return &ExchangeResponse{Token: token, TokenPrefix: session.TokenPrefix, UserID: session.UserID, UserEmail: userEmail, ExpiresAt: expiresAt}, nil
 }
 
 func (s *Service) Resolve(ctx context.Context, token string) (*model.CLISession, error) {

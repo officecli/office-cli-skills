@@ -3201,6 +3201,20 @@ func TestAppRun_WhoamiShowsLoggedInSession(t *testing.T) {
 	}
 }
 
+func TestLoginSuccessMessagePrefersUserEmail(t *testing.T) {
+	msg := loginSuccessMessage(cliLoginExchangeResponse{
+		UserID:    42,
+		UserEmail: "dev@example.com",
+	})
+
+	if !strings.Contains(msg, "Logged in as dev@example.com.") {
+		t.Fatalf("message = %q", msg)
+	}
+	if strings.Contains(msg, "user #42") {
+		t.Fatalf("message should not prefer user id: %q", msg)
+	}
+}
+
 func TestAppRun_AuthSetKeyValidationFailureKeepsOldConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

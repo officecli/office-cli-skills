@@ -1075,6 +1075,7 @@ type cliLoginExchangeResponse struct {
 	Token       string    `json:"token"`
 	TokenPrefix string    `json:"token_prefix"`
 	UserID      uint64    `json:"user_id"`
+	UserEmail   string    `json:"user_email,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
@@ -1161,8 +1162,16 @@ func (a *App) runLogin(ctx context.Context, cfg Config) error {
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "Logged in as user #%d. Account hosted credits are now active for this CLI.\n", exchangeResp.UserID)
+	_, err = fmt.Fprint(a.Stdout, loginSuccessMessage(exchangeResp))
 	return err
+}
+
+func loginSuccessMessage(resp cliLoginExchangeResponse) string {
+	identity := strings.TrimSpace(resp.UserEmail)
+	if identity == "" {
+		identity = fmt.Sprintf("user #%d", resp.UserID)
+	}
+	return fmt.Sprintf("Logged in as %s. Account hosted credits are now active for this CLI.\n", identity)
 }
 
 func (a *App) runLogout(ctx context.Context, cfg Config) error {

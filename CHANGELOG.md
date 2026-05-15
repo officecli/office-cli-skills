@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.63 - 2026-05-15
+
+### Changed
+
+- Changed `officecli login` success output to show the account email when the platform returns it.
+
 ## 0.2.62 - 2026-05-15
 
 ### Added
