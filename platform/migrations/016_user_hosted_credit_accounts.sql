@@ -13,11 +13,15 @@ CREATE TABLE IF NOT EXISTS user_hosted_credit_ledger (
   idempotency_key VARCHAR(191) NOT NULL UNIQUE,
   credit_delta INT NOT NULL DEFAULT 0,
   reserved_delta INT NOT NULL DEFAULT 0,
+  usage_event_id BIGINT UNSIGNED NULL,
+  order_id BIGINT UNSIGNED NULL,
   reason VARCHAR(191) NOT NULL,
   metadata_json JSON NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_user_hosted_credit_ledger_user_id (user_id),
-  KEY idx_user_hosted_credit_ledger_source_type (source_type)
+  KEY idx_user_hosted_credit_ledger_source_type (source_type),
+  KEY idx_user_hosted_credit_ledger_usage_event_id (usage_event_id),
+  KEY idx_user_hosted_credit_ledger_order_id (order_id)
 );
 
 CREATE TABLE IF NOT EXISTS cli_login_challenges (

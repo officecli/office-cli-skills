@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS user_hosted_credit_ledger (
   idempotency_key VARCHAR(191) NOT NULL UNIQUE,
   credit_delta INTEGER NOT NULL DEFAULT 0,
   reserved_delta INTEGER NOT NULL DEFAULT 0,
+  usage_event_id BIGINT NULL,
+  order_id BIGINT NULL,
   reason VARCHAR(191) NOT NULL,
   metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -20,6 +22,8 @@ CREATE TABLE IF NOT EXISTS user_hosted_credit_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_user_hosted_credit_ledger_user_id ON user_hosted_credit_ledger(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_hosted_credit_ledger_source_type ON user_hosted_credit_ledger(source_type);
+CREATE INDEX IF NOT EXISTS idx_user_hosted_credit_ledger_usage_event_id ON user_hosted_credit_ledger(usage_event_id);
+CREATE INDEX IF NOT EXISTS idx_user_hosted_credit_ledger_order_id ON user_hosted_credit_ledger(order_id);
 
 CREATE TABLE IF NOT EXISTS cli_login_challenges (
   id BIGSERIAL PRIMARY KEY,

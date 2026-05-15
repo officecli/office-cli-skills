@@ -2,7 +2,10 @@ package sqlstore
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,26 @@ import (
 	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
+
+func TestUserHostedCreditLedgerMigrationsIncludeRuntimeColumns(t *testing.T) {
+	requiredColumns := []string{"usage_event_id", "order_id"}
+	migrationPaths := []string{
+		filepath.Join("..", "..", "..", "migrations", "016_user_hosted_credit_accounts.sql"),
+		filepath.Join("..", "..", "..", "migrations", "postgres", "016_user_hosted_credit_accounts.sql"),
+		filepath.Join("..", "..", "..", "migrations", "postgres", "017_user_hosted_credit_ledger_runtime_columns.sql"),
+	}
+
+	for _, migrationPath := range migrationPaths {
+		t.Run(migrationPath, func(t *testing.T) {
+			sqlBytes, err := os.ReadFile(migrationPath)
+			require.NoError(t, err)
+			sql := strings.ToLower(string(sqlBytes))
+			for _, column := range requiredColumns {
+				require.Contains(t, sql, column)
+			}
+		})
+	}
+}
 
 func TestSaveGoogleUserGeneratesStableInviteCode(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:save_google_user_generates_stable_invite_code?mode=memory&cache=shared"), &gorm.Config{})
