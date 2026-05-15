@@ -20,16 +20,19 @@ import (
 )
 
 type fakeAPIKeyStore struct {
-	key          *model.APIKey
-	keysByHash   map[string]*model.APIKey
-	userKeys     map[uint64]*model.UserAIGatewayAPIKey
-	settings     *model.HostedPricingSetting
-	rules        []model.HostedPricingRule
-	modelConfigs []model.HostedModelPricingConfig
-	reservations []int
-	releases     []int
-	settlements  []int
-	events       []*model.UsageEvent
+	key            *model.APIKey
+	keysByHash     map[string]*model.APIKey
+	userKeys       map[uint64]*model.UserAIGatewayAPIKey
+	settings       *model.HostedPricingSetting
+	rules          []model.HostedPricingRule
+	modelConfigs   []model.HostedModelPricingConfig
+	reservations   []int
+	releases       []int
+	settlements    []int
+	events         []*model.UsageEvent
+	releaseCtxErrs []error
+	settleCtxErrs  []error
+	eventCtxErrs   []error
 }
 
 func (f *fakeAPIKeyStore) FindAPIKeyByHash(_ context.Context, hash string) (*model.APIKey, error) {
@@ -52,12 +55,14 @@ func (f *fakeAPIKeyStore) ReserveCreditsByHash(_ context.Context, hash string, c
 	return f.FindAPIKeyByHash(context.Background(), hash)
 }
 
-func (f *fakeAPIKeyStore) ReleaseReservedCredits(_ context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error) {
+func (f *fakeAPIKeyStore) ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error) {
+	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
 	f.releases = append(f.releases, reserved)
 	return f.FindAPIKeyByHash(context.Background(), "")
 }
 
-func (f *fakeAPIKeyStore) SettleReservedCredits(_ context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error) {
+func (f *fakeAPIKeyStore) SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error) {
+	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
 	f.settlements = append(f.settlements, settled)
 	key, err := f.FindAPIKeyByHash(context.Background(), "")
 	if key == nil && f.keysByHash != nil {
@@ -80,12 +85,14 @@ func (f *fakeAPIKeyStore) ReserveHostedCreditsByUser(_ context.Context, userID u
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100, CreditReserved: credits}, nil
 }
 
-func (f *fakeAPIKeyStore) ReleaseHostedCreditsByUser(_ context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
+func (f *fakeAPIKeyStore) ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
+	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
 	f.releases = append(f.releases, reserved)
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100}, nil
 }
 
-func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(_ context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
+func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
+	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
 	f.settlements = append(f.settlements, settled)
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - settled}, nil
 }
@@ -98,7 +105,8 @@ func (f *fakeAPIKeyStore) TouchCLISession(_ context.Context, id uint64, usedAt t
 	return nil
 }
 
-func (f *fakeAPIKeyStore) CreateUsageEvent(_ context.Context, event *model.UsageEvent) error {
+func (f *fakeAPIKeyStore) CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error {
+	f.eventCtxErrs = append(f.eventCtxErrs, ctx.Err())
 	f.events = append(f.events, event)
 	return nil
 }
@@ -1109,6 +1117,149 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 	require.Equal(t, 1, store.events[0].SettledCredits)
 }
 
+func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/images/generations", r.URL.Path)
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}],"usage":{"input_tokens":120,"output_tokens":1584}}`, imageData)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 3000, Currency: "usd", CreditsPerUSD: 100},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+		modelConfigs: []model.HostedModelPricingConfig{{
+			Key:                     "image_default",
+			Kind:                    model.HostedModelPricingKindImage,
+			Provider:                "aigateway",
+			Model:                   "gpt-image-shared",
+			PromptPer1MCostMicrousd: 710000,
+			OutputPer1MCostMicrousd: 40000000,
+			Enabled:                 true,
+		}},
+		rules: []model.HostedPricingRule{{
+			ID:                        21,
+			DocumentProfile:           "image",
+			ImageModelKey:             "image_default",
+			ImagePerAssetCredits:      999,
+			ImagePerAssetCostMicrousd: 999000000,
+			ReservationCredits:        100,
+			MinimumChargeCredits:      6,
+			Enabled:                   true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		APIKey:               "upstream-key",
+		HashSalt:             "salt",
+		ImageModel:           "legacy-image",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "image",
+		Prompt:      "A breakfast map of Wuhan",
+		AspectRatio: 1,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Len(t, store.events, 1)
+	event := store.events[0]
+	require.Equal(t, 120, event.PromptTokens)
+	require.Equal(t, 1584, event.CompletionTokens)
+	require.Equal(t, 0, event.ReasoningTokens)
+	require.Equal(t, 1, event.ImageCount)
+	require.Equal(t, int64(63446), event.UpstreamCostMicrousd)
+	require.Equal(t, 9, event.SettledCredits)
+	require.Equal(t, 91, event.RefundCredits)
+	require.Equal(t, int64(26554), event.ProfitMicrousd)
+}
+
+func TestGenerateImageResponsesFallbackParsesInputOutputTokens(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/images/generations":
+			http.Error(w, "not supported", http.StatusBadRequest)
+		case "/responses":
+			_, _ = fmt.Fprintf(w, `{"output":[{"type":"image_generation_call","result":"%s"}],"usage":{"input_tokens":200,"output_tokens":300}}`, imageData)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd", CreditsPerUSD: 100},
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+		modelConfigs: []model.HostedModelPricingConfig{{
+			Key:                     "image_default",
+			Kind:                    model.HostedModelPricingKindImage,
+			Model:                   "gpt-image-shared",
+			PromptPer1MCostMicrousd: 1000000,
+			OutputPer1MCostMicrousd: 2000000,
+			Enabled:                 true,
+		}},
+		rules: []model.HostedPricingRule{{
+			ID:                   21,
+			DocumentProfile:      "image",
+			ImageModelKey:        "image_default",
+			ReservationCredits:   12,
+			MinimumChargeCredits: 1,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		HashSalt:             "salt",
+		ImageModel:           "legacy-image",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "image",
+		Prompt:      "A product image",
+		AspectRatio: 1,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Len(t, store.events, 1)
+	require.Equal(t, 200, store.events[0].PromptTokens)
+	require.Equal(t, 300, store.events[0].CompletionTokens)
+	require.Equal(t, int64(800), store.events[0].UpstreamCostMicrousd)
+	require.Equal(t, 1, store.events[0].SettledCredits)
+}
+
 func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
 	var uploadedImage []byte
@@ -1338,4 +1489,115 @@ func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {
 	require.Equal(t, 1, store.events[0].RefundCredits)
 	require.NotNil(t, store.events[0].DocumentType)
 	require.Equal(t, "img", *store.events[0].DocumentType)
+}
+
+func TestCompleteFailureReleasesReservationWithCanceledRequestContext(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+		rules: []model.HostedPricingRule{{
+			DocumentProfile:      "text",
+			ReservationCredits:   24,
+			MinimumChargeCredits: 2,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		HashSalt:             "salt",
+		TextModel:            "gpt-text-test",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	resp, err := svc.Complete(ctx, "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.Equal(t, []int{24}, store.reservations)
+	require.Equal(t, []int{24}, store.releases)
+	require.Empty(t, store.settlements)
+	require.Len(t, store.events, 1)
+	require.Equal(t, []error{nil}, store.releaseCtxErrs)
+	require.Equal(t, []error{nil}, store.eventCtxErrs)
+	require.Equal(t, 0, store.events[0].SettledCredits)
+	require.Equal(t, 24, store.events[0].RefundCredits)
+}
+
+func TestGenerateImageFailureReleasesReservationWithCanceledRequestContext(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+		rules: []model.HostedPricingRule{{
+			DocumentProfile:      "image",
+			ReservationCredits:   12,
+			MinimumChargeCredits: 6,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		HashSalt:             "salt",
+		ImageModel:           "gpt-image-test",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	resp, err := svc.GenerateImage(ctx, "Bearer hosted-key", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "A polished product launch hero image",
+		AspectRatio: 1,
+	})
+
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.Equal(t, []int{12}, store.reservations)
+	require.Equal(t, []int{12}, store.releases)
+	require.Empty(t, store.settlements)
+	require.Len(t, store.events, 1)
+	require.Equal(t, []error{nil}, store.releaseCtxErrs)
+	require.Equal(t, []error{nil}, store.eventCtxErrs)
+	require.Equal(t, 0, store.events[0].SettledCredits)
+	require.Equal(t, 12, store.events[0].RefundCredits)
 }

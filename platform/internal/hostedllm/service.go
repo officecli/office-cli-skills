@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -500,19 +501,7 @@ func (s *Service) post(ctx context.Context, url string, payload map[string]any, 
 	if resp.StatusCode >= 300 {
 		return nil, usageSummary{}, upstreamHTTPError{statusCode: resp.StatusCode, body: string(body)}
 	}
-	var envelope struct {
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			ReasoningTokens  int `json:"reasoning_tokens"`
-		} `json:"usage"`
-	}
-	_ = json.Unmarshal(body, &envelope)
-	return body, usageSummary{
-		PromptTokens:     envelope.Usage.PromptTokens,
-		CompletionTokens: envelope.Usage.CompletionTokens,
-		ReasoningTokens:  envelope.Usage.ReasoningTokens,
-	}, nil
+	return body, parseUsageSummary(body), nil
 }
 
 func (s *Service) postImageRequest(ctx context.Context, modelName string, req ImageRequest, payload map[string]any, upstreamAPIKey string) ([]byte, usageSummary, error) {
@@ -633,19 +622,32 @@ func (s *Service) postImageEdit(ctx context.Context, rawURL string, fields map[s
 	if resp.StatusCode >= 300 {
 		return nil, usageSummary{}, upstreamHTTPError{statusCode: resp.StatusCode, body: string(respBody)}
 	}
+	return respBody, parseUsageSummary(respBody), nil
+}
+
+func parseUsageSummary(body []byte) usageSummary {
 	var envelope struct {
 		Usage struct {
 			PromptTokens     int `json:"prompt_tokens"`
 			CompletionTokens int `json:"completion_tokens"`
 			ReasoningTokens  int `json:"reasoning_tokens"`
+			InputTokens      int `json:"input_tokens"`
+			OutputTokens     int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	_ = json.Unmarshal(respBody, &envelope)
-	return respBody, usageSummary{
+	_ = json.Unmarshal(body, &envelope)
+	usage := usageSummary{
 		PromptTokens:     envelope.Usage.PromptTokens,
 		CompletionTokens: envelope.Usage.CompletionTokens,
 		ReasoningTokens:  envelope.Usage.ReasoningTokens,
-	}, nil
+	}
+	if usage.PromptTokens == 0 {
+		usage.PromptTokens = envelope.Usage.InputTokens
+	}
+	if usage.CompletionTokens == 0 {
+		usage.CompletionTokens = envelope.Usage.OutputTokens
+	}
+	return usage
 }
 
 func createImageEditPart(writer *multipart.Writer, filename string, mime string) (io.Writer, error) {
@@ -815,11 +817,13 @@ func (s *Service) releaseSubjectCredits(ctx context.Context, subject *hostedSubj
 	if subject == nil {
 		return 0, fmt.Errorf("hosted subject is required")
 	}
+	opCtx, cancel := settlementContext(ctx)
+	defer cancel()
 	if subject.Key != nil && subject.APIKeyID != nil {
-		key, err := s.store.ReleaseReservedCredits(ctx, *subject.APIKeyID, reserved)
+		key, err := s.store.ReleaseReservedCredits(opCtx, *subject.APIKeyID, reserved)
 		return creditBalance(key), err
 	}
-	account, err := s.store.ReleaseHostedCreditsByUser(ctx, subject.UserID, requestID, reserved)
+	account, err := s.store.ReleaseHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved)
 	return accountCreditBalance(account), err
 }
 
@@ -827,12 +831,18 @@ func (s *Service) settleSubjectCredits(ctx context.Context, subject *hostedSubje
 	if subject == nil {
 		return 0, fmt.Errorf("hosted subject is required")
 	}
+	opCtx, cancel := settlementContext(ctx)
+	defer cancel()
 	if subject.Key != nil && subject.APIKeyID != nil {
-		key, err := s.store.SettleReservedCredits(ctx, *subject.APIKeyID, reserved, settled)
+		key, err := s.store.SettleReservedCredits(opCtx, *subject.APIKeyID, reserved, settled)
 		return creditBalance(key), err
 	}
-	account, err := s.store.SettleHostedCreditsByUser(ctx, subject.UserID, requestID, reserved, settled)
+	account, err := s.store.SettleHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved, settled)
 	return accountCreditBalance(account), err
+}
+
+func settlementContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 }
 
 func (s *Service) aigatewayAdminClient() AIGatewayAdminClient {
@@ -954,6 +964,8 @@ type hostedPriceSnapshot struct {
 }
 
 func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) hostedPriceSnapshot {
+	ctx, cancel := settlementContext(ctx)
+	defer cancel()
 	creditsPerUSD := s.effectiveCreditsPerUSD(ctx)
 	if rule, ok := s.matchRule(ctx, modelName); ok {
 		markupBPS := s.effectiveMarkupBPS(ctx, rule)
@@ -1237,6 +1249,8 @@ func effectiveReferenceImages(req ImageRequest) []ImageReference {
 }
 
 func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
+	ctx, cancel := settlementContext(ctx)
+	defer cancel()
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1276,6 +1290,8 @@ func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req C
 }
 
 func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
+	ctx, cancel := settlementContext(ctx)
+	defer cancel()
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1295,6 +1311,9 @@ func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, 
 		RuntimeMode:           &runtimeMode,
 		Provider:              &provider,
 		ModelName:             &modelName,
+		PromptTokens:          usage.PromptTokens,
+		CompletionTokens:      usage.CompletionTokens,
+		ReasoningTokens:       usage.ReasoningTokens,
 		ImageCount:            usage.ImageCount,
 		ReservedCredits:       reserved,
 		SettledCredits:        settled,
@@ -1309,6 +1328,15 @@ func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, 
 	if subject != nil {
 		event.UserID = optionalUserID(subject.UserID)
 		event.APIKeyID = subject.APIKeyID
+	}
+	if settled > 0 && usage.ImageCount > 0 && usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.ReasoningTokens == 0 && pricing.UpstreamCostMicrousd == 0 {
+		slog.Warn("hosted_image_usage_missing",
+			"request_id", req.RequestID,
+			"model", modelName,
+			"size", effectiveImageSize(req),
+			"user_id", event.UserID,
+			"api_key_id", event.APIKeyID,
+		)
 	}
 	_ = s.store.CreateUsageEvent(ctx, event)
 }
