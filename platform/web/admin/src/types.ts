@@ -46,6 +46,7 @@ export interface QuotaSources {
 
 export interface UsageEvent {
   id: number
+  request_id?: string
   fingerprint_hash: string
   mode: 'free' | 'reward' | 'paid' | 'hosted'
   action: 'generate' | 'status'
@@ -67,8 +68,16 @@ export interface UsageEvent {
   upstream_cost_microusd?: number
   uncapped_charge_credits?: number
   settled_credits?: number
+  reserved_credits?: number
+  refund_credits?: number
   profit_microusd?: number
   cap_applied?: boolean
+  client_ip?: string
+  forwarded_for?: string
+  user_agent?: string
+  request_host?: string
+  request_path?: string
+  request_method?: string
 }
 
 export interface User {

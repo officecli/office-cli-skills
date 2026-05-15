@@ -472,6 +472,7 @@ func (s *Service) consumeExternalFree(ctx context.Context, req ConsumeRequest) (
 		RuntimeMode:     optionalString(runtimeMode),
 		UserID:          optionalUserID(req.UserID),
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	if err := s.usage.Create(ctx, event); err != nil {
 		return nil, err
 	}
@@ -504,6 +505,7 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 		DocumentType:    optionalString(documentType),
 		UserID:          optionalUserID(req.UserID),
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	if err := s.usage.Create(ctx, event); err != nil {
 		return nil, err
 	}
@@ -546,6 +548,7 @@ func (s *Service) consumeReward(ctx context.Context, req ConsumeRequest) (*Consu
 		DocumentType:    optionalString(consumeDocumentType(req)),
 		UserID:          optionalUserID(req.UserID),
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	if err := s.usage.Create(ctx, event); err != nil {
 		return nil, err
 	}
@@ -589,6 +592,7 @@ func (s *Service) consumePaid(ctx context.Context, req ConsumeRequest) (*Consume
 		DocumentType:    optionalString(consumeDocumentType(req)),
 		UserID:          optionalUserID(req.UserID),
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	if err := s.usage.Create(ctx, event); err != nil {
 		return nil, err
 	}
@@ -744,6 +748,7 @@ func buildUsageEvent(req CheckRequest, mode model.UsageMode, resp *CheckResponse
 	if resp.ReasonCode != "" {
 		event.ReasonCode = &resp.ReasonCode
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	return event
 }
 

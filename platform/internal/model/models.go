@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type APIKeyStatus string
 type UserAIGatewayAPIKeyStatus string
@@ -284,10 +287,45 @@ type UsageEvent struct {
 	UncappedChargeCredits int         `gorm:"column:uncapped_charge_credits;not null;default:0" json:"uncapped_charge_credits"`
 	ProfitMicrousd        int64       `gorm:"column:profit_microusd;not null;default:0" json:"profit_microusd"`
 	CapApplied            bool        `gorm:"column:cap_applied;not null;default:false" json:"cap_applied"`
+	ClientIP              *string     `gorm:"column:client_ip;size:64;index" json:"client_ip,omitempty"`
+	ForwardedFor          *string     `gorm:"column:forwarded_for;size:512" json:"forwarded_for,omitempty"`
+	UserAgent             *string     `gorm:"column:user_agent;size:512" json:"user_agent,omitempty"`
+	RequestHost           *string     `gorm:"column:request_host;size:191" json:"request_host,omitempty"`
+	RequestPath           *string     `gorm:"column:request_path;size:191" json:"request_path,omitempty"`
+	RequestMethod         *string     `gorm:"column:request_method;size:16" json:"request_method,omitempty"`
 	CreatedAt             time.Time   `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
 
 func (UsageEvent) TableName() string { return "usage_events" }
+
+type UsageAuditContext struct {
+	ClientIP      string
+	ForwardedFor  string
+	UserAgent     string
+	RequestHost   string
+	RequestPath   string
+	RequestMethod string
+}
+
+func (e *UsageEvent) ApplyAuditContext(ctx UsageAuditContext) {
+	if e == nil {
+		return
+	}
+	e.ClientIP = trimmedStringPtr(ctx.ClientIP)
+	e.ForwardedFor = trimmedStringPtr(ctx.ForwardedFor)
+	e.UserAgent = trimmedStringPtr(ctx.UserAgent)
+	e.RequestHost = trimmedStringPtr(ctx.RequestHost)
+	e.RequestPath = trimmedStringPtr(ctx.RequestPath)
+	e.RequestMethod = trimmedStringPtr(ctx.RequestMethod)
+}
+
+func trimmedStringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
 
 type RewardGrant struct {
 	ID             uint64           `gorm:"primaryKey" json:"id"`

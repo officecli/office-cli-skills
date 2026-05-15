@@ -104,6 +104,85 @@ describe('platform admin shell', () => {
     expect(screen.getByRole('option', { name: 'hosted' })).toBeInTheDocument()
   })
 
+  it('renders usage event audit details and sends audit filters', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url.startsWith('/api/admin/usage-events?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 99,
+              request_id: 'req-audit-99',
+              fingerprint_hash: 'fp-audit-machine',
+              mode: 'hosted',
+              action: 'generate',
+              result: 'allowed',
+              api_key_id: 7,
+              user_id: 42,
+              client_ip: '203.0.113.42',
+              forwarded_for: '198.51.100.7, 10.0.0.4',
+              user_agent: 'officecli/0.2.65 audit-test',
+              request_host: 'platform.officecli.io',
+              request_path: '/api/llm/v1/text',
+              request_method: 'POST',
+              cli_version: '0.2.65',
+              document_type: 'pptx',
+              runtime_mode: 'hosted',
+              provider: 'aigateway',
+              model_name: 'gpt-4.1',
+              prompt_tokens: 123,
+              completion_tokens: 45,
+              reasoning_tokens: 6,
+              image_count: 2,
+              reserved_credits: 20,
+              settled_credits: 8,
+              refund_credits: 12,
+              upstream_cost_microusd: 30000,
+              profit_microusd: 50000,
+              cap_applied: true,
+              created_at: '2026-05-15T08:00:00Z',
+            }],
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/usage-events']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect((await screen.findAllByText(/203\.0\.113\.42/i)).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/fp-audit-machine/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/req-audit-99/i)).toBeInTheDocument()
+    expect(screen.getByText(/officecli\/0\.2\.65 audit-test/i)).toBeInTheDocument()
+    expect(screen.getByText(/198\.51\.100\.7, 10\.0\.0\.4/i)).toBeInTheDocument()
+    expect(screen.getByText(/gpt-4\.1/i)).toBeInTheDocument()
+    expect(screen.getByText(/123 \/ 45 \/ 6/i)).toBeInTheDocument()
+    expect(screen.getByText(/reserved 20 \/ settled 8 \/ refund 12/i)).toBeInTheDocument()
+    expect(screen.getByText(/capped/i)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/API key ID/i), { target: { value: '7' } })
+    fireEvent.change(screen.getByLabelText(/User ID/i), { target: { value: '42' } })
+    fireEvent.change(screen.getByLabelText(/Client IP/i), { target: { value: '203.0.113' } })
+    fireEvent.change(screen.getByLabelText(/Request ID/i), { target: { value: 'req-audit' } })
+    fireEvent.click(screen.getByRole('button', { name: /Apply filters/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
+    })
+  })
+
   it('renders hosted billing controls from the DB-backed admin API', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)

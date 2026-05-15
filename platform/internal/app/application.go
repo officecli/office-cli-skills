@@ -378,6 +378,7 @@ func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *lice
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
+		req.AuditContext = usageAuditContext(c)
 		if req.APIKey == "" && cliSvc != nil {
 			if session, err := cliSvc.Resolve(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))); err == nil && session != nil {
 				req.UserID = session.UserID
@@ -396,6 +397,7 @@ func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *lice
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
+		req.AuditContext = usageAuditContext(c)
 		if req.APIKey == "" && cliSvc != nil {
 			if session, err := cliSvc.Resolve(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))); err == nil && session != nil {
 				req.UserID = session.UserID
@@ -422,6 +424,20 @@ func registerLicenseRoutes(api *gin.RouterGroup, lic *licensesvc.Service) {
 	}, lic, nil)
 }
 
+func usageAuditContext(c *gin.Context) model.UsageAuditContext {
+	if c == nil || c.Request == nil {
+		return model.UsageAuditContext{}
+	}
+	return model.UsageAuditContext{
+		ClientIP:      c.ClientIP(),
+		ForwardedFor:  c.GetHeader("X-Forwarded-For"),
+		UserAgent:     c.GetHeader("User-Agent"),
+		RequestHost:   c.Request.Host,
+		RequestPath:   c.Request.URL.Path,
+		RequestMethod: c.Request.Method,
+	}
+}
+
 func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service) {
 	if hostedSvc == nil {
 		return
@@ -435,6 +451,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		}
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.Kind = "text"
+		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
@@ -451,6 +468,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.Kind = "json"
 		req.JSONMode = true
+		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
@@ -466,6 +484,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		}
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.Kind = "structured"
+		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
@@ -480,6 +499,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			return
 		}
 		req.RequestID = c.GetHeader("X-Request-Id")
+		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.GenerateImage(c.Request.Context(), c.GetHeader("Authorization"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
@@ -804,10 +824,21 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
 	protected.GET("/usage-events", func(c *gin.Context) {
-		filter := sqlstore.UsageEventFilter{Mode: c.Query("mode"), Result: c.Query("result"), ReasonCode: c.Query("reason_code"), Fingerprint: c.Query("fingerprint_hash")}
+		filter := sqlstore.UsageEventFilter{
+			Mode:        c.Query("mode"),
+			Result:      c.Query("result"),
+			ReasonCode:  c.Query("reason_code"),
+			Fingerprint: c.Query("fingerprint_hash"),
+			ClientIP:    c.Query("client_ip"),
+			RequestID:   c.Query("request_id"),
+		}
 		if raw := c.Query("api_key_id"); raw != "" {
 			parsed, _ := strconv.ParseUint(raw, 10, 64)
 			filter.APIKeyID = &parsed
+		}
+		if raw := c.Query("user_id"); raw != "" {
+			parsed, _ := strconv.ParseUint(raw, 10, 64)
+			filter.UserID = &parsed
 		}
 		if raw := c.Query("start_time"); raw != "" {
 			if ts, err := time.Parse(time.RFC3339, raw); err == nil {

@@ -88,6 +88,7 @@ func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, defa
 type testUsageStore struct {
 	mu        sync.Mutex
 	byRequest map[string]*model.UsageEvent
+	events    []*model.UsageEvent
 }
 
 type testRewardManager struct {
@@ -122,8 +123,9 @@ func newTestUsageStore() *testUsageStore {
 func (s *testUsageStore) Create(_ context.Context, event *model.UsageEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	cloned := *event
+	s.events = append(s.events, &cloned)
 	if event.RequestID != nil {
-		cloned := *event
 		s.byRequest[*event.RequestID] = &cloned
 	}
 	return nil
@@ -408,5 +410,56 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnRewardQuotaExhausted(t *te
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegisterLicenseRoutesAddsAuditContextToUsageEvents(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	usage := newTestUsageStore()
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), usage, testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	registerLicenseRoutes(api, lic)
+
+	body, _ := json.Marshal(licensesvc.CheckRequest{
+		FingerprintHash: "fp-audit-route",
+		RequestNonce:    "nonce-audit-route-generate",
+		Action:          string(model.UsageActionGenerate),
+		CLIVersion:      "0.2.65",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "officecli/0.2.65 route-test")
+	req.Header.Set("X-Forwarded-For", "198.51.100.9, 10.0.0.3")
+	req.Host = "platform.officecli.io"
+	req.RemoteAddr = "203.0.113.10:4567"
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(usage.events) != 1 {
+		t.Fatalf("usage events = %d", len(usage.events))
+	}
+	event := usage.events[0]
+	if event.ClientIP == nil || *event.ClientIP != "198.51.100.9" {
+		t.Fatalf("client ip = %#v", event.ClientIP)
+	}
+	if event.ForwardedFor == nil || *event.ForwardedFor != "198.51.100.9, 10.0.0.3" {
+		t.Fatalf("forwarded for = %#v", event.ForwardedFor)
+	}
+	if event.UserAgent == nil || *event.UserAgent != "officecli/0.2.65 route-test" {
+		t.Fatalf("user agent = %#v", event.UserAgent)
+	}
+	if event.RequestHost == nil || *event.RequestHost != "platform.officecli.io" {
+		t.Fatalf("request host = %#v", event.RequestHost)
+	}
+	if event.RequestPath == nil || *event.RequestPath != "/api/license/check" {
+		t.Fatalf("request path = %#v", event.RequestPath)
+	}
+	if event.RequestMethod == nil || *event.RequestMethod != http.MethodPost {
+		t.Fatalf("request method = %#v", event.RequestMethod)
 	}
 }

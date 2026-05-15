@@ -93,6 +93,7 @@ type CompletionRequest struct {
 	APIKey          string                  `json:"api_key,omitempty"`
 	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
 	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
+	AuditContext    model.UsageAuditContext `json:"-"`
 }
 
 type ChatMessage struct {
@@ -116,6 +117,7 @@ type ImageRequest struct {
 	APIKey          string                  `json:"api_key,omitempty"`
 	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
 	CommitToken     *licensesvc.CommitToken `json:"commit_token,omitempty"`
+	AuditContext    model.UsageAuditContext `json:"-"`
 	ReferenceImage  *ImageReference         `json:"reference_image,omitempty"`
 	ReferenceImages []ImageReference        `json:"reference_images,omitempty"`
 }
@@ -893,6 +895,7 @@ func imageConsumeRequest(req ImageRequest, bearer string) licensesvc.ConsumeRequ
 		AccessMode:      accessMode,
 		APIKey:          apiKey,
 		CommitToken:     req.CommitToken,
+		AuditContext:    req.AuditContext,
 	}
 }
 
@@ -922,6 +925,7 @@ func textConsumeRequest(req CompletionRequest) licensesvc.ConsumeRequest {
 		AccessMode:      accessMode,
 		APIKey:          apiKey,
 		CommitToken:     req.CommitToken,
+		AuditContext:    req.AuditContext,
 	}
 }
 
@@ -1306,6 +1310,7 @@ func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req C
 		event.UserID = optionalUserID(subject.UserID)
 		event.APIKeyID = subject.APIKeyID
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	_ = s.store.CreateUsageEvent(ctx, event)
 }
 
@@ -1349,6 +1354,7 @@ func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, 
 		event.UserID = optionalUserID(subject.UserID)
 		event.APIKeyID = subject.APIKeyID
 	}
+	event.ApplyAuditContext(req.AuditContext)
 	if settled > 0 && usage.ImageCount > 0 && usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.ReasoningTokens == 0 && pricing.UpstreamCostMicrousd == 0 {
 		slog.Warn("hosted_image_usage_missing",
 			"request_id", req.RequestID,

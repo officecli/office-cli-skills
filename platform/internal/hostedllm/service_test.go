@@ -929,6 +929,72 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 	require.False(t, event.CapApplied)
 }
 
+func TestCompletePersistsAuditContextOnUsageEvent(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/chat/completions", r.URL.Path)
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":4}}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 77,
+			OwnerUserID:        &userID,
+			KeyPrefix:          "cop_hosted",
+			Status:             model.APIKeyStatusActive,
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+		rules: []model.HostedPricingRule{{
+			DocumentProfile:      "text",
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+			Enabled:              true,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:              upstream.URL,
+		APIKey:               "upstream-key",
+		HashSalt:             "salt",
+		TextModel:            "gpt-test",
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+		AuditContext: model.UsageAuditContext{
+			ClientIP:      "203.0.113.77",
+			ForwardedFor:  "198.51.100.77, 10.0.0.2",
+			UserAgent:     "officecli/0.2.65 hosted-test",
+			RequestHost:   "platform.officecli.io",
+			RequestPath:   "/api/llm/v1/text",
+			RequestMethod: http.MethodPost,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, store.events, 1)
+	event := store.events[0]
+	require.NotNil(t, event.ClientIP)
+	require.Equal(t, "203.0.113.77", *event.ClientIP)
+	require.NotNil(t, event.ForwardedFor)
+	require.Equal(t, "198.51.100.77, 10.0.0.2", *event.ForwardedFor)
+	require.NotNil(t, event.UserAgent)
+	require.Equal(t, "officecli/0.2.65 hosted-test", *event.UserAgent)
+	require.NotNil(t, event.RequestHost)
+	require.Equal(t, "platform.officecli.io", *event.RequestHost)
+	require.NotNil(t, event.RequestPath)
+	require.Equal(t, "/api/llm/v1/text", *event.RequestPath)
+	require.NotNil(t, event.RequestMethod)
+	require.Equal(t, http.MethodPost, *event.RequestMethod)
+}
+
 func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10000}}`)

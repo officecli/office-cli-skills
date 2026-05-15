@@ -92,6 +92,12 @@ CREATE TABLE IF NOT EXISTS usage_events (
   reserved_credits INT NOT NULL DEFAULT 0,
   settled_credits INT NOT NULL DEFAULT 0,
   refund_credits INT NOT NULL DEFAULT 0,
+  client_ip VARCHAR(64) NULL,
+  forwarded_for VARCHAR(512) NULL,
+  user_agent VARCHAR(512) NULL,
+  request_host VARCHAR(191) NULL,
+  request_path VARCHAR(191) NULL,
+  request_method VARCHAR(16) NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_usage_events_fingerprint ON usage_events(fingerprint_hash);
@@ -102,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_events_reason_code ON usage_events(reason_c
 CREATE INDEX IF NOT EXISTS idx_usage_events_api_key_id ON usage_events(api_key_id);
 CREATE INDEX IF NOT EXISTS idx_usage_events_runtime_mode ON usage_events(runtime_mode);
 CREATE INDEX IF NOT EXISTS idx_usage_events_user_id ON usage_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_usage_events_client_ip ON usage_events(client_ip);
 
 CREATE TABLE IF NOT EXISTS reward_grants (
   id BIGSERIAL PRIMARY KEY,

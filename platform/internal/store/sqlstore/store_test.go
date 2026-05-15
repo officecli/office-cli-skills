@@ -37,6 +37,71 @@ func TestUserHostedCreditLedgerMigrationsIncludeRuntimeColumns(t *testing.T) {
 	}
 }
 
+func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:usage_event_audit_filters?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	requestID := "req-audit-1"
+	clientIP := "203.0.113.42"
+	forwardedFor := "198.51.100.7, 10.0.0.4"
+	userAgent := "officecli/0.2.65 audit-test"
+	requestHost := "platform.officecli.io"
+	requestPath := "/api/license/check"
+	requestMethod := "POST"
+	userID := uint64(42)
+	apiKeyID := uint64(7)
+	createdAt := time.Date(2026, 5, 15, 8, 0, 0, 0, time.UTC)
+	event := &model.UsageEvent{
+		RequestID:       &requestID,
+		FingerprintHash: "fp-audit",
+		Mode:            model.UsageModePaid,
+		Action:          model.UsageActionGenerate,
+		APIKeyID:        &apiKeyID,
+		UserID:          &userID,
+		Result:          model.UsageResultAllowed,
+		ClientIP:        &clientIP,
+		ForwardedFor:    &forwardedFor,
+		UserAgent:       &userAgent,
+		RequestHost:     &requestHost,
+		RequestPath:     &requestPath,
+		RequestMethod:   &requestMethod,
+		CreatedAt:       createdAt,
+	}
+	require.NoError(t, store.CreateUsageEvent(context.Background(), event))
+
+	start := createdAt.Add(-time.Minute)
+	end := createdAt.Add(time.Minute)
+	events, err := store.ListUsageEvents(context.Background(), UsageEventFilter{
+		APIKeyID:  &apiKeyID,
+		UserID:    &userID,
+		ClientIP:  "203.0.113",
+		RequestID: "req-audit",
+		StartTime: &start,
+		EndTime:   &end,
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "fp-audit", events[0].FingerprintHash)
+	require.NotNil(t, events[0].ClientIP)
+	require.Equal(t, clientIP, *events[0].ClientIP)
+	require.NotNil(t, events[0].ForwardedFor)
+	require.Equal(t, forwardedFor, *events[0].ForwardedFor)
+	require.NotNil(t, events[0].UserAgent)
+	require.Equal(t, userAgent, *events[0].UserAgent)
+	require.NotNil(t, events[0].RequestHost)
+	require.Equal(t, requestHost, *events[0].RequestHost)
+	require.NotNil(t, events[0].RequestPath)
+	require.Equal(t, requestPath, *events[0].RequestPath)
+	require.NotNil(t, events[0].RequestMethod)
+	require.Equal(t, requestMethod, *events[0].RequestMethod)
+
+	events, err = store.ListUsageEvents(context.Background(), UsageEventFilter{ClientIP: "192.0.2"})
+	require.NoError(t, err)
+	require.Empty(t, events)
+}
+
 func TestSaveGoogleUserGeneratesStableInviteCode(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:save_google_user_generates_stable_invite_code?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

@@ -40,13 +40,20 @@ CREATE TABLE IF NOT EXISTS usage_events (
   billed_units INT NOT NULL DEFAULT 0,
   unit_type VARCHAR(32) NOT NULL DEFAULT 'document',
   charged TINYINT(1) NOT NULL DEFAULT 0,
+  client_ip VARCHAR(64) NULL,
+  forwarded_for VARCHAR(512) NULL,
+  user_agent VARCHAR(512) NULL,
+  request_host VARCHAR(191) NULL,
+  request_path VARCHAR(191) NULL,
+  request_method VARCHAR(16) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_usage_events_request_id (request_id),
   KEY idx_usage_events_fingerprint (fingerprint_hash),
   KEY idx_usage_events_mode (mode),
   KEY idx_usage_events_result (result),
   KEY idx_usage_events_reason_code (reason_code),
-  KEY idx_usage_events_api_key_id (api_key_id)
+  KEY idx_usage_events_api_key_id (api_key_id),
+  KEY idx_usage_events_client_ip (client_ip)
 );
 
 CREATE TABLE IF NOT EXISTS admin_audit_logs (

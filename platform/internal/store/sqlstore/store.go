@@ -31,7 +31,10 @@ type UsageEventFilter struct {
 	Result      string
 	ReasonCode  string
 	Fingerprint string
+	ClientIP    string
+	RequestID   string
 	APIKeyID    *uint64
+	UserID      *uint64
 	StartTime   *time.Time
 	EndTime     *time.Time
 }
@@ -1262,8 +1265,17 @@ func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([
 	if filter.Fingerprint != "" {
 		query = query.Where("fingerprint_hash LIKE ?", "%"+filter.Fingerprint+"%")
 	}
+	if filter.ClientIP != "" {
+		query = query.Where("client_ip LIKE ?", "%"+filter.ClientIP+"%")
+	}
+	if filter.RequestID != "" {
+		query = query.Where("request_id LIKE ?", "%"+filter.RequestID+"%")
+	}
 	if filter.APIKeyID != nil {
 		query = query.Where("api_key_id = ?", *filter.APIKeyID)
+	}
+	if filter.UserID != nil {
+		query = query.Where("user_id = ?", *filter.UserID)
 	}
 	if filter.StartTime != nil {
 		query = query.Where("created_at >= ?", *filter.StartTime)

@@ -1,0 +1,8 @@
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS client_ip VARCHAR(64) NULL;
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS forwarded_for VARCHAR(512) NULL;
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS user_agent VARCHAR(512) NULL;
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS request_host VARCHAR(191) NULL;
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS request_path VARCHAR(191) NULL;
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS request_method VARCHAR(16) NULL;
+
+CREATE INDEX IF NOT EXISTS idx_usage_events_client_ip ON usage_events(client_ip);

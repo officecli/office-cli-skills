@@ -19,14 +19,15 @@ var (
 )
 
 type CheckRequest struct {
-	FingerprintHash string `json:"fingerprint_hash"`
-	UserID          uint64 `json:"user_id,omitempty"`
-	APIKey          string `json:"api_key,omitempty"`
-	CLIVersion      string `json:"cli_version,omitempty"`
-	DocumentType    string `json:"document_type,omitempty"`
-	RuntimeMode     string `json:"runtime_mode,omitempty"`
-	RequestNonce    string `json:"request_nonce,omitempty"`
-	Action          string `json:"action"`
+	FingerprintHash string                  `json:"fingerprint_hash"`
+	UserID          uint64                  `json:"user_id,omitempty"`
+	APIKey          string                  `json:"api_key,omitempty"`
+	CLIVersion      string                  `json:"cli_version,omitempty"`
+	DocumentType    string                  `json:"document_type,omitempty"`
+	RuntimeMode     string                  `json:"runtime_mode,omitempty"`
+	RequestNonce    string                  `json:"request_nonce,omitempty"`
+	Action          string                  `json:"action"`
+	AuditContext    model.UsageAuditContext `json:"-"`
 }
 
 type CommitToken struct {
@@ -104,13 +105,14 @@ type CheckResponse struct {
 }
 
 type ConsumeRequest struct {
-	FingerprintHash string           `json:"fingerprint_hash"`
-	UserID          uint64           `json:"user_id,omitempty"`
-	RequestID       string           `json:"request_id"`
-	UsageType       string           `json:"usage_type"`
-	AccessMode      model.AccessMode `json:"access_mode,omitempty"`
-	APIKey          string           `json:"api_key,omitempty"`
-	CommitToken     *CommitToken     `json:"commit_token,omitempty"`
+	FingerprintHash string                  `json:"fingerprint_hash"`
+	UserID          uint64                  `json:"user_id,omitempty"`
+	RequestID       string                  `json:"request_id"`
+	UsageType       string                  `json:"usage_type"`
+	AccessMode      model.AccessMode        `json:"access_mode,omitempty"`
+	APIKey          string                  `json:"api_key,omitempty"`
+	CommitToken     *CommitToken            `json:"commit_token,omitempty"`
+	AuditContext    model.UsageAuditContext `json:"-"`
 }
 
 type ConsumeResponse struct {
