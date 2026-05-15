@@ -87,10 +87,7 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 		job.LicenseCheck = licenseCheck
 	}
 
-	publishCfg := cfg.Publish
-	if strings.TrimSpace(publishCfg.APIKey) == "" {
-		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
-	}
+	publishCfg := publishConfigForLicense(cfg.Publish, cfg.License)
 	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
 		return GenerateResult{}, err
@@ -134,10 +131,7 @@ func (a *App) executeExternalImageJob(ctx context.Context, cfg Config, job Gener
 	if err != nil {
 		return GenerateResult{}, err
 	}
-	publishCfg := cfg.Publish
-	if strings.TrimSpace(publishCfg.APIKey) == "" {
-		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
-	}
+	publishCfg := publishConfigForLicense(cfg.Publish, cfg.License)
 	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
 		return GenerateResult{}, err
@@ -205,10 +199,7 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 	if err != nil {
 		return GenerateResult{}, buildHostedModeError(err)
 	}
-	publishCfg := cfg.Publish
-	if strings.TrimSpace(publishCfg.APIKey) == "" {
-		publishCfg.APIKey = strings.TrimSpace(licenseCfg.APIKey)
-	}
+	publishCfg := publishConfigForLicense(cfg.Publish, licenseCfg)
 	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
 		return GenerateResult{}, err
@@ -216,6 +207,29 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 	executor := NewExecutor(runtime.NewService(llmClient, progress), publisher, nil)
 	executor.progress = progress
 	return executor.Run(ctx, job)
+}
+
+func publishConfigForLicense(publishCfg publishprovider.Config, licenseCfg LicenseConfig) publishprovider.Config {
+	if strings.TrimSpace(licenseCfg.SessionToken) != "" && publishUsesLicensePlatform(publishCfg, licenseCfg) {
+		publishCfg.APIKey = strings.TrimSpace(licenseCfg.SessionToken)
+		return publishCfg
+	}
+	if strings.TrimSpace(publishCfg.APIKey) == "" {
+		publishCfg.APIKey = strings.TrimSpace(licenseCfg.APIKey)
+	}
+	return publishCfg
+}
+
+func publishUsesLicensePlatform(publishCfg publishprovider.Config, licenseCfg LicenseConfig) bool {
+	publishBaseURL := strings.TrimRight(strings.TrimSpace(publishCfg.BaseURL), "/")
+	if publishBaseURL == "" {
+		publishBaseURL = strings.TrimRight(strings.TrimSpace(publishprovider.EmbeddedPublishBaseURL), "/")
+	}
+	licenseBaseURL := strings.TrimRight(strings.TrimSpace(licenseCfg.BaseURL), "/")
+	if licenseBaseURL == "" {
+		licenseBaseURL = strings.TrimRight(strings.TrimSpace(defaultInitConfig().License.BaseURL), "/")
+	}
+	return strings.EqualFold(publishBaseURL, licenseBaseURL)
 }
 
 func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (GenerateJob, error) {

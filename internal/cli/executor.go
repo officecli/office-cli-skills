@@ -189,18 +189,28 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 				DocumentName:  artifact.DocumentName,
 			})
 			if err != nil {
-				emitProgress(ctx, e.progress, progressStepPublish, "failed", "Publishing failed")
-				return GenerateResult{}, fmt.Errorf("publishing failed: %w", err)
+				result.PublishedSkippedReason = fmt.Sprintf("publishing failed: %v", err)
+				result.Warnings = append(result.Warnings, publishFailureWarning(err))
+				emitProgress(ctx, e.progress, progressStepPublish, "completed", "Online preview publishing skipped")
+			} else {
+				result.Published = true
+				result.AccessURL = published.AccessURL
+				result.Password = published.Password
+				result.ExpiresAt = published.ExpiresAt
+				emitProgress(ctx, e.progress, progressStepPublish, "completed", "Online preview publishing completed")
 			}
-			result.Published = true
-			result.AccessURL = published.AccessURL
-			result.Password = published.Password
-			result.ExpiresAt = published.ExpiresAt
-			emitProgress(ctx, e.progress, progressStepPublish, "completed", "Online preview publishing completed")
 		}
 	}
 	emitProgress(ctx, e.progress, progressStepFinalize, "completed", "Document generated")
 	return result, nil
+}
+
+func publishFailureWarning(err error) string {
+	message := "Publishing failed"
+	if err != nil && strings.TrimSpace(err.Error()) != "" {
+		message += ": " + strings.TrimSpace(err.Error())
+	}
+	return message + ". The local file was saved. Run `officecli login` or `officecli config set-publish` to enable online preview publishing."
 }
 
 func warningMessages(items []engine.GenerateIssue) []string {

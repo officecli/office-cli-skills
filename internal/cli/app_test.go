@@ -1656,6 +1656,79 @@ func TestExecuteGenerateJob_IMGHostedRuntimeUsesHostedCreditBilling(t *testing.T
 	}
 }
 
+func TestExecuteGenerateJob_IMGHostedRuntimePublishesWithSessionToken(t *testing.T) {
+	imageBytes := []byte("hosted-session-png-bytes")
+	var gotImageAuth string
+	var gotPublishAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/llm/v1/image":
+			gotImageAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":16}`, base64.StdEncoding.EncodeToString(imageBytes))
+		case "/api/publish":
+			gotPublishAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"access_url":"https://officecli.io/p/session-img","password":"123456","file_id":"file-session","expires_at":"2026-05-06T00:00:00Z"}`)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				return &LicenseCheckResult{
+					Allowed:       true,
+					AccessMode:    LicenseAccessModeHosted,
+					HostedEnabled: true,
+					CreditBalance: 18,
+					CommitToken:   signTestCommitToken(req, LicenseAccessModeHosted, UsageCommitToken{}),
+				}, nil
+			},
+		}, nil
+	}
+
+	tmpDir := t.TempDir()
+	result, err := app.executeGenerateJob(t.Context(), Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: true},
+		License: LicenseConfig{
+			BaseURL:      server.URL,
+			SessionToken: "ocli_sess_current",
+			Enabled:      true,
+			TimeoutSec:   5,
+		},
+		Publish: publishprovider.Config{
+			Enabled: true,
+			BaseURL: server.URL,
+			APIKey:  "cop_li_stale_publish_key",
+		},
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch Visual",
+		Prompt:       "A polished product launch hero image",
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "fast",
+		OutputDir:    tmpDir,
+		Publish:      true,
+		ImageRatio:   "square",
+	}, false, noopProgressController{}, nil)
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if !result.Published {
+		t.Fatal("expected hosted image to publish")
+	}
+	if gotImageAuth != "Bearer ocli_sess_current" {
+		t.Fatalf("image authorization = %q", gotImageAuth)
+	}
+	if gotPublishAuth != "Bearer ocli_sess_current" {
+		t.Fatalf("publish authorization = %q", gotPublishAuth)
+	}
+}
+
 func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
 	imageBytes := []byte("slow-server-png-bytes")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

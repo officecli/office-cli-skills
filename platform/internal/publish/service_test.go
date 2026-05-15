@@ -15,9 +15,12 @@ import (
 )
 
 type fakeAPIKeyStore struct {
-	key       *model.APIKey
-	touched   bool
-	touchedID uint64
+	key              *model.APIKey
+	session          *model.CLISession
+	touched          bool
+	touchedID        uint64
+	sessionTouched   bool
+	sessionTouchedID uint64
 }
 
 func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey, error) {
@@ -31,6 +34,20 @@ func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey
 func (f *fakeAPIKeyStore) TouchLastUsedAt(_ context.Context, id uint64, _ time.Time) error {
 	f.touched = true
 	f.touchedID = id
+	return nil
+}
+
+func (f *fakeAPIKeyStore) FindCLISessionByTokenHash(_ context.Context, _ string) (*model.CLISession, error) {
+	if f.session == nil {
+		return nil, nil
+	}
+	cloned := *f.session
+	return &cloned, nil
+}
+
+func (f *fakeAPIKeyStore) TouchCLISession(_ context.Context, id uint64, _ time.Time) error {
+	f.sessionTouched = true
+	f.sessionTouchedID = id
 	return nil
 }
 
@@ -208,6 +225,41 @@ func TestPublishCreatesLocalPreviewShare(t *testing.T) {
 	require.Equal(t, objects.putKey, shares.got.StorageKey)
 	require.Equal(t, "Quarterly deck.pptx", shares.got.FileName)
 	require.Equal(t, "pptx", shares.got.FileType)
+}
+
+func TestPublishAcceptsActiveCLISession(t *testing.T) {
+	apiKeys := &fakeAPIKeyStore{
+		session: &model.CLISession{
+			ID:        17,
+			UserID:    42,
+			ExpiresAt: time.Now().UTC().Add(time.Hour),
+		},
+	}
+	objects := &fakeObjectStore{}
+	files := &fakeFileMetaStore{}
+	shares := &fakePreviewShareStore{}
+	svc := NewService(apiKeys, objects, files, shares, Config{
+		SiteBaseURL:          "https://officecli.io",
+		HashSalt:             "salt",
+		DefaultExpireSeconds: 3600,
+	})
+
+	result, err := svc.Publish(context.Background(), "Bearer ocli_sess_current", Request{
+		FileName:     "demo.png",
+		DocumentType: "img",
+		DocumentName: "Tea cup",
+		ContentType:  "image/png",
+		Reader:       bytes.NewReader([]byte("png-bytes")),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "https://officecli.io/p/share-1", result.AccessURL)
+	require.True(t, apiKeys.sessionTouched)
+	require.Equal(t, uint64(17), apiKeys.sessionTouchedID)
+	require.False(t, apiKeys.touched)
+	require.NotNil(t, files.meta)
+	require.Equal(t, "publish-user-42", files.meta.CreatorID)
+	require.Equal(t, "publish-user-42", files.meta.ModifierID)
 }
 
 func TestPublishAcceptsReportHTML(t *testing.T) {

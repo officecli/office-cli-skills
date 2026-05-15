@@ -483,12 +483,12 @@ func TestExecutorDoesNotConsumeWhenGenerationFails(t *testing.T) {
 	}
 }
 
-func TestExecutorDoesNotConsumeWhenPublishFails(t *testing.T) {
+func TestExecutorWarnsAndReturnsLocalFileWhenPublishFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	manager := &fakeLicenseManager{}
 	executor := NewExecutor(fakeGenerator{}, failingPublisher{err: context.DeadlineExceeded}, manager)
 
-	_, err := executor.Run(context.Background(), GenerateJob{
+	result, err := executor.Run(context.Background(), GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
 		Topic:        "Enterprise Collaboration Platform Overview",
 		Prompt:       "Describe the product capabilities, customer value, and use cases of this collaboration platform.",
@@ -503,11 +503,21 @@ func TestExecutorDoesNotConsumeWhenPublishFails(t *testing.T) {
 			},
 		},
 	})
-	if err == nil {
-		t.Fatal("expected error")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
-	if !strings.Contains(err.Error(), "publishing failed") {
-		t.Fatalf("unexpected error: %v", err)
+	if result.Published {
+		t.Fatal("publish failure should not mark result as published")
+	}
+	if _, err := os.Stat(result.FilePath); err != nil {
+		t.Fatalf("stat local file: %v", err)
+	}
+	warnings := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(warnings, "Publishing failed") {
+		t.Fatalf("warnings should include publishing failure, got: %v", result.Warnings)
+	}
+	if !strings.Contains(warnings, "officecli login") {
+		t.Fatalf("warnings should prompt login, got: %v", result.Warnings)
 	}
 	if manager.consumeCalls != 1 {
 		t.Fatalf("consumeCalls = %d, want 1", manager.consumeCalls)

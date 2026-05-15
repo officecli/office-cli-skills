@@ -346,7 +346,7 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			status := http.StatusBadRequest
 			errMsg := strings.ToLower(err.Error())
 			switch {
-			case strings.Contains(errMsg, "missing api key"), strings.Contains(errMsg, "invalid api key"), strings.Contains(errMsg, "disabled"):
+			case strings.Contains(errMsg, "missing api key"), strings.Contains(errMsg, "invalid api key"), strings.Contains(errMsg, "disabled"), strings.Contains(errMsg, "cli session"):
 				status = http.StatusUnauthorized
 			case strings.Contains(errMsg, "too large"):
 				status = http.StatusRequestEntityTooLarge
@@ -1850,6 +1850,12 @@ func (r apiKeyRepo) FindAPIKeyByHash(ctx context.Context, hash string) (*model.A
 }
 func (r apiKeyRepo) TouchLastUsedAt(ctx context.Context, id uint64, usedAt time.Time) error {
 	return r.store.TouchAPIKeyLastUsedAt(ctx, id, usedAt)
+}
+func (r apiKeyRepo) FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error) {
+	return r.store.FindCLISessionByTokenHash(ctx, tokenHash)
+}
+func (r apiKeyRepo) TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error {
+	return r.store.TouchCLISession(ctx, id, usedAt)
 }
 func (r apiKeyRepo) TouchAPIKeyLastUsedAt(ctx context.Context, id uint64, usedAt time.Time) error {
 	return r.store.TouchAPIKeyLastUsedAt(ctx, id, usedAt)

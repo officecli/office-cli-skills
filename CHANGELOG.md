@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.67 - 2026-05-15
+
+### Fixed
+
+- Treat online preview publishing failures as warnings so document generation still succeeds and reports the local file path.
+- Reuse active CLI login sessions for platform preview publishing when generation and publish target the same OfficeCLI platform endpoint.
+
 ## 0.2.66 - 2026-05-15
 
 ### Changed

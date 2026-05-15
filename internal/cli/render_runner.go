@@ -44,10 +44,7 @@ func (a *App) executeRenderJob(ctx context.Context, cfg Config, job GenerateJob,
 		}
 	}
 
-	publishCfg := cfg.Publish
-	if strings.TrimSpace(publishCfg.APIKey) == "" {
-		publishCfg.APIKey = strings.TrimSpace(cfg.License.APIKey)
-	}
+	publishCfg := publishConfigForLicense(cfg.Publish, cfg.License)
 	publisher, err := publishprovider.NewPublisher(publishCfg)
 	if err != nil {
 		return GenerateResult{}, err

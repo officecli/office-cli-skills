@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/officecli/officecli-internal/platform/internal/clisession"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 	"github.com/officecli/officecli-internal/platform/internal/officesdk"
 	"github.com/officecli/officecli-internal/platform/internal/previewshare"
@@ -22,6 +23,8 @@ import (
 type APIKeyStore interface {
 	FindByHash(ctx context.Context, hash string) (*model.APIKey, error)
 	TouchLastUsedAt(ctx context.Context, id uint64, usedAt time.Time) error
+	FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error)
+	TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error
 }
 
 type ObjectStore interface {
@@ -69,6 +72,11 @@ type Result struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
+type principal struct {
+	apiKey  *model.APIKey
+	session *model.CLISession
+}
+
 func NewService(store APIKeyStore, objects ObjectStore, files FileMetaStore, shares PreviewShareStore, cfg Config) *Service {
 	return &Service{
 		store:   store,
@@ -84,7 +92,7 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 	if s == nil || s.store == nil || s.objects == nil || s.files == nil || s.shares == nil {
 		return nil, fmt.Errorf("publish service unavailable")
 	}
-	key, err := s.authorize(ctx, bearer)
+	actor, err := s.authorize(ctx, bearer)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +126,8 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 		FromSDK:    false,
 		CreateTime: now.Unix(),
 		ModifyTime: now.Unix(),
-		CreatorID:  "publish",
-		ModifierID: "publish",
+		CreatorID:  actor.creatorID(),
+		ModifierID: actor.creatorID(),
 	}
 	if err := s.files.SetFileMeta(ctx, meta); err != nil {
 		_ = s.objects.DeleteObject(ctx, storageKey)
@@ -141,7 +149,7 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 	}
 	share := result.Share
 
-	_ = s.store.TouchLastUsedAt(ctx, key.ID, now)
+	actor.touch(ctx, s.store, now)
 	return &Result{
 		AccessURL: strings.TrimRight(defaultSiteBaseURL(s.cfg.SiteBaseURL), "/") + "/p/" + share.ShareToken,
 		Password:  result.Password,
@@ -150,7 +158,7 @@ func (s *Service) Publish(ctx context.Context, bearer string, req Request) (*Res
 	}, nil
 }
 
-func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, error) {
+func (s *Service) authorize(ctx context.Context, bearer string) (*principal, error) {
 	keyValue := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
 	if keyValue == "" {
 		return nil, fmt.Errorf("missing api key")
@@ -162,7 +170,7 @@ func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, 
 	}
 	switch {
 	case key == nil:
-		return nil, fmt.Errorf("invalid api key")
+		return s.authorizeSession(ctx, keyValue)
 	case key.Status != model.APIKeyStatusActive:
 		return nil, fmt.Errorf("api key is disabled")
 	case key.ExpiresAt != nil && key.ExpiresAt.Before(time.Now().UTC()):
@@ -170,7 +178,44 @@ func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, 
 	case !hasPublishEntitlement(key):
 		return nil, fmt.Errorf("publish entitlement is required")
 	default:
-		return key, nil
+		return &principal{apiKey: key}, nil
+	}
+}
+
+func (s *Service) authorizeSession(ctx context.Context, token string) (*principal, error) {
+	session, err := s.store.FindCLISessionByTokenHash(ctx, clisession.HashToken(token))
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case session == nil:
+		return nil, fmt.Errorf("invalid api key")
+	case session.RevokedAt != nil:
+		return nil, fmt.Errorf("cli session is revoked")
+	case session.ExpiresAt.Before(time.Now().UTC()):
+		return nil, fmt.Errorf("cli session is expired")
+	default:
+		return &principal{session: session}, nil
+	}
+}
+
+func (p *principal) creatorID() string {
+	if p != nil && p.session != nil {
+		return fmt.Sprintf("publish-user-%d", p.session.UserID)
+	}
+	return "publish"
+}
+
+func (p *principal) touch(ctx context.Context, store APIKeyStore, now time.Time) {
+	if p == nil || store == nil {
+		return
+	}
+	if p.apiKey != nil {
+		_ = store.TouchLastUsedAt(ctx, p.apiKey.ID, now)
+		return
+	}
+	if p.session != nil {
+		_ = store.TouchCLISession(ctx, p.session.ID, now)
 	}
 }
 
