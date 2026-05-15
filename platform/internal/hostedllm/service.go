@@ -3,8 +3,10 @@ package hostedllm
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -169,6 +171,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if err := validateHostedProfile(req.Model, false); err != nil {
 		return nil, err
 	}
+	req.RequestID = hostedRequestID(req.RequestID, req.CommitToken)
 	if req.CommitToken != nil {
 		return s.completeQuotaText(ctx, req)
 	}
@@ -321,6 +324,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if err := validateHostedProfile(req.Model, true); err != nil {
 		return nil, err
 	}
+	req.RequestID = hostedRequestID(req.RequestID, req.CommitToken)
 	if req.CommitToken != nil {
 		return s.generateQuotaImage(ctx, bearer, req)
 	}
@@ -939,6 +943,22 @@ func (s *Service) normalizeModel(ctx context.Context, value string, image bool) 
 		}
 	}
 	return model
+}
+
+func hostedRequestID(value string, token *licensesvc.CommitToken) string {
+	if requestID := strings.TrimSpace(value); requestID != "" {
+		return requestID
+	}
+	if token != nil {
+		if requestID := strings.TrimSpace(token.RequestID); requestID != "" {
+			return requestID
+		}
+	}
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("hosted-%d", time.Now().UnixNano())
+	}
+	return "hosted-" + hex.EncodeToString(b[:])
 }
 
 func (s *Service) reserveCreditsForModel(ctx context.Context, modelName string, image bool) int {

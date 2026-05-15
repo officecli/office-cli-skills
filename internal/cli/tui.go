@@ -667,11 +667,35 @@ func inferTUIDocumentType(prompt string) string {
 		return "xlsx"
 	case strings.Contains(normalized, "docx"), strings.Contains(normalized, "doc "), strings.Contains(normalized, "word"), strings.Contains(normalized, "brief"), strings.Contains(prompt, "文档"), strings.Contains(prompt, "方案"):
 		return "docx"
-	case strings.Contains(normalized, "img"), strings.Contains(normalized, "image"), strings.Contains(normalized, "poster"), strings.Contains(prompt, "图片"), strings.Contains(prompt, "海报"), strings.Contains(prompt, "视觉图"):
+	case strings.Contains(normalized, "img"), strings.Contains(normalized, "image"), strings.Contains(normalized, "poster"), strings.Contains(prompt, "图片"), strings.Contains(prompt, "海报"), strings.Contains(prompt, "视觉图"), hasChineseImagePromptIntent(prompt):
 		return "img"
 	default:
 		return "pptx"
 	}
+}
+
+func hasChineseImagePromptIntent(prompt string) bool {
+	if strings.Contains(prompt, "图表") {
+		return false
+	}
+	imageIntentPhrases := []string{
+		"画一个图",
+		"画一张图",
+		"画幅图",
+		"画图",
+		"生成一个图",
+		"生成一张图",
+		"出一张图",
+		"做一张图",
+		"插画",
+		"配图",
+	}
+	for _, phrase := range imageIntentPhrases {
+		if strings.Contains(prompt, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func tuiTopicFromPrompt(prompt string) string {

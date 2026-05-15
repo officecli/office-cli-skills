@@ -568,6 +568,46 @@ func TestInternalClient_CompleteSendsAnonymousAccessFields(t *testing.T) {
 	}
 }
 
+func TestInternalClient_CompleteAddsRequestIDForHostedAccountBilling(t *testing.T) {
+	t.Parallel()
+
+	var payload struct {
+		RequestID string `json:"request_id"`
+		Model     string `json:"model"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		_, _ = fmt.Fprint(w, `{"content":"{\"ok\":true}"}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider: "internal",
+		BaseURL:  server.URL,
+		APIKey:   "session-token",
+		Model:    "hosted/text",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{{Role: "user", Content: "Return JSON"}})
+	if err != nil {
+		t.Fatalf("CompleteJSON: %v", err)
+	}
+	if payload.Model != "hosted/text" {
+		t.Fatalf("model = %q", payload.Model)
+	}
+	if !strings.HasPrefix(payload.RequestID, "llm-") {
+		t.Fatalf("request_id = %q, want llm-*", payload.RequestID)
+	}
+}
+
 func TestOpenAIClient_GenerateImageWithReferenceUsesImageEditMultipart(t *testing.T) {
 	t.Parallel()
 

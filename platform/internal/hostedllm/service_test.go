@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	"github.com/officecli/officecli-internal/platform/internal/clisession"
 	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
@@ -22,11 +23,13 @@ import (
 type fakeAPIKeyStore struct {
 	key            *model.APIKey
 	keysByHash     map[string]*model.APIKey
+	sessionsByHash map[string]*model.CLISession
 	userKeys       map[uint64]*model.UserAIGatewayAPIKey
 	settings       *model.HostedPricingSetting
 	rules          []model.HostedPricingRule
 	modelConfigs   []model.HostedModelPricingConfig
 	reservations   []int
+	hostedRequests []string
 	releases       []int
 	settlements    []int
 	events         []*model.UsageEvent
@@ -81,6 +84,10 @@ func (f *fakeAPIKeyStore) SettleReservedCredits(ctx context.Context, apiKeyID ui
 }
 
 func (f *fakeAPIKeyStore) ReserveHostedCreditsByUser(_ context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	f.hostedRequests = append(f.hostedRequests, requestID)
 	f.reservations = append(f.reservations, credits)
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100, CreditReserved: credits}, nil
 }
@@ -98,6 +105,12 @@ func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(ctx context.Context, userID 
 }
 
 func (f *fakeAPIKeyStore) FindCLISessionByTokenHash(_ context.Context, tokenHash string) (*model.CLISession, error) {
+	if f.sessionsByHash != nil {
+		if session, ok := f.sessionsByHash[tokenHash]; ok && session != nil {
+			cloned := *session
+			return &cloned, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -264,6 +277,58 @@ func testAIGatewayCipher(t *testing.T) *apikey.Cipher {
 	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
 	require.NoError(t, err)
 	return cipher
+}
+
+func TestCompleteWithCLISessionGeneratesMissingRequestID(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/chat/completions", r.URL.Path)
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer upstream.Close()
+
+	cipher := testAIGatewayCipher(t)
+	ciphertext, err := cipher.Encrypt("sk-user-42")
+	require.NoError(t, err)
+
+	sessionToken := "ocli_sess_test"
+	store := &fakeAPIKeyStore{
+		sessionsByHash: map[string]*model.CLISession{
+			clisession.HashToken(sessionToken): {
+				ID:        9,
+				UserID:    42,
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
+			},
+		},
+		userKeys: map[uint64]*model.UserAIGatewayAPIKey{
+			42: {
+				UserID:        42,
+				Status:        model.UserAIGatewayAPIKeyStatusActive,
+				KeyCiphertext: ciphertext,
+			},
+		},
+		rules: []model.HostedPricingRule{{
+			DocumentProfile:      "text",
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+		}},
+	}
+	svc := NewService(store, Config{
+		BaseURL:            upstream.URL,
+		TextModel:          "gpt-test",
+		AIGatewayKeyCipher: cipher,
+		TimeoutSec:         5,
+	})
+
+	resp, err := svc.Complete(context.Background(), "Bearer "+sessionToken, CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Content)
+	require.Len(t, store.hostedRequests, 1)
+	require.NotEmpty(t, store.hostedRequests[0])
+	require.NotNil(t, store.events[0].RequestID)
+	require.Equal(t, store.hostedRequests[0], *store.events[0].RequestID)
 }
 
 func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {

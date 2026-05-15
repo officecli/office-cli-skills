@@ -45,6 +45,18 @@ func TestBuildTUIGenerateJobInfersWordAsDOCX(t *testing.T) {
 	}
 }
 
+func TestBuildTUIGenerateJobInfersChineseDrawPictureAsIMG(t *testing.T) {
+	job, err := BuildTUIGenerateJob("画一个图，关于长江", Config{
+		Defaults: DefaultsConfig{OutputDir: "./output", Mode: "fast", Publish: false},
+	}, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildTUIGenerateJob: %v", err)
+	}
+	if job.DocumentType != engine.DocumentTypeIMG {
+		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
 func TestTUIModelRenderShowsResultAndReturnsIdleText(t *testing.T) {
 	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
 	model.state = tuiStateIdle

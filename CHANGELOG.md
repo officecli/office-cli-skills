@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.64 - 2026-05-15
+
+### Fixed
+
+- Fixed hosted document generation requests so account-credit billing always receives a request id before reserving credits.
+- Fixed the TUI prompt router so Chinese requests such as `画一个图，关于长江` use standalone image generation instead of PPTX generation.
+
 ## 0.2.63 - 2026-05-15
 
 ### Changed

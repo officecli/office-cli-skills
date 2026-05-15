@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -839,6 +841,7 @@ func llmInvalidStreamingPayloadError(payload string, err error) error {
 }
 
 func (c *internalClient) post(ctx context.Context, url string, payload map[string]any) ([]byte, error) {
+	ensureInternalRequestID(payload)
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -864,4 +867,61 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 		return nil, fmt.Errorf("internal llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return body, nil
+}
+
+func ensureInternalRequestID(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	if requestID, ok := payload["request_id"].(string); ok && strings.TrimSpace(requestID) != "" {
+		return
+	}
+	if requestID := requestIDFromCommitToken(payload["commit_token"]); requestID != "" {
+		payload["request_id"] = requestID
+		return
+	}
+	payload["request_id"] = newInternalRequestID()
+}
+
+func requestIDFromCommitToken(value any) string {
+	if value == nil {
+		return ""
+	}
+	var raw []byte
+	switch token := value.(type) {
+	case json.RawMessage:
+		raw = token
+	case []byte:
+		raw = token
+	case map[string]any:
+		if requestID, ok := token["request_id"].(string); ok {
+			return strings.TrimSpace(requestID)
+		}
+	case map[string]string:
+		return strings.TrimSpace(token["request_id"])
+	default:
+		marshaled, err := json.Marshal(token)
+		if err != nil {
+			return ""
+		}
+		raw = marshaled
+	}
+	if len(raw) == 0 {
+		return ""
+	}
+	var parsed struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parsed.RequestID)
+}
+
+func newInternalRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("llm-%d", time.Now().UnixNano())
+	}
+	return "llm-" + hex.EncodeToString(b[:])
 }
