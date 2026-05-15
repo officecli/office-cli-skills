@@ -115,6 +115,33 @@ func (f *fakeGrants) SaveRewardGrant(_ context.Context, grant *model.RewardGrant
 	return nil
 }
 
+type fakeHostedCredits struct {
+	byKey map[string]*model.UserHostedCreditLedger
+}
+
+func newFakeHostedCredits() *fakeHostedCredits {
+	return &fakeHostedCredits{byKey: map[string]*model.UserHostedCreditLedger{}}
+}
+
+func (f *fakeHostedCredits) GrantHostedCreditsToUser(_ context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	if ledger := f.byKey[idempotencyKey]; ledger != nil {
+		copied := *ledger
+		return &copied, &model.UserHostedCreditAccount{UserID: userID, CreditBalance: creditAmount}, false, nil
+	}
+	ledger := &model.UserHostedCreditLedger{
+		ID:             uint64(len(f.byKey) + 1),
+		UserID:         userID,
+		SourceType:     source,
+		IdempotencyKey: idempotencyKey,
+		CreditDelta:    creditAmount,
+		Reason:         reason,
+		MetadataJSON:   metadataJSON,
+	}
+	f.byKey[idempotencyKey] = ledger
+	copied := *ledger
+	return &copied, &model.UserHostedCreditAccount{UserID: userID, CreditBalance: creditAmount}, true, nil
+}
+
 func TestRegisterReferralIsIdempotent(t *testing.T) {
 	referrals := newFakeReferrals()
 	svc := NewService(
@@ -179,23 +206,29 @@ func TestActivateReferralCreatesSingleGrant(t *testing.T) {
 		RegisteredAt:  time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC),
 	}
 	grants := newFakeGrants()
-	svc := NewService(&fakeUsers{}, referrals, newFakeDiscord(), grants)
+	hosted := newFakeHostedCredits()
+	svc := NewService(&fakeUsers{}, referrals, newFakeDiscord(), grants, hosted)
 	svc.clock = func() time.Time { return time.Date(2026, 4, 2, 11, 0, 0, 0, time.UTC) }
 
-	first, err := svc.ActivateReferral(context.Background(), 22, 5)
+	first, err := svc.ActivateReferral(context.Background(), 22, InviteActivationRewardAmount)
 	require.NoError(t, err)
 	require.True(t, first.Created)
-	require.Equal(t, model.RewardSourceInviteActivation, first.Grant.SourceType)
-	require.Equal(t, "invite-activation:22", first.Grant.IdempotencyKey)
+	require.Nil(t, first.Grant)
+
+	ledger := hosted.byKey["invite_activation_bonus:11:22"]
+	require.NotNil(t, ledger)
+	require.Equal(t, model.HostedCreditLedgerSourceInviteActivationBonus, ledger.SourceType)
+	require.Equal(t, 100, ledger.CreditDelta)
 
 	var metadata map[string]any
-	require.NoError(t, json.Unmarshal([]byte(first.Grant.MetadataJSON), &metadata))
+	require.NoError(t, json.Unmarshal([]byte(ledger.MetadataJSON), &metadata))
 	require.EqualValues(t, 22, metadata["invited_user_id"])
 
-	second, err := svc.ActivateReferral(context.Background(), 22, 5)
+	second, err := svc.ActivateReferral(context.Background(), 22, InviteActivationRewardAmount)
 	require.NoError(t, err)
 	require.False(t, second.Created)
-	require.Len(t, grants.byKey, 1)
+	require.Empty(t, grants.byKey)
+	require.Len(t, hosted.byKey, 1)
 
 	updatedReferral, err := referrals.FindReferralByInvitedUserID(context.Background(), 22)
 	require.NoError(t, err)
@@ -276,18 +309,25 @@ func TestGrantDiscordJoinRewardIsIdempotent(t *testing.T) {
 	discord.byDiscord["discord-11"] = discord.byUser[11]
 
 	grants := newFakeGrants()
-	svc := NewService(&fakeUsers{}, newFakeReferrals(), discord, grants)
+	hosted := newFakeHostedCredits()
+	svc := NewService(&fakeUsers{}, newFakeReferrals(), discord, grants, hosted)
 	svc.clock = func() time.Time { return time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC) }
 
-	first, err := svc.GrantDiscordJoinReward(context.Background(), 11, 2)
+	first, err := svc.GrantDiscordJoinReward(context.Background(), 11, DiscordJoinRewardAmount)
 	require.NoError(t, err)
 	require.True(t, first.Created)
-	require.Equal(t, model.RewardSourceDiscordJoin, first.Grant.SourceType)
+	require.Nil(t, first.Grant)
 
-	second, err := svc.GrantDiscordJoinReward(context.Background(), 11, 2)
+	ledger := hosted.byKey["discord_join_bonus:11:discord-11"]
+	require.NotNil(t, ledger)
+	require.Equal(t, model.HostedCreditLedgerSourceDiscordJoinBonus, ledger.SourceType)
+	require.Equal(t, 100, ledger.CreditDelta)
+
+	second, err := svc.GrantDiscordJoinReward(context.Background(), 11, DiscordJoinRewardAmount)
 	require.NoError(t, err)
 	require.False(t, second.Created)
-	require.Len(t, grants.byKey, 1)
+	require.Empty(t, grants.byKey)
+	require.Len(t, hosted.byKey, 1)
 
 	connection, err := discord.FindDiscordConnectionByUserID(context.Background(), 11)
 	require.NoError(t, err)

@@ -8,9 +8,10 @@ Validate that:
 
 - External Mode works without an API key and remains allowed after repeated consumes
 - External Mode with an API key still does not consume legacy external quota
-- Hosted Mode works with a hosted-enabled key and consumes hosted credits after success
+- Hosted Mode works with anonymous trial, CLI session, or API key access and consumes only after success
+- CLI session and API key access consume the same account hosted credits
 - Hosted blocked states stop generation before the LLM run starts
-- app/admin/database views show hosted credits, orders, usage events, and hosted credit grants consistently
+- app/admin/database views show account hosted credits, orders, usage events, and hosted credit ledger rows consistently
 
 ## Suggested Scenarios
 
@@ -24,19 +25,22 @@ Validate that:
 
 ### Scenario B: Hosted credits are required and consumed
 
-1. create or select a hosted-enabled API key with a positive `credit_balance`
-2. run a Hosted Mode document or IMG generation
-3. confirm the key's `credit_balance` decreases and `credit_reserved` returns to zero after settlement
-4. reduce hosted credits to zero
-5. confirm Hosted Mode is blocked before content generation begins
+1. create or select a user account with positive account hosted credits
+2. run a Hosted Mode document or IMG generation with `officecli login`
+3. confirm `user_hosted_credit_accounts.credit_balance` decreases and `credit_reserved` returns to zero after settlement
+4. run the same flow through `officecli set-key <api-key>` for a key owned by that user and confirm it spends the same account balance
+5. reduce account hosted credits to zero
+6. confirm Hosted Mode is blocked before content generation begins
 
-### Scenario C: Signup and invite hosted credits are idempotent
+### Scenario C: Signup, invite, and Discord hosted credits are idempotent
 
 1. sign in as a new Google user and open the app Overview
-2. confirm one Starter key exists and the account receives 30 hosted credits
+2. confirm no API key is required for the account to receive signup hosted credits
 3. sign in again and confirm no duplicate signup grant is created
 4. activate one invited user through first successful generation
-5. confirm the inviter receives exactly 20 hosted credits and repeat activation does not duplicate the grant
+5. confirm the inviter receives exactly 100 hosted credits and repeat activation does not duplicate the grant
+6. complete one trusted Discord verification
+7. confirm the account receives exactly 100 hosted credits and repeat verification does not duplicate the grant
 
 ### Scenario D: Billing sells hosted credits only
 
@@ -49,5 +53,5 @@ Validate that:
 ## Manual Checks Still Worth Keeping
 
 - app and admin surfaces display the same hosted credit numbers
-- CLI output matches the selected runtime mode
-- there is no stale cache after admin-side key or credit changes
+- CLI output matches anonymous, account login, API key, and External Mode states
+- there is no stale cache after account credit or credential changes

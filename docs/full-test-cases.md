@@ -26,7 +26,7 @@ It is intended for developer self-testing, QA regression, integration sign-off, 
 
 - `CLI-CONFIG-001`: `config set-generation` writes generation settings on first run
 - `CLI-CONFIG-002`: `config status` shows the current configuration summary
-- `CLI-CONFIG-003`: `config set-license` uses the fixed platform base URL
+- `CLI-AUTH-003`: `login`, `logout`, `whoami`, and `set-key` keep account session and API key mode mutually exclusive
 - `CLI-CONFIG-004`: `config set-publish` updates publish settings independently
 - `CLI-CONFIG-005`: `config set-defaults` updates default output settings independently
 - `CLI-CONFIG-006`: missing generation settings should guide the user to `config set-generation`

@@ -19,6 +19,10 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	}
 	textModelName := hostedTextModelName(job)
 	imageModelName := hostedImageModelName(job)
+	authToken := strings.TrimSpace(cfg.APIKey)
+	if authToken == "" {
+		authToken = strings.TrimSpace(cfg.SessionToken)
+	}
 	var imageAccess *llmprovider.InternalImageAccess
 	if job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
 		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
@@ -28,7 +32,7 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 		imageAccess = &llmprovider.InternalImageAccess{
 			FingerprintHash: job.LicenseCheck.CommitToken.FingerprintHash,
 			UserID:          job.LicenseCheck.CommitToken.UserID,
-			APIKey:          strings.TrimSpace(cfg.APIKey),
+			APIKey:          authToken,
 			AccessMode:      string(job.LicenseCheck.AccessMode),
 			CommitToken:     json.RawMessage(tokenBytes),
 		}
@@ -36,7 +40,7 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 	return llmprovider.NewClient(llmprovider.Config{
 		Provider:    "internal",
 		BaseURL:     baseURL + "/api/llm",
-		APIKey:      strings.TrimSpace(cfg.APIKey),
+		APIKey:      authToken,
 		Model:       textModelName,
 		ImageModel:  imageModelName,
 		TimeoutSec:  hostedTimeoutSec(cfg.TimeoutSec, job),

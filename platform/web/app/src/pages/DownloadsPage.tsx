@@ -23,7 +23,7 @@ export default function DownloadsPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Download / integrate" title="Install OfficeCLI for document operations" body="Use Homebrew, npm, or the official shell installer to bring the same lightweight CLI into local workflows, CI, or hosted-access setups." />
+        <SectionHeading eyebrow="Download / integrate" title="Install OfficeCLI for document operations" body="Use Homebrew, npm, or the official shell installer to bring the same lightweight CLI into local workflows, CI, or account-hosted setups." />
         <div className="grid gap-4 lg:grid-cols-3">
           {commands.map((item) => (
             <div key={item.title} className="panel-muted p-5">
@@ -44,9 +44,9 @@ export default function DownloadsPage() {
           <SectionHeading eyebrow="Recommended sequence" title="Connect the runtime in four moves" />
           <ol className="space-y-3 text-sm text-outline">
             <li>1. Install the CLI on your workstation or CI runner.</li>
-            <li>2. Run `officecli config set-generation` to point the CLI at your LLM endpoint.</li>
-            <li>3. Run `officecli new ...` for generation, then `score` or `review` when needed.</li>
-            <li>4. Use this app only when you need paid access, hosted runtime features, billing, or preview publishing.</li>
+            <li>2. Run `officecli new ...` immediately with anonymous hosted trial, or configure External Mode with `officecli config set-generation`.</li>
+            <li>3. When anonymous hosted trial is used up, run `officecli login` and buy account hosted credits.</li>
+            <li>4. Use `officecli set-key` only for advanced automation that needs an account API key.</li>
           </ol>
         </Panel>
         <Panel>
@@ -58,7 +58,7 @@ export default function DownloadsPage() {
             </div>
             <div className="soft-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
               <ShieldCheck size={18} className="mt-0.5 text-primary" />
-              <p>Platform access is optional. Use it for hosted API keys, hosted runtime workflows, billing, and online preview publishing, not for basic External Mode setup.</p>
+              <p>Platform access is optional. Use it for account hosted credits, access credentials, billing, and online preview publishing, not for basic External Mode setup.</p>
             </div>
           </div>
         </Panel>

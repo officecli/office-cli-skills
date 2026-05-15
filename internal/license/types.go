@@ -3,11 +3,14 @@ package license
 import "time"
 
 type Config struct {
-	BaseURL    string `json:"base_url"`
-	APIKey     string `json:"api_key"`
-	UserID     uint64 `json:"user_id,omitempty"`
-	Enabled    bool   `json:"enabled"`
-	TimeoutSec int    `json:"timeout_sec"`
+	BaseURL            string     `json:"base_url"`
+	APIKey             string     `json:"api_key"`
+	UserID             uint64     `json:"user_id,omitempty"`
+	SessionToken       string     `json:"session_token,omitempty"`
+	SessionTokenPrefix string     `json:"session_token_prefix,omitempty"`
+	SessionExpiresAt   *time.Time `json:"session_expires_at,omitempty"`
+	Enabled            bool       `json:"enabled"`
+	TimeoutSec         int        `json:"timeout_sec"`
 }
 
 type AccessMode string

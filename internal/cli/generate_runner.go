@@ -26,7 +26,7 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 	}
 	if job.RuntimeMode == RuntimeModeHosted {
 		if missing := missingHostedConfig(cfg); missing != "" {
-			return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
+			return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli login` to finish account access setup", missing)
 		}
 	}
 
@@ -161,7 +161,7 @@ func (a *App) pptxImageClient(_ context.Context, cfg Config, job GenerateJob) (G
 	if missing := missingHostedConfig(cfg); missing != "" {
 		return nil, []engine.GenerateIssue{{
 			Code:    "WARN_PPT_PREMIUM_IMAGE_DEGRADED",
-			Message: fmt.Sprintf("Premium PPT images require hosted image credits, but platform service is not fully configured: missing %s. The deck will be generated without premium images. Run `officecli config set-license` or purchase/configure hosted credits.", missing),
+			Message: fmt.Sprintf("Premium PPT images require account hosted credits, but platform service is not fully configured: missing %s. The deck will be generated without premium images. Run `officecli login` or purchase account hosted credits.", missing),
 			Field:   "image_quality",
 		}}, nil
 	}
@@ -169,7 +169,7 @@ func (a *App) pptxImageClient(_ context.Context, cfg Config, job GenerateJob) (G
 	if err != nil {
 		return nil, []engine.GenerateIssue{{
 			Code:    "WARN_PPT_PREMIUM_IMAGE_DEGRADED",
-			Message: fmt.Sprintf("Premium PPT images are unavailable: %v. The deck will be generated without premium images. Run `officecli config set-license` or purchase/configure hosted credits.", err),
+			Message: fmt.Sprintf("Premium PPT images are unavailable: %v. The deck will be generated without premium images. Run `officecli login` or purchase account hosted credits.", err),
 			Field:   "image_quality",
 		}}, nil
 	}
@@ -179,7 +179,7 @@ func (a *App) pptxImageClient(_ context.Context, cfg Config, job GenerateJob) (G
 func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job GenerateJob, progress progressController) (GenerateResult, error) {
 	if strings.TrimSpace(cfg.License.BaseURL) == "" {
 		missing := "platform service URL"
-		return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
+		return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli login` to finish account access setup", missing)
 	}
 	licenseCfg := cfg.License
 	licenseCfg.Enabled = true

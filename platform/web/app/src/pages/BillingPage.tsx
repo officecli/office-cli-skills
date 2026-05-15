@@ -7,31 +7,27 @@ import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 import { redirectTo } from '../lib/navigation'
-import type { ApiKey, Order } from '../types'
+import type { Order } from '../types'
 
 export default function BillingPage() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { data: pricingRaw = [] } = useQuery({ queryKey: ['pricing'], queryFn: api.pricing })
-  const { data: keys = [] } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
   const pendingPollInterval = 5000
   const { data: orders = [] } = useQuery({
     queryKey: ['app-orders'],
     queryFn: api.orders,
     refetchInterval: (query) => query.state.data?.some((item) => item.status === 'pending') ? pendingPollInterval : false,
   })
-  const activeKeys = useMemo(() => keys.filter((item) => item.status === 'active'), [keys])
   const pricing = useMemo(() => pricingRaw.filter((pack) => pack.pack_kind === 'hosted_credits'), [pricingRaw])
-  const keyByID = useMemo(() => new Map(keys.map((item) => [item.id, item])), [keys])
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const checkoutSessionID = searchParams.get('session_id')?.trim() ?? ''
   const shouldAttemptReconcile = searchParams.get('status') === 'success' && checkoutSessionID !== ''
-  const [selectedKey, setSelectedKey] = useState<number | null>(null)
   const [copiedReference, setCopiedReference] = useState<string | null>(null)
   const [reconciledSessionID, setReconciledSessionID] = useState<string | null>(null)
 
   const checkout = useMutation({
-    mutationFn: ({ packCode, keyID }: { packCode: string; keyID: number }) => api.checkout({ pack_code: packCode, target_api_key_id: keyID }),
+    mutationFn: ({ packCode }: { packCode: string }) => api.checkout({ pack_code: packCode }),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ['app-orders'] })
       redirectTo(result.checkout_url)
@@ -44,7 +40,6 @@ export default function BillingPage() {
     },
   })
 
-  const activeKey = useMemo(() => activeKeys.find((item) => item.id === selectedKey), [activeKeys, selectedKey])
   const checkoutError = checkout.error instanceof ApiError
     ? `${checkout.error.message}${checkout.error.requestId ? ` (request_id: ${checkout.error.requestId})` : ''}`
     : checkout.error?.message
@@ -71,28 +66,20 @@ export default function BillingPage() {
   return (
     <div className="space-y-8">
       <Panel>
-        <SectionHeading eyebrow="Secure checkout" title="Buy hosted credits for an API key" body="External Mode is free and unlimited, so checkout only sells hosted credits for the OfficeCLI-managed runtime." />
+        <SectionHeading eyebrow="Secure checkout" title="Buy account hosted credits" body="External Mode is free and unlimited. Checkout adds hosted credits to your signed-in account, and all CLI sessions or API keys on that account share the same balance." />
         <div className="billing-shell mb-6">
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
-            <select className="surface-console mt-4 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={selectedKey ?? ''} onChange={(event) => setSelectedKey(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">{activeKeys.length ? 'Choose an active key' : 'No active key available'}</option>
-              {activeKeys.map((key) => <option key={key.id} value={key.id}>{key.key_prefix} / {key.plan_name}</option>)}
-            </select>
             <div className="mt-4 text-sm text-outline">
-              {activeKey
-                ? `${activeKey.key_prefix} has ${activeKey.quota_remaining} document generations and ${activeKey.credit_balance ?? 0} hosted credits remaining.`
-                : activeKeys.length
-                  ? 'Pick an active production key before starting checkout.'
-                  : 'No active API key is available for billing. Re-enable a key in API Keys first.'}
+              Credits are added to your account balance. `officecli login` sessions and `officecli set-key` API key mode consume the same account hosted credits.
             </div>
           </div>
           <div className="panel-muted p-5">
             <div className="info-eyebrow text-tertiary">Billing flow</div>
             <ol className="mt-4 space-y-3 text-sm text-outline">
-              <li>1. Choose the target API key.</li>
-              <li>2. Pick a hosted credits pack below.</li>
-              <li>3. Continue to Stripe Checkout and land back in the billing view.</li>
+              <li>1. Pick a hosted credits pack below.</li>
+              <li>2. Continue to Stripe Checkout.</li>
+              <li>3. Return to Billing and let the workspace reconcile payment status.</li>
             </ol>
           </div>
         </div>
@@ -115,11 +102,10 @@ export default function BillingPage() {
                 <button
                   type="button"
                   className="tonal-button mt-8 w-full"
-                  disabled={!selectedKey || checkout.isPending}
+                  disabled={checkout.isPending}
                   onClick={() => {
-                    if (!selectedKey) return
-                    trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', pack_code: pack.code, target_api_key_id: selectedKey })
-                    checkout.mutate({ packCode: pack.code, keyID: selectedKey })
+                    trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', pack_code: pack.code })
+                    checkout.mutate({ packCode: pack.code })
                   }}
                 >
                   <CreditCard size={16} /> Continue to Stripe Checkout
@@ -161,7 +147,7 @@ export default function BillingPage() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="mt-2 text-sm text-outline">{targetAPIKeyLabel(order, keyByID)}</div>
+                  <div className="mt-2 text-sm text-outline">{targetAccountLabel(order)}</div>
                   <div className="mt-1 text-xs text-outline">Internal order #{order.id} / created {formatDate(order.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -215,13 +201,9 @@ function usdLabel(amountCents: number, currency: string) {
   return `${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: currency.toUpperCase() })} USD`
 }
 
-function targetAPIKeyLabel(order: Order, keyByID: Map<number, ApiKey>) {
-  if (!order.target_api_key_id) {
-    return 'API key not recorded for this order.'
+function targetAccountLabel(order: Order) {
+  if (order.target_api_key_id) {
+    return `Legacy order target API key #${order.target_api_key_id}; credits are now account-level.`
   }
-  const key = keyByID.get(order.target_api_key_id)
-  if (!key) {
-    return `API key #${order.target_api_key_id}`
-  }
-  return `API key ${key.key_prefix} / #${key.id} / ${key.plan_name}`
+  return 'Account hosted credits.'
 }

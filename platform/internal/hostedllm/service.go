@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/officecli/officecli-internal/platform/internal/apikey"
+	"github.com/officecli/officecli-internal/platform/internal/clisession"
 	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
@@ -27,6 +28,11 @@ type APIKeyStore interface {
 	ReserveCreditsByHash(ctx context.Context, hash string, credits int) (*model.APIKey, error)
 	ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error)
 	SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error)
+	ReserveHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error)
+	ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error)
+	SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error)
+	FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error)
+	TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
 	HostedPricingSettings(ctx context.Context) (*model.HostedPricingSetting, error)
 	ListHostedPricingRules(ctx context.Context, enabledOnly bool) ([]model.HostedPricingRule, error)
@@ -128,6 +134,14 @@ type ImageResponse struct {
 	PaidQuotaRemaining int
 }
 
+type hostedSubject struct {
+	UserID     uint64
+	APIKeyID   *uint64
+	APIKeyHash string
+	Key        *model.APIKey
+	Session    *model.CLISession
+}
+
 func NewService(store APIKeyStore, cfg Config, quotaManagers ...GenerationQuotaManager) *Service {
 	timeout := timeoutFor(cfg.TimeoutSec)
 	var quota GenerationQuotaManager
@@ -157,16 +171,16 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if req.CommitToken != nil {
 		return s.completeQuotaText(ctx, req)
 	}
-	key, hash, err := s.authorize(ctx, bearer)
+	subject, err := s.authorizeSubject(ctx, bearer)
 	if err != nil {
 		return nil, err
 	}
-	upstreamAPIKey, err := s.upstreamAPIKeyForOfficeKey(ctx, key)
+	upstreamAPIKey, err := s.upstreamAPIKeyForSubject(ctx, subject)
 	if err != nil {
 		return nil, err
 	}
 	reservation := s.reserveCreditsForModel(ctx, req.Model, false)
-	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +196,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if len(req.Schema) > 0 {
 		var schema map[string]any
 		if err := json.Unmarshal(req.Schema, &schema); err != nil {
-			_, _ = s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
+			_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
 			return nil, fmt.Errorf("parse schema: %w", err)
 		}
 		payload["response_format"] = map[string]any{
@@ -197,20 +211,20 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 
 	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
 	if err != nil && isUpstreamAuthError(err) {
-		_, _ = s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		upstreamAPIKey, rotateErr := s.rotateUserAIGatewayAPIKey(ctx, key, err)
+		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
 		if rotateErr != nil {
 			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
 		}
-		key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+		creditBalance, err = s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 		if err != nil {
 			return nil, err
 		}
 		body, usage, err = s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
 	}
 	if err != nil {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, err
 	}
 	var resp struct {
@@ -221,13 +235,13 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, fmt.Errorf("decode hosted completion: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, false))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, fmt.Errorf("hosted completion is empty")
 	}
 	pricing := s.priceUsage(ctx, req.Model, usage, false)
@@ -236,14 +250,14 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 		settled = reservation
 		pricing.CapApplied = true
 	}
-	updatedKey, err := s.store.SettleReservedCredits(ctx, key.ID, reservation, settled)
+	creditBalance, err = s.settleSubjectCredits(ctx, subject, req.RequestID, reservation, settled)
 	if err != nil {
 		return nil, err
 	}
-	s.recordUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey, pricing)
+	s.recordUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
 	return &CompletionResponse{
 		Content:       resp.Choices[0].Message.Content,
-		CreditBalance: creditBalance(updatedKey),
+		CreditBalance: creditBalance,
 	}, nil
 }
 
@@ -277,7 +291,7 @@ func (s *Service) completeQuotaText(ctx context.Context, req CompletionRequest) 
 			},
 		}
 	}
-	body, _, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, strings.TrimSpace(s.cfg.APIKey))
+	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, strings.TrimSpace(s.cfg.APIKey))
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +308,12 @@ func (s *Service) completeQuotaText(ctx context.Context, req CompletionRequest) 
 	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("hosted completion is empty")
 	}
-	return &CompletionResponse{Content: resp.Choices[0].Message.Content}, nil
+	consumeResp, err := s.quota.Consume(ctx, consumeReq)
+	if err != nil {
+		return nil, err
+	}
+	_ = usage
+	return &CompletionResponse{Content: resp.Choices[0].Message.Content, CreditBalance: consumeResp.CreditBalance}, nil
 }
 
 func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
@@ -304,16 +323,16 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if req.CommitToken != nil {
 		return s.generateQuotaImage(ctx, bearer, req)
 	}
-	key, hash, err := s.authorize(ctx, bearer)
+	subject, err := s.authorizeSubject(ctx, bearer)
 	if err != nil {
 		return nil, err
 	}
-	upstreamAPIKey, err := s.upstreamAPIKeyForOfficeKey(ctx, key)
+	upstreamAPIKey, err := s.upstreamAPIKeyForSubject(ctx, subject)
 	if err != nil {
 		return nil, err
 	}
 	reservation := s.reserveCreditsForModel(ctx, req.Model, true)
-	key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 	if err != nil {
 		return nil, err
 	}
@@ -326,20 +345,20 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	}
 	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
 	if err != nil && isUpstreamAuthError(err) {
-		_, _ = s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		upstreamAPIKey, rotateErr := s.rotateUserAIGatewayAPIKey(ctx, key, err)
+		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
 		if rotateErr != nil {
 			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
 		}
-		key, err = s.store.ReserveCreditsByHash(ctx, hash, reservation)
+		creditBalance, err = s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 		if err != nil {
 			return nil, err
 		}
 		body, usage, err = s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
 	}
 	if err != nil {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, err
 	}
 	var resp struct {
@@ -348,19 +367,19 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("decode hosted image: %w", err)
 	}
 	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("hosted image is empty")
 	}
 	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
 	if err != nil {
-		updatedKey, _ := s.store.ReleaseReservedCredits(ctx, key.ID, reservation)
-		s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, 0, reservation, updatedKey, s.priceUsage(ctx, req.Model, usage, true))
+		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, fmt.Errorf("decode hosted image data: %w", err)
 	}
 	usage.ImageCount = 1
@@ -370,15 +389,15 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 		settled = reservation
 		pricing.CapApplied = true
 	}
-	updatedKey, err := s.store.SettleReservedCredits(ctx, key.ID, reservation, settled)
+	creditBalance, err = s.settleSubjectCredits(ctx, subject, req.RequestID, reservation, settled)
 	if err != nil {
 		return nil, err
 	}
-	s.recordImageUsage(ctx, key.ID, req, modelName, usage, reservation, settled, reservation-settled, updatedKey, pricing)
+	s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
 	return &ImageResponse{
 		Data:          data,
 		MIME:          "image/png",
-		CreditBalance: creditBalance(updatedKey),
+		CreditBalance: creditBalance,
 	}, nil
 }
 
@@ -641,34 +660,54 @@ func createImageEditPart(writer *multipart.Writer, filename string, mime string)
 	return writer.CreatePart(header)
 }
 
-func (s *Service) authorize(ctx context.Context, bearer string) (*model.APIKey, string, error) {
+func (s *Service) authorizeSubject(ctx context.Context, bearer string) (*hostedSubject, error) {
 	keyValue := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
 	if keyValue == "" {
-		return nil, "", fmt.Errorf("missing api key")
+		return nil, fmt.Errorf("missing api key or cli session")
+	}
+	if strings.HasPrefix(keyValue, "ocli_sess_") {
+		session, err := s.store.FindCLISessionByTokenHash(ctx, clisession.HashToken(keyValue))
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case session == nil:
+			return nil, fmt.Errorf("invalid cli session")
+		case session.RevokedAt != nil:
+			return nil, fmt.Errorf("cli session has been revoked")
+		case time.Now().UTC().After(session.ExpiresAt):
+			return nil, fmt.Errorf("cli session has expired")
+		}
+		_ = s.store.TouchCLISession(ctx, session.ID, time.Now().UTC())
+		return &hostedSubject{UserID: session.UserID, Session: session}, nil
 	}
 	hash := hashAPIKey(keyValue, s.cfg.HashSalt)
 	key, err := s.store.FindAPIKeyByHash(ctx, hash)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	switch {
 	case key == nil:
-		return nil, "", fmt.Errorf("invalid api key")
+		return nil, fmt.Errorf("invalid api key")
 	case key.Status != model.APIKeyStatusActive:
-		return nil, "", fmt.Errorf("api key is disabled")
+		return nil, fmt.Errorf("api key is disabled")
 	case !key.SupportsHosted():
-		return nil, "", fmt.Errorf("hosted mode is not enabled for this key")
+		return nil, fmt.Errorf("hosted mode is not enabled for this key")
 	case key.OwnerUserID == nil || *key.OwnerUserID == 0:
-		return nil, "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+		return nil, fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
-	return key, hash, nil
+	apiKeyID := key.ID
+	return &hostedSubject{UserID: *key.OwnerUserID, APIKeyID: &apiKeyID, APIKeyHash: hash, Key: key}, nil
 }
 
-func (s *Service) upstreamAPIKeyForOfficeKey(ctx context.Context, key *model.APIKey) (string, error) {
-	if key == nil || key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+func (s *Service) upstreamAPIKeyForSubject(ctx context.Context, subject *hostedSubject) (string, error) {
+	if subject == nil || subject.UserID == 0 {
 		return "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
-	userID := *key.OwnerUserID
+	return s.upstreamAPIKeyForUser(ctx, subject.UserID)
+}
+
+func (s *Service) upstreamAPIKeyForUser(ctx context.Context, userID uint64) (string, error) {
 	if existing, err := s.store.FindUserAIGatewayAPIKeyByUserID(ctx, userID); err != nil {
 		return "", err
 	} else if existing != nil && existing.Status == model.UserAIGatewayAPIKeyStatusActive && strings.TrimSpace(existing.KeyCiphertext) != "" {
@@ -729,11 +768,11 @@ func (s *Service) upstreamAPIKeyForOfficeKey(ctx context.Context, key *model.API
 	return plain, nil
 }
 
-func (s *Service) rotateUserAIGatewayAPIKey(ctx context.Context, key *model.APIKey, cause error) (string, error) {
-	if key == nil || key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+func (s *Service) rotateSubjectAIGatewayAPIKey(ctx context.Context, subject *hostedSubject, cause error) (string, error) {
+	if subject == nil || subject.UserID == 0 {
 		return "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
-	userID := *key.OwnerUserID
+	userID := subject.UserID
 	upstreamName := fmt.Sprintf("officecli-user-%d", userID)
 	message := "upstream credential rejected"
 	if cause != nil {
@@ -742,7 +781,7 @@ func (s *Service) rotateUserAIGatewayAPIKey(ctx context.Context, key *model.APIK
 	if _, err := s.store.MarkUserAIGatewayAPIKeyCreationError(ctx, userID, upstreamName, message); err != nil {
 		return "", err
 	}
-	return s.upstreamAPIKeyForOfficeKey(ctx, key)
+	return s.upstreamAPIKeyForUser(ctx, userID)
 }
 
 func (s *Service) decryptUserAIGatewayAPIKey(key *model.UserAIGatewayAPIKey) (string, error) {
@@ -758,6 +797,42 @@ func (s *Service) decryptUserAIGatewayAPIKey(key *model.UserAIGatewayAPIKey) (st
 		return "", fmt.Errorf("stored aigateway api key is empty")
 	}
 	return strings.TrimSpace(plain), nil
+}
+
+func (s *Service) reserveSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, credits int) (int, error) {
+	if subject == nil {
+		return 0, fmt.Errorf("hosted subject is required")
+	}
+	if subject.Key != nil {
+		key, err := s.store.ReserveCreditsByHash(ctx, subject.APIKeyHash, credits)
+		return creditBalance(key), err
+	}
+	account, err := s.store.ReserveHostedCreditsByUser(ctx, subject.UserID, requestID, credits)
+	return accountCreditBalance(account), err
+}
+
+func (s *Service) releaseSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, reserved int) (int, error) {
+	if subject == nil {
+		return 0, fmt.Errorf("hosted subject is required")
+	}
+	if subject.Key != nil && subject.APIKeyID != nil {
+		key, err := s.store.ReleaseReservedCredits(ctx, *subject.APIKeyID, reserved)
+		return creditBalance(key), err
+	}
+	account, err := s.store.ReleaseHostedCreditsByUser(ctx, subject.UserID, requestID, reserved)
+	return accountCreditBalance(account), err
+}
+
+func (s *Service) settleSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, reserved int, settled int) (int, error) {
+	if subject == nil {
+		return 0, fmt.Errorf("hosted subject is required")
+	}
+	if subject.Key != nil && subject.APIKeyID != nil {
+		key, err := s.store.SettleReservedCredits(ctx, *subject.APIKeyID, reserved, settled)
+		return creditBalance(key), err
+	}
+	account, err := s.store.SettleHostedCreditsByUser(ctx, subject.UserID, requestID, reserved, settled)
+	return accountCreditBalance(account), err
 }
 
 func (s *Service) aigatewayAdminClient() AIGatewayAdminClient {
@@ -1161,7 +1236,7 @@ func effectiveReferenceImages(req ImageRequest) []ImageReference {
 	return out
 }
 
-func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey, pricing hostedPriceSnapshot) {
+func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1172,7 +1247,6 @@ func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req Completi
 		FingerprintHash:       "hosted",
 		Mode:                  model.UsageModeHosted,
 		Action:                model.UsageActionGenerate,
-		APIKeyID:              &apiKeyID,
 		Result:                model.UsageResultAllowed,
 		Charged:               settled > 0,
 		BilledUnits:           settled,
@@ -1194,11 +1268,14 @@ func (s *Service) recordUsage(ctx context.Context, apiKeyID uint64, req Completi
 		ProfitMicrousd:        int64(settled)*10000 - pricing.UpstreamCostMicrousd,
 		CapApplied:            pricing.CapApplied,
 	}
+	if subject != nil {
+		event.UserID = optionalUserID(subject.UserID)
+		event.APIKeyID = subject.APIKeyID
+	}
 	_ = s.store.CreateUsageEvent(ctx, event)
-	_ = updatedKey
 }
 
-func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, updatedKey *model.APIKey, pricing hostedPriceSnapshot) {
+func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1210,7 +1287,6 @@ func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req Ima
 		FingerprintHash:       "hosted",
 		Mode:                  model.UsageModeHosted,
 		Action:                model.UsageActionGenerate,
-		APIKeyID:              &apiKeyID,
 		Result:                model.UsageResultAllowed,
 		DocumentType:          &documentType,
 		Charged:               settled > 0,
@@ -1230,8 +1306,11 @@ func (s *Service) recordImageUsage(ctx context.Context, apiKeyID uint64, req Ima
 		ProfitMicrousd:        int64(settled)*10000 - pricing.UpstreamCostMicrousd,
 		CapApplied:            pricing.CapApplied,
 	}
+	if subject != nil {
+		event.UserID = optionalUserID(subject.UserID)
+		event.APIKeyID = subject.APIKeyID
+	}
 	_ = s.store.CreateUsageEvent(ctx, event)
-	_ = updatedKey
 }
 
 func creditBalance(key *model.APIKey) int {
@@ -1241,12 +1320,26 @@ func creditBalance(key *model.APIKey) int {
 	return key.AvailableCredits()
 }
 
+func accountCreditBalance(account *model.UserHostedCreditAccount) int {
+	if account == nil {
+		return 0
+	}
+	return account.AvailableCredits()
+}
+
 func stringPtr(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
 	return &value
+}
+
+func optionalUserID(userID uint64) *uint64 {
+	if userID == 0 {
+		return nil
+	}
+	return &userID
 }
 
 func timeoutFor(seconds int) time.Duration {

@@ -46,7 +46,7 @@ export const firstRunCommands: FirstRunCommand[] = [
   },
   {
     label: 'Access',
-    command: 'officecli auth status',
+    command: 'officecli whoami',
   },
 ]
 

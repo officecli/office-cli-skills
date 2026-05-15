@@ -19,7 +19,7 @@ describe('app api keys page', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows the latest quota totals returned by the platform API', async () => {
+  it('shows account access credentials without key-level balances', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/app/api-keys') {
@@ -49,8 +49,9 @@ describe('app api keys page', () => {
 
     expect(await screen.findByText(/cop_live_growth/i)).toBeInTheDocument()
     expect(screen.getByText('Growth 120')).toBeInTheDocument()
-    expect(screen.getByText('80')).toBeInTheDocument()
-    expect(screen.getByText('40')).toBeInTheDocument()
+    expect(screen.getByText('Enabled')).toBeInTheDocument()
+    expect(screen.queryByText('80')).not.toBeInTheDocument()
+    expect(screen.queryByText('40')).not.toBeInTheDocument()
   })
 
   it('copies the stored plaintext key for supported records and disables legacy keys', async () => {

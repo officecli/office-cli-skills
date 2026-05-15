@@ -52,5 +52,5 @@ export const api = {
   reconcileOrder: (payload: { checkout_session_id: string }) => request<Order>('/api/app/orders/reconcile', { method: 'POST', body: JSON.stringify(payload) }),
   usage: () => request<UsageEvent[]>('/api/app/usage-events'),
   pricing: () => request<PricingPack[]>('/api/pricing'),
-  checkout: (payload: { pack_code: string; target_api_key_id: number }) => request<{ order: Order; checkout_url: string }>('/api/app/checkout', { method: 'POST', body: JSON.stringify(payload) }),
+  checkout: (payload: { pack_code: string }) => request<{ order: Order; checkout_url: string }>('/api/app/checkout', { method: 'POST', body: JSON.stringify(payload) }),
 }

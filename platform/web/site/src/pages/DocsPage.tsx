@@ -469,9 +469,9 @@ export default function DocsPage() {
               <div className="text-primary font-headline text-xs uppercase tracking-widest mb-3">Current scope</div>
               <div className="text-white text-lg font-semibold mb-3">What this guide intentionally does and does not promise</div>
               <ul className="space-y-3 text-sm leading-relaxed text-outline-variant">
-                <li>Invite rewards currently describe the invite code, registration, activation, and reward-quota flow only.</li>
-                <li>Discord reward verification still depends on production-grade guild verification and should not be treated as fully launched automation.</li>
-                <li>Invite attribution analytics remain limited, so use the in-app referral timeline and reward ledger as the primary source of truth.</li>
+                <li>Invite rewards currently describe the invite code, registration, activation, and account hosted credits flow only.</li>
+                <li>Discord verification grants 100 account hosted credits after a trusted membership check succeeds.</li>
+                <li>Invite attribution analytics remain limited, so use the in-app referral timeline and hosted credits ledger as the primary source of truth.</li>
               </ul>
             </div>
             <div className="flex flex-wrap gap-4">

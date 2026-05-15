@@ -44,7 +44,7 @@ export default function QuotaSourcesPage() {
         <SectionHeading
           eyebrow="Unified quota audit"
           title="Quota sources"
-          body="Inspect anonymous CLI trial devices, account reward grants, paid external quota keys, and hosted credits from one operator surface."
+          body="Inspect anonymous CLI trial devices, legacy reward grants, paid external quota keys, and account hosted credits from one operator surface."
         />
         <form className="surface-console soft-panel grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
@@ -94,7 +94,7 @@ export default function QuotaSourcesPage() {
       </Panel>
 
       <Panel>
-        <SectionHeading eyebrow="Account rewards" title="Reward grants" body="Reward grants remain account-owned quota and should never be mixed into anonymous trial counts." />
+        <SectionHeading eyebrow="Legacy account rewards" title="Reward grants" body="Legacy reward grants remain account-owned historical quota and should never be mixed into anonymous trial counts or account hosted credits." />
         {rewardGrants.length ? (
           <div className="space-y-3">
             {rewardGrants.map((grant) => (
@@ -143,7 +143,7 @@ export default function QuotaSourcesPage() {
         </Panel>
 
         <Panel>
-          <SectionHeading eyebrow="Hidden hosted" title="Hosted credit keys" body="Hosted credits stay operator-only in the current product surface and do not appear in user quota views." />
+          <SectionHeading eyebrow="Account hosted" title="Hosted credit credentials" body="These rows are legacy key-shaped compatibility views; the authoritative hosted credits balance is account-level." />
           {hostedKeys.length ? (
             <div className="space-y-3">
               {hostedKeys.map((key) => (
@@ -164,7 +164,7 @@ export default function QuotaSourcesPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No hosted keys matched" body="Hosted credit inventory will appear here when the current filter set matches hosted-enabled keys." />
+            <EmptyState title="No hosted credentials matched" body="Hosted credit compatibility rows will appear here when the current filter set matches hosted-enabled credentials." />
           )}
         </Panel>
       </div>

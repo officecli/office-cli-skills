@@ -47,7 +47,7 @@ export default function GrowthPage() {
         <SectionHeading
           eyebrow="Growth operations"
           title="Reward grants, referrals, and Discord connections"
-          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace hosted credit grants, legacy reward quota, referrals, and Discord records."
+          body="This panel consumes the real `/api/admin/growth` ledger so operations can trace account hosted credit grants, referrals, and Discord records."
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="panel-muted p-5">
@@ -66,7 +66,7 @@ export default function GrowthPage() {
       </Panel>
 
       <Panel>
-        <SectionHeading eyebrow="Hosted credits ledger" title="Signup and invite credits" body="New users receive 30 hosted credits; each activated referral grants 20 hosted credits to the inviter, capped by the referral limit." />
+        <SectionHeading eyebrow="Hosted credits ledger" title="Signup, invite, and Discord credits" body="New users receive signup hosted credits; each activated referral grants 100 hosted credits to the inviter, and each verified Discord connection grants 100 hosted credits." />
         {hostedCreditRows.length ? (
           <DataTable headers={['User', 'API key', 'Source', 'Credits', 'Idempotency key', 'Created']} rows={hostedCreditRows} columns="0.6fr 0.7fr 1fr 0.6fr 1.4fr 1fr" />
         ) : (

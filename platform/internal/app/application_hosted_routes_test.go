@@ -16,7 +16,7 @@ func TestRegisterRoutesWithHostedMountsLLMImageRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	server := egin.DefaultContainer().Build()
 	hostedSvc := hostedllm.NewService(nil, hostedllm.Config{})
-	registerRoutesWithHosted(server, Config{}, nil, nil, nil, nil, nil, hostedSvc, nil, nil, nil, nil, nil)
+	registerRoutesWithHosted(server, Config{}, nil, nil, nil, nil, nil, hostedSvc, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/llm/v1/image", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")

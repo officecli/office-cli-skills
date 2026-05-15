@@ -34,7 +34,7 @@ export default function DownloadPage() {
           <ol className="space-y-3 text-sm text-outline-variant list-decimal list-inside">
             <li>Install OfficeCLI with one channel: Homebrew, npm, the script, or a manual binary.</li>
             <li>Run <code>officecli --version</code>, then copy one of the first-run generation commands.</li>
-            <li>Use <code>officecli auth status</code> to check trial or hosted key access.</li>
+            <li>Use <code>officecli whoami</code> to check anonymous trial, account login, or API key access.</li>
           </ol>
         </article>
         <article className="bg-surface-low rounded-2xl border border-outline-variant/10 p-8">

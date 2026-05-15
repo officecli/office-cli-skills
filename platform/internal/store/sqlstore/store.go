@@ -159,6 +159,77 @@ func (s *Store) TouchAPIKeyLastUsedAt(ctx context.Context, id uint64, usedAt tim
 	return s.db.WithContext(ctx).Model(&model.APIKey{}).Where("id = ?", id).Update("last_used_at", usedAt).Error
 }
 
+func (s *Store) CreateCLILoginChallenge(ctx context.Context, challenge *model.CLILoginChallenge) error {
+	return s.db.WithContext(ctx).Create(challenge).Error
+}
+
+func (s *Store) GetCLILoginChallengeByChallengeID(ctx context.Context, challengeID string) (*model.CLILoginChallenge, error) {
+	var challenge model.CLILoginChallenge
+	if err := s.db.WithContext(ctx).Where("challenge_id = ?", challengeID).First(&challenge).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &challenge, nil
+}
+
+func (s *Store) CompleteCLILoginChallenge(ctx context.Context, challengeID string, userID uint64, exchangeCodeHash string, completedAt time.Time) (*model.CLILoginChallenge, error) {
+	updates := map[string]any{
+		"user_id":            userID,
+		"exchange_code_hash": exchangeCodeHash,
+		"status":             model.CLILoginChallengeStatusCompleted,
+		"completed_at":       completedAt,
+	}
+	if err := s.db.WithContext(ctx).Model(&model.CLILoginChallenge{}).
+		Where("challenge_id = ? AND status = ?", challengeID, model.CLILoginChallengeStatusPending).
+		Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return s.GetCLILoginChallengeByChallengeID(ctx, challengeID)
+}
+
+func (s *Store) ConsumeCLILoginChallenge(ctx context.Context, challengeID string, consumedAt time.Time) error {
+	return s.db.WithContext(ctx).Model(&model.CLILoginChallenge{}).
+		Where("challenge_id = ?", challengeID).
+		Updates(map[string]any{"status": model.CLILoginChallengeStatusConsumed, "consumed_at": consumedAt}).Error
+}
+
+func (s *Store) CreateCLISession(ctx context.Context, session *model.CLISession) error {
+	return s.db.WithContext(ctx).Create(session).Error
+}
+
+func (s *Store) FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error) {
+	var session model.CLISession
+	if err := s.db.WithContext(ctx).Where("token_hash = ?", tokenHash).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (s *Store) TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error {
+	return s.db.WithContext(ctx).Model(&model.CLISession{}).Where("id = ? AND revoked_at IS NULL", id).Update("last_used_at", usedAt).Error
+}
+
+func (s *Store) RevokeCLISession(ctx context.Context, id uint64, revokedAt time.Time) error {
+	return s.db.WithContext(ctx).Model(&model.CLISession{}).Where("id = ?", id).Update("revoked_at", revokedAt).Error
+}
+
+func (s *Store) RevokeCLISessionsByUser(ctx context.Context, userID uint64, revokedAt time.Time) error {
+	return s.db.WithContext(ctx).Model(&model.CLISession{}).Where("user_id = ? AND revoked_at IS NULL", userID).Update("revoked_at", revokedAt).Error
+}
+
+func (s *Store) ListCLISessionsByUser(ctx context.Context, userID uint64) ([]model.CLISession, error) {
+	var sessions []model.CLISession
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at desc").Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
 func (s *Store) FindUserAIGatewayAPIKeyByUserID(ctx context.Context, userID uint64) (*model.UserAIGatewayAPIKey, error) {
 	var key model.UserAIGatewayAPIKey
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&key).Error; err != nil {
@@ -590,6 +661,180 @@ func (s *Store) GrantHostedCreditsToAPIKey(ctx context.Context, apiKeyID, userID
 	return result, created, err
 }
 
+func (s *Store) GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
+	var account model.UserHostedCreditAccount
+	if err := s.db.WithContext(ctx).First(&account, "user_id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &model.UserHostedCreditAccount{UserID: userID}, nil
+		}
+		return nil, err
+	}
+	return &account, nil
+}
+
+func (s *Store) GrantHostedCreditsToUser(ctx context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	if userID == 0 {
+		return nil, nil, false, fmt.Errorf("user_id is required")
+	}
+	if creditAmount <= 0 {
+		return nil, nil, false, fmt.Errorf("credit amount must be positive")
+	}
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return nil, nil, false, fmt.Errorf("idempotency_key is required")
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		metadataJSON = "{}"
+	}
+	var ledger *model.UserHostedCreditLedger
+	var account *model.UserHostedCreditAccount
+	created := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		entry, loaded, didCreate, err := grantHostedCreditsToUserTx(tx, userID, source, idempotencyKey, creditAmount, reason, metadataJSON)
+		ledger = entry
+		account = loaded
+		created = didCreate
+		return err
+	})
+	return ledger, account, created, err
+}
+
+func grantHostedCreditsToUserTx(tx *gorm.DB, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	var existing model.UserHostedCreditLedger
+	if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+		account, loadErr := lockedHostedCreditAccountTx(tx, userID)
+		if loadErr != nil {
+			return nil, nil, false, loadErr
+		}
+		return &existing, account, false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, false, err
+	}
+	account, err := lockedHostedCreditAccountTx(tx, userID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	account.CreditBalance += creditAmount
+	if err := tx.Save(account).Error; err != nil {
+		return nil, nil, false, err
+	}
+	entry := &model.UserHostedCreditLedger{
+		UserID:         userID,
+		SourceType:     source,
+		IdempotencyKey: idempotencyKey,
+		CreditDelta:    creditAmount,
+		Reason:         strings.TrimSpace(reason),
+		MetadataJSON:   metadataJSON,
+	}
+	if entry.Reason == "" {
+		entry.Reason = string(source)
+	}
+	if strings.TrimSpace(entry.MetadataJSON) == "" {
+		entry.MetadataJSON = "{}"
+	}
+	if err := tx.Create(entry).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			var duplicated model.UserHostedCreditLedger
+			if loadErr := tx.Where("idempotency_key = ?", idempotencyKey).First(&duplicated).Error; loadErr == nil {
+				return &duplicated, account, false, nil
+			}
+		}
+		return nil, nil, false, err
+	}
+	return entry, account, true, nil
+}
+
+func (s *Store) ReserveHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error) {
+	return s.applyHostedCreditReservation(ctx, userID, "reserve:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceReserve, 0, credits, credits)
+}
+
+func (s *Store) ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
+	return s.applyHostedCreditReservation(ctx, userID, "release:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceRelease, 0, -reserved, 0)
+}
+
+func (s *Store) SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
+	return s.applyHostedCreditReservation(ctx, userID, "settle:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceSettle, -settled, -reserved, 0)
+}
+
+func (s *Store) applyHostedCreditReservation(ctx context.Context, userID uint64, idempotencyKey string, source model.HostedCreditLedgerSource, creditDelta, reservedDelta, requiredAvailable int) (*model.UserHostedCreditAccount, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" || strings.HasSuffix(idempotencyKey, ":") {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	var account *model.UserHostedCreditAccount
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.UserHostedCreditLedger
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			loaded, loadErr := lockedHostedCreditAccountTx(tx, userID)
+			if loadErr != nil {
+				return loadErr
+			}
+			account = loaded
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		loaded, err := lockedHostedCreditAccountTx(tx, userID)
+		if err != nil {
+			return err
+		}
+		if requiredAvailable > 0 && loaded.AvailableCredits() < requiredAvailable {
+			return fmt.Errorf("hosted credits exhausted")
+		}
+		loaded.CreditBalance += creditDelta
+		if loaded.CreditBalance < 0 {
+			loaded.CreditBalance = 0
+		}
+		loaded.CreditReserved += reservedDelta
+		if loaded.CreditReserved < 0 {
+			loaded.CreditReserved = 0
+		}
+		if err := tx.Save(loaded).Error; err != nil {
+			return err
+		}
+		entry := &model.UserHostedCreditLedger{
+			UserID:         userID,
+			SourceType:     source,
+			IdempotencyKey: idempotencyKey,
+			CreditDelta:    creditDelta,
+			ReservedDelta:  reservedDelta,
+			Reason:         string(source),
+			MetadataJSON:   "{}",
+		}
+		if err := tx.Create(entry).Error; err != nil {
+			return err
+		}
+		account = loaded
+		return nil
+	})
+	return account, err
+}
+
+func lockedHostedCreditAccountTx(tx *gorm.DB, userID uint64) (*model.UserHostedCreditAccount, error) {
+	var account model.UserHostedCreditAccount
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&account).Error
+	switch {
+	case err == nil:
+		return &account, nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return nil, err
+	}
+	account = model.UserHostedCreditAccount{UserID: userID}
+	if err := tx.Create(&account).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&account).Error; err != nil {
+				return nil, err
+			}
+			return &account, nil
+		}
+		return nil, err
+	}
+	return &account, nil
+}
+
 func (s *Store) ReserveCreditsByHash(ctx context.Context, hash string, credits int) (*model.APIKey, error) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
@@ -615,18 +860,40 @@ func (s *Store) ReserveCreditsByHash(ctx context.Context, hash string, credits i
 		tx.Rollback()
 		return nil, fmt.Errorf("api key is disabled")
 	}
-	if key.AvailableCredits() < credits {
+	if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		tx.Rollback()
+		return nil, fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+	}
+	account, err := lockedHostedCreditAccountTx(tx, *key.OwnerUserID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if account.AvailableCredits() < credits {
 		tx.Rollback()
 		return nil, fmt.Errorf("hosted credits exhausted")
 	}
-	key.CreditReserved += credits
-	if err := tx.Save(&key).Error; err != nil {
+	account.CreditReserved += credits
+	if err := tx.Save(account).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&model.UserHostedCreditLedger{
+		UserID:         *key.OwnerUserID,
+		SourceType:     model.HostedCreditLedgerSourceReserve,
+		IdempotencyKey: fmt.Sprintf("api-key-reserve:%d:%d:%d", key.ID, time.Now().UnixNano(), credits),
+		ReservedDelta:  credits,
+		Reason:         string(model.HostedCreditLedgerSourceReserve),
+		MetadataJSON:   "{}",
+	}).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+	key.CreditBalance = account.CreditBalance
+	key.CreditReserved = account.CreditReserved
 	return withRemaining(key), nil
 }
 
@@ -642,17 +909,39 @@ func (s *Store) ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, res
 		tx.Rollback()
 		return nil, err
 	}
-	key.CreditReserved -= reserved
-	if key.CreditReserved < 0 {
-		key.CreditReserved = 0
+	if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		tx.Rollback()
+		return nil, fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
-	if err := tx.Save(&key).Error; err != nil {
+	account, err := lockedHostedCreditAccountTx(tx, *key.OwnerUserID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	account.CreditReserved -= reserved
+	if account.CreditReserved < 0 {
+		account.CreditReserved = 0
+	}
+	if err := tx.Save(account).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&model.UserHostedCreditLedger{
+		UserID:         *key.OwnerUserID,
+		SourceType:     model.HostedCreditLedgerSourceRelease,
+		IdempotencyKey: fmt.Sprintf("api-key-release:%d:%d:%d", key.ID, time.Now().UnixNano(), reserved),
+		ReservedDelta:  -reserved,
+		Reason:         string(model.HostedCreditLedgerSourceRelease),
+		MetadataJSON:   "{}",
+	}).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+	key.CreditBalance = account.CreditBalance
+	key.CreditReserved = account.CreditReserved
 	return withRemaining(key), nil
 }
 
@@ -668,21 +957,44 @@ func (s *Store) SettleReservedCredits(ctx context.Context, apiKeyID uint64, rese
 		tx.Rollback()
 		return nil, err
 	}
-	key.CreditReserved -= reserved
-	if key.CreditReserved < 0 {
-		key.CreditReserved = 0
+	if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		tx.Rollback()
+		return nil, fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
-	key.CreditBalance -= settled
-	if key.CreditBalance < 0 {
-		key.CreditBalance = 0
+	account, err := lockedHostedCreditAccountTx(tx, *key.OwnerUserID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
 	}
-	if err := tx.Save(&key).Error; err != nil {
+	account.CreditReserved -= reserved
+	if account.CreditReserved < 0 {
+		account.CreditReserved = 0
+	}
+	account.CreditBalance -= settled
+	if account.CreditBalance < 0 {
+		account.CreditBalance = 0
+	}
+	if err := tx.Save(account).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&model.UserHostedCreditLedger{
+		UserID:         *key.OwnerUserID,
+		SourceType:     model.HostedCreditLedgerSourceSettle,
+		IdempotencyKey: fmt.Sprintf("api-key-settle:%d:%d:%d:%d", key.ID, time.Now().UnixNano(), reserved, settled),
+		CreditDelta:    -settled,
+		ReservedDelta:  -reserved,
+		Reason:         string(model.HostedCreditLedgerSourceSettle),
+		MetadataJSON:   "{}",
+	}).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+	key.CreditBalance = account.CreditBalance
+	key.CreditReserved = account.CreditReserved
 	return withRemaining(key), nil
 }
 
@@ -1357,14 +1669,19 @@ func (s *Store) FinalizeOrderPayment(ctx context.Context, params billing.Finaliz
 		}
 	}
 
-	if order.TargetAPIKeyID != nil {
-		switch order.PackKind {
-		case model.PackKindHostedCredits:
-			if err := addCreditBalanceToAPIKeyTx(tx, *order.TargetAPIKeyID, order.CreditAmount); err != nil {
+	switch order.PackKind {
+	case model.PackKindHostedCredits:
+		if order.CreditAmount > 0 {
+			if _, _, _, err := grantHostedCreditsToUserTx(tx, order.UserID, model.HostedCreditLedgerSourcePurchase, fmt.Sprintf("order:%d", order.ID), order.CreditAmount, "hosted credit purchase", JSONString(map[string]any{
+				"order_id":  order.ID,
+				"pack_code": order.PackCode,
+			})); err != nil {
 				tx.Rollback()
 				return nil, false, err
 			}
-		default:
+		}
+	default:
+		if order.TargetAPIKeyID != nil {
 			if err := addPaidQuotaToAPIKeyTx(tx, *order.TargetAPIKeyID, order.QuotaAmount); err != nil {
 				tx.Rollback()
 				return nil, false, err
@@ -1634,6 +1951,15 @@ func withRemaining(key model.APIKey) *model.APIKey {
 func (s *Store) withEffectiveAPIKeyStatus(ctx context.Context, key model.APIKey) (*model.APIKey, error) {
 	if key.OwnerUserID == nil {
 		return withRemaining(key), nil
+	}
+	var account model.UserHostedCreditAccount
+	if err := s.db.WithContext(ctx).Where("user_id = ?", *key.OwnerUserID).First(&account).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	} else {
+		key.CreditBalance = account.CreditBalance
+		key.CreditReserved = account.CreditReserved
 	}
 	disabled, err := ownerUserDisabledWithDB(s.db.WithContext(ctx), *key.OwnerUserID)
 	if err != nil {

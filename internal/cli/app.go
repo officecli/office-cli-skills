@@ -3,10 +3,17 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -139,7 +146,7 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 		switch args[0] {
 		case "config":
 			help = ConfigHelpText()
-		case "auth":
+		case "auth", "login", "logout", "whoami", "set-key":
 			help = AuthHelpText()
 		case "new":
 			help = NewHelpText()
@@ -182,6 +189,37 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "config":
 		return a.runConfig(args[1:])
+	case "login":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runLogin(ctx, cfg)
+	case "logout":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runLogout(ctx, cfg)
+	case "whoami":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runWhoami(ctx, cfg)
+	case "set-key":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
+			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the API key", "")
+			if err != nil {
+				return err
+			}
+			return a.runAuthSetKey(ctx, cfg, strings.TrimSpace(key))
+		}
+		return a.runAuthSetKey(ctx, cfg, strings.TrimSpace(args[1]))
 	case "auth":
 		cfg, err := LoadConfig("")
 		if err != nil {
@@ -227,7 +265,7 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 
 func isKnownCommand(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "config", "auth", "new", "score", "review", "upgrade", "agent-bridge":
+	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge":
 		return true
 	default:
 		return false
@@ -256,7 +294,7 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 	}
 	if len(missing) > 0 {
 		if cfg.RuntimeModeOrDefault() == RuntimeModeHosted {
-			return Config{}, fmt.Errorf("missing required environment variables. Complete the platform access settings first or run `officecli config set-license`")
+			return Config{}, fmt.Errorf("missing required environment variables. Complete platform access settings first, then run `officecli login`")
 		}
 		return Config{}, fmt.Errorf("missing required environment variables. Complete the generation service settings first or run `officecli config set-generation`")
 	}
@@ -338,14 +376,18 @@ Scripted usage:
 
 Commands:
   new                     Generate a PPTX, DOCX, XLSX, report, or image
-  auth                    Check access or save a hosted API key
+  login                   Log in to use account hosted credits
+  logout                  Clear local account session, user ID, and API key
+  whoami                  Show anonymous, account, or API key mode
+  set-key <api-key>       Advanced: use an account API key instead of login
   config                  View or change runtime settings
   upgrade                 Check for a newer officecli version
 
 Useful checks:
-  officecli auth status
+  officecli whoami
+  officecli login
   officecli new --help
-  officecli auth set-key <api-key>   # after buying or creating a hosted key
+  officecli set-key <api-key>   # advanced automation credential
 `
 }
 
@@ -366,11 +408,13 @@ Description:
 
 func AuthHelpText() string {
 	return `Usage:
-  officecli auth status
-  officecli auth set-key <api-key>
+  officecli login
+  officecli logout
+  officecli whoami
+  officecli set-key <api-key>
 
 Description:
-  View access status or save a hosted API key.
+  Log in with your OfficeCLI account, inspect local auth state, or save an advanced API key credential.
 `
 }
 
@@ -622,7 +666,7 @@ func (a *App) runConfigSetLicense(cfg Config) error {
 	}
 	cfg.License.BaseURL = defaultInitConfig().License.BaseURL
 	if cfg.License.Enabled {
-		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the hosted API key (optional for External Mode)", cfg.License.APIKey); err != nil {
+		if cfg.License.APIKey, err = a.promptLine(reader, "Enter the account API key (optional advanced credential)", cfg.License.APIKey); err != nil {
 			return err
 		}
 		syncPublishCredentialFromLicense(&cfg)
@@ -783,7 +827,7 @@ func (a *App) collectInitConfig(reader *bufio.Reader, base Config) (Config, erro
 			cfg.LLM.Model = defaultInitConfig().LLM.Model
 		}
 	}
-	if cfg.License.APIKey, err = a.promptLine(reader, "Enter the hosted API key (optional for External Mode)", cfg.License.APIKey); err != nil {
+	if cfg.License.APIKey, err = a.promptLine(reader, "Enter the account API key (optional advanced credential)", cfg.License.APIKey); err != nil {
 		return Config{}, err
 	}
 	cfg.Publish.Enabled, err = a.promptYesNo(reader, "Enable online preview publishing? (yes/no)", cfg.Publish.Enabled)
@@ -1006,7 +1050,7 @@ func (a *App) runAuth(ctx context.Context, cfg Config, args []string) error {
 		return a.runAuthStatus(ctx, cfg)
 	case "set-key":
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
-			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the hosted API key", "")
+			key, err := a.promptLine(bufio.NewReader(a.Stdin), "Enter the account API key", "")
 			if err != nil {
 				return err
 			}
@@ -1018,6 +1062,149 @@ func (a *App) runAuth(ctx context.Context, cfg Config, args []string) error {
 		return a.runAuthSetKey(ctx, cfg, strings.TrimSpace(args[1]))
 	default:
 		return fmt.Errorf("unsupported auth command: %s", args[0])
+	}
+}
+
+type cliLoginStartResponse struct {
+	ChallengeID string    `json:"challenge_id"`
+	LoginURL    string    `json:"login_url"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type cliLoginExchangeResponse struct {
+	Token       string    `json:"token"`
+	TokenPrefix string    `json:"token_prefix"`
+	UserID      uint64    `json:"user_id"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type cliSessionResponse struct {
+	Authenticated bool       `json:"authenticated"`
+	UserID        uint64     `json:"user_id,omitempty"`
+	TokenPrefix   string     `json:"token_prefix,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+}
+
+func (a *App) runLogin(ctx context.Context, cfg Config) error {
+	cfg.License.Enabled = true
+	if strings.TrimSpace(cfg.License.BaseURL) == "" {
+		cfg.License.BaseURL = defaultInitConfig().License.BaseURL
+	}
+	verifier := randomURLToken(32)
+	state := randomURLToken(18)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+	redirectURI := "http://" + listener.Addr().String() + "/callback"
+	startResp := cliLoginStartResponse{}
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/start", map[string]any{
+		"code_challenge":        s256Challenge(verifier),
+		"code_challenge_method": "S256",
+		"redirect_uri":          redirectURI,
+		"state":                 state,
+	}, "", &startResp); err != nil {
+		return err
+	}
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("state") != state {
+			errCh <- fmt.Errorf("login callback state mismatch")
+			http.Error(w, "state mismatch", http.StatusBadRequest)
+			return
+		}
+		code := strings.TrimSpace(r.URL.Query().Get("code"))
+		if code == "" {
+			errCh <- fmt.Errorf("login callback missing code")
+			http.Error(w, "missing code", http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, "OfficeCLI login complete. You can return to the terminal.")
+		codeCh <- code
+	})}
+	defer server.Close()
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+	if err := openBrowser(startResp.LoginURL); err != nil {
+		if _, writeErr := fmt.Fprintf(a.Stdout, "Open this URL to log in:\n%s\n", startResp.LoginURL); writeErr != nil {
+			return writeErr
+		}
+	}
+	var code string
+	select {
+	case code = <-codeCh:
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(10 * time.Minute):
+		return fmt.Errorf("login timed out")
+	}
+	exchangeResp := cliLoginExchangeResponse{}
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/exchange", map[string]any{
+		"challenge_id":  startResp.ChallengeID,
+		"code":          code,
+		"code_verifier": verifier,
+	}, "", &exchangeResp); err != nil {
+		return err
+	}
+	cfg.License.APIKey = ""
+	cfg.License.SessionToken = exchangeResp.Token
+	cfg.License.SessionTokenPrefix = exchangeResp.TokenPrefix
+	cfg.License.SessionExpiresAt = &exchangeResp.ExpiresAt
+	cfg.License.UserID = exchangeResp.UserID
+	if _, err := WriteConfig("", cfg, true); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(a.Stdout, "Logged in as user #%d. Account hosted credits are now active for this CLI.\n", exchangeResp.UserID)
+	return err
+}
+
+func (a *App) runLogout(ctx context.Context, cfg Config) error {
+	if strings.TrimSpace(cfg.License.SessionToken) != "" {
+		_ = a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/logout", map[string]any{}, cfg.License.SessionToken, nil)
+	}
+	cfg.License.SessionToken = ""
+	cfg.License.SessionTokenPrefix = ""
+	cfg.License.SessionExpiresAt = nil
+	cfg.License.UserID = 0
+	cfg.License.APIKey = ""
+	if _, err := WriteConfig("", cfg, true); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(a.Stdout, "Logged out. This CLI is back to anonymous hosted trial mode.")
+	return err
+}
+
+func (a *App) runWhoami(ctx context.Context, cfg Config) error {
+	switch {
+	case strings.TrimSpace(cfg.License.APIKey) != "":
+		if _, err := fmt.Fprintln(a.Stdout, "Mode: API key"); err != nil {
+			return err
+		}
+		return a.runAuthStatus(ctx, cfg)
+	case strings.TrimSpace(cfg.License.SessionToken) != "":
+		var session cliSessionResponse
+		err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodGet, "/api/cli/session", nil, cfg.License.SessionToken, &session)
+		if err == nil && session.Authenticated {
+			if _, err := fmt.Fprintf(a.Stdout, "Mode: logged in\nUser ID: %d\nSession: %s\n", session.UserID, session.TokenPrefix); err != nil {
+				return err
+			}
+			if session.ExpiresAt != nil {
+				_, err = fmt.Fprintf(a.Stdout, "Expires at: %s\n", session.ExpiresAt.Format(time.RFC3339))
+			}
+			return err
+		}
+		_, err = fmt.Fprintln(a.Stdout, "Mode: logged out (saved CLI session is invalid or expired)")
+		return err
+	default:
+		_, err := fmt.Fprintln(a.Stdout, "Mode: anonymous hosted trial")
+		return err
 	}
 }
 
@@ -1040,6 +1227,11 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 	if _, err := fmt.Fprintln(a.Stdout, "Quota summary"); err != nil {
 		return err
 	}
+	if result.AccessMode == LicenseAccessModeHosted || result.CreditBalance > 0 {
+		if _, err := fmt.Fprintf(a.Stdout, "Account hosted credits: %d\n", result.CreditBalance); err != nil {
+			return err
+		}
+	}
 	freeTrial, rewardQuota, paidQuota := quotaSnapshotSections(result)
 	if _, err := fmt.Fprintf(a.Stdout, "Free trial quota (this machine, lifetime): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
 		return err
@@ -1052,14 +1244,17 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 			return err
 		}
 	} else {
-		if _, err := fmt.Fprintln(a.Stdout, "Hosted key: no hosted API key configured"); err != nil {
+		if _, err := fmt.Fprintln(a.Stdout, "API key: none configured"); err != nil {
 			return err
 		}
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Access checks enabled: %t\n", cfg.License.Enabled); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Hosted API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Account session configured: %t\n", strings.TrimSpace(cfg.License.SessionToken) != ""); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
 		return err
 	}
 	if strings.TrimSpace(result.Message) != "" {
@@ -1104,20 +1299,95 @@ func (a *App) runAuthSetKey(ctx context.Context, cfg Config, key string) error {
 	if strings.TrimSpace(key) == "" {
 		return fmt.Errorf("api-key is required")
 	}
+	if strings.TrimSpace(cfg.License.SessionToken) != "" {
+		_ = a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/logout", map[string]any{}, cfg.License.SessionToken, nil)
+	}
 	cfg.License.Enabled = true
 	cfg.License.APIKey = key
+	cfg.License.SessionToken = ""
+	cfg.License.SessionTokenPrefix = ""
+	cfg.License.SessionExpiresAt = nil
+	cfg.License.UserID = 0
 	result, err := a.checkLicenseWithRuntime(ctx, cfg.License, cfg.RuntimeModeOrDefault(), "", "status")
 	if err != nil {
 		return err
 	}
 	if !result.Allowed || result.AccessMode == LicenseAccessModeBlocked {
-		return fmt.Errorf("hosted API key validation failed: %s", fallbackMessage(result.Message, "the key is invalid, expired, depleted, or the access service is unavailable"))
+		return fmt.Errorf("account API key validation failed: %s", fallbackMessage(result.Message, "the key is invalid, expired, depleted, or the access service is unavailable"))
 	}
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.Stdout, "Saved the hosted API key. Current access mode: %s\n", displayAccessMode(result.AccessMode))
+	_, err = fmt.Fprintf(a.Stdout, "Saved the API key. Current access mode: %s\n", displayAccessMode(result.AccessMode))
 	return err
+}
+
+func (a *App) platformJSON(ctx context.Context, baseURL, method, path string, payload any, bearer string, out any) error {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultInitConfig().License.BaseURL
+	}
+	var body io.Reader
+	if payload != nil {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = strings.NewReader(string(raw))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
+	if err != nil {
+		return err
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if strings.TrimSpace(bearer) != "" {
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(bearer))
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("platform request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	if out == nil {
+		return nil
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err == nil {
+		if data, ok := envelope["data"]; ok {
+			return json.Unmarshal(data, out)
+		}
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func randomURLToken(n int) string {
+	buf := make([]byte, n)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+func s256Challenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func openBrowser(rawURL string) error {
+	if strings.TrimSpace(rawURL) == "" {
+		return fmt.Errorf("empty url")
+	}
+	return exec.Command("open", rawURL).Start()
 }
 
 func (a *App) checkLicense(ctx context.Context, cfg LicenseConfig, documentType, action string) (*LicenseCheckResult, error) {
@@ -1187,12 +1457,12 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		}
 	}
 	if !result.Allowed {
-		fallback := "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>."
+		fallback := "Free trial quota is used up. Run `officecli login`, then buy hosted credits for your account."
 		if result.ReasonCode == "hosted_credit_exhausted" {
-			fallback = "Hosted credits are exhausted. Please top up credits first."
+			fallback = "Hosted credits are exhausted. Run `officecli login`, then buy hosted credits for your account."
 		}
 		if strings.TrimSpace(cfg.APIKey) != "" || result.ReasonCode == "paid_quota_exhausted" {
-			fallback = "The current key is out of quota. Replace it or purchase more quota."
+			fallback = "The current API key's account is out of hosted credits. Buy hosted credits for that account or run `officecli login`."
 		}
 		return nil, fmt.Errorf("%s", fallbackMessage(result.Message, fallback))
 	}

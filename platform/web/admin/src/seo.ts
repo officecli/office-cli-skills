@@ -49,7 +49,7 @@ function buildRouteSEO(pathname: string, title: string, description: string): Ro
 }
 
 const routeSEO: Record<string, RouteSEO> = {
-  '/': buildRouteSEO('/', 'OfficeCLI Admin | Overview', 'Review governance posture, key inventory, and quota pressure across the OfficeCLI platform.'),
+  '/': buildRouteSEO('/', 'OfficeCLI Admin | Overview', 'Review governance posture, credential inventory, and account hosted credit state across the OfficeCLI platform.'),
   '/growth': buildRouteSEO('/growth', 'OfficeCLI Admin | Growth', 'Inspect reward grants, referrals, and Discord connection state from the OfficeCLI admin plane.'),
   '/hosted-pricing': buildRouteSEO('/hosted-pricing', 'OfficeCLI Admin | Hosted Pricing', 'Review config-backed hosted pricing rules for the OfficeCLI platform.'),
   '/api-keys': buildRouteSEO('/api-keys', 'OfficeCLI Admin | API Keys', 'Audit and edit OfficeCLI platform API keys, limits, and routing metadata.'),

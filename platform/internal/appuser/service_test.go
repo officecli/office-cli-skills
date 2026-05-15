@@ -24,6 +24,8 @@ type fakeStore struct {
 	referrals      []model.UserReferral
 	discord        *model.DiscordConnection
 	creditGrants   map[string]*model.HostedCreditGrant
+	hostedLedgers  map[string]*model.UserHostedCreditLedger
+	hostedAccount  *model.UserHostedCreditAccount
 }
 
 func (f *fakeStore) CountUserAPIKeys(_ context.Context, _ uint64) (int64, error) {
@@ -91,6 +93,32 @@ func (f *fakeStore) GrantHostedCreditsToAPIKey(_ context.Context, apiKeyID, user
 	f.creditGrants[idempotencyKey] = grant
 	copied := *grant
 	return &copied, true, nil
+}
+func (f *fakeStore) GetHostedCreditAccountByUser(_ context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
+	if f.hostedAccount == nil {
+		return &model.UserHostedCreditAccount{UserID: userID}, nil
+	}
+	copied := *f.hostedAccount
+	return &copied, nil
+}
+func (f *fakeStore) GrantHostedCreditsToUser(_ context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	if f.hostedLedgers == nil {
+		f.hostedLedgers = map[string]*model.UserHostedCreditLedger{}
+	}
+	if ledger := f.hostedLedgers[idempotencyKey]; ledger != nil {
+		copied := *ledger
+		account, _ := f.GetHostedCreditAccountByUser(context.Background(), userID)
+		return &copied, account, false, nil
+	}
+	if f.hostedAccount == nil {
+		f.hostedAccount = &model.UserHostedCreditAccount{UserID: userID}
+	}
+	f.hostedAccount.CreditBalance += creditAmount
+	ledger := &model.UserHostedCreditLedger{ID: uint64(len(f.hostedLedgers) + 1), UserID: userID, SourceType: source, IdempotencyKey: idempotencyKey, CreditDelta: creditAmount, Reason: reason, MetadataJSON: metadataJSON}
+	f.hostedLedgers[idempotencyKey] = ledger
+	copied := *ledger
+	account := *f.hostedAccount
+	return &copied, &account, true, nil
 }
 func (f *fakeStore) UpdateAPIKey(_ context.Context, _ uint64, values map[string]any) error {
 	f.updateCalls++
@@ -242,7 +270,11 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 			{InvitedUserID: 100},
 			{InvitedUserID: 101, ActivatedAt: timePtr()},
 		},
-		discord: &model.DiscordConnection{UserID: 42, GuildMember: true},
+		discord:       &model.DiscordConnection{UserID: 42, GuildMember: true},
+		hostedAccount: &model.UserHostedCreditAccount{UserID: 42, CreditBalance: 180, CreditReserved: 50},
+		hostedLedgers: map[string]*model.UserHostedCreditLedger{
+			"signup-hosted-credits:42": {UserID: 42, SourceType: model.HostedCreditLedgerSourceSignupBonus, IdempotencyKey: "signup-hosted-credits:42", CreditDelta: SignupHostedCreditBonus},
+		},
 	}
 	cipher := testAPIKeyCipher(t)
 	svc := NewService(store, fakeBillingWithData{
@@ -259,6 +291,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 	overview, err := svc.Overview(context.Background(), 42)
 	require.NoError(t, err)
 	require.Equal(t, 7, overview.TotalRemaining)
+	require.Equal(t, 130, overview.HostedCreditBalance)
 	require.Equal(t, 8, overview.RewardRemaining)
 	require.Equal(t, "invite-xyz", overview.InviteCode)
 	require.Equal(t, growthsvc.MaxReferralsPerInviter, overview.InviteLimit)
@@ -271,6 +304,25 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 	require.Equal(t, 2, overview.RecentOrdersCount)
 	require.Len(t, overview.Pricing, 2)
 	require.Equal(t, "external-100", overview.Pricing[0].Code)
+}
+
+func TestOverviewGrantsSignupHostedCreditsToUserWithoutCreatingAPIKey(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		user: &model.User{ID: 42, InviteCode: "invite-xyz"},
+	}
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
+
+	overview, err := svc.Overview(context.Background(), 42)
+	require.NoError(t, err)
+	require.Equal(t, SignupHostedCreditBonus, overview.HostedCreditBalance)
+	require.Empty(t, store.apiKeysByOwner)
+
+	ledger := store.hostedLedgers["signup-hosted-credits:42"]
+	require.NotNil(t, ledger)
+	require.Equal(t, model.HostedCreditLedgerSourceSignupBonus, ledger.SourceType)
+	require.Equal(t, SignupHostedCreditBonus, ledger.CreditDelta)
 }
 
 func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
@@ -302,6 +354,7 @@ func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {
 	require.Equal(t, "cop_live_demo", keys[0].KeyPrefix)
 	require.True(t, keys[0].PlaintextAvailable)
 	require.Equal(t, 40, keys[0].QuotaRemaining)
+	require.Zero(t, keys[0].CreditBalance)
 }
 
 func TestListUsageEventsIncludesHostedEventsWithoutCostDetails(t *testing.T) {

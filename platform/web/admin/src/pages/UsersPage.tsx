@@ -79,8 +79,8 @@ export default function UsersPage() {
                       <div className="mt-4 flex flex-wrap gap-2 text-xs text-outline">
                         <span className="rounded-full border border-outline-variant/20 px-3 py-1 text-white">External {formatNumber(key.quota_remaining ?? key.quota_total)} / {formatNumber(key.quota_total)}</span>
                         <span className="rounded-full border border-outline-variant/20 px-3 py-1">Used {formatNumber(key.quota_used)}</span>
-                        <span className="rounded-full border border-outline-variant/20 px-3 py-1">Hosted credits {formatNumber(key.credit_balance)}</span>
-                        <span className="rounded-full border border-outline-variant/20 px-3 py-1">Reserved {formatNumber(key.credit_reserved)}</span>
+                        <span className="rounded-full border border-outline-variant/20 px-3 py-1">Hosted credits account-level</span>
+                        <span className="rounded-full border border-outline-variant/20 px-3 py-1">Key reserved legacy {formatNumber(key.credit_reserved)}</span>
                       </div>
                     </div>
                   ))}

@@ -30,6 +30,7 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/appuser"
 	"github.com/officecli/officecli-internal/platform/internal/auth"
 	"github.com/officecli/officecli-internal/platform/internal/billing"
+	"github.com/officecli/officecli-internal/platform/internal/clisession"
 	"github.com/officecli/officecli-internal/platform/internal/discordoauth"
 	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
 	"github.com/officecli/officecli-internal/platform/internal/hostedllm"
@@ -205,13 +206,14 @@ func New() (*Application, error) {
 		redisRepo,
 		growthService,
 	)
+	cliSessionSvc := clisession.NewService(dbStore, cfg.PlatformBaseURL)
 
 	port, err := parsePort(cfg.HTTPAddr)
 	if err != nil {
 		return nil, err
 	}
 	server := egin.DefaultContainer().Build(egin.WithHost(hostPart(cfg.HTTPAddr)), egin.WithPort(port))
-	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, previewShares, sdkHandler, sdkProvider)
+	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider)
 
 	application := ego.New()
 	application.Serve(server)
@@ -221,23 +223,24 @@ func New() (*Application, error) {
 func (a *Application) Run() error { return a.ego.Run() }
 
 func registerRoutes(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
-	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil)
+	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil)
 }
 
-func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
 	r.Use(httpapi.RequestIDMiddleware())
 	r.Use(httpapi.AccessLogMiddleware(time.Second))
 	r.Use(gin.Recovery())
 	r.GET("/healthz", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, gin.H{"status": "ok"}) })
 	api := r.Group("/api")
 
-	registerLicenseRoutesWithConfig(api, cfg, lic)
+	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
 	registerHostedLLMRoutes(api, hostedSvc)
 	registerPublishRoutes(api, cfg, publishService)
 	registerAuthRoutes(api, cfg, authSvc)
+	registerCLIRoutes(api, cfg, authSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
 	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
-	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc)
+	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc, cliSessionSvc)
 	registerStripeRoutes(api, billingSvc)
 	registerPreviewRoutes(r, cfg, authSvc, previewShares, sdkHandler, sdkProvider)
 	registerStatic(r.Engine, cfg)
@@ -355,7 +358,7 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 	})
 }
 
-func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *licensesvc.Service) {
+func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *licensesvc.Service, cliSvc *clisession.Service) {
 	licenseRatePerMinute := cfg.LicenseRateLimitPerMinute
 	if licenseRatePerMinute <= 0 {
 		licenseRatePerMinute = defaultLicenseRateLimit(cfg.AppEnv)
@@ -375,6 +378,11 @@ func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *lice
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
+		if req.APIKey == "" && cliSvc != nil {
+			if session, err := cliSvc.Resolve(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))); err == nil && session != nil {
+				req.UserID = session.UserID
+			}
+		}
 		resp, err := lic.Check(c.Request.Context(), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
@@ -387,6 +395,11 @@ func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *lice
 		if err := c.ShouldBindJSON(&req); err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
+		}
+		if req.APIKey == "" && cliSvc != nil {
+			if session, err := cliSvc.Resolve(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))); err == nil && session != nil {
+				req.UserID = session.UserID
+			}
 		}
 		resp, err := lic.Consume(c.Request.Context(), req)
 		if err != nil {
@@ -406,7 +419,7 @@ func registerLicenseRoutes(api *gin.RouterGroup, lic *licensesvc.Service) {
 		AppEnv:                    "production",
 		LicenseRateLimitPerMinute: 30,
 		RateLimitVisitorTTL:       5 * time.Minute,
-	}, lic)
+	}, lic, nil)
 }
 
 func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service) {
@@ -541,6 +554,74 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 		clearSessionCookie(c, cfg, "cop_app_session")
 		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
+}
+
+func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, cliSvc *clisession.Service) {
+	if cliSvc == nil || authSvc == nil {
+		return
+	}
+	api.POST("/cli/login/start", func(c *gin.Context) {
+		var req clisession.StartRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		resp, err := cliSvc.Start(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, resp)
+	})
+	api.GET("/cli/login/complete", func(c *gin.Context) {
+		raw, err := c.Cookie("cop_app_session")
+		if err != nil || raw == "" {
+			values := url.Values{}
+			values.Set("return_to", c.Request.URL.RequestURI())
+			c.Redirect(http.StatusFound, "/api/auth/google/login?"+values.Encode())
+			return
+		}
+		user, err := authSvc.Me(c.Request.Context(), raw)
+		if err != nil || user == nil {
+			httpapi.AbortUnauthorized(c)
+			return
+		}
+		redirectTo, _, err := cliSvc.Complete(c.Request.Context(), c.Query("challenge_id"), user.ID)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		c.Redirect(http.StatusFound, redirectTo)
+	})
+	api.POST("/cli/login/exchange", func(c *gin.Context) {
+		var req clisession.ExchangeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		resp, err := cliSvc.Exchange(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, resp)
+	})
+	api.GET("/cli/session", func(c *gin.Context) {
+		resp, err := cliSvc.Session(c.Request.Context(), bearerToken(c.GetHeader("Authorization")))
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, resp)
+	})
+	api.POST("/cli/logout", func(c *gin.Context) {
+		if err := cliSvc.Logout(c.Request.Context(), bearerToken(c.GetHeader("Authorization"))); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
+	})
+	_ = cfg
 }
 
 func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteService) {
@@ -1249,7 +1330,11 @@ func shouldUseSecureCookies(cfg Config) bool {
 	return cfg.AppEnv == "production"
 }
 
-func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
+func bearerToken(header string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(header), "Bearer "))
+}
+
+func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService, cliSvc *clisession.Service) {
 	resolver := func(cookieValue string) (uint64, string, error) {
 		payload, err := authSvc.ResolveSession(cookieValue)
 		if err != nil || payload == nil {
@@ -1316,6 +1401,34 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/cli-sessions", func(c *gin.Context) {
+		if cliSvc == nil {
+			httpapi.Error(c, http.StatusServiceUnavailable, "cli sessions are unavailable")
+			return
+		}
+		sessions, err := cliSvc.StoreSessions(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, sessions)
+	})
+	protected.DELETE("/cli-sessions/:id", func(c *gin.Context) {
+		if cliSvc == nil {
+			httpapi.Error(c, http.StatusServiceUnavailable, "cli sessions are unavailable")
+			return
+		}
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "invalid cli session id")
+			return
+		}
+		if err := cliSvc.RevokeUserSession(c.Request.Context(), currentUserID(c), id); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
 	protected.POST("/discord/connect", func(c *gin.Context) {
 		var req appuser.ConnectDiscordRequest
@@ -1681,6 +1794,9 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 		return nil, licensesvc.ErrPaidQuotaExhausted
 	}
 	return key, err
+}
+func (r apiKeyRepo) GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
+	return r.store.GetHostedCreditAccountByUser(ctx, userID)
 }
 
 type freeQuotaRepo struct{ store *sqlstore.Store }

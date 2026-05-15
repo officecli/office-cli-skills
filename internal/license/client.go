@@ -12,9 +12,10 @@ import (
 )
 
 type Service struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	baseURL      string
+	apiKey       string
+	sessionToken string
+	client       *http.Client
 }
 
 func NewService(cfg Config) (*Service, error) {
@@ -26,9 +27,10 @@ func NewService(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("missing platform service URL. Complete the officecli configuration first")
 	}
 	return &Service{
-		baseURL: baseURL,
-		apiKey:  strings.TrimSpace(cfg.APIKey),
-		client:  &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
+		baseURL:      baseURL,
+		apiKey:       strings.TrimSpace(cfg.APIKey),
+		sessionToken: strings.TrimSpace(cfg.SessionToken),
+		client:       &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
 	}, nil
 }
 
@@ -101,8 +103,8 @@ func (s *Service) post(ctx context.Context, path string, payload any) ([]byte, e
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	if token := s.authToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -117,4 +119,11 @@ func (s *Service) post(ctx context.Context, path string, payload any) ([]byte, e
 		return nil, fmt.Errorf("license request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return body, nil
+}
+
+func (s *Service) authToken() string {
+	if strings.TrimSpace(s.apiKey) != "" {
+		return strings.TrimSpace(s.apiKey)
+	}
+	return strings.TrimSpace(s.sessionToken)
 }

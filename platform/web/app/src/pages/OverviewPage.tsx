@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { KeyRound } from 'lucide-react'
+import { KeyRound, ShieldCheck } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { api } from '../api'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
@@ -24,8 +24,8 @@ export default function OverviewPage() {
   const referralCount = overview?.referral_count ?? referrals.length
   const activatedReferralCount = overview?.activated_referral_count ?? referrals.filter((referral) => referral.activated_at).length
   const inviteRemaining = overview?.invite_remaining ?? growth?.invite_remaining ?? Math.max(inviteLimit - referrals.length, 0)
-  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 20
-  const hostedCredits = overview?.hosted_credit_balance ?? apiKeys.reduce((sum, key) => sum + (key.credit_balance ?? 0), 0)
+  const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 100
+  const hostedCredits = overview?.hosted_credit_balance ?? 0
   const signupBonus = overview?.signup_credit_bonus ?? 30
   const discordParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const discordResult = discordParams.get('discord')
@@ -66,8 +66,8 @@ export default function OverviewPage() {
         <div className="overview-hero-glow absolute inset-y-0 right-0 hidden w-1/2 lg:block" />
         <SectionHeading
           eyebrow="Runtime overview"
-          title="Remaining Quota"
-          body="Keep an eye on account quota, recent document traffic, and the key carrying the most production load."
+          title="Account Hosted Credits"
+          body="Keep an eye on account hosted credits, anonymous trial separation, recent document traffic, and access credentials."
         />
         <div className="overview-shell">
           <div className="panel-muted grid gap-4 p-6 md:grid-cols-3">
@@ -79,14 +79,14 @@ export default function OverviewPage() {
               </>
             ) : (
               <>
-                <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Active production and staging credentials" />
+                <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Account access credentials for advanced automation" />
                 <MetricCard label="Hosted Credits" value={formatNumber(hostedCredits)} detail={`${formatNumber(signupBonus)} credits granted to new users; hosted runtime spends credits`} />
                 <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External and hosted requests recorded recently" />
               </>
             )}
           </div>
           <div className="panel-muted p-6">
-            <div className="info-eyebrow text-tertiary">Lead key</div>
+            <div className="info-eyebrow text-tertiary">Access credential</div>
             {isLoadingApiKeys ? (
               <div className="mt-4 space-y-4">
                 <Skeleton className="h-6 w-48" />
@@ -102,10 +102,13 @@ export default function OverviewPage() {
                   </div>
                   <StatusPill value={featuredKey.status} />
                 </div>
-                <KeyStat label="Remaining Quota" value={featuredKey.quota_remaining ?? featuredKey.quota_total} meta={`Last used ${formatDate(featuredKey.last_used_at)}`} />
+                <div className="panel-muted mt-5 flex items-start gap-3 p-4 text-sm text-outline">
+                  <ShieldCheck size={18} className="mt-0.5 text-secondary" />
+                  <div>Hosted credits are account-level. This key is only an access credential and shares the same balance as `officecli login` sessions.</div>
+                </div>
               </div>
             ) : (
-              <EmptyState title="No keys provisioned yet" body="Create your first API key to start using paid quota in a real workflow." />
+              <EmptyState title="No API keys provisioned yet" body="Use `officecli login` for interactive CLI access, or create an API key for production automation." />
             )}
           </div>
         </div>
@@ -141,7 +144,7 @@ export default function OverviewPage() {
       </div>
 
       <Panel>
-        <SectionHeading eyebrow="Key inventory" title="Current API key fleet" body="The newest or most active credentials stay visible here so you can spot quota pressure before it blocks document generation." />
+        <SectionHeading eyebrow="Access credentials" title="Current API key fleet" body="API keys are account credentials for automation. They do not carry separate hosted credit balances." />
         {apiKeys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {apiKeys.slice(0, 4).map((key) => (
@@ -153,16 +156,23 @@ export default function OverviewPage() {
                   </div>
                   <StatusPill value={key.status} />
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <KeyStat label="Hosted" value={key.credit_balance ?? 0} meta="Credits" />
-                  <KeyStat label="External" value={0} meta="Free unlimited" />
-                  <KeyStat label="Remaining" value={key.quota_remaining} meta="Legacy quota" />
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="panel-muted p-4">
+                    <div className="info-eyebrow-tight text-outline">Hosted credits</div>
+                    <div className="mt-2 text-sm text-white">Account balance</div>
+                    <div className="mt-1 text-xs text-outline">Shared by login sessions and every API key</div>
+                  </div>
+                  <div className="panel-muted p-4">
+                    <div className="info-eyebrow-tight text-outline">Last used</div>
+                    <div className="mt-2 text-sm text-white">{formatDate(key.last_used_at)}</div>
+                    <div className="mt-1 text-xs text-outline">Credential activity only</div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyState title="No usage surfaces yet" body="As soon as a key is created, this overview becomes your live quota board." />
+          <EmptyState title="No API keys yet" body="Account login works without an API key. Create one only for scripts, CI, or service integrations." />
         )}
       </Panel>
 
@@ -225,7 +235,7 @@ export default function OverviewPage() {
         </Panel>
 
         <Panel>
-          <SectionHeading eyebrow="Discord status" title="Link Discord for growth rewards" body="The connect API is live, but this build still blocks guild verification until a trusted Discord membership checker is configured." />
+        <SectionHeading eyebrow="Discord status" title="Link Discord for 100 hosted credits" body="The connect API grants 100 account hosted credits after trusted Discord membership verification succeeds." />
           {discordConnection ? (
             <div className="panel-muted p-5">
               <div className="flex items-center justify-between gap-4">

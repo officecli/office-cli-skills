@@ -61,8 +61,6 @@ type Store interface {
 	GetOrderByCheckoutSessionID(ctx context.Context, sessionID string) (*model.Order, error)
 	GetOrderByID(ctx context.Context, id uint64) (*model.Order, error)
 	UpdateOrder(ctx context.Context, id uint64, values map[string]any) error
-	AddPaidQuotaToAPIKey(ctx context.Context, apiKeyID uint64, quotaAmount int) (*model.APIKey, error)
-	AddCreditBalanceToAPIKey(ctx context.Context, apiKeyID uint64, creditAmount int) (*model.APIKey, error)
 	CreateBillingEvent(ctx context.Context, event *model.BillingEvent) error
 	GetBillingEventByEventID(ctx context.Context, eventID string) (*model.BillingEvent, error)
 	FinalizeOrderPayment(ctx context.Context, params FinalizeOrderPaymentParams) (*model.Order, bool, error)
@@ -76,7 +74,7 @@ type Store interface {
 type CheckoutRequest struct {
 	UserID         uint64 `json:"-"`
 	PackCode       string `json:"pack_code"`
-	TargetAPIKeyID uint64 `json:"target_api_key_id"`
+	TargetAPIKeyID uint64 `json:"target_api_key_id,omitempty"`
 }
 
 type ReconcileOrderRequest struct {
@@ -148,29 +146,19 @@ func (s *Service) CreateCheckout(ctx context.Context, req CheckoutRequest) (*mod
 	if pack.PackKind == string(model.PackKindExternalGeneration) {
 		return nil, "", fmt.Errorf("external mode is free and no longer sold as a paid pack")
 	}
-	targetKey, err := s.store.FindAPIKeyByID(ctx, req.TargetAPIKeyID)
-	if err != nil {
-		return nil, "", err
-	}
-	switch {
-	case targetKey == nil:
-		return nil, "", fmt.Errorf("target api key not found")
-	case targetKey.OwnerUserID == nil || *targetKey.OwnerUserID != req.UserID:
-		return nil, "", fmt.Errorf("target api key does not belong to current user")
-	case targetKey.Status != model.APIKeyStatusActive:
-		return nil, "", fmt.Errorf("target api key is disabled")
-	}
 	order := &model.Order{
-		UserID:         req.UserID,
-		Status:         model.OrderStatusPending,
-		Currency:       pack.Currency,
-		AmountTotal:    pack.AmountTotal,
-		PackCode:       pack.Code,
-		PackName:       pack.Name,
-		PackKind:       model.PackKind(pack.PackKind),
-		QuotaAmount:    pack.QuotaAmount,
-		CreditAmount:   pack.CreditAmount,
-		TargetAPIKeyID: &req.TargetAPIKeyID,
+		UserID:       req.UserID,
+		Status:       model.OrderStatusPending,
+		Currency:     pack.Currency,
+		AmountTotal:  pack.AmountTotal,
+		PackCode:     pack.Code,
+		PackName:     pack.Name,
+		PackKind:     model.PackKind(pack.PackKind),
+		QuotaAmount:  pack.QuotaAmount,
+		CreditAmount: pack.CreditAmount,
+	}
+	if req.TargetAPIKeyID > 0 {
+		order.TargetAPIKeyID = &req.TargetAPIKeyID
 	}
 	if err := s.store.CreateOrder(ctx, order); err != nil {
 		return nil, "", err

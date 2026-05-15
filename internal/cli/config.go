@@ -137,6 +137,7 @@ func applyEnvOverrides(cfg *Config) {
 	setIfPresent(&cfg.Runtime.DefaultDocumentProfile, "OFFICE_CLI_RUNTIME_DEFAULT_DOCUMENT_PROFILE")
 	setIfPresent(&cfg.License.BaseURL, "OFFICE_CLI_LICENSE_BASE_URL")
 	setIfPresent(&cfg.License.APIKey, "OFFICE_CLI_LICENSE_API_KEY")
+	setIfPresent(&cfg.License.SessionToken, "OFFICE_CLI_SESSION_TOKEN")
 	setIfPresent(&cfg.Publish.Provider, "OFFICE_CLI_PUBLISH_PROVIDER")
 	setIfPresent(&cfg.Publish.BaseURL, "OFFICE_CLI_PUBLISH_BASE_URL")
 	setIfPresent(&cfg.Publish.APIKey, "OFFICE_CLI_PUBLISH_API_KEY")

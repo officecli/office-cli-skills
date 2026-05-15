@@ -105,7 +105,7 @@ export default function Pricing({ standalone = false }: PricingProps) {
                 ))}
               </ul>
               <div className="mb-4 text-sm text-outline-variant">
-                Secure Stripe checkout starts in the billing workspace after sign-in and API key selection.
+                Secure Stripe checkout starts in the billing workspace after sign-in and account selection.
               </div>
               <motion.a
                 whileHover={{ scale: 0.98 }}

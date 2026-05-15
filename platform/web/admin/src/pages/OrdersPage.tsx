@@ -17,11 +17,11 @@ export default function OrdersPage() {
       <SectionHeading
         eyebrow="Revenue trail"
         title="Orders and checkout state"
-        body="Inspect pack purchases, target API key routing, and last-mile payment status from a single operator surface."
+        body="Inspect account hosted credit purchases, legacy target-key metadata, and last-mile payment status from a single operator surface."
       />
       {orders.length ? (
         <DataTable
-          headers={['Order', 'Pack', 'Destination key', 'Status', 'Created', 'Action']}
+          headers={['Order', 'Pack', 'Destination', 'Status', 'Created', 'Action']}
           columns="minmax(0,0.9fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,0.9fr)"
           rows={orders.map((order) => [
             <div key={`order-${order.id}`}>
@@ -32,7 +32,7 @@ export default function OrdersPage() {
               <div className="font-semibold text-white">{order.pack_name}</div>
               <div className="mt-1 text-xs text-outline">{order.pack_code} / {orderAmountLabel(order)}</div>
             </div>,
-            <span key={`target-${order.id}`}>{order.target_api_key_id ? `#${order.target_api_key_id}` : '—'}</span>,
+            <span key={`target-${order.id}`}>{order.target_api_key_id ? `Legacy key #${order.target_api_key_id}` : 'Account credits'}</span>,
             <StatusPill key={`status-${order.id}`} value={order.status} />,
             <span key={`created-${order.id}`}>{formatDate(order.created_at)}</span>,
             <button

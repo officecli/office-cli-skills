@@ -13,7 +13,9 @@ type UsageAction string
 type UsageResult string
 type RewardSourceType string
 type HostedCreditGrantSource string
+type HostedCreditLedgerSource string
 type PackKind string
+type CLILoginChallengeStatus string
 
 const (
 	APIKeyStatusActive   APIKeyStatus = "active"
@@ -59,8 +61,21 @@ const (
 	HostedCreditGrantSourceSignup           HostedCreditGrantSource = "signup_bonus"
 	HostedCreditGrantSourceInviteActivation HostedCreditGrantSource = "invite_activation_bonus"
 
+	HostedCreditLedgerSourcePurchase              HostedCreditLedgerSource = "purchase"
+	HostedCreditLedgerSourceSignupBonus           HostedCreditLedgerSource = "signup_bonus"
+	HostedCreditLedgerSourceInviteActivationBonus HostedCreditLedgerSource = "invite_activation_bonus"
+	HostedCreditLedgerSourceDiscordJoinBonus      HostedCreditLedgerSource = "discord_join_bonus"
+	HostedCreditLedgerSourceReserve               HostedCreditLedgerSource = "reserve"
+	HostedCreditLedgerSourceSettle                HostedCreditLedgerSource = "settle"
+	HostedCreditLedgerSourceRelease               HostedCreditLedgerSource = "release"
+	HostedCreditLedgerSourceMigration             HostedCreditLedgerSource = "migration"
+
 	PackKindExternalGeneration PackKind = "external_generation"
 	PackKindHostedCredits      PackKind = "hosted_credits"
+
+	CLILoginChallengeStatusPending   CLILoginChallengeStatus = "pending"
+	CLILoginChallengeStatusCompleted CLILoginChallengeStatus = "completed"
+	CLILoginChallengeStatusConsumed  CLILoginChallengeStatus = "consumed"
 )
 
 type User struct {
@@ -163,6 +178,40 @@ type UserAIGatewayAPIKey struct {
 }
 
 func (UserAIGatewayAPIKey) TableName() string { return "user_aigateway_api_keys" }
+
+type CLILoginChallenge struct {
+	ID                  uint64                  `gorm:"primaryKey" json:"id"`
+	ChallengeID         string                  `gorm:"column:challenge_id;size:128;uniqueIndex;not null" json:"challenge_id"`
+	CodeChallenge       string                  `gorm:"column:code_challenge;size:191;not null" json:"-"`
+	CodeChallengeMethod string                  `gorm:"column:code_challenge_method;size:16;not null" json:"code_challenge_method"`
+	RedirectURI         string                  `gorm:"column:redirect_uri;size:512;not null" json:"redirect_uri"`
+	State               string                  `gorm:"column:state;size:191;not null" json:"state"`
+	Status              CLILoginChallengeStatus `gorm:"column:status;size:16;index;not null" json:"status"`
+	UserID              *uint64                 `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	ExchangeCodeHash    *string                 `gorm:"column:exchange_code_hash;size:128;uniqueIndex" json:"-"`
+	ExpiresAt           time.Time               `gorm:"column:expires_at;index;not null" json:"expires_at"`
+	CompletedAt         *time.Time              `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	ConsumedAt          *time.Time              `gorm:"column:consumed_at" json:"consumed_at,omitempty"`
+	CreatedAt           time.Time               `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt           time.Time               `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (CLILoginChallenge) TableName() string { return "cli_login_challenges" }
+
+type CLISession struct {
+	ID          uint64     `gorm:"primaryKey" json:"id"`
+	UserID      uint64     `gorm:"column:user_id;index;not null" json:"user_id"`
+	TokenHash   string     `gorm:"column:token_hash;size:128;uniqueIndex;not null" json:"-"`
+	TokenPrefix string     `gorm:"column:token_prefix;size:32;not null" json:"token_prefix"`
+	Name        string     `gorm:"column:name;size:191;not null" json:"name"`
+	RevokedAt   *time.Time `gorm:"column:revoked_at" json:"revoked_at,omitempty"`
+	LastUsedAt  *time.Time `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
+	ExpiresAt   time.Time  `gorm:"column:expires_at;index;not null" json:"expires_at"`
+	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (CLISession) TableName() string { return "cli_sessions" }
 
 type FreeQuota struct {
 	ID              uint64    `gorm:"primaryKey" json:"id"`
@@ -290,6 +339,40 @@ type HostedCreditGrant struct {
 }
 
 func (HostedCreditGrant) TableName() string { return "hosted_credit_grants" }
+
+type UserHostedCreditAccount struct {
+	UserID         uint64    `gorm:"column:user_id;primaryKey" json:"user_id"`
+	CreditBalance  int       `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
+	CreditReserved int       `gorm:"column:credit_reserved;not null;default:0" json:"credit_reserved"`
+	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (UserHostedCreditAccount) TableName() string { return "user_hosted_credit_accounts" }
+
+func (a UserHostedCreditAccount) AvailableCredits() int {
+	remaining := a.CreditBalance - a.CreditReserved
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+type UserHostedCreditLedger struct {
+	ID             uint64                   `gorm:"primaryKey" json:"id"`
+	UserID         uint64                   `gorm:"column:user_id;index;not null" json:"user_id"`
+	SourceType     HostedCreditLedgerSource `gorm:"column:source_type;size:64;index;not null" json:"source_type"`
+	IdempotencyKey string                   `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
+	CreditDelta    int                      `gorm:"column:credit_delta;not null;default:0" json:"credit_delta"`
+	ReservedDelta  int                      `gorm:"column:reserved_delta;not null;default:0" json:"reserved_delta"`
+	UsageEventID   *uint64                  `gorm:"column:usage_event_id;index" json:"usage_event_id,omitempty"`
+	OrderID        *uint64                  `gorm:"column:order_id;index" json:"order_id,omitempty"`
+	Reason         string                   `gorm:"column:reason;size:191;not null" json:"reason"`
+	MetadataJSON   string                   `gorm:"column:metadata_json;type:json;not null" json:"metadata_json"`
+	CreatedAt      time.Time                `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+func (UserHostedCreditLedger) TableName() string { return "user_hosted_credit_ledger" }
 
 type DiscordConnection struct {
 	ID              uint64     `gorm:"primaryKey" json:"id"`

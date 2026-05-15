@@ -75,6 +75,29 @@ func (f *fakeAPIKeyStore) SettleReservedCredits(_ context.Context, apiKeyID uint
 	return key, err
 }
 
+func (f *fakeAPIKeyStore) ReserveHostedCreditsByUser(_ context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error) {
+	f.reservations = append(f.reservations, credits)
+	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100, CreditReserved: credits}, nil
+}
+
+func (f *fakeAPIKeyStore) ReleaseHostedCreditsByUser(_ context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
+	f.releases = append(f.releases, reserved)
+	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100}, nil
+}
+
+func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(_ context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
+	f.settlements = append(f.settlements, settled)
+	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - settled}, nil
+}
+
+func (f *fakeAPIKeyStore) FindCLISessionByTokenHash(_ context.Context, tokenHash string) (*model.CLISession, error) {
+	return nil, nil
+}
+
+func (f *fakeAPIKeyStore) TouchCLISession(_ context.Context, id uint64, usedAt time.Time) error {
+	return nil
+}
+
 func (f *fakeAPIKeyStore) CreateUsageEvent(_ context.Context, event *model.UsageEvent) error {
 	f.events = append(f.events, event)
 	return nil
@@ -399,7 +422,8 @@ func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
 	require.Equal(t, "ok", resp.Content)
 	require.Equal(t, []string{"Bearer platform-upstream-key"}, upstreamAuth)
 	require.Len(t, quota.validations, 1)
-	require.Empty(t, quota.consumes)
+	require.Len(t, quota.consumes, 1)
+	require.Equal(t, "req-anon", quota.consumes[0].RequestID)
 	require.Empty(t, store.reservations)
 	require.Empty(t, store.settlements)
 }
@@ -623,9 +647,9 @@ func TestAuthorizeRejectsDisabledKey(t *testing.T) {
 		TimeoutSec: 5,
 	})
 
-	key, _, err := svc.authorize(context.Background(), "Bearer demo")
+	subject, err := svc.authorizeSubject(context.Background(), "Bearer demo")
 	require.Error(t, err)
-	require.Nil(t, key)
+	require.Nil(t, subject)
 	require.Contains(t, err.Error(), "disabled")
 }
 

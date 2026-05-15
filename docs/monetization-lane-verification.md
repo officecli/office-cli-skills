@@ -10,16 +10,16 @@ Status: partial
 
 Covered now:
 
-- `platform/internal/reward/service.go` and `platform/internal/store/sqlstore/store.go` provide reward-grant storage, balance aggregation, and single-credit consume behavior.
-- `platform/internal/license/service.go` now checks reward balance before free quota when no API key is supplied, and supports reward consumes with idempotent restore semantics.
-- `internal/cli/app.go` and `internal/cli/executor.go` already surface `reward_remaining` in auth status and post-generate warnings.
-- Tests cover reward path resolution and consume/idempotency in `platform/internal/license/service_test.go`, plus CLI rendering in `internal/cli/app_test.go` and `internal/cli/executor_test.go`.
+- `platform/internal/store/sqlstore/store.go` provides account hosted credit accounts, ledger rows, reserve/settle/release idempotency, and API-key-to-owner-account credit resolution.
+- `platform/internal/license/service.go` resolves anonymous trial, CLI session, API key owner, and External Mode access without treating API keys as independent Hosted wallets.
+- `internal/cli/app.go` now exposes top-level `login`, `logout`, `whoami`, and `set-key`; `auth` remains compatibility-only rather than the public entrypoint.
+- Tests cover account hosted credit grants, API key owner-account reservation, license checks, Hosted LLM settlement, growth rewards, billing, and CLI rendering.
 
 Blockers:
 
-- `license/check` and `license/consume` still return only summarized remaining counts; they do not expose the concrete reward grant source or ledger row selected for a consume.
-- There is still no operator-facing reward ledger page or export path for auditing cross-source consumption decisions.
-- End-to-end verification is still package-level; there is no live API-to-CLI reward flow proof with a real database fixture.
+- `license/check` and Hosted LLM responses still return summarized remaining counts; they do not expose a full account ledger cursor to the CLI.
+- Operator-facing hosted credit ledger export is still minimal.
+- End-to-end verification is still package-level; live API-to-CLI proof with a real production-like database fixture remains a release task.
 
 ## Lane 2 - Invite, referral activation, Discord reward flow
 
@@ -29,13 +29,13 @@ Covered now:
 
 - `platform/internal/store/sqlstore/store.go` now generates deterministic `invite_code` values during Google-user creation/update, matching the unique schema introduced by `platform/migrations/004_growth_rewards.sql`.
 - `platform/internal/auth/service.go` preserves invite codes through OAuth state and registers referrals after login callback.
-- `platform/internal/growth/service.go` implements idempotent referral registration, invite-activation reward grants, Discord connection linking, and Discord-join reward grants.
+- `platform/internal/growth/service.go` implements idempotent referral registration, invite-activation hosted credit grants, Discord connection linking, and Discord-join hosted credit grants.
 - Tests cover invite-code propagation and referral registration in `platform/internal/auth/service_test.go`, plus referral/Discord reward idempotency in `platform/internal/growth/service_test.go`.
 
 Blockers:
 
-- There is still no real Discord OAuth callback, guild-membership verification client, or background sync against Discord itself.
-- Referral flows are externally reachable now, and Discord now has dedicated `/api/app/discord/connect` and `/api/app/discord/status` routes, but the Discord route intentionally stays in a blocked-verification state until a trusted guild checker exists.
+- Discord OAuth callback exists for CLI/app flow wiring, but production-grade guild-membership verification and background sync still need live operational validation.
+- Referral flows are externally reachable now, and Discord has dedicated app routes; reward grants must still depend on trusted verification signals.
 - Anti-abuse is still limited to unique keys and service idempotency; there is no rate limit, fraud review, or invite-policy enforcement layer yet.
 
 ## Lane 3 - App/admin/site reward visibility and attribution

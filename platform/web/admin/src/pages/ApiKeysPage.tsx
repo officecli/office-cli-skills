@@ -14,11 +14,10 @@ type KeyForm = {
   plan_code: string
   expires_at: string
   quota_total: string
-  credit_balance: string
   note: string
 }
 
-const blankForm: KeyForm = { key_type: 'hosted_only', plan_name: '', owner_user_id: '', plan_code: '', expires_at: '', quota_total: '', credit_balance: '', note: '' }
+const blankForm: KeyForm = { key_type: 'hosted_only', plan_name: '', owner_user_id: '', plan_code: '', expires_at: '', quota_total: '', note: '' }
 const keyTypePresets: Record<KeyType, { planName: string; allowedModes: string; hostedEnabled: boolean; defaultRuntimeMode: string }> = {
   hosted_only: { planName: 'Hosted Key', allowedModes: 'hosted_only', hostedEnabled: true, defaultRuntimeMode: 'hosted' },
   external_only: { planName: 'External Key', allowedModes: 'external_only', hostedEnabled: false, defaultRuntimeMode: 'external' },
@@ -26,9 +25,6 @@ const keyTypePresets: Record<KeyType, { planName: string; allowedModes: string; 
 }
 
 function formForKeyType(form: KeyForm, keyType: KeyType): KeyForm {
-  if (keyType === 'external_only') {
-    return { ...form, key_type: keyType, credit_balance: '' }
-  }
   if (keyType === 'hybrid') {
     return { ...form, key_type: keyType }
   }
@@ -56,9 +52,6 @@ function buildCreatePayload(form: KeyForm) {
   if (form.key_type !== 'hosted_only' && form.quota_total !== '') {
     payload.quota_total = Number(form.quota_total)
   }
-  if (form.key_type !== 'external_only' && form.credit_balance !== '') {
-    payload.credit_balance = Number(form.credit_balance)
-  }
   return payload
 }
 
@@ -76,9 +69,6 @@ function buildUpdatePayload(draft: KeyForm) {
   }
   if (draft.key_type !== 'hosted_only' && draft.quota_total !== '') {
     payload.quota_total = Number(draft.quota_total)
-  }
-  if (draft.key_type !== 'external_only' && draft.credit_balance !== '') {
-    payload.credit_balance = Number(draft.credit_balance)
   }
   return payload
 }
@@ -138,7 +128,6 @@ export default function ApiKeysPage() {
     plan_code: key.plan_code ?? '',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
     quota_total: String(key.quota_total ?? ''),
-    credit_balance: String(key.credit_balance ?? 0),
     note: key.note ?? '',
   }])), [keys])
   const [drafts, setDrafts] = useState<Record<number, KeyForm>>({})
@@ -149,7 +138,6 @@ export default function ApiKeysPage() {
     plan_code: key.plan_code ?? '',
     expires_at: key.expires_at ? key.expires_at.slice(0, 16) : '',
     quota_total: String(key.quota_total ?? ''),
-    credit_balance: String(key.credit_balance ?? 0),
     note: key.note ?? '',
   }
 
@@ -175,7 +163,7 @@ export default function ApiKeysPage() {
         <SectionHeading
           eyebrow="Credential governance"
           title="Review and edit platform API keys"
-          body="Use this surface for audit-safe key creation, quota corrections, and status changes across the platform fleet."
+          body="Use this surface for audit-safe credential creation, owner assignment, and status changes across the platform fleet."
           action={<button type="button" className="tonal-button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> Create API Key</button>}
         />
 
@@ -183,7 +171,7 @@ export default function ApiKeysPage() {
           <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (createRequiresUser && !createForm.owner_user_id) {
-              setCreateUserError('Select a user before creating a hosted key.')
+              setCreateUserError('Select a user before creating a hosted access credential.')
               return
             }
             create.mutate(buildCreatePayload(createForm))
@@ -240,10 +228,9 @@ export default function ApiKeysPage() {
               </label>
             ) : null}
             {createForm.key_type !== 'external_only' ? (
-              <label className="text-sm text-outline">
-                Hosted credits
-                <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.credit_balance} onChange={(event) => setCreateForm((current) => ({ ...current, credit_balance: event.target.value }))} />
-              </label>
+              <div className="panel-muted rounded-2xl p-4 text-sm text-outline">
+                Hosted credentials spend the owner's account hosted credits. Add credits through Billing or account credit ledgers, not on the key.
+              </div>
             ) : null}
             <div className="md:col-span-3">
               <button type="button" className="ghost-button" onClick={() => setShowCreateAdvanced((value) => !value)}>{showCreateAdvanced ? 'Hide advanced' : 'Advanced'}</button>
@@ -316,7 +303,7 @@ export default function ApiKeysPage() {
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Owner</div><div className="mt-2 text-white">{key.owner_user_id ?? '—'}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External quota</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">{formatNumber(key.credit_balance)}</div></div>
+                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">Account-level</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan code</div><div className="mt-2 text-white">{key.plan_code || '—'}</div></div>
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Expires</div><div className="mt-2 text-white">{formatDate(key.expires_at)}</div></div>
                   </div>
@@ -338,10 +325,9 @@ export default function ApiKeysPage() {
                         </label>
                       ) : null}
                       {draft.key_type !== 'external_only' ? (
-                        <label className="text-sm text-outline">
-                          Hosted credits
-                          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.credit_balance} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, credit_balance: event.target.value } }))} />
-                        </label>
+                        <div className="panel-muted rounded-2xl p-4 text-sm text-outline">
+                          Hosted credits are account-level; editing this credential cannot grant or remove credits.
+                        </div>
                       ) : null}
                       <div>
                         <button type="button" className="ghost-button" onClick={() => setShowEditAdvanced((current) => ({ ...current, [key.id]: !current[key.id] }))}>{showEditAdvanced[key.id] ? 'Hide advanced' : 'Advanced'}</button>

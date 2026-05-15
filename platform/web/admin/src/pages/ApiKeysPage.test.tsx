@@ -100,7 +100,7 @@ describe('admin api keys page', () => {
     expect(buttons[1]).toBeDisabled()
   })
 
-  it('creates hosted-only keys by default with hosted entitlement fields', async () => {
+  it('creates hosted-only account access credentials without key credits', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url === '/api/admin/api-keys' && init?.method === 'POST') {
@@ -130,7 +130,7 @@ describe('admin api keys page', () => {
     expect(screen.getByRole('button', { name: /^create key$/i })).toBeDisabled()
     fireEvent.change(screen.getByLabelText(/^user$/i), { target: { value: 'demo@example.com' } })
     fireEvent.click(await screen.findByRole('button', { name: /uid 42/i }))
-    fireEvent.change(screen.getByLabelText(/hosted credits/i), { target: { value: '120' } })
+    expect(screen.getByText(/Hosted credentials spend the owner's account hosted credits/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^create key$/i }))
 
     await waitFor(() => {
@@ -144,9 +144,9 @@ describe('admin api keys page', () => {
       hosted_enabled: true,
       default_runtime_mode: 'hosted',
       owner_user_id: 42,
-      credit_balance: 120,
     })
     expect(requestBody(postCall!)).not.toHaveProperty('quota_total')
+    expect(requestBody(postCall!)).not.toHaveProperty('credit_balance')
   })
 
   it('does not submit hosted or hybrid creation until a user is selected', async () => {
@@ -232,7 +232,7 @@ describe('admin api keys page', () => {
     expect(requestBody(postCall!)).not.toHaveProperty('credit_balance')
   })
 
-  it('creates hybrid keys with both external quota and hosted credits', async () => {
+  it('creates hybrid keys as account access credentials without key credits', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url === '/api/admin/api-keys' && init?.method === 'POST') {
@@ -257,7 +257,7 @@ describe('admin api keys page', () => {
     fireEvent.change(screen.getByLabelText(/^user$/i), { target: { value: '42' } })
     fireEvent.click(await screen.findByRole('button', { name: /uid 42/i }))
     fireEvent.change(screen.getByLabelText(/external quota/i), { target: { value: '40' } })
-    fireEvent.change(screen.getByLabelText(/hosted credits/i), { target: { value: '80' } })
+    expect(screen.getByText(/Hosted credentials spend the owner's account hosted credits/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^create key$/i }))
 
     await waitFor(() => {
@@ -271,8 +271,8 @@ describe('admin api keys page', () => {
       default_runtime_mode: 'hosted',
       owner_user_id: 42,
       quota_total: 40,
-      credit_balance: 80,
     })
+    expect(requestBody(postCall!)).not.toHaveProperty('credit_balance')
   })
 
   it('saves hosted entitlement changes while editing an existing key', async () => {
@@ -308,6 +308,7 @@ describe('admin api keys page', () => {
     expect(await screen.findByText(/cop_admin_external/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /edit metadata/i }))
     fireEvent.change(screen.getByLabelText(/edit key type/i), { target: { value: 'hosted_only' } })
+    expect(screen.getByText(/Hosted credits are account-level/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/allowed modes/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/default runtime/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/hosted enabled/i)).not.toBeInTheDocument()

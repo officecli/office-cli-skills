@@ -1049,9 +1049,9 @@ func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []e
 		message = "Some images failed to generate, but successfully generated visuals were kept in the deck. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name."
 	}
 	if normalizePPTXImageQuality(imageQuality) == "premium" {
-		message = "Premium PPT images failed to generate through the hosted image route, so the deck was generated without premium images. Check that hosted image generation is enabled for this key and that hosted credits are sufficient, or run `officecli config set-license` / purchase hosted credits. For a text-only deck, use `--no-images`."
+		message = "Premium PPT images failed to generate through the hosted image route, so the deck was generated without premium images. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient, or run `officecli login` / purchase hosted credits. For a text-only deck, use `--no-images`."
 		if succeeded > 0 {
-			message = "Some premium PPT images failed through the hosted image route, but successfully generated visuals were kept in the deck. Check that hosted image generation is enabled for this key and that hosted credits are sufficient."
+			message = "Some premium PPT images failed through the hosted image route, but successfully generated visuals were kept in the deck. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient."
 		}
 	}
 	if firstFailure != "" {

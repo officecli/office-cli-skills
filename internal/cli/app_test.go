@@ -1880,7 +1880,7 @@ func TestExecuteGenerateJob_PPTXPremiumMissingHostedConfigDegrades(t *testing.T)
 	if err != nil {
 		t.Fatalf("executeGenerateJob: %v", err)
 	}
-	if !containsWarning(result.Warnings, "Premium PPT images require hosted image credits") {
+	if !containsWarning(result.Warnings, "Premium PPT images require account hosted credits") {
 		t.Fatalf("warnings = %#v", result.Warnings)
 	}
 	if result.CreditBalance != 0 {
@@ -2079,8 +2079,9 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
 		"officecli new docx \"Product Launch Brief\" --prompt \"Write a concise launch brief with audience, positioning, timeline, risks, and next steps.\"",
 		"officecli new xlsx \"Sales Pipeline\" --prompt \"Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns.\"",
-		"officecli auth status",
-		"officecli auth set-key <api-key>",
+		"officecli whoami",
+		"officecli login",
+		"officecli set-key <api-key>",
 		"Commands:",
 		"officecli new --help",
 	} {
@@ -2113,7 +2114,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		needles []string
 	}{
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
-		{args: []string{"auth", "--help"}, needles: []string{"officecli auth status", "officecli auth set-key", "View access status or save a hosted API key."}},
+		{args: []string{"auth", "--help"}, needles: []string{"officecli login", "officecli set-key <api-key>", "Log in with your OfficeCLI account"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
 		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
@@ -2893,7 +2894,7 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 				Allowed:       false,
 				AccessMode:    LicenseAccessModeBlocked,
 				FreeRemaining: 0,
-				Message:       "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>.",
+				Message:       "Free trial quota is used up. Run `officecli login`, then buy hosted credits for your account.",
 			},
 		}, nil
 	}
@@ -2906,8 +2907,10 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "https://officecli.io/pricing") {
-		t.Fatalf("unexpected error: %v", err)
+	for _, needle := range []string{"Free trial quota is used up", "officecli login", "hosted credits"} {
+		if !strings.Contains(err.Error(), needle) {
+			t.Fatalf("unexpected error: %v, want %q", err, needle)
+		}
 	}
 	if llmCalled {
 		t.Fatal("expected llm client init to be skipped")
@@ -2953,7 +2956,87 @@ func TestAppRun_AuthSetKeyWritesConfig(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-license\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "Saved the hosted API key") {
+	if !strings.Contains(stdout.String(), "Saved the API key") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestAppRun_SetKeyClearsAccountSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	var revokedAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/cli/logout" {
+			revokedAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte(`{"data":{"ok":true}}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	expiresAt := time.Now().Add(24 * time.Hour).UTC()
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:            server.URL,
+			APIKey:             "old-key",
+			UserID:             42,
+			SessionToken:       "ocli_sess_old",
+			SessionTokenPrefix: "ocli_sess",
+			SessionExpiresAt:   &expiresAt,
+			Enabled:            true,
+			TimeoutSec:         60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		if cfg.APIKey != "sk-account" {
+			t.Fatalf("api key used for validation = %q", cfg.APIKey)
+		}
+		if cfg.SessionToken != "" || cfg.UserID != 0 {
+			t.Fatalf("session fields should be cleared before validation: %+v", cfg)
+		}
+		return stubLicenseManager{
+			checkResult: &LicenseCheckResult{
+				Allowed:       true,
+				AccessMode:    LicenseAccessModeHosted,
+				CreditBalance: 90,
+				PlanName:      "pro",
+			},
+		}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"set-key", "sk-account"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if revokedAuth != "Bearer ocli_sess_old" {
+		t.Fatalf("revoked auth = %q", revokedAuth)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	configText := string(data)
+	for _, needle := range []string{`"api_key": "sk-account"`} {
+		if !strings.Contains(configText, needle) {
+			t.Fatalf("config missing %q: %s", needle, configText)
+		}
+	}
+	if strings.Contains(configText, `ocli_sess_old`) {
+		t.Fatalf("config kept old session token: %s", configText)
+	}
+	if strings.Contains(configText, `"user_id": 42`) {
+		t.Fatalf("config kept old user_id: %s", configText)
+	}
+	if !strings.Contains(stdout.String(), "Saved the API key") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -2997,8 +3080,124 @@ func TestAppRun_AuthSetKeyPromptsWhenArgMissing(t *testing.T) {
 	if !strings.Contains(string(data), "\"api_key\": \"sk-interactive\"") {
 		t.Fatalf("config = %s", string(data))
 	}
-	if !strings.Contains(stdout.String(), "Enter the hosted API key") {
+	if !strings.Contains(stdout.String(), "Enter the account API key") {
 		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestAppRun_WhoamiShowsAnonymousMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:    "https://license.example.com/api",
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	if err := app.Run(t.Context(), []string{"whoami"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "Mode: anonymous hosted trial") {
+		t.Fatalf("stdout = %s", stdout.String())
+	}
+}
+
+func TestAppRun_WhoamiShowsAPIKeyModeWithAccountHostedCredits(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:    "https://license.example.com/api",
+			APIKey:     "sk-account",
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{
+			checkResult: &LicenseCheckResult{
+				Allowed:       true,
+				AccessMode:    LicenseAccessModeHosted,
+				CreditBalance: 70,
+				PlanName:      "pro",
+			},
+		}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"whoami"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	for _, needle := range []string{"Mode: API key", "Current access mode: hosted", "Account hosted credits: 70"} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("stdout missing %q: %s", needle, output)
+		}
+	}
+}
+
+func TestAppRun_WhoamiShowsLoggedInSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	expiresAt := time.Now().Add(180 * 24 * time.Hour).UTC().Truncate(time.Second)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/cli/session" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ocli_sess_account" {
+			t.Fatalf("authorization = %q", got)
+		}
+		_, _ = fmt.Fprintf(w, `{"data":{"authenticated":true,"user_id":42,"token_prefix":"ocli_sess","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+	}))
+	defer server.Close()
+
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:            server.URL,
+			UserID:             42,
+			SessionToken:       "ocli_sess_account",
+			SessionTokenPrefix: "ocli_sess",
+			SessionExpiresAt:   &expiresAt,
+			Enabled:            true,
+			TimeoutSec:         60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	if err := app.Run(t.Context(), []string{"whoami"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	for _, needle := range []string{"Mode: logged in", "User ID: 42", "Session: ocli_sess"} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("stdout missing %q: %s", needle, output)
+		}
 	}
 }
 
@@ -3137,7 +3336,7 @@ func TestCheckLicensePaidQuotaExhaustedShowsPaidMessage(t *testing.T) {
 	}
 
 	_, err := app.checkLicense(t.Context(), LicenseConfig{Enabled: true, BaseURL: "https://license.example.com/api", APIKey: "paid-key"}, "pptx", "generate")
-	if err == nil || !strings.Contains(err.Error(), "out of quota") {
+	if err == nil || !strings.Contains(err.Error(), "out of hosted credits") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -3158,7 +3357,7 @@ func TestCheckLicenseFreeQuotaExhaustedGuidesToWebsite(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, needle := range []string{"Free trial quota is used up", "https://officecli.io/pricing", "officecli auth set-key"} {
+	for _, needle := range []string{"Free trial quota is used up", "officecli login", "hosted credits"} {
 		if !strings.Contains(err.Error(), needle) {
 			t.Fatalf("err = %v, want %q", err, needle)
 		}
@@ -3567,7 +3766,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	if !strings.Contains(output, "Access checks enabled: true") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "Hosted API key configured: false") {
+	if !strings.Contains(output, "API key configured: false") {
 		t.Fatalf("stdout = %s", output)
 	}
 }

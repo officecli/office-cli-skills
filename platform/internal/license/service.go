@@ -20,6 +20,10 @@ type APIKeyStore interface {
 	ConsumePaidByHash(ctx context.Context, hash string) (*model.APIKey, error)
 }
 
+type HostedCreditAccountStore interface {
+	GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error)
+}
+
 type FreeQuotaStore interface {
 	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error)
 	GetByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error)
@@ -108,12 +112,55 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 	if strings.TrimSpace(req.APIKey) != "" {
 		return s.checkPaid(ctx, req)
 	}
+	if req.UserID != 0 && requestedRuntimeMode(req, nil) == string(model.AccessModeHosted) {
+		return s.checkAccountHosted(ctx, req)
+	}
 	if rewardResp, handled, err := s.checkReward(ctx, req); err != nil {
 		return nil, err
 	} else if handled {
 		return rewardResp, nil
 	}
 	return s.checkFree(ctx, req)
+}
+
+func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
+	hostedAccounts, ok := s.apiKeys.(HostedCreditAccountStore)
+	if !ok {
+		return nil, fmt.Errorf("hosted credit accounts are unavailable")
+	}
+	account, err := hostedAccounts.GetHostedCreditAccountByUser(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	response := &CheckResponse{
+		AllowedModes:        []string{"hosted"},
+		DefaultRuntimeMode:  string(model.AccessModeHosted),
+		SelectedRuntimeMode: string(model.AccessModeHosted),
+		HostedEnabled:       true,
+		CreditBalance:       account.AvailableCredits(),
+	}
+	if account.AvailableCredits() <= 0 {
+		response.Allowed = false
+		response.AccessMode = model.AccessModeBlocked
+		response.ReasonCode = "hosted_credit_exhausted"
+		response.Message = "Hosted credits are exhausted. Run `officecli login`, then buy hosted credits for your account."
+	} else {
+		response.Allowed = true
+		response.AccessMode = model.AccessModeHosted
+		response.Message = fmt.Sprintf("Hosted account mode is active with %d credits remaining.", account.AvailableCredits())
+		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeHosted, "")
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeHosted, response, nil)); err != nil {
+		return nil, err
+	}
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, nil, response.RewardRemaining)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckResponse, error) {

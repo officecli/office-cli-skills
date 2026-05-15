@@ -43,9 +43,6 @@ describe('billing page', () => {
           }),
         }
       }
-      if (url === '/api/app/api-keys') {
-        return { ok: true, status: 200, json: async () => ({ data: [] }) }
-      }
       if (url === '/api/app/orders') {
         return {
           ok: true,
@@ -79,7 +76,7 @@ describe('billing page', () => {
     expect(screen.getByRole('button', { name: /Continue to Stripe Checkout/i })).toBeInTheDocument()
     expect(screen.queryByText(/external-100/i)).not.toBeInTheDocument()
     expect(screen.getByText('pi_test_123')).toBeInTheDocument()
-    expect(screen.getByText(/API key #7/i)).toBeInTheDocument()
+    expect(screen.getByText(/Legacy order target API key #7/i)).toBeInTheDocument()
   })
 
   it('posts checkout to the existing app endpoint and keeps Stripe copy explicit', async () => {
@@ -103,30 +100,12 @@ describe('billing page', () => {
           }),
         }
       }
-      if (url === '/api/app/api-keys') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            data: [{
-              id: 7,
-              key_prefix: 'cop_live_demo',
-              status: 'active',
-              plan_name: 'Production',
-              quota_total: 100,
-              quota_used: 0,
-              quota_remaining: 100,
-              created_at: '2026-04-03T00:00:00Z',
-            }],
-          }),
-        }
-      }
       if (url === '/api/app/orders') {
         return { ok: true, status: 200, json: async () => ({ data: [] }) }
       }
       if (url === '/api/app/checkout') {
         expect(init?.method).toBe('POST')
-        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300', target_api_key_id: 7 }))
+        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300' }))
         return {
           ok: true,
           status: 200,
@@ -145,7 +124,6 @@ describe('billing page', () => {
     renderPage()
 
     expect(await screen.findByText('Hosted 300')).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
 
     await waitFor(() => {
@@ -163,14 +141,11 @@ describe('billing page', () => {
       if (url === '/api/pricing') {
         return { ok: true, status: 200, json: async () => ({ data: [{ code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits for platform-managed generation.', currency: 'usd', amount_total: 300, credit_amount: 300, pack_kind: 'hosted_credits' }] }) }
       }
-      if (url === '/api/app/api-keys') {
-        return { ok: true, status: 200, json: async () => ({ data: [{ id: 7, key_prefix: 'cop_hosted', status: 'active', plan_name: 'Hosted', quota_used: 0, quota_remaining: 0, credit_balance: 12, created_at: '2026-04-03T00:00:00Z' }] }) }
-      }
       if (url === '/api/app/orders') {
         return { ok: true, status: 200, json: async () => ({ data: [{ id: 31, status: 'paid', currency: 'usd', amount_total: 300, pack_code: 'hosted-300', pack_name: 'Hosted 300', pack_kind: 'hosted_credits', quota_amount: 0, credit_amount: 300, target_api_key_id: 7, created_at: '2026-04-03T00:00:00Z' }] }) }
       }
       if (url === '/api/app/checkout') {
-        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300', target_api_key_id: 7 }))
+        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300' }))
         return { ok: true, status: 200, json: async () => ({ data: { order: { id: 32, status: 'pending' }, checkout_url: 'https://checkout.stripe.com/pay/hosted' } }) }
       }
       throw new Error(`unexpected request: ${url}`)
@@ -183,7 +158,6 @@ describe('billing page', () => {
     expect(screen.getAllByText(/300 hosted credits/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/300 credits/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/≈ \$3\.00 USD/i).length).toBeGreaterThan(0)
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
     fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
 
     await waitFor(() => expect(redirectSpy).toHaveBeenCalledWith('https://checkout.stripe.com/pay/hosted'))
@@ -209,23 +183,6 @@ describe('billing page', () => {
           }),
         }
       }
-      if (url === '/api/app/api-keys') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            data: [{
-              id: 7,
-              key_prefix: 'cop_test',
-              status: 'active',
-              plan_name: 'Growth',
-              quota_used: 0,
-              quota_remaining: 100,
-              created_at: '2026-04-03T00:00:00Z',
-            }],
-          }),
-        }
-      }
       if (url === '/api/app/orders') {
         return { ok: true, status: 200, json: async () => ({ data: [] }) }
       }
@@ -245,9 +202,8 @@ describe('billing page', () => {
 
     renderPage()
 
-    await screen.findByText(/cop_test \/ Growth/i)
+    await screen.findByText('Hosted 300')
     const checkoutButton = await screen.findByRole('button', { name: /continue to stripe checkout/i })
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '7' } })
     fireEvent.click(checkoutButton)
 
     expect(await screen.findByText(/Checkout failed: target api key is disabled \(request_id: req_checkout_123\)/i)).toBeInTheDocument()
@@ -259,24 +215,6 @@ describe('billing page', () => {
       const url = String(input)
       if (url === '/api/pricing') {
         return { ok: true, status: 200, json: async () => ({ data: [] }) }
-      }
-      if (url === '/api/app/api-keys') {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            data: [{
-              id: 7,
-              key_prefix: 'cop_live_demo',
-              status: 'active',
-              plan_name: 'Production',
-              quota_total: 100,
-              quota_used: 0,
-              quota_remaining: 100,
-              created_at: '2026-04-03T00:00:00Z',
-            }],
-          }),
-        }
       }
       if (url === '/api/app/orders') {
         ordersCallCount++

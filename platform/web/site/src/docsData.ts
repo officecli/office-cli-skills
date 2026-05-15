@@ -79,8 +79,9 @@ export const quickstartChecklist: DocsChecklist[] = [
   {
     title: 'Check access or go advanced',
     items: [
-      'Run `officecli auth status` to check hosted trial, hosted key, or External Mode access.',
-      'When the hosted trial is used up, create or purchase a hosted key and run `officecli auth set-key <api-key>`.',
+      'Run `officecli whoami` to check hosted trial, account login, or External Mode access.',
+      'When the hosted trial is used up, run `officecli login`, then buy account hosted credits from the platform Billing page.',
+      'For advanced automation, create an account API key in the platform and save it with `officecli set-key <api-key>`.',
       'For External Mode, run `officecli config set-runtime external` and `officecli config set-generation` to configure your own LLM endpoint. External Mode is free and unlimited.',
       'For `pptx`, images are enabled by default when the plan benefits from visuals; add `--no-images` for a text-only deck.',
     ],
@@ -148,18 +149,23 @@ export const commandGroups: CommandGroup[] = [
   },
   {
     title: 'Access and quota status',
-    command: 'officecli auth status | set-key <api-key>',
-    summary: 'Check whether the current machine is using External Mode or Hosted Mode, or save a hosted API key.',
+    command: 'officecli login | logout | whoami | set-key <api-key>',
+    summary: 'Log in with a browser, check the current access mode, sign out, or save an advanced account API key.',
     examples: [
       {
-        label: 'Check current access mode',
-        command: 'officecli auth status',
-        detail: 'Shows runtime mode, hosted credit status, and access configuration.',
+        label: 'Log in to account credits',
+        command: 'officecli login',
+        detail: 'Opens the browser login flow and stores a revocable CLI session token. Existing local API key credentials are cleared.',
       },
       {
-        label: 'Save a hosted key',
-        command: 'officecli auth set-key cop_live_xxx',
-        detail: 'Routes Hosted Mode generation requests through the hosted credits linked to that key. External Mode remains free and unlimited.',
+        label: 'Check current access mode',
+        command: 'officecli whoami',
+        detail: 'Shows anonymous hosted trial, account login, or API key mode and the hosted credit status.',
+      },
+      {
+        label: 'Save an advanced account API key',
+        command: 'officecli set-key cop_live_xxx',
+        detail: 'Switches to API key mode, clears the local CLI login session, and spends the same account hosted credits. External Mode remains free and unlimited.',
       },
     ],
   },
@@ -361,15 +367,15 @@ export const agentSkillHighlights: DocsChecklist[] = [
 export const usageRules: UsageRule[] = [
   {
     title: 'External Mode is free and unlimited',
-    detail: 'External Mode uses your own model endpoint and works without a hosted API key or OfficeCLI usage quota.',
+    detail: 'External Mode uses your own model endpoint and works without account login, API key credentials, or OfficeCLI usage quota.',
   },
   {
     title: 'External and Hosted Mode share one binary',
     detail: 'PPTX, DOCX, XLSX, REPORT, and IMG generation all run from the same officecli binary. External IMG uses your local image provider; Hosted IMG uses OfficeCLI-managed runtime.',
   },
   {
-    title: 'Hosted usage is API-key based',
-    detail: 'Hosted users consume hosted credits through API keys managed by the platform. Checkout sells hosted credits only.',
+    title: 'Hosted usage is account based',
+    detail: 'Anonymous trial usage stays fingerprint-scoped. After login, CLI sessions and API keys consume the same account hosted credits. Checkout adds hosted credits to the account.',
   },
   {
     title: 'Hosted credits are consumed only after successful generation',
@@ -381,7 +387,7 @@ export const usageRules: UsageRule[] = [
   },
   {
     title: 'Invite rewards are available with current limits',
-    detail: 'Invite codes, referral progress, and hosted credit grants are visible today. Each activated referral grants 20 hosted credits up to the current limit.',
+    detail: 'Invite codes, referral progress, and hosted credit grants are visible today. Each activated referral grants 100 hosted credits up to the current limit.',
   },
 ]
 
@@ -406,7 +412,7 @@ export const inviteRewardRules: UsageRule[] = [
     detail: 'The current backend limit is five captured referrals per inviter account.',
   },
   {
-    title: 'Each activated referral adds 20 hosted credits',
+    title: 'Each activated referral adds 100 hosted credits',
     detail: 'Hosted credits increase only when the referral becomes activated, not when the invite link is merely shared.',
   },
   {
@@ -450,7 +456,7 @@ export const troubleshootingTips: TipGroup[] = [
   },
   {
     title: 'Standalone `new img` fails or skips quota',
-    detail: 'External Mode standalone images use your local `config set-generation` image provider and do not consume OfficeCLI hosted credits. Hosted Mode images require `officecli config set-license` and spend hosted credits through the OfficeCLI-managed runtime.',
+    detail: 'External Mode standalone images use your local `config set-generation` image provider and do not consume OfficeCLI hosted credits. Hosted Mode images require `officecli login` or advanced `officecli set-key` access and spend account hosted credits through the OfficeCLI-managed runtime.',
   },
   {
     title: 'No image preview link returned',
@@ -466,7 +472,7 @@ export const troubleshootingTips: TipGroup[] = [
   },
   {
     title: 'Access or quota behavior looks wrong',
-    detail: 'Run `officecli auth status` and confirm whether the machine is using External Mode or Hosted Mode. If you expect Hosted Mode usage, save the correct hosted key with `officecli auth set-key`.',
+    detail: 'Run `officecli whoami` and confirm whether the machine is using anonymous trial, account login, API key, or External Mode. If anonymous hosted trial is exhausted, run `officecli login` and buy account hosted credits.',
   },
 ]
 
@@ -492,7 +498,7 @@ export const publishGuide: PublishGuide = {
     },
     {
       title: 'License-aware credential reuse',
-      detail: 'If `set-publish` is enabled but no dedicated publish API key is set, OfficeCLI reuses the license API key configured by `officecli config set-license`, so most users only have to authenticate once.',
+      detail: 'If `set-publish` is enabled but no dedicated publish API key is set, OfficeCLI reuses the active account login or advanced API key credential, so most users only have to authenticate once.',
     },
     {
       title: 'Password-protected by default',

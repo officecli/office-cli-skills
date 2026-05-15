@@ -68,6 +68,7 @@ type fakeStore struct {
 	orders               []*model.Order
 	billingEvents        map[string]*model.BillingEvent
 	hostedPacks          []model.HostedCreditPack
+	userCredits          map[uint64]int
 	updateOrderCalls     int
 	stripeCustomer       *model.StripeCustomer
 	createdAuditCount    int
@@ -200,11 +201,14 @@ func (f *fakeStore) FinalizeOrderPayment(_ context.Context, params FinalizeOrder
 			order.StripeCustomerID = &customerID
 			f.stripeCustomer = &model.StripeCustomer{UserID: order.UserID, StripeCustomerID: customerID}
 		}
-		if order.TargetAPIKeyID != nil {
-			switch order.PackKind {
-			case model.PackKindHostedCredits:
-				_, _ = f.AddCreditBalanceToAPIKey(context.Background(), *order.TargetAPIKeyID, order.CreditAmount)
-			default:
+		switch order.PackKind {
+		case model.PackKindHostedCredits:
+			if f.userCredits == nil {
+				f.userCredits = map[uint64]int{}
+			}
+			f.userCredits[order.UserID] += order.CreditAmount
+		default:
+			if order.TargetAPIKeyID != nil {
 				_, _ = f.AddPaidQuotaToAPIKey(context.Background(), *order.TargetAPIKeyID, order.QuotaAmount)
 			}
 		}
@@ -258,54 +262,30 @@ func (f *fakeStore) FindAPIKeyByID(_ context.Context, id uint64) (*model.APIKey,
 	return nil, nil
 }
 
-func TestCreateCheckoutRejectsTargetKeyOwnedByAnotherUser(t *testing.T) {
+func TestCreateCheckoutNoLongerRequiresTargetAPIKey(t *testing.T) {
 	t.Parallel()
 
-	quota := 10
-	store := &fakeStore{
-		apiKeys: map[uint64]*model.APIKey{
-			7: {
-				ID:          7,
-				OwnerUserID: uint64Ptr(99),
-				Status:      model.APIKeyStatusActive,
-				PlanName:    "Growth",
-				QuotaTotal:  &quota,
-			},
-		},
-	}
+	store := &fakeStore{}
 	gateway := &fakeGateway{}
 	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
 	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{
-		UserID:         42,
-		PackCode:       "hosted-300",
-		TargetAPIKeyID: 7,
+		UserID:   42,
+		PackCode: "hosted-300",
 	})
 
-	require.Error(t, err)
-	require.Nil(t, order)
-	require.Empty(t, checkoutURL)
-	require.Contains(t, err.Error(), "target api key")
-	require.Empty(t, store.orders)
-	require.False(t, gateway.called)
-	require.Zero(t, store.updateOrderCalls)
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.Nil(t, order.TargetAPIKeyID)
+	require.True(t, gateway.called)
+	require.Equal(t, 1, store.updateOrderCalls)
 }
 
-func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
+func TestCreateCheckoutPreservesLegacyTargetAPIKeyIDWhenProvided(t *testing.T) {
 	t.Parallel()
 
-	quota := 10
-	store := &fakeStore{
-		apiKeys: map[uint64]*model.APIKey{
-			7: {
-				ID:          7,
-				OwnerUserID: uint64Ptr(42),
-				Status:      model.APIKeyStatusDisabled,
-				PlanName:    "Growth",
-				QuotaTotal:  &quota,
-			},
-		},
-	}
+	store := &fakeStore{}
 	gateway := &fakeGateway{}
 	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 990, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)}})
 
@@ -315,12 +295,12 @@ func TestCreateCheckoutRejectsDisabledTargetKey(t *testing.T) {
 		TargetAPIKeyID: 7,
 	})
 
-	require.Error(t, err)
-	require.Nil(t, order)
-	require.Empty(t, checkoutURL)
-	require.Contains(t, err.Error(), "disabled")
-	require.Empty(t, store.orders)
-	require.False(t, gateway.called)
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.NotNil(t, order.TargetAPIKeyID)
+	require.Equal(t, uint64(7), *order.TargetAPIKeyID)
+	require.True(t, gateway.called)
 }
 
 func TestPricingOmitsExternalGenerationPacks(t *testing.T) {
@@ -576,11 +556,8 @@ func TestReconcileCheckoutSessionAddsHostedCredits(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, order)
 	require.Equal(t, model.OrderStatusPaid, order.Status)
-	require.Equal(t, 300, store.apiKeys[7].CreditBalance)
-	require.True(t, store.apiKeys[7].HostedEnabled)
-	require.Equal(t, "hybrid", store.apiKeys[7].AllowedModes)
-	require.NotNil(t, store.apiKeys[7].DefaultRuntimeMode)
-	require.Equal(t, "hosted", *store.apiKeys[7].DefaultRuntimeMode)
+	require.Equal(t, 300, store.userCredits[42])
+	require.Equal(t, 0, store.apiKeys[7].CreditBalance)
 }
 
 func uint64Ptr(v uint64) *uint64 {

@@ -14,7 +14,7 @@ import (
 func (a *App) executeRenderJob(ctx context.Context, cfg Config, job GenerateJob, payload json.RawMessage, progress progressController) (GenerateResult, error) {
 	if job.RuntimeMode == RuntimeModeHosted {
 		if missing := missingHostedConfig(cfg); missing != "" {
-			return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli config set-license` to finish setup", missing)
+			return GenerateResult{}, fmt.Errorf("platform service is not fully configured: missing %s. Run `officecli login` to finish account access setup", missing)
 		}
 	}
 

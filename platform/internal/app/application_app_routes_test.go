@@ -20,13 +20,15 @@ import (
 )
 
 type overviewRouteStore struct {
-	apiKeys      []model.APIKey
-	usage        []model.UsageEvent
-	user         *model.User
-	rewardGrants []model.RewardGrant
-	referrals    []model.UserReferral
-	discord      *model.DiscordConnection
-	creditGrants map[string]*model.HostedCreditGrant
+	apiKeys       []model.APIKey
+	usage         []model.UsageEvent
+	user          *model.User
+	rewardGrants  []model.RewardGrant
+	referrals     []model.UserReferral
+	discord       *model.DiscordConnection
+	creditGrants  map[string]*model.HostedCreditGrant
+	hostedLedgers map[string]*model.UserHostedCreditLedger
+	hostedAccount *model.UserHostedCreditAccount
 }
 
 func (s *overviewRouteStore) CountUserAPIKeys(_ context.Context, _ uint64) (int64, error) {
@@ -95,6 +97,34 @@ func (s *overviewRouteStore) GrantHostedCreditsToAPIKey(_ context.Context, apiKe
 	s.creditGrants[idempotencyKey] = grant
 	copied := *grant
 	return &copied, true, nil
+}
+
+func (s *overviewRouteStore) GetHostedCreditAccountByUser(_ context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
+	if s.hostedAccount == nil {
+		return &model.UserHostedCreditAccount{UserID: userID}, nil
+	}
+	copied := *s.hostedAccount
+	return &copied, nil
+}
+
+func (s *overviewRouteStore) GrantHostedCreditsToUser(_ context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	if s.hostedLedgers == nil {
+		s.hostedLedgers = map[string]*model.UserHostedCreditLedger{}
+	}
+	if ledger := s.hostedLedgers[idempotencyKey]; ledger != nil {
+		copied := *ledger
+		account, _ := s.GetHostedCreditAccountByUser(context.Background(), userID)
+		return &copied, account, false, nil
+	}
+	if s.hostedAccount == nil {
+		s.hostedAccount = &model.UserHostedCreditAccount{UserID: userID}
+	}
+	s.hostedAccount.CreditBalance += creditAmount
+	ledger := &model.UserHostedCreditLedger{ID: uint64(len(s.hostedLedgers) + 1), UserID: userID, SourceType: source, IdempotencyKey: idempotencyKey, CreditDelta: creditAmount, Reason: reason, MetadataJSON: metadataJSON}
+	s.hostedLedgers[idempotencyKey] = ledger
+	copied := *ledger
+	account := *s.hostedAccount
+	return &copied, &account, true, nil
 }
 
 func (s *overviewRouteStore) UpdateAPIKey(_ context.Context, _ uint64, _ map[string]any) error {
@@ -227,7 +257,7 @@ func TestRegisterAppRoutesOverviewReturnsRewardReferralAndDiscordState(t *testin
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/overview", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -275,7 +305,7 @@ func TestRegisterAppRoutesQuotaSummaryReturnsAccountQuotaAndTrialPolicy(t *testi
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/quota-summary", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -325,7 +355,7 @@ func TestRegisterAppRoutesRejectsDisabledSessionUser(t *testing.T) {
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/overview", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -360,7 +390,7 @@ func TestRegisterAppRoutesAPIKeyPlaintextReturnsStoredKey(t *testing.T) {
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/api-keys/7/plaintext", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -399,7 +429,7 @@ func TestRegisterAppRoutesAPIKeyPlaintextRejectsLegacyKey(t *testing.T) {
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/api-keys/7/plaintext", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -464,7 +494,7 @@ func TestRegisterAppRoutesDiscordConnectReturnsBlockedVerificationStatus(t *test
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/app/discord/connect", strings.NewReader(`{"discord_user_id":"discord-42","username":"officecli-user","guild_member":true}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -518,7 +548,7 @@ func TestRegisterAppRoutesDiscordStatusReturnsCurrentSnapshot(t *testing.T) {
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/discord/status", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})
@@ -553,7 +583,7 @@ func TestRegisterAppRoutesDiscordLoginRedirectsBackWhenOAuthUnavailable(t *testi
 
 	router := gin.New()
 	api := router.Group("/api")
-	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{err: discordoauth.ErrDiscordOAuthNotConfigured})
+	registerAppRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc, nil, fakeDiscordOAuthRouteService{err: discordoauth.ErrDiscordOAuthNotConfigured}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/app/discord/login?return_to=%2Fapp", nil)
 	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "cookie:session-1"})

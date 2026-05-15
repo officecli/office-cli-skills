@@ -5,7 +5,7 @@ import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import type { ApiKey } from '../types'
-import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 
 const blankForm = { plan_name: '' }
 
@@ -69,8 +69,8 @@ export default function ApiKeysPage() {
       <Panel>
         <SectionHeading
           eyebrow="Credential control"
-          title="Issue and tune API keys"
-          body="Provision new keys, inspect their quota runway, and pause any credential that should stop receiving production traffic."
+          title="Access credential management"
+          body="Provision account API keys for advanced automation, copy retained plaintext keys, and pause any credential that should stop receiving production traffic."
           action={<button type="button" className="tonal-button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> Generate API Key</button>}
         />
 
@@ -86,7 +86,7 @@ export default function ApiKeysPage() {
               <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
             </label>
             <div className="md:col-span-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 p-4 text-sm text-outline">
-              New user-created keys start with zero paid quota. Buy more document generations from Billing or ask an operator to adjust quota in the admin console when needed.
+              API keys are credentials for your account. Hosted credits live on the account balance and are shared across login sessions and all active keys.
             </div>
             <div className="md:col-span-3 flex gap-3">
               <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>
@@ -119,16 +119,15 @@ export default function ApiKeysPage() {
                     <StatusPill value={key.status} />
                   </div>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining)}</div></div>
+                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Access</div><div className="mt-2 text-white">{key.status === 'active' ? 'Enabled' : 'Paused'}</div></div>
                   </div>
 
                   {editingId === key.id ? (
                     <div className="mt-5 grid gap-4">
                       <textarea className="surface-console min-h-24 rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
-                      <div className="text-xs text-outline">User workspace edits are intentionally limited to note and enable/disable state. Quota, plan, and expiry stay under account/billing control.</div>
+                      <div className="text-xs text-outline">User workspace edits are intentionally limited to note and enable/disable state. Hosted credits stay under account billing.</div>
                     </div>
                   ) : key.note ? <div className="mt-5 text-sm text-outline">{key.note}</div> : null}
 
