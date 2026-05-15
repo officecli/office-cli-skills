@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/officecli/officecli-internal/engine"
 )
@@ -54,6 +55,21 @@ func TestBuildTUIGenerateJobInfersChineseDrawPictureAsIMG(t *testing.T) {
 	}
 	if job.DocumentType != engine.DocumentTypeIMG {
 		t.Fatalf("document type = %q", job.DocumentType)
+	}
+}
+
+func TestBuildTUIGenerateJobForTypeUsesExplicitDocumentType(t *testing.T) {
+	job, err := BuildTUIGenerateJobForType("做一个word内容随意", "pptx", Config{
+		Defaults: DefaultsConfig{OutputDir: "./output", Mode: "fast", Publish: false},
+	}, InputSources{IsTTY: true, CWD: t.TempDir()}, "")
+	if err != nil {
+		t.Fatalf("BuildTUIGenerateJobForType: %v", err)
+	}
+	if job.DocumentType != engine.DocumentTypePPTX {
+		t.Fatalf("document type = %q", job.DocumentType)
+	}
+	if job.Prompt != "做一个word内容随意" {
+		t.Fatalf("prompt = %q", job.Prompt)
 	}
 }
 
@@ -205,6 +221,28 @@ func TestTUIModelShowsProgressAndWarnings(t *testing.T) {
 	}
 }
 
+func TestTUIModelWrapsLongErrorLines(t *testing.T) {
+	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 64, Height: 20})
+	model = updated.(tuiModel)
+	model.append("error", "content generation failed: internal LLM request failed: status=400 body={\"error\":\"hosted upstream request failed because this token value is invalid and the response body is very long\"}")
+
+	rendered := model.renderEntries()
+	lines := strings.Split(rendered, "\n")
+	errorLineCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "Error:") || strings.Contains(line, "status=400") || strings.Contains(line, "invalid") || strings.Contains(line, "response body") {
+			errorLineCount++
+			if width := lipgloss.Width(line); width > model.view.Width {
+				t.Fatalf("error line width = %d, want <= %d: %q\n%s", width, model.view.Width, line, rendered)
+			}
+		}
+	}
+	if errorLineCount < 2 {
+		t.Fatalf("expected long error to wrap onto multiple lines:\n%s", rendered)
+	}
+}
+
 func TestTUIProgressPrompterSendsQuestionsAndReceivesAnswer(t *testing.T) {
 	events := make(chan tea.Msg, 1)
 	prompter := newTUIProgressPrompter(events, 7)
@@ -319,19 +357,53 @@ func TestTUIProgressEmitterForwardsEvents(t *testing.T) {
 	}
 }
 
-func TestTUIModelTransitionsRunningCompletedIdle(t *testing.T) {
+func TestTUIModelPromptEnterShowsTypeSelector(t *testing.T) {
 	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
 	model.input.SetValue("做一个word内容随意")
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(tuiModel)
+	if model.state != tuiStateTypeSelect {
+		t.Fatalf("state after prompt submit = %q", model.state)
+	}
+	if cmd != nil {
+		t.Fatal("type selection should not start generation yet")
+	}
+	if model.currentJob != nil {
+		t.Fatalf("current job before type confirmation = %#v", model.currentJob)
+	}
+	view := model.View()
+	for _, needle := range []string{"Choose file type", "> docx", "pptx", "xlsx", "img", "report"} {
+		if !strings.Contains(view, needle) {
+			t.Fatalf("type selector missing %q:\n%s", needle, view)
+		}
+	}
+}
+
+func TestTUIModelTypeSelectorArrowsAndEnterStartSelectedType(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("做一个word内容随意")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("prompt submit should only open type selector")
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(tuiModel)
+	if !strings.Contains(model.View(), "> pptx") {
+		t.Fatalf("down should select pptx:\n%s", model.View())
+	}
+
+	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
 	if model.state != tuiStateRunning {
-		t.Fatalf("state after submit = %q", model.state)
+		t.Fatalf("state after type confirmation = %q", model.state)
 	}
 	if cmd == nil {
-		t.Fatal("expected generation command after submit")
+		t.Fatal("expected generation command after type confirmation")
 	}
-	if model.currentJob == nil || model.currentJob.DocumentType != engine.DocumentTypeDOCX {
+	if model.currentJob == nil || model.currentJob.DocumentType != engine.DocumentTypePPTX {
 		t.Fatalf("current job = %#v", model.currentJob)
 	}
 
@@ -349,6 +421,172 @@ func TestTUIModelTransitionsRunningCompletedIdle(t *testing.T) {
 		if !strings.Contains(view, needle) {
 			t.Fatalf("view missing %q:\n%s", needle, view)
 		}
+	}
+}
+
+func TestTUIModelTypeSelectorUsesInferredImageDefault(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("画一个图，关于长江")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("prompt submit should only open type selector")
+	}
+	if model.state != tuiStateTypeSelect {
+		t.Fatalf("state = %q", model.state)
+	}
+	if !strings.Contains(model.View(), "> img") {
+		t.Fatalf("image prompt should default to img:\n%s", model.View())
+	}
+}
+
+func TestTUIModelUpDownNavigatesPromptHistory(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+
+	model.input.SetValue("first prompt")
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updated.(tuiModel)
+
+	model.input.SetValue("second prompt")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updated.(tuiModel)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("history navigation should not start a command")
+	}
+	if model.input.Value() != "second prompt" {
+		t.Fatalf("first up input = %q", model.input.Value())
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updated.(tuiModel)
+	if model.input.Value() != "first prompt" {
+		t.Fatalf("second up input = %q", model.input.Value())
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(tuiModel)
+	if model.input.Value() != "second prompt" {
+		t.Fatalf("down input = %q", model.input.Value())
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(tuiModel)
+	if model.input.Value() != "" {
+		t.Fatalf("down at newest input = %q", model.input.Value())
+	}
+}
+
+func TestTUIModelHistoryDownRestoresDraft(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("previous prompt")
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updated.(tuiModel)
+
+	model.input.SetValue("draft prompt")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = updated.(tuiModel)
+	if model.input.Value() != "previous prompt" {
+		t.Fatalf("up input = %q", model.input.Value())
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(tuiModel)
+	if model.input.Value() != "draft prompt" {
+		t.Fatalf("down should restore draft, got %q", model.input.Value())
+	}
+}
+
+func TestTUIModelReportTypeUsesWorkbookPathFromPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	workbookPath := tmpDir + "/metrics.xlsx"
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("根据 " + workbookPath + " 做一个经营 report")
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	model.selectedTypeIndex = 4
+	model.refreshTypeSelectionEntry()
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if model.state != tuiStateRunning {
+		t.Fatalf("state after report confirmation = %q", model.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected generation command after report confirmation")
+	}
+	if model.currentJob == nil || model.currentJob.DocumentType != engine.DocumentTypeReport {
+		t.Fatalf("current job = %#v", model.currentJob)
+	}
+	if model.currentJob.SourceFilePath != workbookPath {
+		t.Fatalf("source file = %q", model.currentJob.SourceFilePath)
+	}
+}
+
+func TestTUIModelReportTypePromptsForMissingWorkbookPath(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Defaults: DefaultsConfig{Mode: "fast"}}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("做一个经营 report")
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	model.selectedTypeIndex = 4
+	model.refreshTypeSelectionEntry()
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("missing report path should not start generation")
+	}
+	if model.state != tuiStateReportFile {
+		t.Fatalf("state after report confirmation = %q", model.state)
+	}
+	if !strings.Contains(model.View(), "Enter the .xlsx file path") {
+		t.Fatalf("missing report file prompt:\n%s", model.View())
+	}
+
+	model.input.SetValue("/tmp/metrics.xlsx")
+	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if model.state != tuiStateRunning {
+		t.Fatalf("state after report path = %q", model.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected generation command after report path")
+	}
+	if model.currentJob == nil || model.currentJob.SourceFilePath != "/tmp/metrics.xlsx" {
+		t.Fatalf("current job = %#v", model.currentJob)
+	}
+}
+
+func TestTUIModelCtrlCCancelsTypeSelection(t *testing.T) {
+	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("做一个word内容随意")
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("ctrl-c in type selector should not quit")
+	}
+	if model.state != tuiStateIdle {
+		t.Fatalf("state after ctrl-c = %q", model.state)
+	}
+	if model.pendingPrompt != "" {
+		t.Fatalf("pending prompt = %q", model.pendingPrompt)
+	}
+	if !strings.Contains(model.View(), "Selection cancelled") {
+		t.Fatalf("missing cancellation message:\n%s", model.View())
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -18,9 +19,11 @@ import (
 )
 
 const (
-	tuiStateIdle     = "idle"
-	tuiStateRunning  = "running"
-	tuiStateQuestion = "question"
+	tuiStateIdle       = "idle"
+	tuiStateRunning    = "running"
+	tuiStateQuestion   = "question"
+	tuiStateTypeSelect = "type_select"
+	tuiStateReportFile = "report_file"
 )
 
 const tuiStartupBanner = `╭─── OfficeCLI ─────────────────────────╮
@@ -146,6 +149,13 @@ type tuiModel struct {
 	cancelled     bool
 	exitArmed     bool
 	quota         tuiQuotaStatus
+
+	pendingPrompt        string
+	selectedTypeIndex    int
+	typeSelectEntryIndex int
+	inputHistory         []string
+	historyIndex         int
+	historyDraft         string
 }
 
 type tuiQuotaStatus struct {
@@ -167,6 +177,8 @@ var (
 	tuiErrorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	tuiCardStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
 )
+
+var tuiDocumentTypeOptions = []string{"docx", "pptx", "xlsx", "img", "report"}
 
 func (a *App) runTUIProgram(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
 	rootCtx := ctx
@@ -197,17 +209,19 @@ func newTUIModel(app *App, cfg Config, opts TUIOptions, initialPrompt string, _ 
 	input.Width = 76
 	vp := viewport.New(80, 18)
 	model := tuiModel{
-		app:           app,
-		cfg:           cfg,
-		opts:          opts,
-		rootCtx:       context.Background(),
-		cwd:           cwd,
-		input:         input,
-		view:          vp,
-		state:         tuiStateIdle,
-		width:         80,
-		height:        24,
-		initialPrompt: strings.TrimSpace(initialPrompt),
+		app:                  app,
+		cfg:                  cfg,
+		opts:                 opts,
+		rootCtx:              context.Background(),
+		cwd:                  cwd,
+		input:                input,
+		view:                 vp,
+		state:                tuiStateIdle,
+		width:                80,
+		height:               24,
+		initialPrompt:        strings.TrimSpace(initialPrompt),
+		typeSelectEntryIndex: -1,
+		historyIndex:         -1,
 		quota: tuiQuotaStatus{
 			RuntimeMode: runtimeModeLabel(cfg.RuntimeModeOrDefault()),
 		},
@@ -241,7 +255,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuiInitialPromptMsg:
 		prompt := strings.TrimSpace(m.initialPrompt)
 		m.initialPrompt = ""
-		return m.submit(prompt)
+		return m.enterTypeSelection(prompt)
 	case tuiAccessStatusMsg:
 		m.applyAccessStatus(msg.Result, msg.Err)
 		return m, nil
@@ -306,6 +320,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
+			if m.state == tuiStateTypeSelect || m.state == tuiStateReportFile {
+				m.input.Reset()
+				m.cancelPendingSelection("Selection cancelled")
+				return m, nil
+			}
 			if m.state == tuiStateRunning || m.state == tuiStateQuestion {
 				if strings.TrimSpace(m.input.Value()) != "" {
 					m.input.Reset()
@@ -338,10 +357,39 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.exitArmed = true
 			m.append("status", "Press Ctrl+C again to exit.")
 			return m, nil
+		case tea.KeyUp:
+			if m.state == tuiStateTypeSelect {
+				m.moveTypeSelection(-1)
+				return m, nil
+			}
+			if m.state == tuiStateIdle {
+				m.navigateInputHistory(-1)
+				return m, nil
+			}
+		case tea.KeyDown:
+			if m.state == tuiStateTypeSelect {
+				m.moveTypeSelection(1)
+				return m, nil
+			}
+			if m.state == tuiStateIdle {
+				m.navigateInputHistory(1)
+				return m, nil
+			}
 		case tea.KeyEnter:
 			m.exitArmed = false
+			if m.state == tuiStateTypeSelect {
+				m.input.Reset()
+				return m.confirmTypeSelection()
+			}
 			value := strings.TrimSpace(m.input.Value())
 			m.input.Reset()
+			if m.state == tuiStateReportFile {
+				if value == "" {
+					m.append("error", "report generation requires an .xlsx file path")
+					return m, nil
+				}
+				return m.submitWithType(m.pendingPrompt, "report", value)
+			}
 			if value == "" {
 				return m, nil
 			}
@@ -377,12 +425,120 @@ func (m tuiModel) handleCommandOrSubmit(value string) (tea.Model, tea.Cmd) {
 		m.append("assistant", "Describe the document you want to generate in natural language. Commands: /help, /clear, /exit. Ctrl+C clears the current input; press Ctrl+C again to exit. During generation, Ctrl+C cancels the current run. For scripts, use officecli new ...")
 		return m, nil
 	default:
-		return m.submit(value)
+		return m.enterTypeSelection(value)
 	}
 }
 
+func (m tuiModel) enterTypeSelection(prompt string) (tea.Model, tea.Cmd) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		m.append("error", "document request is required")
+		return m, nil
+	}
+	m.pendingPrompt = prompt
+	m.addInputHistory(prompt)
+	m.selectedTypeIndex = indexOfTUIDocumentType(inferTUIDocumentType(prompt))
+	m.typeSelectEntryIndex = -1
+	m.state = tuiStateTypeSelect
+	m.exitArmed = false
+	m.currentJob = nil
+	m.input.Placeholder = "Use ↑/↓ to choose a file type, Enter to generate"
+	m.append("user", prompt)
+	m.typeSelectEntryIndex = len(m.entries)
+	m.append("assistant", formatTUITypeSelection(m.selectedTypeIndex))
+	return m, nil
+}
+
+func (m *tuiModel) addInputHistory(value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	if len(m.inputHistory) > 0 && m.inputHistory[len(m.inputHistory)-1] == value {
+		m.historyIndex = -1
+		m.historyDraft = ""
+		return
+	}
+	m.inputHistory = append(m.inputHistory, value)
+	m.historyIndex = -1
+	m.historyDraft = ""
+}
+
+func (m *tuiModel) navigateInputHistory(delta int) {
+	if len(m.inputHistory) == 0 {
+		return
+	}
+	if m.historyIndex == -1 {
+		if delta >= 0 {
+			return
+		}
+		m.historyDraft = m.input.Value()
+		m.historyIndex = len(m.inputHistory) - 1
+	} else {
+		next := m.historyIndex + delta
+		switch {
+		case next < 0:
+			next = 0
+		case next >= len(m.inputHistory):
+			m.historyIndex = -1
+			m.input.SetValue(m.historyDraft)
+			m.input.CursorEnd()
+			m.exitArmed = false
+			return
+		}
+		m.historyIndex = next
+	}
+	m.input.SetValue(m.inputHistory[m.historyIndex])
+	m.input.CursorEnd()
+	m.exitArmed = false
+}
+
+func (m *tuiModel) moveTypeSelection(delta int) {
+	if len(tuiDocumentTypeOptions) == 0 {
+		return
+	}
+	m.selectedTypeIndex = (m.selectedTypeIndex + delta + len(tuiDocumentTypeOptions)) % len(tuiDocumentTypeOptions)
+	m.refreshTypeSelectionEntry()
+}
+
+func (m *tuiModel) refreshTypeSelectionEntry() {
+	if m.typeSelectEntryIndex < 0 || m.typeSelectEntryIndex >= len(m.entries) {
+		return
+	}
+	m.entries[m.typeSelectEntryIndex].text = formatTUITypeSelection(m.selectedTypeIndex)
+	m.refreshViewport()
+}
+
+func (m tuiModel) confirmTypeSelection() (tea.Model, tea.Cmd) {
+	documentType := selectedTUIDocumentType(m.selectedTypeIndex)
+	if documentType == "report" {
+		if sourceFile := extractTUIWorkbookPath(m.pendingPrompt); sourceFile != "" {
+			return m.submitWithType(m.pendingPrompt, documentType, sourceFile)
+		}
+		m.state = tuiStateReportFile
+		m.input.Placeholder = "Enter the .xlsx file path"
+		m.append("assistant", "Enter the .xlsx file path for this report.")
+		return m, nil
+	}
+	return m.submitWithType(m.pendingPrompt, documentType, "")
+}
+
+func (m *tuiModel) cancelPendingSelection(message string) {
+	m.pendingPrompt = ""
+	m.selectedTypeIndex = 0
+	m.typeSelectEntryIndex = -1
+	m.state = tuiStateIdle
+	m.exitArmed = true
+	m.input.Placeholder = "Describe a document, or type /help"
+	m.append("status", message)
+}
+
 func (m tuiModel) submit(prompt string) (tea.Model, tea.Cmd) {
-	job, err := BuildTUIGenerateJob(prompt, m.cfg, InputSources{IsTTY: true, CWD: m.cwd})
+	return m.submitWithType(prompt, inferTUIDocumentType(prompt), "")
+}
+
+func (m tuiModel) submitWithType(prompt, documentType, sourceFile string) (tea.Model, tea.Cmd) {
+	job, err := BuildTUIGenerateJobForType(prompt, documentType, m.cfg, InputSources{IsTTY: true, CWD: m.cwd}, sourceFile)
 	if err != nil {
 		m.append("error", err.Error())
 		return m, nil
@@ -402,7 +558,8 @@ func (m tuiModel) submit(prompt string) (tea.Model, tea.Cmd) {
 	m.currentJob = &job
 	m.state = tuiStateRunning
 	m.input.Placeholder = "Generating. Ctrl+C to cancel"
-	m.append("user", prompt)
+	m.pendingPrompt = ""
+	m.typeSelectEntryIndex = -1
 	m.append("status", fmt.Sprintf("Detected %s, topic: %s, mode: %s", job.DocumentType, job.Topic, job.Mode))
 	return m, m.startGenerationCmd(ctx, job, generationID, events)
 }
@@ -506,7 +663,7 @@ func (m tuiModel) renderEntries() string {
 		case "status":
 			b.WriteString(tuiStatusStyle.Render("• " + entry.text))
 		case "error":
-			b.WriteString(tuiErrorStyle.Render("Error: " + entry.text))
+			b.WriteString(tuiErrorStyle.Render(wrapTUIText("Error: "+entry.text, m.entryWrapWidth())))
 		default:
 			content := "OfficeCLI\n" + entry.text
 			if strings.HasPrefix(entry.text, tuiStartupBanner) {
@@ -520,6 +677,58 @@ func (m tuiModel) renderEntries() string {
 		b.WriteString("\n\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func (m tuiModel) entryWrapWidth() int {
+	width := m.view.Width
+	if width <= 0 {
+		width = m.width
+	}
+	if width < 20 {
+		return 20
+	}
+	return width
+}
+
+func wrapTUIText(text string, width int) string {
+	if width <= 0 || strings.TrimSpace(text) == "" {
+		return text
+	}
+	var wrapped []string
+	for _, line := range strings.Split(text, "\n") {
+		for lipgloss.Width(line) > width {
+			cut := tuiWrapCutIndex(line, width)
+			if cut <= 0 || cut >= len(line) {
+				break
+			}
+			wrapped = append(wrapped, strings.TrimRightFunc(line[:cut], unicode.IsSpace))
+			line = strings.TrimLeftFunc(line[cut:], unicode.IsSpace)
+		}
+		wrapped = append(wrapped, line)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+func tuiWrapCutIndex(line string, width int) int {
+	displayWidth := 0
+	lastSpace := -1
+	for idx, r := range line {
+		runeWidth := lipgloss.Width(string(r))
+		if displayWidth+runeWidth > width {
+			if lastSpace > 0 {
+				return lastSpace
+			}
+			if idx == 0 {
+				return len(string(r))
+			}
+			return idx
+		}
+		if unicode.IsSpace(r) {
+			lastSpace = idx
+		}
+		displayWidth += runeWidth
+	}
+	return len(line)
 }
 
 func (m tuiModel) View() string {
@@ -644,6 +853,10 @@ func (m tuiModel) statusText() string {
 		return "Generating · " + runtimeMode
 	case tuiStateQuestion:
 		return "Waiting for answer · " + runtimeMode
+	case tuiStateTypeSelect:
+		return "Choose file type · " + runtimeMode
+	case tuiStateReportFile:
+		return "Waiting for report file · " + runtimeMode
 	default:
 		return "Ready · " + runtimeMode + " · keep typing"
 	}
@@ -654,10 +867,38 @@ func BuildTUIGenerateJob(prompt string, cfg Config, src InputSources) (GenerateJ
 	if prompt == "" {
 		return GenerateJob{}, fmt.Errorf("document request is required")
 	}
-	documentType := inferTUIDocumentType(prompt)
+	return BuildTUIGenerateJobForType(prompt, inferTUIDocumentType(prompt), cfg, src, "")
+}
+
+func BuildTUIGenerateJobForType(prompt, documentType string, cfg Config, src InputSources, sourceFile string) (GenerateJob, error) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return GenerateJob{}, fmt.Errorf("document request is required")
+	}
+	documentType = selectedTUIDocumentType(indexOfTUIDocumentType(documentType))
 	topic := tuiTopicFromPrompt(prompt)
 	args := []string{documentType, topic, "--prompt", prompt}
+	if strings.TrimSpace(sourceFile) != "" {
+		args = append(args, "--file", strings.TrimSpace(sourceFile))
+	}
 	return BuildGenerateJob(args, cfg, src)
+}
+
+func indexOfTUIDocumentType(documentType string) int {
+	normalized := strings.ToLower(strings.TrimSpace(documentType))
+	for idx, option := range tuiDocumentTypeOptions {
+		if option == normalized {
+			return idx
+		}
+	}
+	return indexOfTUIDocumentType("pptx")
+}
+
+func selectedTUIDocumentType(index int) string {
+	if index < 0 || index >= len(tuiDocumentTypeOptions) {
+		return "pptx"
+	}
+	return tuiDocumentTypeOptions[index]
 }
 
 func inferTUIDocumentType(prompt string) string {
@@ -715,6 +956,25 @@ func tuiTopicFromPrompt(prompt string) string {
 	return filepath.Base(trimmed)
 }
 
+func extractTUIWorkbookPath(prompt string) string {
+	for _, field := range strings.Fields(strings.ReplaceAll(prompt, "\n", " ")) {
+		normalized := strings.ToLower(field)
+		idx := strings.Index(normalized, ".xlsx")
+		if idx < 0 {
+			continue
+		}
+		candidate := field[:idx+len(".xlsx")]
+		if eq := strings.LastIndex(candidate, "="); eq >= 0 {
+			candidate = candidate[eq+1:]
+		}
+		candidate = strings.Trim(candidate, "\"'`“”‘’()[]{}<>，,。；;：:")
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func formatTUIProgress(event engine.ProgressEvent) string {
 	message := strings.TrimSpace(event.ActiveContent)
 	if message == "" {
@@ -740,6 +1000,22 @@ func formatTUIQuestion(question string, options []string, allowFreeform bool) st
 	} else {
 		sb.WriteString("\nEnter an option number.")
 	}
+	return sb.String()
+}
+
+func formatTUITypeSelection(selectedIndex int) string {
+	var sb strings.Builder
+	sb.WriteString("Choose file type")
+	for idx, option := range tuiDocumentTypeOptions {
+		prefix := "  "
+		if idx == selectedIndex {
+			prefix = "> "
+		}
+		sb.WriteString("\n")
+		sb.WriteString(prefix)
+		sb.WriteString(option)
+	}
+	sb.WriteString("\nUse ↑/↓ to choose, Enter to generate.")
 	return sb.String()
 }
 
