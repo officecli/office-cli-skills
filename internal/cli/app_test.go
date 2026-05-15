@@ -3105,6 +3105,91 @@ func TestAppRun_AuthSetKeyPromptsWhenArgMissing(t *testing.T) {
 	}
 }
 
+func TestAppRun_LoginPrintsDeviceCodeWhenBrowserCannotOpen(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	expiresAt := time.Now().Add(10 * time.Minute).UTC().Truncate(time.Second)
+	var startPayload map[string]any
+	var pollCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/cli/login/start":
+			if err := json.NewDecoder(r.Body).Decode(&startPayload); err != nil {
+				t.Fatalf("decode start: %v", err)
+			}
+			if _, ok := startPayload["redirect_uri"]; ok {
+				t.Fatalf("device login start should not send redirect_uri: %+v", startPayload)
+			}
+			_, _ = fmt.Fprintf(w, `{"data":{"challenge_id":"cli_test","login_url":"http://%s/api/cli/login/verify?user_code=ABCD-EFGH","user_code":"ABCD-EFGH","verification_url":"http://%s/api/cli/login/verify","poll_interval_seconds":1,"expires_at":%q}}`, r.Host, r.Host, expiresAt.Format(time.RFC3339))
+		case "/api/cli/login/poll":
+			pollCount++
+			_, _ = fmt.Fprintf(w, `{"data":{"status":"completed","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+		case "/api/cli/login/exchange":
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode exchange: %v", err)
+			}
+			if payload["challenge_id"] != "cli_test" {
+				t.Fatalf("challenge_id = %q", payload["challenge_id"])
+			}
+			if payload["code"] != "" {
+				t.Fatalf("device login exchange should not send callback code: %+v", payload)
+			}
+			if payload["code_verifier"] == "" {
+				t.Fatalf("code_verifier was empty")
+			}
+			_, _ = fmt.Fprintf(w, `{"data":{"token":"ocli_sess_new","token_prefix":"ocli_sess","user_id":42,"user_email":"dev@example.com","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:    server.URL,
+			APIKey:     "old-api-key",
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.openBrowser = func(string) error {
+		return fmt.Errorf("browser unavailable")
+	}
+
+	if err := app.Run(t.Context(), []string{"login"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if pollCount == 0 {
+		t.Fatalf("poll endpoint was not called")
+	}
+	output := stdout.String()
+	for _, needle := range []string{"Login URL:", "ABCD-EFGH", "Could not open your browser automatically", "Logged in as dev@example.com"} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("stdout missing %q: %s", needle, output)
+		}
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	configText := string(data)
+	if !strings.Contains(configText, `"session_token": "ocli_sess_new"`) {
+		t.Fatalf("config did not save session token: %s", configText)
+	}
+	if strings.Contains(configText, "old-api-key") {
+		t.Fatalf("config kept old API key: %s", configText)
+	}
+}
+
 func TestAppRun_WhoamiShowsAnonymousMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

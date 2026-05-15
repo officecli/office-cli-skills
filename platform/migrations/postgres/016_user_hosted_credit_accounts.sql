@@ -28,12 +28,14 @@ CREATE INDEX IF NOT EXISTS idx_user_hosted_credit_ledger_order_id ON user_hosted
 CREATE TABLE IF NOT EXISTS cli_login_challenges (
   id BIGSERIAL PRIMARY KEY,
   challenge_id VARCHAR(128) NOT NULL UNIQUE,
+  flow VARCHAR(16) NOT NULL DEFAULT 'callback',
   code_challenge VARCHAR(191) NOT NULL,
   code_challenge_method VARCHAR(16) NOT NULL,
   redirect_uri VARCHAR(512) NOT NULL,
   state VARCHAR(191) NOT NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'pending',
   user_id BIGINT NULL,
+  user_code_hash VARCHAR(128) NULL UNIQUE,
   exchange_code_hash VARCHAR(128) NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
   completed_at TIMESTAMPTZ NULL,
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS cli_login_challenges (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_cli_login_challenges_flow ON cli_login_challenges(flow);
 CREATE INDEX IF NOT EXISTS idx_cli_login_challenges_user_id ON cli_login_challenges(user_id);
 CREATE INDEX IF NOT EXISTS idx_cli_login_challenges_expires_at ON cli_login_challenges(expires_at);
 

@@ -27,18 +27,21 @@ CREATE TABLE IF NOT EXISTS user_hosted_credit_ledger (
 CREATE TABLE IF NOT EXISTS cli_login_challenges (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   challenge_id VARCHAR(128) NOT NULL UNIQUE,
+  flow VARCHAR(16) NOT NULL DEFAULT 'callback',
   code_challenge VARCHAR(191) NOT NULL,
   code_challenge_method VARCHAR(16) NOT NULL,
   redirect_uri VARCHAR(512) NOT NULL,
   state VARCHAR(191) NOT NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'pending',
   user_id BIGINT UNSIGNED NULL,
+  user_code_hash VARCHAR(128) NULL UNIQUE,
   exchange_code_hash VARCHAR(128) NULL UNIQUE,
   expires_at TIMESTAMP NOT NULL,
   completed_at TIMESTAMP NULL,
   consumed_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_cli_login_challenges_flow (flow),
   KEY idx_cli_login_challenges_user_id (user_id),
   KEY idx_cli_login_challenges_expires_at (expires_at)
 );

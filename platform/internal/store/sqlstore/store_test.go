@@ -102,6 +102,27 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
+	requiredColumns := []string{"flow", "user_code_hash"}
+	migrationPaths := []string{
+		filepath.Join("..", "..", "..", "migrations", "016_user_hosted_credit_accounts.sql"),
+		filepath.Join("..", "..", "..", "migrations", "018_cli_login_device_flow.sql"),
+		filepath.Join("..", "..", "..", "migrations", "postgres", "016_user_hosted_credit_accounts.sql"),
+		filepath.Join("..", "..", "..", "migrations", "postgres", "018_cli_login_device_flow.sql"),
+	}
+
+	for _, migrationPath := range migrationPaths {
+		t.Run(migrationPath, func(t *testing.T) {
+			sqlBytes, err := os.ReadFile(migrationPath)
+			require.NoError(t, err)
+			sql := strings.ToLower(string(sqlBytes))
+			for _, column := range requiredColumns {
+				require.Contains(t, sql, column)
+			}
+		})
+	}
+}
+
 func TestSaveGoogleUserGeneratesStableInviteCode(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:save_google_user_generates_stable_invite_code?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

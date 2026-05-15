@@ -21,7 +21,7 @@ This document lists the main test cases for anonymous hosted trial, account host
 ## CLI-Side Cases
 
 - `UL-CLI-001`: `new` stops before LLM execution when anonymous Hosted trial is exhausted and suggests `officecli login`
-- `UL-CLI-002`: `login` writes a CLI session token and clears any local API key
+- `UL-CLI-002`: `login` prints a browser URL and short code, writes a CLI session token, and clears any local API key
 - `UL-CLI-003`: `set-key` prompts when the argument is missing and clears any local CLI session before saving a key
 - `UL-CLI-004`: failed key validation does not overwrite the previous config
 - `UL-CLI-005`: `whoami` shows anonymous Hosted trial mode and remaining trial quota

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,6 +36,7 @@ type App struct {
 	performUpdate       func(ctx context.Context, info UpdateInfo) error
 	restartCommand      func(ctx context.Context, info UpdateInfo, args []string) error
 	runTUI              func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error
+	openBrowser         func(rawURL string) error
 }
 
 var Version = "dev"
@@ -84,6 +84,7 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 		checkForUpdates: defaultCheckForUpdates,
 		performUpdate:   defaultPerformUpdate,
 		restartCommand:  defaultRestartCommand,
+		openBrowser:     openBrowser,
 	}
 	app.runTUI = app.runTUIProgram
 	return app
@@ -415,6 +416,7 @@ func AuthHelpText() string {
 
 Description:
   Log in with your OfficeCLI account, inspect local auth state, or save an advanced API key credential.
+  Login prints a browser URL and short code, so it also works on headless or remote shells.
 `
 }
 
@@ -1066,9 +1068,12 @@ func (a *App) runAuth(ctx context.Context, cfg Config, args []string) error {
 }
 
 type cliLoginStartResponse struct {
-	ChallengeID string    `json:"challenge_id"`
-	LoginURL    string    `json:"login_url"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	ChallengeID         string    `json:"challenge_id"`
+	LoginURL            string    `json:"login_url"`
+	UserCode            string    `json:"user_code,omitempty"`
+	VerificationURL     string    `json:"verification_url,omitempty"`
+	PollIntervalSeconds int       `json:"poll_interval_seconds,omitempty"`
+	ExpiresAt           time.Time `json:"expires_at"`
 }
 
 type cliLoginExchangeResponse struct {
@@ -1086,75 +1091,95 @@ type cliSessionResponse struct {
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
 
+type cliLoginPollResponse struct {
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 func (a *App) runLogin(ctx context.Context, cfg Config) error {
 	cfg.License.Enabled = true
 	if strings.TrimSpace(cfg.License.BaseURL) == "" {
 		cfg.License.BaseURL = defaultInitConfig().License.BaseURL
 	}
 	verifier := randomURLToken(32)
-	state := randomURLToken(18)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
-	redirectURI := "http://" + listener.Addr().String() + "/callback"
 	startResp := cliLoginStartResponse{}
 	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/start", map[string]any{
 		"code_challenge":        s256Challenge(verifier),
 		"code_challenge_method": "S256",
-		"redirect_uri":          redirectURI,
-		"state":                 state,
 	}, "", &startResp); err != nil {
 		return err
 	}
-	codeCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("state") != state {
-			errCh <- fmt.Errorf("login callback state mismatch")
-			http.Error(w, "state mismatch", http.StatusBadRequest)
-			return
+	if strings.TrimSpace(startResp.LoginURL) == "" || strings.TrimSpace(startResp.UserCode) == "" {
+		return fmt.Errorf("platform returned an incomplete login challenge")
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Login URL:\n%s\n\nCode: %s\n", startResp.LoginURL, startResp.UserCode); err != nil {
+		return err
+	}
+	if !startResp.ExpiresAt.IsZero() {
+		if _, err := fmt.Fprintf(a.Stdout, "Expires at: %s\n", startResp.ExpiresAt.Format(time.RFC3339)); err != nil {
+			return err
 		}
-		code := strings.TrimSpace(r.URL.Query().Get("code"))
-		if code == "" {
-			errCh <- fmt.Errorf("login callback missing code")
-			http.Error(w, "missing code", http.StatusBadRequest)
-			return
+	}
+	if err := a.openBrowser(startResp.LoginURL); err != nil {
+		if _, writeErr := fmt.Fprintf(a.Stdout, "Could not open your browser automatically. Copy the login URL above into any browser, complete login, then return here.\n"); writeErr != nil {
+			return writeErr
 		}
-		_, _ = io.WriteString(w, "OfficeCLI login complete. You can return to the terminal.")
-		codeCh <- code
-	})}
-	defer server.Close()
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-	if err := openBrowser(startResp.LoginURL); err != nil {
-		if _, writeErr := fmt.Fprintf(a.Stdout, "Open this URL to log in:\n%s\n", startResp.LoginURL); writeErr != nil {
+	} else {
+		if _, writeErr := fmt.Fprintln(a.Stdout, "Opened your browser. Complete login there, then return here."); writeErr != nil {
 			return writeErr
 		}
 	}
-	var code string
-	select {
-	case code = <-codeCh:
-	case err := <-errCh:
+	if _, err := fmt.Fprintln(a.Stdout, "Waiting for browser login to complete..."); err != nil {
 		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(10 * time.Minute):
-		return fmt.Errorf("login timed out")
 	}
+	pollInterval := time.Duration(startResp.PollIntervalSeconds) * time.Second
+	if pollInterval <= 0 {
+		pollInterval = 2 * time.Second
+	}
+	deadline := startResp.ExpiresAt
+	if deadline.IsZero() {
+		deadline = time.Now().Add(10 * time.Minute)
+	}
+	for {
+		pollResp := cliLoginPollResponse{}
+		if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/poll", map[string]any{
+			"challenge_id": startResp.ChallengeID,
+		}, "", &pollResp); err != nil {
+			return err
+		}
+		switch strings.TrimSpace(strings.ToLower(pollResp.Status)) {
+		case "completed":
+			goto exchange
+		case "pending":
+		case "consumed":
+			return fmt.Errorf("login challenge was already used")
+		default:
+			return fmt.Errorf("login challenge returned unexpected status: %s", pollResp.Status)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("login timed out")
+		}
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+exchange:
 	exchangeResp := cliLoginExchangeResponse{}
 	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/exchange", map[string]any{
 		"challenge_id":  startResp.ChallengeID,
-		"code":          code,
 		"code_verifier": verifier,
 	}, "", &exchangeResp); err != nil {
 		return err
 	}
+	oldAPIKey := strings.TrimSpace(cfg.License.APIKey)
 	cfg.License.APIKey = ""
+	if oldAPIKey != "" && strings.TrimSpace(cfg.Publish.APIKey) == oldAPIKey {
+		cfg.Publish.APIKey = ""
+	}
 	cfg.License.SessionToken = exchangeResp.Token
 	cfg.License.SessionTokenPrefix = exchangeResp.TokenPrefix
 	cfg.License.SessionExpiresAt = &exchangeResp.ExpiresAt
@@ -1162,7 +1187,7 @@ func (a *App) runLogin(ctx context.Context, cfg Config) error {
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(a.Stdout, loginSuccessMessage(exchangeResp))
+	_, err := fmt.Fprint(a.Stdout, loginSuccessMessage(exchangeResp))
 	return err
 }
 

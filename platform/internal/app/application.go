@@ -593,6 +593,41 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		}
 		httpapi.JSON(c, http.StatusOK, resp)
 	})
+	api.GET("/cli/login/verify", func(c *gin.Context) {
+		raw, err := c.Cookie("cop_app_session")
+		if err != nil || raw == "" {
+			values := url.Values{}
+			values.Set("return_to", c.Request.URL.RequestURI())
+			c.Redirect(http.StatusFound, "/api/auth/google/login?"+values.Encode())
+			return
+		}
+		user, err := authSvc.Me(c.Request.Context(), raw)
+		if err != nil || user == nil {
+			httpapi.AbortUnauthorized(c)
+			return
+		}
+		if err := cliSvc.VerifyUserCode(c.Request.Context(), c.Query("user_code"), user.ID); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, "OfficeCLI login complete. You can return to the terminal.")
+	})
+	api.POST("/cli/login/poll", func(c *gin.Context) {
+		var req struct {
+			ChallengeID string `json:"challenge_id"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		resp, err := cliSvc.Poll(c.Request.Context(), req.ChallengeID)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, resp)
+	})
 	api.GET("/cli/login/complete", func(c *gin.Context) {
 		raw, err := c.Cookie("cop_app_session")
 		if err != nil || raw == "" {

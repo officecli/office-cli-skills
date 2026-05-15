@@ -32,7 +32,9 @@ const (
 type Store interface {
 	CreateCLILoginChallenge(ctx context.Context, challenge *model.CLILoginChallenge) error
 	GetCLILoginChallengeByChallengeID(ctx context.Context, challengeID string) (*model.CLILoginChallenge, error)
+	GetCLILoginChallengeByUserCodeHash(ctx context.Context, userCodeHash string) (*model.CLILoginChallenge, error)
 	CompleteCLILoginChallenge(ctx context.Context, challengeID string, userID uint64, exchangeCodeHash string, completedAt time.Time) (*model.CLILoginChallenge, error)
+	CompleteCLILoginChallengeByUserCodeHash(ctx context.Context, userCodeHash string, userID uint64, completedAt time.Time) (*model.CLILoginChallenge, error)
 	ConsumeCLILoginChallenge(ctx context.Context, challengeID string, consumedAt time.Time) error
 	CreateCLISession(ctx context.Context, session *model.CLISession) error
 	FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error)
@@ -57,9 +59,12 @@ type StartRequest struct {
 }
 
 type StartResponse struct {
-	ChallengeID string    `json:"challenge_id"`
-	LoginURL    string    `json:"login_url"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	ChallengeID         string    `json:"challenge_id"`
+	LoginURL            string    `json:"login_url"`
+	UserCode            string    `json:"user_code,omitempty"`
+	VerificationURL     string    `json:"verification_url,omitempty"`
+	PollIntervalSeconds int       `json:"poll_interval_seconds,omitempty"`
+	ExpiresAt           time.Time `json:"expires_at"`
 }
 
 type ExchangeRequest struct {
@@ -83,6 +88,11 @@ type SessionResponse struct {
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
 
+type PollResponse struct {
+	Status    model.CLILoginChallengeStatus `json:"status"`
+	ExpiresAt time.Time                     `json:"expires_at"`
+}
+
 func NewService(store Store, platformURL string) *Service {
 	return &Service{store: store, platformURL: strings.TrimRight(strings.TrimSpace(platformURL), "/"), clock: time.Now}
 }
@@ -91,25 +101,47 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*StartResponse, 
 	if strings.TrimSpace(req.CodeChallengeMethod) != "S256" {
 		return nil, fmt.Errorf("code_challenge_method must be S256")
 	}
-	if strings.TrimSpace(req.CodeChallenge) == "" || strings.TrimSpace(req.RedirectURI) == "" || strings.TrimSpace(req.State) == "" {
-		return nil, fmt.Errorf("code_challenge, redirect_uri, and state are required")
+	if strings.TrimSpace(req.CodeChallenge) == "" {
+		return nil, fmt.Errorf("code_challenge is required")
+	}
+	redirectURI := strings.TrimSpace(req.RedirectURI)
+	state := strings.TrimSpace(req.State)
+	flow := model.CLILoginChallengeFlowDevice
+	var userCode string
+	var userCodeHash *string
+	if redirectURI != "" || state != "" {
+		if redirectURI == "" || state == "" {
+			return nil, fmt.Errorf("redirect_uri and state must be provided together")
+		}
+		flow = model.CLILoginChallengeFlowCallback
+	} else {
+		userCode = randomUserCode()
+		hash := sha256Hex(normalizeUserCode(userCode))
+		userCodeHash = &hash
 	}
 	challengeID := "cli_" + randomToken(24)
 	expiresAt := s.clock().UTC().Add(defaultChallengeTTL)
 	challenge := &model.CLILoginChallenge{
 		ChallengeID:         challengeID,
+		Flow:                flow,
 		CodeChallenge:       strings.TrimSpace(req.CodeChallenge),
 		CodeChallengeMethod: "S256",
-		RedirectURI:         strings.TrimSpace(req.RedirectURI),
-		State:               strings.TrimSpace(req.State),
+		RedirectURI:         redirectURI,
+		State:               state,
 		Status:              model.CLILoginChallengeStatusPending,
+		UserCodeHash:        userCodeHash,
 		ExpiresAt:           expiresAt,
 	}
 	if err := s.store.CreateCLILoginChallenge(ctx, challenge); err != nil {
 		return nil, err
 	}
-	loginURL := s.platformURL + "/api/auth/google/login?return_to=" + url.QueryEscape("/api/cli/login/complete?challenge_id="+url.QueryEscape(challengeID))
-	return &StartResponse{ChallengeID: challengeID, LoginURL: loginURL, ExpiresAt: expiresAt}, nil
+	if flow == model.CLILoginChallengeFlowCallback {
+		loginURL := s.platformURL + "/api/auth/google/login?return_to=" + url.QueryEscape("/api/cli/login/complete?challenge_id="+url.QueryEscape(challengeID))
+		return &StartResponse{ChallengeID: challengeID, LoginURL: loginURL, ExpiresAt: expiresAt}, nil
+	}
+	verificationURL := s.platformURL + "/api/cli/login/verify"
+	loginURL := verificationURL + "?user_code=" + url.QueryEscape(userCode)
+	return &StartResponse{ChallengeID: challengeID, LoginURL: loginURL, UserCode: userCode, VerificationURL: verificationURL, PollIntervalSeconds: 2, ExpiresAt: expiresAt}, nil
 }
 
 func (s *Service) Complete(ctx context.Context, challengeID string, userID uint64) (string, string, error) {
@@ -137,7 +169,7 @@ func (s *Service) Exchange(ctx context.Context, req ExchangeRequest) (*ExchangeR
 	if err != nil {
 		return nil, err
 	}
-	if challenge == nil || challenge.UserID == nil || challenge.ExchangeCodeHash == nil {
+	if challenge == nil || challenge.UserID == nil {
 		return nil, ErrInvalidChallenge
 	}
 	if s.clock().UTC().After(challenge.ExpiresAt) {
@@ -149,8 +181,10 @@ func (s *Service) Exchange(ctx context.Context, req ExchangeRequest) (*ExchangeR
 	if expectedS256(req.CodeVerifier) != challenge.CodeChallenge {
 		return nil, ErrInvalidCodeVerifier
 	}
-	if sha256Hex(strings.TrimSpace(req.Code)) != *challenge.ExchangeCodeHash {
-		return nil, ErrInvalidExchangeCode
+	if challenge.Flow == "" || challenge.Flow == model.CLILoginChallengeFlowCallback {
+		if challenge.ExchangeCodeHash == nil || sha256Hex(strings.TrimSpace(req.Code)) != *challenge.ExchangeCodeHash {
+			return nil, ErrInvalidExchangeCode
+		}
 	}
 	token := "ocli_sess_" + randomToken(32)
 	expiresAt := s.clock().UTC().Add(defaultSessionTTL)
@@ -176,6 +210,39 @@ func (s *Service) Exchange(ctx context.Context, req ExchangeRequest) (*ExchangeR
 		userEmail = strings.TrimSpace(user.Email)
 	}
 	return &ExchangeResponse{Token: token, TokenPrefix: session.TokenPrefix, UserID: session.UserID, UserEmail: userEmail, ExpiresAt: expiresAt}, nil
+}
+
+func (s *Service) VerifyUserCode(ctx context.Context, userCode string, userID uint64) error {
+	hash := sha256Hex(normalizeUserCode(userCode))
+	challenge, err := s.store.GetCLILoginChallengeByUserCodeHash(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if challenge == nil || challenge.Flow != model.CLILoginChallengeFlowDevice {
+		return ErrInvalidChallenge
+	}
+	if s.clock().UTC().After(challenge.ExpiresAt) {
+		return ErrChallengeExpired
+	}
+	if challenge.Status != model.CLILoginChallengeStatusPending {
+		return ErrInvalidChallenge
+	}
+	_, err = s.store.CompleteCLILoginChallengeByUserCodeHash(ctx, hash, userID, s.clock().UTC())
+	return err
+}
+
+func (s *Service) Poll(ctx context.Context, challengeID string) (*PollResponse, error) {
+	challenge, err := s.store.GetCLILoginChallengeByChallengeID(ctx, strings.TrimSpace(challengeID))
+	if err != nil {
+		return nil, err
+	}
+	if challenge == nil {
+		return nil, ErrInvalidChallenge
+	}
+	if s.clock().UTC().After(challenge.ExpiresAt) {
+		return nil, ErrChallengeExpired
+	}
+	return &PollResponse{Status: challenge.Status, ExpiresAt: challenge.ExpiresAt}, nil
 }
 
 func (s *Service) Resolve(ctx context.Context, token string) (*model.CLISession, error) {
@@ -247,6 +314,33 @@ func randomToken(bytesLen int) string {
 		panic(err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+func randomUserCode() string {
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	out := make([]byte, 9)
+	for i, b := range buf {
+		if i == 4 {
+			out[i] = '-'
+		}
+		offset := i
+		if i >= 4 {
+			offset = i + 1
+		}
+		out[offset] = alphabet[int(b)%len(alphabet)]
+	}
+	return string(out)
+}
+
+func normalizeUserCode(userCode string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(userCode))
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	return normalized
 }
 
 func tokenPrefix(token string) string {

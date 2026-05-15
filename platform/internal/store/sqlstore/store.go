@@ -177,6 +177,17 @@ func (s *Store) GetCLILoginChallengeByChallengeID(ctx context.Context, challenge
 	return &challenge, nil
 }
 
+func (s *Store) GetCLILoginChallengeByUserCodeHash(ctx context.Context, userCodeHash string) (*model.CLILoginChallenge, error) {
+	var challenge model.CLILoginChallenge
+	if err := s.db.WithContext(ctx).Where("user_code_hash = ?", userCodeHash).First(&challenge).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &challenge, nil
+}
+
 func (s *Store) CompleteCLILoginChallenge(ctx context.Context, challengeID string, userID uint64, exchangeCodeHash string, completedAt time.Time) (*model.CLILoginChallenge, error) {
 	updates := map[string]any{
 		"user_id":            userID,
@@ -190,6 +201,20 @@ func (s *Store) CompleteCLILoginChallenge(ctx context.Context, challengeID strin
 		return nil, err
 	}
 	return s.GetCLILoginChallengeByChallengeID(ctx, challengeID)
+}
+
+func (s *Store) CompleteCLILoginChallengeByUserCodeHash(ctx context.Context, userCodeHash string, userID uint64, completedAt time.Time) (*model.CLILoginChallenge, error) {
+	updates := map[string]any{
+		"user_id":      userID,
+		"status":       model.CLILoginChallengeStatusCompleted,
+		"completed_at": completedAt,
+	}
+	if err := s.db.WithContext(ctx).Model(&model.CLILoginChallenge{}).
+		Where("user_code_hash = ? AND status = ?", userCodeHash, model.CLILoginChallengeStatusPending).
+		Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return s.GetCLILoginChallengeByUserCodeHash(ctx, userCodeHash)
 }
 
 func (s *Store) ConsumeCLILoginChallenge(ctx context.Context, challengeID string, consumedAt time.Time) error {

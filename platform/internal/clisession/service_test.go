@@ -2,6 +2,7 @@ package clisession
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,16 @@ func (f *fakeStore) GetCLILoginChallengeByChallengeID(_ context.Context, challen
 	return &copied, nil
 }
 
+func (f *fakeStore) GetCLILoginChallengeByUserCodeHash(_ context.Context, userCodeHash string) (*model.CLILoginChallenge, error) {
+	for _, challenge := range f.challenges {
+		if challenge.UserCodeHash != nil && *challenge.UserCodeHash == userCodeHash {
+			copied := *challenge
+			return &copied, nil
+		}
+	}
+	return nil, nil
+}
+
 func (f *fakeStore) CompleteCLILoginChallenge(_ context.Context, challengeID string, userID uint64, exchangeCodeHash string, completedAt time.Time) (*model.CLILoginChallenge, error) {
 	challenge := f.challenges[challengeID]
 	if challenge == nil {
@@ -47,6 +58,19 @@ func (f *fakeStore) CompleteCLILoginChallenge(_ context.Context, challengeID str
 	challenge.Status = model.CLILoginChallengeStatusCompleted
 	copied := *challenge
 	return &copied, nil
+}
+
+func (f *fakeStore) CompleteCLILoginChallengeByUserCodeHash(_ context.Context, userCodeHash string, userID uint64, completedAt time.Time) (*model.CLILoginChallenge, error) {
+	for _, challenge := range f.challenges {
+		if challenge.UserCodeHash != nil && *challenge.UserCodeHash == userCodeHash {
+			challenge.UserID = &userID
+			challenge.CompletedAt = &completedAt
+			challenge.Status = model.CLILoginChallengeStatusCompleted
+			copied := *challenge
+			return &copied, nil
+		}
+	}
+	return nil, nil
 }
 
 func (f *fakeStore) ConsumeCLILoginChallenge(_ context.Context, challengeID string, consumedAt time.Time) error {
@@ -124,6 +148,66 @@ func TestExchangeResponseIncludesUserEmail(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Exchange: %v", err)
+	}
+	if resp.UserEmail != "dev@example.com" {
+		t.Fatalf("UserEmail = %q", resp.UserEmail)
+	}
+}
+
+func TestDeviceLoginFlowCreatesSessionWithoutLocalRedirect(t *testing.T) {
+	store := newFakeStore()
+	store.users[42] = &model.User{ID: 42, Email: "dev@example.com"}
+	svc := NewService(store, "https://platform.example.com")
+
+	verifier := "test-verifier"
+	start, err := svc.Start(context.Background(), StartRequest{
+		CodeChallenge:       expectedS256(verifier),
+		CodeChallengeMethod: "S256",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if start.UserCode == "" {
+		t.Fatalf("UserCode is empty")
+	}
+	if start.VerificationURL != "https://platform.example.com/api/cli/login/verify" {
+		t.Fatalf("VerificationURL = %q", start.VerificationURL)
+	}
+	if want := "https://platform.example.com/api/cli/login/verify?user_code="; !strings.HasPrefix(start.LoginURL, want) {
+		t.Fatalf("LoginURL = %q, want prefix %q", start.LoginURL, want)
+	}
+
+	challenge := store.challenges[start.ChallengeID]
+	if challenge == nil {
+		t.Fatalf("challenge was not stored")
+	}
+	if challenge.Flow != model.CLILoginChallengeFlowDevice {
+		t.Fatalf("Flow = %q", challenge.Flow)
+	}
+	if challenge.UserCodeHash == nil || *challenge.UserCodeHash == "" {
+		t.Fatalf("UserCodeHash was not stored")
+	}
+
+	if err := svc.VerifyUserCode(context.Background(), start.UserCode, 42); err != nil {
+		t.Fatalf("VerifyUserCode: %v", err)
+	}
+	poll, err := svc.Poll(context.Background(), start.ChallengeID)
+	if err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+	if poll.Status != model.CLILoginChallengeStatusCompleted {
+		t.Fatalf("Poll status = %q", poll.Status)
+	}
+
+	resp, err := svc.Exchange(context.Background(), ExchangeRequest{
+		ChallengeID:  start.ChallengeID,
+		CodeVerifier: verifier,
+	})
+	if err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+	if resp.Token == "" {
+		t.Fatalf("Token is empty")
 	}
 	if resp.UserEmail != "dev@example.com" {
 		t.Fatalf("UserEmail = %q", resp.UserEmail)

@@ -57,7 +57,7 @@ brew uninstall officecli
 npm install -g officecli
 ```
 
-After `npm install -g officecli`, the binary can generate through hosted anonymous trial access without a local model endpoint or API key. The one-time free quota is tied to the machine fingerprint; after it is used up, run `officecli login`, then buy account hosted credits from https://officecli.io/pricing.
+After `npm install -g officecli`, the binary can generate through hosted anonymous trial access without a local model endpoint or API key. The one-time free quota is tied to the machine fingerprint; after it is used up, run `officecli login`, then buy account hosted credits from https://officecli.io/pricing. Login prints a browser URL and short code, so it also works in headless or remote shells where OfficeCLI cannot open a browser.
 
 For trusted publishing without exposing this private source repository on npmjs, the long-term target is a separate public repository, for example `officecli/officecli-npm`, that receives synced wrapper files and runs the actual npm publish workflow.
 
@@ -98,7 +98,7 @@ Check the current access mode:
 officecli whoami
 ```
 
-When the hosted trial is used up, run `officecli login`, then buy account hosted credits from https://officecli.io/pricing. For advanced automation, save an account API key:
+When the hosted trial is used up, run `officecli login`, then buy account hosted credits from https://officecli.io/pricing. If the browser cannot open automatically, copy the printed login URL into any browser and confirm the short code. For advanced automation, save an account API key:
 
 ```bash
 officecli set-key <api-key>

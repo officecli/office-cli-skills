@@ -43,7 +43,7 @@ Check access at any time:
 officecli auth status
 ```
 
-When the free quota is used up, run `officecli auth set-key <api-key>` after purchasing or creating a hosted key from https://officecli.io/pricing.
+When the free quota is used up, run `officecli login`, then purchase hosted credits from https://officecli.io/pricing. Login prints a browser URL and short code, so it works even when the CLI cannot open a browser automatically. For scripts and CI, use `officecli set-key <api-key>` with an account API key.
 
 To use your own model endpoint instead, switch to External Mode:
 

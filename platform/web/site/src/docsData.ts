@@ -150,12 +150,12 @@ export const commandGroups: CommandGroup[] = [
   {
     title: 'Access and quota status',
     command: 'officecli login | logout | whoami | set-key <api-key>',
-    summary: 'Log in with a browser, check the current access mode, sign out, or save an advanced account API key.',
+    summary: 'Log in with a browser URL and short code, check the current access mode, sign out, or save an advanced account API key.',
     examples: [
       {
         label: 'Log in to account credits',
         command: 'officecli login',
-        detail: 'Opens the browser login flow and stores a revocable CLI session token. Existing local API key credentials are cleared.',
+        detail: 'Prints a browser login URL and short code, tries to open the browser automatically, then stores a revocable CLI session token. Existing local API key credentials are cleared.',
       },
       {
         label: 'Check current access mode',

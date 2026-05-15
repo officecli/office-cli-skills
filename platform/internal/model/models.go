@@ -19,6 +19,7 @@ type HostedCreditGrantSource string
 type HostedCreditLedgerSource string
 type PackKind string
 type CLILoginChallengeStatus string
+type CLILoginChallengeFlow string
 
 const (
 	APIKeyStatusActive   APIKeyStatus = "active"
@@ -79,6 +80,9 @@ const (
 	CLILoginChallengeStatusPending   CLILoginChallengeStatus = "pending"
 	CLILoginChallengeStatusCompleted CLILoginChallengeStatus = "completed"
 	CLILoginChallengeStatusConsumed  CLILoginChallengeStatus = "consumed"
+
+	CLILoginChallengeFlowCallback CLILoginChallengeFlow = "callback"
+	CLILoginChallengeFlowDevice   CLILoginChallengeFlow = "device"
 )
 
 type User struct {
@@ -185,12 +189,14 @@ func (UserAIGatewayAPIKey) TableName() string { return "user_aigateway_api_keys"
 type CLILoginChallenge struct {
 	ID                  uint64                  `gorm:"primaryKey" json:"id"`
 	ChallengeID         string                  `gorm:"column:challenge_id;size:128;uniqueIndex;not null" json:"challenge_id"`
+	Flow                CLILoginChallengeFlow   `gorm:"column:flow;size:16;index;not null" json:"flow"`
 	CodeChallenge       string                  `gorm:"column:code_challenge;size:191;not null" json:"-"`
 	CodeChallengeMethod string                  `gorm:"column:code_challenge_method;size:16;not null" json:"code_challenge_method"`
 	RedirectURI         string                  `gorm:"column:redirect_uri;size:512;not null" json:"redirect_uri"`
 	State               string                  `gorm:"column:state;size:191;not null" json:"state"`
 	Status              CLILoginChallengeStatus `gorm:"column:status;size:16;index;not null" json:"status"`
 	UserID              *uint64                 `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	UserCodeHash        *string                 `gorm:"column:user_code_hash;size:128;uniqueIndex" json:"-"`
 	ExchangeCodeHash    *string                 `gorm:"column:exchange_code_hash;size:128;uniqueIndex" json:"-"`
 	ExpiresAt           time.Time               `gorm:"column:expires_at;index;not null" json:"expires_at"`
 	CompletedAt         *time.Time              `gorm:"column:completed_at" json:"completed_at,omitempty"`
