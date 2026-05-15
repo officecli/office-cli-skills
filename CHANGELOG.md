@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.62 - 2026-05-15
+
+### Added
+
+- Added browser-based `officecli login`, `officecli logout`, and `officecli whoami` for account hosted credits.
+- Added account-level hosted credit accounts, ledgers, CLI sessions, and migrations for MySQL and Postgres.
+
+### Changed
+
+- Changed Hosted Mode billing so CLI sessions and API keys consume the same account hosted credits.
+- Changed Billing, Overview, API Keys, Invite, Discord, Docs, and Download copy to the account hosted credits model.
+- Changed invite activation and Discord verification rewards to grant 100 account hosted credits each.
+
 ## 0.2.61 - 2026-05-14
 
 ### Changed
