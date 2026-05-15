@@ -178,6 +178,20 @@ func TestLoginURLNormalizesAppRelativeReturnToInOAuthState(t *testing.T) {
 	}
 }
 
+func TestLoginURLPreservesCLILoginCompleteReturnToInOAuthState(t *testing.T) {
+	sessions := newFakeSessionStore()
+	svc := NewService(fakeOAuthProvider{}, &fakeAuthUserStore{}, sessions, "cop_app_session", time.Hour, fakeCookieCodec{}, nil, nil)
+
+	_, err := svc.LoginURL(context.Background(), "/api/cli/login/complete?challenge_id=cli_123", "")
+	require.NoError(t, err)
+	require.Len(t, sessions.payloads, 1)
+
+	for _, raw := range sessions.payloads {
+		payload := raw.(map[string]string)
+		require.Equal(t, "/api/cli/login/complete?challenge_id=cli_123", payload["return_to"])
+	}
+}
+
 func TestHandleCallbackRegistersReferralFromOAuthState(t *testing.T) {
 	sessions := newFakeSessionStore()
 	state := "oauth-state"
