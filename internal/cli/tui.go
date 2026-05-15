@@ -24,6 +24,7 @@ const (
 	tuiStateQuestion   = "question"
 	tuiStateTypeSelect = "type_select"
 	tuiStateReportFile = "report_file"
+	tuiStateLogin      = "login"
 )
 
 const tuiStartupBanner = `╭─── OfficeCLI ─────────────────────────╮
@@ -81,6 +82,17 @@ type tuiAccessStatusMsg struct {
 	Err    error
 }
 
+type tuiLoginOutputMsg struct {
+	GenerationID int
+	Role         string
+	Text         string
+}
+
+type tuiLoginFinishedMsg struct {
+	GenerationID int
+	Err          error
+}
+
 type tuiInitialPromptMsg struct{}
 type tuiNoopMsg struct{}
 
@@ -106,6 +118,12 @@ type tuiProgressPrompter struct {
 	generationID int
 }
 
+type tuiLoginWriter struct {
+	events       chan<- tea.Msg
+	generationID int
+	role         string
+}
+
 func newTUIProgressPrompter(events chan<- tea.Msg, generationID int) *tuiProgressPrompter {
 	return &tuiProgressPrompter{events: events, generationID: generationID}
 }
@@ -124,6 +142,14 @@ func (p *tuiProgressPrompter) Ask(question string, options []string, allowFreefo
 	}
 	answer := <-reply
 	return answer.optionID, answer.answer, answer.err
+}
+
+func (w tuiLoginWriter) Write(p []byte) (int, error) {
+	text := strings.TrimSpace(string(p))
+	if text != "" && w.events != nil {
+		w.events <- tuiLoginOutputMsg{GenerationID: w.generationID, Role: w.role, Text: text}
+	}
+	return len(p), nil
 }
 
 type tuiModel struct {
@@ -259,6 +285,41 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuiAccessStatusMsg:
 		m.applyAccessStatus(msg.Result, msg.Err)
 		return m, nil
+	case tuiLoginOutputMsg:
+		if msg.GenerationID != m.generationID || m.cancelled {
+			return m, m.waitForEvent()
+		}
+		role := strings.TrimSpace(msg.Role)
+		if role == "" {
+			role = "assistant"
+		}
+		m.append(role, msg.Text)
+		return m, m.waitForEvent()
+	case tuiLoginFinishedMsg:
+		if msg.GenerationID != m.generationID {
+			return m, nil
+		}
+		m.cancel = nil
+		m.events = nil
+		m.exitArmed = false
+		m.input.Placeholder = "Describe a document, or type /help"
+		if m.cancelled {
+			m.cancelled = false
+			m.state = tuiStateIdle
+			return m, nil
+		}
+		m.state = tuiStateIdle
+		if msg.Err != nil {
+			m.append("error", msg.Err.Error())
+			return m, nil
+		}
+		cfg, err := LoadConfig("")
+		if err != nil {
+			m.append("error", err.Error())
+			return m, nil
+		}
+		m.cfg = cfg
+		return m, m.checkAccessStatus()
 	case tuiProgressMsg:
 		if msg.GenerationID != m.generationID {
 			return m, m.waitForEvent()
@@ -320,6 +381,18 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
+			if m.state == tuiStateLogin {
+				if m.cancel != nil {
+					m.cancel()
+				}
+				m.cancelled = true
+				m.cancel = nil
+				m.state = tuiStateIdle
+				m.input.Reset()
+				m.input.Placeholder = "Describe a document, or type /help"
+				m.append("status", "Login cancelled")
+				return m, nil
+			}
 			if m.state == tuiStateTypeSelect || m.state == tuiStateReportFile {
 				m.input.Reset()
 				m.cancelPendingSelection("Selection cancelled")
@@ -393,6 +466,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value == "" {
 				return m, nil
 			}
+			if m.state == tuiStateLogin {
+				m.append("status", "Login is already running. Press Ctrl+C to cancel it.")
+				return m, nil
+			}
 			if m.state == tuiStateQuestion && m.question != nil {
 				m.answerQuestion(value)
 				m.state = tuiStateRunning
@@ -417,15 +494,69 @@ func (m tuiModel) handleCommandOrSubmit(value string) (tea.Model, tea.Cmd) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "/exit", "/quit":
 		return m, tea.Quit
-	case "/clear":
-		m.entries = nil
-		m.refreshViewport()
-		return m, nil
+	case "/login":
+		return m.startLogin()
 	case "/help":
-		m.append("assistant", "Describe the document you want to generate in natural language. Commands: /help, /clear, /exit. Ctrl+C clears the current input; press Ctrl+C again to exit. During generation, Ctrl+C cancels the current run. For scripts, use officecli new ...")
+		m.append("assistant", tuiHelpText)
 		return m, nil
 	default:
+		if strings.HasPrefix(strings.TrimSpace(value), "/") {
+			m.append("error", fmt.Sprintf("Unknown command: %s. Type /help for available commands.", strings.Fields(strings.TrimSpace(value))[0]))
+			return m, nil
+		}
 		return m.enterTypeSelection(value)
+	}
+}
+
+const tuiHelpText = `Describe the document you want to generate in natural language.
+
+Commands:
+  /help   Show this help
+  /login  Log in to use account hosted credits
+  /exit   Exit the TUI
+
+Ctrl+C clears the current input; press Ctrl+C again to exit. During generation or login, Ctrl+C cancels the current run. For scripts, use officecli new ...`
+
+func (m tuiModel) startLogin() (tea.Model, tea.Cmd) {
+	if m.app == nil {
+		m.append("error", "login is unavailable")
+		return m, nil
+	}
+	m.generationID++
+	generationID := m.generationID
+	rootCtx := m.rootCtx
+	if rootCtx == nil {
+		rootCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(rootCtx)
+	events := make(chan tea.Msg, 128)
+	m.events = events
+	m.cancel = cancel
+	m.cancelled = false
+	m.exitArmed = false
+	m.state = tuiStateLogin
+	m.currentJob = nil
+	m.input.Placeholder = "Logging in. Ctrl+C to cancel"
+	m.append("status", "Starting login")
+	return m, m.startLoginCmd(ctx, generationID, events)
+}
+
+func (m tuiModel) startLoginCmd(ctx context.Context, generationID int, events chan tea.Msg) tea.Cmd {
+	app := *m.app
+	cfg := m.cfg
+	app.Stdout = tuiLoginWriter{events: events, generationID: generationID, role: "assistant"}
+	app.Stderr = tuiLoginWriter{events: events, generationID: generationID, role: "error"}
+	return func() tea.Msg {
+		go func() {
+			err := app.runLogin(ctx, cfg)
+			events <- tuiLoginFinishedMsg{GenerationID: generationID, Err: err}
+			close(events)
+		}()
+		msg, ok := <-events
+		if !ok {
+			return tuiNoopMsg{}
+		}
+		return msg
 	}
 }
 
@@ -661,11 +792,11 @@ func (m tuiModel) renderEntries() string {
 			b.WriteString("\n")
 			b.WriteString(entry.text)
 		case "status":
-			b.WriteString(tuiStatusStyle.Render("• " + entry.text))
+			b.WriteString(tuiStatusStyle.Render(wrapTUIText("• "+entry.text, m.entryWrapWidth())))
 		case "error":
 			b.WriteString(tuiErrorStyle.Render(wrapTUIText("Error: "+entry.text, m.entryWrapWidth())))
 		default:
-			content := "OfficeCLI\n" + entry.text
+			content := "OfficeCLI\n" + wrapTUIText(entry.text, m.entryWrapWidth())
 			if strings.HasPrefix(entry.text, tuiStartupBanner) {
 				content = entry.text
 			}
@@ -741,9 +872,9 @@ func (m tuiModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.input.View())
 	b.WriteString("\n")
-	b.WriteString(tuiStatusStyle.Render(m.quotaText()))
+	b.WriteString(tuiStatusStyle.Render(wrapTUIText(m.quotaText(), m.entryWrapWidth())))
 	b.WriteString("\n")
-	b.WriteString(tuiStatusStyle.Render("Enter send  Ctrl+C clear/cancel  Ctrl+C twice exit  /help  /clear  /exit"))
+	b.WriteString(tuiStatusStyle.Render(wrapTUIText("Enter send  Ctrl+C clear/cancel  Ctrl+C twice exit  /help  /login  /exit", m.entryWrapWidth())))
 	return b.String()
 }
 
@@ -857,6 +988,8 @@ func (m tuiModel) statusText() string {
 		return "Choose file type · " + runtimeMode
 	case tuiStateReportFile:
 		return "Waiting for report file · " + runtimeMode
+	case tuiStateLogin:
+		return "Logging in · " + runtimeMode
 	default:
 		return "Ready · " + runtimeMode + " · keep typing"
 	}

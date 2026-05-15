@@ -1,11 +1,18 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -189,11 +196,170 @@ func TestTUIModelClearRemovesContentWithoutOldPadding(t *testing.T) {
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(tuiModel)
 	view := model.View()
-	if strings.Contains(view, "Welcome to OfficeCLI") {
-		t.Fatalf("/clear should remove previous conversation content:\n%s", view)
+	if !strings.Contains(view, "Unknown command: /clear") {
+		t.Fatalf("/clear should be rejected as an unknown command:\n%s", view)
+	}
+	if strings.Contains(view, "Choose file type") {
+		t.Fatalf("/clear should not start document generation:\n%s", view)
 	}
 	if !strings.Contains(view, "> Describe a document") {
-		t.Fatalf("/clear should leave the input usable:\n%s", view)
+		t.Fatalf("unknown /clear should leave the input usable:\n%s", view)
+	}
+}
+
+func TestTUIModelSlashLoginRunsDeviceLoginAndRefreshesQuota(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	expiresAt := time.Now().Add(10 * time.Minute).UTC().Truncate(time.Second)
+	var pollCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/cli/login/start":
+			_, _ = fmt.Fprintf(w, `{"data":{"challenge_id":"cli_test","login_url":"http://%s/api/cli/login/verify?user_code=ABCD-EFGH","user_code":"ABCD-EFGH","verification_url":"http://%s/api/cli/login/verify","poll_interval_seconds":1,"expires_at":%q}}`, r.Host, r.Host, expiresAt.Format(time.RFC3339))
+		case "/api/cli/login/poll":
+			pollCount++
+			_, _ = fmt.Fprintf(w, `{"data":{"status":"completed","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+		case "/api/cli/login/exchange":
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode exchange: %v", err)
+			}
+			if payload["challenge_id"] != "cli_test" || payload["code_verifier"] == "" {
+				t.Fatalf("exchange payload = %+v", payload)
+			}
+			_, _ = fmt.Fprintf(w, `{"data":{"token":"ocli_sess_new","token_prefix":"ocli_sess","user_id":42,"user_email":"dev@example.com","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, err := WriteConfig("", Config{
+		Runtime: RuntimeConfig{Mode: RuntimeModeHosted},
+		License: LicenseConfig{
+			BaseURL:    server.URL,
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	app := NewApp(&bytes.Buffer{}, &bytes.Buffer{}, bytes.NewBuffer(nil))
+	app.openBrowser = func(string) error { return fmt.Errorf("browser unavailable") }
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		if strings.TrimSpace(cfg.SessionToken) != "ocli_sess_new" {
+			t.Fatalf("quota refresh did not load saved session token: %#v", cfg.SessionToken)
+		}
+		return stubLicenseManager{checkResult: &LicenseCheckResult{
+			Allowed:       true,
+			AccessMode:    LicenseAccessModeHosted,
+			CreditBalance: 77,
+		}}, nil
+	}
+	model := newTUIModel(app, Config{
+		Runtime: RuntimeConfig{Mode: RuntimeModeHosted},
+		License: LicenseConfig{
+			BaseURL:    server.URL,
+			Enabled:    true,
+			TimeoutSec: 60,
+		},
+	}, TUIOptions{}, "", io.Discard)
+	model.input.SetValue("/login")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if cmd == nil {
+		t.Fatal("expected /login to start a login command")
+	}
+	model = runTUICommandsUntil(t, model, cmd, func(model tuiModel) bool {
+		view := model.View()
+		return strings.Contains(view, "Logged in as dev@example.com") && strings.Contains(view, "Credits: 77")
+	})
+
+	if pollCount == 0 {
+		t.Fatal("poll endpoint was not called")
+	}
+	view := model.View()
+	for _, needle := range []string{"Login URL:", "ABCD-EFGH", "Could not open your browser automatically", "Logged in as dev@example.com", "Credits: 77"} {
+		if !strings.Contains(view, needle) {
+			t.Fatalf("TUI login output missing %q:\n%s", needle, view)
+		}
+	}
+	if model.state != tuiStateIdle {
+		t.Fatalf("state after login = %q", model.state)
+	}
+}
+
+func TestTUIModelSlashLoginBlocksGenerationInput(t *testing.T) {
+	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
+	model.state = tuiStateLogin
+	model.input.SetValue("做一个 PPT")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("login input should not start a command")
+	}
+	if model.currentJob != nil || model.state != tuiStateLogin {
+		t.Fatalf("login input should not start generation, state=%q job=%#v", model.state, model.currentJob)
+	}
+	if !strings.Contains(model.View(), "Login is already running") {
+		t.Fatalf("missing login-running message:\n%s", model.View())
+	}
+}
+
+func TestTUIModelCtrlCCancelsLogin(t *testing.T) {
+	cancelled := false
+	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
+	model.state = tuiStateLogin
+	model.cancel = func() { cancelled = true }
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	model = updated.(tuiModel)
+	if cmd != nil {
+		t.Fatal("ctrl-c while logging in should not quit")
+	}
+	if !cancelled {
+		t.Fatal("expected login ctrl-c to cancel the login context")
+	}
+	if model.state != tuiStateIdle {
+		t.Fatalf("state after login cancel = %q", model.state)
+	}
+	if !strings.Contains(model.View(), "Login cancelled") {
+		t.Fatalf("missing login cancellation message:\n%s", model.View())
+	}
+}
+
+func TestTUIModelHelpWrapsAndListsCurrentCommands(t *testing.T) {
+	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 64, Height: 20})
+	model = updated.(tuiModel)
+	model.input.SetValue("/help")
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+
+	view := model.View()
+	for _, needle := range []string{"/help", "/login", "/exit"} {
+		if !strings.Contains(view, needle) {
+			t.Fatalf("help/footer missing %q:\n%s", needle, view)
+		}
+	}
+	if strings.Contains(view, "/clear") {
+		t.Fatalf("help/footer should not mention /clear:\n%s", view)
+	}
+	rendered := model.renderEntries()
+	if strings.Count(rendered, "\n") < 8 {
+		t.Fatalf("help should render as multiple lines:\n%s", rendered)
+	}
+	for _, line := range strings.Split(rendered, "\n") {
+		if width := lipgloss.Width(line); width > model.view.Width {
+			t.Fatalf("help line width = %d, want <= %d: %q\n%s", width, model.view.Width, line, rendered)
+		}
 	}
 }
 
@@ -708,4 +874,22 @@ func lineIndexContaining(lines []string, needle string) int {
 		}
 	}
 	return -1
+}
+
+func runTUICommandsUntil(t *testing.T, model tuiModel, cmd tea.Cmd, done func(tuiModel) bool) tuiModel {
+	t.Helper()
+	for i := 0; i < 40; i++ {
+		if cmd == nil {
+			t.Fatalf("command stream ended before condition was met:\n%s", model.View())
+		}
+		msg := cmd()
+		updated, next := model.Update(msg)
+		model = updated.(tuiModel)
+		if done(model) {
+			return model
+		}
+		cmd = next
+	}
+	t.Fatalf("condition was not met after processing TUI commands:\n%s", model.View())
+	return model
 }

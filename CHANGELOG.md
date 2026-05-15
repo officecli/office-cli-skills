@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.66 - 2026-05-15
+
+### Changed
+
+- Added `/login` to the interactive TUI so users can complete browser-based account login without leaving the session.
+- Removed `/clear` from the interactive TUI command set and report it as an unknown command.
+- Wrapped TUI help, status, and footer text to prevent long help lines from being truncated.
+
 ## 0.2.65 - 2026-05-15
 
 ### Changed
