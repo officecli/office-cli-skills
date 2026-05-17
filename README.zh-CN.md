@@ -4,7 +4,7 @@ OfficeCLI 是一个命令行工具，可以用自然语言 prompt 生成 Office 
 
 这个仓库是 OfficeCLI 二进制的公开安装和文档入口，同时也包含 Claude Code、Codex 风格本地 Agent 和 OpenClaw 的可选 skill 封装。AI Agent 使用 OfficeCLI 是非重点功能；主入口仍然是 `officecli` 命令本身。
 
-主 README 仍然使用英文：[README.md](./README.md)
+社区：[Discord](https://discord.gg/ezAHMkdG)
 
 ## 使用 npm 安装
 

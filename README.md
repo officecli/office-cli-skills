@@ -10,6 +10,8 @@ those integrations are secondary to the CLI itself.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
+Community: [Discord](https://discord.gg/ezAHMkdG)
+
 ## Fast links
 
 Site pages:
