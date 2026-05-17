@@ -58,7 +58,7 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    const discordLink = screen.getByRole('link', { name: /Discord/i })
+    const discordLink = screen.getAllByRole('link', { name: /Discord/i }).at(-1)!
     expect(discordLink).toHaveAttribute('href', 'https://discord.gg/ezAHMkdG')
     expect(discordLink).toHaveAttribute('target', '_blank')
     expect(discordLink).toHaveAttribute('rel', 'noreferrer')
@@ -71,10 +71,21 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    const xLink = screen.getByRole('link', { name: /^X$/i })
+    const xLink = screen.getAllByRole('link', { name: /^X$/i }).at(-1)!
     expect(xLink).toHaveAttribute('href', 'https://x.com/officecli')
     expect(xLink).toHaveAttribute('target', '_blank')
     expect(xLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
+  it('links Discord and X from the home hero', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('link', { name: /Join Discord/i })).toHaveAttribute('href', 'https://discord.gg/ezAHMkdG')
+    expect(screen.getByRole('link', { name: /Follow on X/i })).toHaveAttribute('href', 'https://x.com/officecli')
   })
 
   it('shows a non-price placeholder when the pricing api fails', async () => {

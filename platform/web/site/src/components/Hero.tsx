@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Megaphone, MessageSquare } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
@@ -14,6 +15,27 @@ const HERO_TERMINAL_TABS: Array<{ id: HeroFormatTab; label: string }> = [
   { id: 'xlsx', label: 'XLSX' },
   { id: 'report', label: 'REPORT' },
   { id: 'img', label: 'IMG' },
+]
+
+const HERO_SOCIAL_LINKS = [
+  {
+    label: 'Join Discord',
+    title: 'Discord',
+    description: 'Community room',
+    href: 'https://discord.gg/ezAHMkdG',
+    icon: MessageSquare,
+    className: 'border-tertiary/25 bg-tertiary/10 hover:border-tertiary/40 hover:bg-tertiary/15',
+    iconClassName: 'text-tertiary',
+  },
+  {
+    label: 'Follow on X',
+    title: 'X / Twitter',
+    description: 'Release updates',
+    href: 'https://x.com/officecli',
+    icon: Megaphone,
+    className: 'border-primary/25 bg-primary/10 hover:border-primary/40 hover:bg-primary/15',
+    iconClassName: 'text-primary',
+  },
 ]
 
 function DocPageMock() {
@@ -362,14 +384,32 @@ export default function Hero() {
             External: free unlimited with your own model endpoint. Hosted: OfficeCLI-managed runtime with hosted credits. Both modes use the same dependency-free officecli binary for PPTX, DOCX, XLSX, REPORT, and IMG outputs.
           </p>
           <div className="mb-7 grid max-w-2xl gap-2 sm:grid-cols-2">
-            <div className="rounded-lg border border-tertiary/25 bg-tertiary/10 px-3 py-2.5">
-              <div className="font-headline text-[11px] uppercase tracking-widest text-tertiary">External Mode</div>
-              <p className="mt-1 text-xs leading-snug text-outline-variant">Free unlimited with your own LLM endpoint and local image provider.</p>
-            </div>
-            <div className="rounded-lg border border-primary/25 bg-primary/10 px-3 py-2.5">
-              <div className="font-headline text-[11px] uppercase tracking-widest text-primary">Hosted Mode</div>
-              <p className="mt-1 text-xs leading-snug text-outline-variant">Managed runtime with hosted credits when you do not want to run model services.</p>
-            </div>
+            {HERO_SOCIAL_LINKS.map((item) => {
+              const Icon = item.icon
+              return (
+                <a
+                  key={item.label}
+                  className={`group/social flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors ${item.className}`}
+                  href={item.href}
+                  aria-label={item.label}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <Icon className={`h-4 w-4 shrink-0 ${item.iconClassName}`} aria-hidden="true" />
+                    <span className="min-w-0">
+                      <span className="block font-headline text-[11px] uppercase tracking-widest text-white">
+                        {item.title}
+                      </span>
+                      <span className="block truncate text-xs text-outline-variant">{item.description}</span>
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded border border-outline-variant/15 px-2 py-0.5 text-[9px] font-headline uppercase tracking-wider text-outline-variant transition-colors group-hover/social:text-white">
+                    Open
+                  </span>
+                </a>
+              )
+            })}
           </div>
           <div className="flex flex-wrap gap-3">
             <motion.a
