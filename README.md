@@ -2,6 +2,8 @@
 
 OfficeCLI is a command-line tool that turns natural-language prompts into `PPTX`, `DOCX`, `XLSX`, workbook-backed `Report`, and standalone image outputs. When publishing is configured, document outputs can also return an online preview URL.
 
+Community: [Discord](https://discord.gg/ezAHMkdG)
+
 For `PPTX`, OfficeCLI generates and embeds images by default when the slide plan benefits from visuals. Use `--no-images` if you want a text-only deck.
 
 Standalone `new img` generation follows the runtime selected by `config set-runtime`: `external` is free and unlimited and uses the local image provider from `config set-generation`, while `hosted` goes through the OfficeCLI-managed runtime and consumes hosted credits. Standalone images publish online by default when publishing is configured; use `--no-publish` for local-only output.
