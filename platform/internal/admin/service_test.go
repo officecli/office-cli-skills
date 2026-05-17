@@ -52,6 +52,55 @@ func TestNewServiceRejectsNonAllowlistedEmailAfterNormalization(t *testing.T) {
 	require.True(t, allowed)
 }
 
+func TestServiceMockDataProvidesAdminListSamples(t *testing.T) {
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(nil, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+	svc.UseMockData(true)
+
+	users, err := svc.ListUsers(context.Background(), "")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(users), 3)
+
+	filteredUsers, err := svc.ListUsers(context.Background(), "disabled")
+	require.NoError(t, err)
+	require.Len(t, filteredUsers, 1)
+	require.Equal(t, model.UserStatusDisabled, filteredUsers[0].Status)
+
+	keys, err := svc.ListAPIKeys(context.Background(), nil)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(keys), 3)
+	require.NotNil(t, keys[0].OwnerUserID)
+
+	ownerID := *keys[0].OwnerUserID
+	ownedKeys, err := svc.ListAPIKeys(context.Background(), &ownerID)
+	require.NoError(t, err)
+	require.NotEmpty(t, ownedKeys)
+	for _, key := range ownedKeys {
+		require.NotNil(t, key.OwnerUserID)
+		require.Equal(t, ownerID, *key.OwnerUserID)
+	}
+
+	events, err := svc.ListUsageEvents(context.Background(), sqlstore.UsageEventFilter{Result: string(model.UsageResultBlocked)})
+	require.NoError(t, err)
+	require.NotEmpty(t, events)
+	for _, event := range events {
+		require.Equal(t, model.UsageResultBlocked, event.Result)
+	}
+
+	overview, err := svc.Overview(context.Background())
+	require.NoError(t, err)
+	require.Greater(t, overview.TotalUsers, int64(0))
+	require.Greater(t, overview.TotalAPIKeys, int64(0))
+
+	sources, err := svc.QuotaSources(context.Background(), QuotaSourcesFilter{})
+	require.NoError(t, err)
+	require.NotEmpty(t, sources.FreeTrialDevices)
+	require.NotEmpty(t, sources.RewardGrants)
+	require.NotEmpty(t, sources.PaidExternalKeys)
+	require.NotEmpty(t, sources.HostedKeys)
+}
+
 func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

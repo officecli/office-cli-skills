@@ -56,12 +56,12 @@ export default function UsageEventsPage() {
     <div className="space-y-8">
       <Panel>
         <SectionHeading eyebrow="Audit visibility" title="Recent usage events" body="Filter the event stream to understand why requests were allowed, blocked, or routed through a specific mode." />
-        <form className="surface-console soft-panel mb-6 grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+        <form className="admin-code-card admin-surface-panel mb-6 grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           setFilters(draft)
         }}>
           <label className="text-sm text-outline">Mode
-            <select className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.mode} onChange={(event) => setDraft((current) => ({ ...current, mode: event.target.value }))}>
+            <select className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.mode} onChange={(event) => setDraft((current) => ({ ...current, mode: event.target.value }))}>
               <option value="">All modes</option>
               <option value="free">free</option>
               <option value="reward">reward</option>
@@ -70,39 +70,39 @@ export default function UsageEventsPage() {
             </select>
           </label>
           <label className="text-sm text-outline">Result
-            <select className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.result} onChange={(event) => setDraft((current) => ({ ...current, result: event.target.value }))}>
+            <select className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.result} onChange={(event) => setDraft((current) => ({ ...current, result: event.target.value }))}>
               <option value="">All results</option>
               <option value="allowed">allowed</option>
               <option value="blocked">blocked</option>
             </select>
           </label>
           <label className="text-sm text-outline">Reason code
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.reason_code} onChange={(event) => setDraft((current) => ({ ...current, reason_code: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.reason_code} onChange={(event) => setDraft((current) => ({ ...current, reason_code: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">Fingerprint
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.fingerprint_hash} onChange={(event) => setDraft((current) => ({ ...current, fingerprint_hash: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.fingerprint_hash} onChange={(event) => setDraft((current) => ({ ...current, fingerprint_hash: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">API key ID
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.api_key_id} onChange={(event) => setDraft((current) => ({ ...current, api_key_id: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.api_key_id} onChange={(event) => setDraft((current) => ({ ...current, api_key_id: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">User ID
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.user_id} onChange={(event) => setDraft((current) => ({ ...current, user_id: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.user_id} onChange={(event) => setDraft((current) => ({ ...current, user_id: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">Client IP
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.client_ip} onChange={(event) => setDraft((current) => ({ ...current, client_ip: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.client_ip} onChange={(event) => setDraft((current) => ({ ...current, client_ip: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">Request ID
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.request_id} onChange={(event) => setDraft((current) => ({ ...current, request_id: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.request_id} onChange={(event) => setDraft((current) => ({ ...current, request_id: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">Start time
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-15T00:00:00Z" value={draft.start_time} onChange={(event) => setDraft((current) => ({ ...current, start_time: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-15T00:00:00Z" value={draft.start_time} onChange={(event) => setDraft((current) => ({ ...current, start_time: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">End time
-            <input className="surface-console-muted mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-16T00:00:00Z" value={draft.end_time} onChange={(event) => setDraft((current) => ({ ...current, end_time: event.target.value }))} />
+            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-16T00:00:00Z" value={draft.end_time} onChange={(event) => setDraft((current) => ({ ...current, end_time: event.target.value }))} />
           </label>
           <div className="md:col-span-4 flex gap-3">
-            <button type="submit" className="tonal-button">Apply filters</button>
-            <button type="button" className="ghost-button" onClick={() => {
+            <button type="submit" className="admin-primary-button">Apply filters</button>
+            <button type="button" className="admin-secondary-button" onClick={() => {
               setDraft(defaultFilters)
               setFilters(defaultFilters)
             }}>Reset</button>
@@ -122,7 +122,7 @@ export default function UsageEventsPage() {
 
 function UsageAuditEvent({ event }: { event: UsageEvent }) {
   return (
-    <article className="soft-panel overflow-hidden border border-outline-variant/15">
+    <article className="admin-surface-panel overflow-hidden border border-outline-variant/15">
       <div className="grid gap-4 bg-surface-container-high/60 p-5 text-sm lg:grid-cols-[1fr_1fr_1.3fr_1fr_1fr]">
         <div>
           <div className="info-eyebrow-tight text-outline">Mode / Result</div>

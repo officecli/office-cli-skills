@@ -1,6 +1,8 @@
-import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Wallet, Workflow } from 'lucide-react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Menu as MenuIcon, Wallet, Workflow } from 'lucide-react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Button, Dropdown, Layout, Space, Tag, Typography } from 'antd'
+import type { MenuProps } from 'antd'
 import { api } from '../api'
 import { cn } from '../lib/utils'
 import type { User } from '../types'
@@ -33,69 +35,87 @@ const navItems = [
 
 export function AppSidebar({ user }: { user: User }) {
   const queryClient = useQueryClient()
-  
+
   return (
-    <aside className="sidebar-shell fixed inset-y-0 left-0 z-40 hidden w-72 flex-col border-r border-outline-variant/20 px-5 py-6 lg:flex">
-      <Link to="/" className="mb-10 flex items-center gap-4">
-        <OfficeCliBrand
-          markClassName="h-12 w-12"
-          titleClassName="text-lg font-bold text-white"
-          subtitle="document runtime / app"
-        />
-      </Link>
+    <Layout.Sider width={288} className="app-sider hidden lg:block">
+      <div className="sticky top-0 px-5 py-6">
+        <Link to="/" className="mb-8 flex items-center gap-4">
+          <OfficeCliBrand
+            markClassName="h-12 w-12"
+            titleClassName="text-lg font-bold text-white"
+            subtitle="document runtime / app"
+          />
+        </Link>
 
-      <div className="soft-panel mb-8 border border-outline-variant/20 bg-surface-container-low/70 p-4">
-        <div className="info-eyebrow text-outline">Signed in as</div>
-        <div className="mt-3 text-sm font-semibold text-white">{user.name || user.email}</div>
-        <div className="mt-1 break-all text-xs text-outline">{user.email}</div>
+        <div className="app-operator-card mb-6">
+          <Typography.Text className="app-eyebrow" type="secondary">Signed in as</Typography.Text>
+          <Typography.Text className="mt-3 block font-semibold">{user.name || user.email}</Typography.Text>
+          <Typography.Text className="mt-1 block break-all text-xs" type="secondary">{user.email}</Typography.Text>
+        </div>
+
+        <nav>
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              onMouseEnter={() => item.prefetch?.(queryClient)}
+              className="block"
+            >
+              {({ isActive }) => (
+                <div className={cn('app-nav-item', isActive && 'app-nav-item-active')}>
+                  <item.icon size={18} />
+                  <span>{item.label}</span>
+                </div>
+              )}
+            </NavLink>
+          ))}
+        </nav>
       </div>
-
-      <nav className="space-y-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            onMouseEnter={() => item.prefetch?.(queryClient)}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-outline hover:bg-surface-container-high hover:text-white',
-              isActive && 'active-nav-item bg-surface-container-high text-white',
-            )}
-          >
-            <item.icon size={18} />
-            <span className="font-medium">{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-    </aside>
+    </Layout.Sider>
   )
 }
 
 export function AppTopBar({ user }: { user: User }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const queryClient = useQueryClient()
   const logout = useMutation({
     mutationFn: api.logout,
     onSuccess: () => navigate('/login', { replace: true }),
   })
+  const activeNavKey = navItems.find((item) => item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))?.to ?? '/'
+  const mobileNavMenu: MenuProps = {
+    selectedKeys: [activeNavKey],
+    items: navItems.map((item) => ({
+      key: item.to,
+      icon: <item.icon size={16} />,
+      label: item.label,
+    })),
+    onClick: ({ key }) => {
+      const item = navItems.find((candidate) => candidate.to === key)
+      item?.prefetch?.(queryClient)
+      navigate(key)
+    },
+  }
 
   return (
-    <header className="topbar-shell sticky top-0 z-30 mb-8 flex items-center justify-between gap-4 border border-outline-variant/20 px-5 py-4 backdrop-blur-xl">
-      <div>
-        <div className="info-eyebrow-wide text-primary">Live Infrastructure</div>
-        <div className="mt-2 text-2xl font-bold text-white">Production document control</div>
+    <Layout.Header className="app-header sticky top-0 z-30 mb-6 flex h-auto min-h-24 flex-col items-start justify-between gap-4 px-5 py-4 xl:flex-row xl:items-center">
+      <div className="min-w-0">
+        <Typography.Text className="app-eyebrow text-primary">Live Infrastructure</Typography.Text>
+        <Typography.Title level={3} className="!mb-0 !mt-1 max-w-3xl break-words !text-xl xl:!text-2xl">Production document control</Typography.Title>
       </div>
-      <div className="flex items-center gap-3">
-        <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button text-xs">Docs</a>
-        <a href="https://officecli.io/pricing" target="_blank" rel="noreferrer" className="ghost-button text-xs">Pricing</a>
-        <div className="hidden rounded-full border border-outline-variant/20 px-4 py-2 text-right sm:block">
-          <div className="info-eyebrow-mid text-outline">Operator</div>
-          <div className="text-sm font-semibold text-white">{user.name || user.email}</div>
-        </div>
-        <button type="button" className="ghost-button px-4 text-xs" onClick={() => logout.mutate()} disabled={logout.isPending}>
-          <LogOut size={14} />
+      <Space wrap className="shrink-0">
+        <Dropdown menu={mobileNavMenu} trigger={['click']}>
+          <Button className="lg:hidden" icon={<MenuIcon size={14} />}>Menu</Button>
+        </Dropdown>
+        <Button href={inviteRewardGuideHref} target="_blank" rel="noreferrer">Docs</Button>
+        <Button href="https://officecli.io/pricing" target="_blank" rel="noreferrer">Pricing</Button>
+        <Tag className="hidden sm:inline-flex">User: {user.name || user.email}</Tag>
+        <Button onClick={() => logout.mutate()} disabled={logout.isPending} loading={logout.isPending} icon={<LogOut size={14} />}>
           Sign out
-        </button>
-      </div>
-    </header>
+        </Button>
+      </Space>
+    </Layout.Header>
   )
 }

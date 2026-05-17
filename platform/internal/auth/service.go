@@ -194,6 +194,44 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 	return user, rawCookie, returnTo, nil
 }
 
+func (s *Service) MockGoogleLogin(ctx context.Context, email, name, returnTo string) (*model.User, string, string, error) {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	displayName := strings.TrimSpace(name)
+	if normalizedEmail == "" {
+		return nil, "", "", fmt.Errorf("mock app email is required")
+	}
+	if displayName == "" {
+		displayName = normalizedEmail
+	}
+	user, err := s.users.SaveGoogleUser(ctx, "mock-google-app-user", normalizedEmail, displayName, nil)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if user.Status == model.UserStatusDisabled {
+		return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "user_disabled"}
+	}
+	sessionID := uuid.NewString()
+	session := SessionPayload{SessionID: sessionID, UserID: user.ID, CreatedAt: time.Now().UTC()}
+	if err := s.sessions.SaveNamespacedSession(ctx, "app", sessionID, session, s.sessionTTL); err != nil {
+		return nil, "", "", err
+	}
+	if err := s.sessions.AddUserNamespacedSession(ctx, "app", user.ID, sessionID, s.sessionTTL); err != nil {
+		_ = s.sessions.DeleteNamespacedSession(ctx, "app", sessionID)
+		return nil, "", "", err
+	}
+	rawCookie, err := s.codec.Encode(sessionID)
+	if err != nil {
+		_ = s.removeAppSession(ctx, session)
+		return nil, "", "", err
+	}
+	s.writeAuditLog(ctx, "app.google_mock_login", normalizedEmail, map[string]any{
+		"email":   normalizedEmail,
+		"name":    displayName,
+		"user_id": user.ID,
+	})
+	return user, rawCookie, normalizeReturnTo(returnTo), nil
+}
+
 func (s *Service) ResolveSession(raw string) (*SessionPayload, error) {
 	sessionID, err := s.codec.Decode(raw)
 	if err != nil {

@@ -43,6 +43,10 @@ type Config struct {
 	GoogleClientSecret           string
 	GoogleRedirectURL            string
 	AppGoogleAllowlist           []string
+	AppGoogleMockEnabled         bool
+	AppGoogleMockEmail           string
+	AppGoogleMockName            string
+	AppMockDataEnabled           bool
 	DiscordClientID              string
 	DiscordClientSecret          string
 	DiscordRedirectURL           string
@@ -73,6 +77,10 @@ type Config struct {
 	HostedPricingRules           []model.HostedPricingRule
 	AdminGoogleRedirectURL       string
 	AdminGoogleAllowlist         []string
+	AdminGoogleMockEnabled       bool
+	AdminGoogleMockEmail         string
+	AdminGoogleMockName          string
+	AdminMockDataEnabled         bool
 	StripeSecretKey              string
 	StripeWebhookSecret          string
 	StripeSuccessURL             string
@@ -114,6 +122,10 @@ func LoadConfig() (Config, error) {
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),
 		AppGoogleAllowlist:           parseCSVList(os.Getenv("APP_GOOGLE_ALLOWLIST")),
+		AppGoogleMockEnabled:         mustEnvBool("APP_GOOGLE_MOCK_ENABLED", false),
+		AppGoogleMockEmail:           mustEnvDefault("APP_GOOGLE_MOCK_EMAIL", "mock-user@example.com"),
+		AppGoogleMockName:            mustEnvDefault("APP_GOOGLE_MOCK_NAME", "Mock User"),
+		AppMockDataEnabled:           mustEnvBool("APP_MOCK_DATA_ENABLED", false),
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),
 		DiscordClientSecret:          os.Getenv("DISCORD_CLIENT_SECRET"),
 		DiscordRedirectURL:           mustEnvDefault("DISCORD_REDIRECT_URL", "https://platform.officecli.io/api/app/discord/callback"),
@@ -143,6 +155,10 @@ func LoadConfig() (Config, error) {
 		HostedPricingRules:           defaultHostedPricingRules(),
 		AdminGoogleRedirectURL:       mustEnvDefault("ADMIN_GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/admin/auth/google/callback"),
 		AdminGoogleAllowlist:         parseCSVList(os.Getenv("ADMIN_GOOGLE_ALLOWLIST")),
+		AdminGoogleMockEnabled:       mustEnvBool("ADMIN_GOOGLE_MOCK_ENABLED", false),
+		AdminGoogleMockEmail:         mustEnvDefault("ADMIN_GOOGLE_MOCK_EMAIL", "mock-admin@example.com"),
+		AdminGoogleMockName:          mustEnvDefault("ADMIN_GOOGLE_MOCK_NAME", "Mock Admin"),
+		AdminMockDataEnabled:         mustEnvBool("ADMIN_MOCK_DATA_ENABLED", false),
 		StripeSecretKey:              os.Getenv("STRIPE_SECRET_KEY"),
 		StripeWebhookSecret:          os.Getenv("STRIPE_WEBHOOK_SECRET"),
 		StripeSuccessURL:             mustEnvDefault("STRIPE_SUCCESS_URL", "https://platform.officecli.io/app/billing?status=success&session_id={CHECKOUT_SESSION_ID}"),
@@ -375,6 +391,18 @@ func normalizeAppEnv(value string) string {
 }
 
 func validateProductionSecrets(cfg Config) error {
+	if cfg.AppGoogleMockEnabled {
+		return fmt.Errorf("APP_GOOGLE_MOCK_ENABLED cannot be enabled in production")
+	}
+	if cfg.AppMockDataEnabled {
+		return fmt.Errorf("APP_MOCK_DATA_ENABLED cannot be enabled in production")
+	}
+	if cfg.AdminGoogleMockEnabled {
+		return fmt.Errorf("ADMIN_GOOGLE_MOCK_ENABLED cannot be enabled in production")
+	}
+	if cfg.AdminMockDataEnabled {
+		return fmt.Errorf("ADMIN_MOCK_DATA_ENABLED cannot be enabled in production")
+	}
 	if strings.TrimSpace(cfg.AdminPassword) == "" || cfg.AdminPassword == "admin123" {
 		return fmt.Errorf("ADMIN_PASSWORD must be explicitly configured in production")
 	}

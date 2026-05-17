@@ -19,7 +19,7 @@ export default function NotFoundPage() {
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Page not found</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">The page you requested could not be found.</p>
 
-            <div className="terminal-card mt-8 flex items-start gap-3 p-5">
+            <div className="admin-code-card mt-8 flex items-start gap-3 p-5">
               <FileSearch size={18} className="mt-0.5 text-tertiary" />
               <div>
                 <div className="info-eyebrow text-outline">Not Found</div>
@@ -28,7 +28,7 @@ export default function NotFoundPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <a href="https://officecli.io/" className="ghost-button">
+              <a href="https://officecli.io/" className="admin-secondary-button">
                 <ArrowLeft size={16} />
                 Back to site
               </a>

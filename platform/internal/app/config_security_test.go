@@ -139,6 +139,112 @@ func TestLoadConfigProductionRejectsNonAIGatewayHostedLLMBaseURL(t *testing.T) {
 	}
 }
 
+func TestLoadConfigProductionRejectsAdminGoogleMock(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("ADMIN_GOOGLE_MOCK_ENABLED", "true")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "ADMIN_GOOGLE_MOCK_ENABLED cannot be enabled in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
+}
+
+func TestLoadConfigProductionRejectsAppGoogleMock(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("APP_GOOGLE_MOCK_ENABLED", "true")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "APP_GOOGLE_MOCK_ENABLED cannot be enabled in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
+}
+
+func TestLoadConfigProductionRejectsAdminMockData(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("ADMIN_MOCK_DATA_ENABLED", "true")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "ADMIN_MOCK_DATA_ENABLED cannot be enabled in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
+}
+
+func TestLoadConfigProductionRejectsAppMockData(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	setRequiredProductionEnv(t)
+	t.Setenv("APP_MOCK_DATA_ENABLED", "true")
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "APP_MOCK_DATA_ENABLED cannot be enabled in production" {
+		t.Fatalf("unexpected error = %v", err)
+	}
+}
+
+func TestLoadConfigReadsAdminGoogleMockSettings(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("ADMIN_GOOGLE_MOCK_ENABLED", "true")
+	t.Setenv("ADMIN_GOOGLE_MOCK_EMAIL", "local-admin@example.com")
+	t.Setenv("ADMIN_GOOGLE_MOCK_NAME", "Local Admin")
+	t.Setenv("ADMIN_MOCK_DATA_ENABLED", "true")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if !cfg.AdminGoogleMockEnabled {
+		t.Fatal("AdminGoogleMockEnabled = false")
+	}
+	if cfg.AdminGoogleMockEmail != "local-admin@example.com" {
+		t.Fatalf("AdminGoogleMockEmail = %q", cfg.AdminGoogleMockEmail)
+	}
+	if cfg.AdminGoogleMockName != "Local Admin" {
+		t.Fatalf("AdminGoogleMockName = %q", cfg.AdminGoogleMockName)
+	}
+	if !cfg.AdminMockDataEnabled {
+		t.Fatal("AdminMockDataEnabled = false")
+	}
+}
+
+func TestLoadConfigReadsAppGoogleMockSettings(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("APP_GOOGLE_MOCK_ENABLED", "true")
+	t.Setenv("APP_GOOGLE_MOCK_EMAIL", "local-user@example.com")
+	t.Setenv("APP_GOOGLE_MOCK_NAME", "Local User")
+	t.Setenv("APP_MOCK_DATA_ENABLED", "true")
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	if !cfg.AppGoogleMockEnabled {
+		t.Fatal("AppGoogleMockEnabled = false")
+	}
+	if cfg.AppGoogleMockEmail != "local-user@example.com" {
+		t.Fatalf("AppGoogleMockEmail = %q", cfg.AppGoogleMockEmail)
+	}
+	if cfg.AppGoogleMockName != "Local User" {
+		t.Fatalf("AppGoogleMockName = %q", cfg.AppGoogleMockName)
+	}
+	if !cfg.AppMockDataEnabled {
+		t.Fatal("AppMockDataEnabled = false")
+	}
+}
+
 func TestLoadConfigRejectsInvalidAPIKeyEncryptionKey(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("API_KEY_ENCRYPTION_KEY", "not-base64")

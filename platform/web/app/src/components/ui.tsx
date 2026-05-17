@@ -1,17 +1,19 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import { Card, Empty, Skeleton as AntSkeleton, Statistic, Table, Tag, Typography } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { cn, formatDate, formatNumber } from '../lib/utils'
 
 export function Panel({ className, children }: PropsWithChildren<{ className?: string }>) {
-  return <section className={cn('panel p-6', className)}>{children}</section>
+  return <Card className={cn('app-panel', className)}>{children}</Card>
 }
 
 export function SectionHeading({ eyebrow, title, body, action }: { eyebrow: string; title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
-        <div className="info-eyebrow text-primary">{eyebrow}</div>
-        <h2 className="mt-2 text-3xl font-bold text-white">{title}</h2>
-        {body ? <p className="mt-2 max-w-2xl text-sm text-outline">{body}</p> : null}
+        <Typography.Text className="app-eyebrow" type="secondary">{eyebrow}</Typography.Text>
+        <Typography.Title level={2} className="!mb-0 !mt-2 !text-2xl">{title}</Typography.Title>
+        {body ? <Typography.Paragraph className="!mb-0 !mt-2 max-w-2xl" type="secondary">{body}</Typography.Paragraph> : null}
       </div>
       {action}
     </div>
@@ -20,34 +22,29 @@ export function SectionHeading({ eyebrow, title, body, action }: { eyebrow: stri
 
 export function MetricCard({ label, value, detail }: { label: string; value: string; detail: ReactNode }) {
   return (
-    <div className="panel-muted p-5">
-      <div className="info-eyebrow-mid text-outline">{label}</div>
-      <div className="mt-3 text-3xl font-bold text-white">{value}</div>
-      <div className="mt-2 text-sm text-outline">{detail}</div>
-    </div>
+    <Card className="app-metric-card" size="small">
+      <Statistic title={label} value={value} />
+      <Typography.Text type="secondary" className="mt-2 block text-sm">{detail}</Typography.Text>
+    </Card>
   )
 }
 
 export function StatusPill({ value }: { value: string }) {
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
-  const styles = statusPillStyles(normalized)
-  return <span className={cn('info-eyebrow-tight inline-flex rounded-full border px-3 py-1', styles)}>{value}</span>
+  return <Tag color={statusPillColor(normalized)}>{value}</Tag>
 }
 
-function statusPillStyles(value: string) {
+function statusPillColor(value: string) {
   if (matchesStatus(value, ['active', 'allowed', 'paid', 'complete', 'completed', 'success', 'succeeded', 'verified'])) {
-    return 'border-emerald-400/30 bg-emerald-500/12 text-emerald-300'
+    return 'success'
   }
   if (matchesStatus(value, ['pending', 'processing', 'queued', 'reconciling', 'incomplete', 'requires_action', 'action_required', 'trialing', 'awaiting_payment'])) {
-    return 'border-amber-400/30 bg-amber-500/12 text-amber-200'
-  }
-  if (matchesStatus(value, ['cancelled', 'canceled', 'refunded', 'reversed', 'inactive', 'archived'])) {
-    return 'border-slate-400/30 bg-slate-500/12 text-slate-200'
+    return 'warning'
   }
   if (matchesStatus(value, ['disabled', 'blocked', 'failed', 'failure', 'error', 'denied', 'expired'])) {
-    return 'border-rose-400/30 bg-rose-500/12 text-rose-200'
+    return 'error'
   }
-  return 'bg-tertiary/15 text-tertiary border-tertiary/20'
+  return 'default'
 }
 
 function matchesStatus(value: string, exactValues: string[]) {
@@ -59,50 +56,61 @@ function matchesStatus(value: string, exactValues: string[]) {
 }
 
 export function DataTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
+  const tableColumns: ColumnsType<Record<string, ReactNode>> = headers.map((header, index) => ({
+    title: header,
+    dataIndex: `col_${index}`,
+    key: `col_${index}`,
+    render: (value: ReactNode) => value,
+  }))
+  const dataSource = rows.map((row, rowIndex) => Object.fromEntries([
+    ['key', rowIndex],
+    ...row.map((cell, cellIndex) => [`col_${cellIndex}`, cell]),
+  ]))
+  const minWidth = Math.max(headers.length * 160, 720)
   return (
-    <div className="soft-panel overflow-hidden border border-outline-variant/15">
-      <div className="info-eyebrow-tight grid bg-surface-container-high/70 text-outline" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>
-        {headers.map((header) => (
-          <div key={header} className="px-4 py-3">{header}</div>
-        ))}
-      </div>
-      <div className="divide-y divide-outline-variant/10">
-        {rows.map((row, index) => (
-          <div key={index} className="grid items-center bg-surface-container-low/40 text-sm" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>
-            {row.map((cell, cellIndex) => <div key={cellIndex} className="px-4 py-4 text-outline">{cell}</div>)}
-          </div>
-        ))}
-      </div>
+    <div className="app-table-scroll">
+      <Table
+        className="app-table"
+        columns={tableColumns}
+        dataSource={dataSource}
+        pagination={false}
+        size="small"
+        scroll={{ x: minWidth }}
+      />
     </div>
   )
 }
 
 export function KeyStat({ label, value, meta }: { label: string; value?: number; meta: string }) {
   return (
-    <div className="panel-muted p-4">
-      <div className="info-eyebrow-tight text-outline">{label}</div>
-      <div className="mt-2 text-2xl font-bold text-white">{formatNumber(value)}</div>
-      <div className="mt-1 text-xs text-outline">{meta}</div>
-    </div>
+    <Card className="app-key-stat" size="small">
+      <Statistic title={label} value={formatNumber(value)} />
+      <Typography.Text type="secondary" className="mt-1 block text-xs">{meta}</Typography.Text>
+    </Card>
   )
 }
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="panel-muted p-8 text-center">
-      <div className="text-lg font-semibold text-white">{title}</div>
-      <div className="mt-2 text-sm text-outline">{body}</div>
-    </div>
+    <Empty
+      className="app-empty"
+      description={(
+        <div>
+          <Typography.Text strong>{title}</Typography.Text>
+          <Typography.Paragraph className="!mb-0 !mt-2" type="secondary">{body}</Typography.Paragraph>
+        </div>
+      )}
+    />
   )
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-md bg-surface-container-high/50', className)} />
+  return <AntSkeleton.Input active className={cn('app-skeleton', className)} />
 }
 
 export function SkeletonMetricCard() {
   return (
-    <div className="panel-muted p-5">
+    <div className="app-card-muted p-5">
       <Skeleton className="h-4 w-24" />
       <Skeleton className="mt-3 h-9 w-16" />
       <Skeleton className="mt-2 h-4 w-48" />
@@ -112,7 +120,7 @@ export function SkeletonMetricCard() {
 
 export function SkeletonDataTable({ columns, rows = 3 }: { columns: number; rows?: number }) {
   return (
-    <div className="soft-panel overflow-hidden border border-outline-variant/15">
+    <div className="app-surface-panel overflow-hidden border border-outline-variant/15">
       <div className="info-eyebrow-tight grid bg-surface-container-high/70 text-outline" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {Array.from({ length: columns }).map((_, i) => (
           <div key={i} className="px-4 py-3"><Skeleton className="h-4 w-full" /></div>

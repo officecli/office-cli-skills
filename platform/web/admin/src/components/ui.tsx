@@ -1,17 +1,19 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import { Card, Empty, Skeleton as AntSkeleton, Statistic, Table, Tag, Typography } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { cn, formatDate, formatNumber } from '../lib/utils'
 
 export function Panel({ className, children }: PropsWithChildren<{ className?: string }>) {
-  return <section className={cn('panel p-6', className)}>{children}</section>
+  return <Card className={cn('admin-panel', className)}>{children}</Card>
 }
 
 export function SectionHeading({ eyebrow, title, body, action }: { eyebrow: string; title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
-        <div className="info-eyebrow text-primary">{eyebrow}</div>
-        <h2 className="mt-2 text-3xl font-bold text-white">{title}</h2>
-        {body ? <p className="mt-2 max-w-2xl text-sm text-outline">{body}</p> : null}
+        <Typography.Text className="admin-eyebrow" type="secondary">{eyebrow}</Typography.Text>
+        <Typography.Title level={2} className="!mb-0 !mt-2 !text-2xl">{title}</Typography.Title>
+        {body ? <Typography.Paragraph className="!mb-0 !mt-2 max-w-2xl" type="secondary">{body}</Typography.Paragraph> : null}
       </div>
       {action}
     </div>
@@ -19,51 +21,77 @@ export function SectionHeading({ eyebrow, title, body, action }: { eyebrow: stri
 }
 
 export function MetricCard({ label, value, detail, tone = 'default' }: { label: string; value: string; detail: string; tone?: 'default' | 'critical' | 'warning' }) {
-  const toneClass = tone === 'critical' ? 'border-error/20' : tone === 'warning' ? 'border-tertiary/20' : 'border-outline-variant/10'
+  const toneClass = tone === 'critical' ? 'admin-metric-critical' : tone === 'warning' ? 'admin-metric-warning' : undefined
   return (
-    <div className={cn('panel-muted border p-5', toneClass)}>
-      <div className="info-eyebrow-mid text-outline">{label}</div>
-      <div className="mt-3 text-3xl font-bold text-white">{value}</div>
-      <div className="mt-2 text-sm text-outline">{detail}</div>
-    </div>
+    <Card className={cn('admin-metric-card', toneClass)} size="small">
+      <Statistic title={label} value={value} />
+      <Typography.Text type="secondary" className="mt-2 block text-sm">{detail}</Typography.Text>
+    </Card>
   )
 }
 
 export function StatusPill({ value }: { value: string }) {
-  const styles = value === 'active' || value === 'allowed'
-    ? 'bg-secondary/15 text-secondary border-secondary/20'
-    : value === 'disabled' || value === 'blocked'
-      ? 'bg-error/15 text-error border-error/20'
-      : 'bg-tertiary/15 text-tertiary border-tertiary/20'
-  return <span className={cn('info-eyebrow-tight inline-flex rounded-full border px-3 py-1', styles)}>{value}</span>
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const color = matchesStatus(normalized, ['active', 'allowed', 'paid', 'complete', 'completed', 'success', 'succeeded', 'verified'])
+    ? 'success'
+    : matchesStatus(normalized, ['disabled', 'blocked', 'failed', 'failure', 'error', 'denied', 'expired'])
+      ? 'error'
+      : matchesStatus(normalized, ['pending', 'processing', 'queued', 'reconciling', 'incomplete', 'requires_action', 'action_required'])
+        ? 'warning'
+        : 'default'
+  return <Tag color={color}>{value}</Tag>
+}
+
+function matchesStatus(value: string, exactValues: string[]) {
+  if (exactValues.includes(value)) {
+    return true
+  }
+
+  return exactValues.some((candidate) => value.endsWith(`_${candidate}`))
 }
 
 export function DataTable({ headers, rows, columns }: { headers: string[]; rows: ReactNode[][]; columns?: string }) {
+  const tableColumns: ColumnsType<Record<string, ReactNode>> = headers.map((header, index) => ({
+    title: header,
+    dataIndex: `col_${index}`,
+    key: `col_${index}`,
+    render: (value: ReactNode) => value,
+  }))
+  const dataSource = rows.map((row, rowIndex) => Object.fromEntries([
+    ['key', rowIndex],
+    ...row.map((cell, cellIndex) => [`col_${cellIndex}`, cell]),
+  ]))
+  const minWidth = columns ? Math.max(headers.length * 160, 720) : undefined
   return (
-    <div className="soft-panel overflow-hidden border border-outline-variant/15">
-      <div className="info-eyebrow-tight grid bg-surface-container-high/70 text-outline" style={{ gridTemplateColumns: columns ?? `repeat(${headers.length}, minmax(0, 1fr))` }}>
-        {headers.map((header) => (
-          <div key={header} className="px-4 py-3">{header}</div>
-        ))}
-      </div>
-      <div className="divide-y divide-outline-variant/10">
-        {rows.map((row, index) => (
-          <div key={index} className="grid items-center bg-surface-container-low/40 text-sm" style={{ gridTemplateColumns: columns ?? `repeat(${headers.length}, minmax(0, 1fr))` }}>
-            {row.map((cell, cellIndex) => <div key={cellIndex} className="px-4 py-4 text-outline">{cell}</div>)}
-          </div>
-        ))}
-      </div>
+    <div className="admin-table-scroll">
+      <Table
+        className="admin-table"
+        columns={tableColumns}
+        dataSource={dataSource}
+        pagination={false}
+        size="small"
+        scroll={{ x: minWidth }}
+      />
     </div>
   )
 }
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="panel-muted p-8 text-center">
-      <div className="text-lg font-semibold text-white">{title}</div>
-      <div className="mt-2 text-sm text-outline">{body}</div>
-    </div>
+    <Empty
+      className="admin-empty"
+      description={(
+        <div>
+          <Typography.Text strong>{title}</Typography.Text>
+          <Typography.Paragraph className="!mb-0 !mt-2" type="secondary">{body}</Typography.Paragraph>
+        </div>
+      )}
+    />
   )
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <AntSkeleton.Input active className={cn('admin-skeleton', className)} />
 }
 
 export { formatDate, formatNumber }

@@ -38,7 +38,7 @@ export default function OrdersPage() {
             <button
               key={`action-${order.id}`}
               type="button"
-              className="ghost-button"
+              className="admin-secondary-button"
               disabled={update.isPending || order.status === 'refunded'}
               onClick={() => update.mutate({ id: order.id, status: order.status === 'pending' ? 'failed' : 'refunded' })}
             >

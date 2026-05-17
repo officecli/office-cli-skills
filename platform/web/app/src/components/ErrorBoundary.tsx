@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
+import { Button } from 'antd'
 
 interface Props {
   children?: ReactNode
@@ -33,13 +34,13 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="mt-2 max-w-md text-sm text-outline">
             {this.state.error?.message || 'An unexpected error occurred while rendering this component.'}
           </p>
-          <button
-            type="button"
-            className="tonal-button mt-6"
+          <Button
+            type="primary"
+            className="mt-6"
             onClick={() => this.setState({ hasError: false, error: undefined })}
           >
             Try again
-          </button>
+          </Button>
         </div>
       )
     }

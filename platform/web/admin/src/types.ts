@@ -78,6 +78,8 @@ export interface UsageEvent {
   request_host?: string
   request_path?: string
   request_method?: string
+  cli_version?: string
+  document_type?: string
 }
 
 export interface User {

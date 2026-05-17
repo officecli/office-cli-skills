@@ -70,7 +70,7 @@ export default function OverviewPage() {
           body="Keep an eye on account hosted credits, anonymous trial separation, recent document traffic, and access credentials."
         />
         <div className="overview-shell">
-          <div className="panel-muted grid gap-4 p-6 md:grid-cols-3">
+          <div className="app-card-muted grid gap-4 p-6 md:grid-cols-3">
             {isLoadingOverview ? (
               <>
                 <SkeletonMetricCard />
@@ -85,7 +85,7 @@ export default function OverviewPage() {
               </>
             )}
           </div>
-          <div className="panel-muted p-6">
+          <div className="app-card-muted p-6">
             <div className="info-eyebrow text-tertiary">Access credential</div>
             {isLoadingApiKeys ? (
               <div className="mt-4 space-y-4">
@@ -102,7 +102,7 @@ export default function OverviewPage() {
                   </div>
                   <StatusPill value={featuredKey.status} />
                 </div>
-                <div className="panel-muted mt-5 flex items-start gap-3 p-4 text-sm text-outline">
+                <div className="app-card-muted mt-5 flex items-start gap-3 p-4 text-sm text-outline">
                   <ShieldCheck size={18} className="mt-0.5 text-secondary" />
                   <div>Hosted credits are account-level. This key is only an access credential and shares the same balance as `officecli login` sessions.</div>
                 </div>
@@ -148,7 +148,7 @@ export default function OverviewPage() {
         {apiKeys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {apiKeys.slice(0, 4).map((key) => (
-              <div key={key.id} className="panel-muted p-5">
+              <div key={key.id} className="app-card-muted p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 text-white"><KeyRound size={16} className="text-primary" /> {key.key_prefix}</div>
@@ -157,12 +157,12 @@ export default function OverviewPage() {
                   <StatusPill value={key.status} />
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="panel-muted p-4">
+                  <div className="app-card-muted p-4">
                     <div className="info-eyebrow-tight text-outline">Hosted credits</div>
                     <div className="mt-2 text-sm text-white">Account balance</div>
                     <div className="mt-1 text-xs text-outline">Shared by login sessions and every API key</div>
                   </div>
-                  <div className="panel-muted p-4">
+                  <div className="app-card-muted p-4">
                     <div className="info-eyebrow-tight text-outline">Last used</div>
                     <div className="mt-2 text-sm text-white">{formatDate(key.last_used_at)}</div>
                     <div className="mt-1 text-xs text-outline">Credential activity only</div>
@@ -183,7 +183,7 @@ export default function OverviewPage() {
             title="Reward grants and referral progress"
             body={`Each account can invite up to ${formatNumber(inviteLimit)} users, and every activated referral adds ${formatNumber(rewardPerInvite)} hosted credits.`}
             action={(
-              <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
+              <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="app-secondary-button self-start text-xs">
                 Full invite guide
               </a>
             )}
@@ -191,7 +191,7 @@ export default function OverviewPage() {
           {rewardGrants.length ? (
             <div className="space-y-3">
               {rewardGrants.map((grant) => (
-                <div key={`${grant.source_type}-${grant.created_at}`} className="panel-muted p-5">
+                <div key={`${grant.source_type}-${grant.created_at}`} className="app-card-muted p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="text-white">{grant.reason}</div>
@@ -216,7 +216,7 @@ export default function OverviewPage() {
             {referrals.length ? (
               <div className="space-y-3">
                 {referrals.map((referral) => (
-                  <div key={`${referral.invite_code}-${referral.registered_at}`} className="panel-muted flex flex-wrap items-center justify-between gap-4 p-5">
+                  <div key={`${referral.invite_code}-${referral.registered_at}`} className="app-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
                     <div>
                       <div className="text-white">{referral.invite_code}</div>
                       <div className="mt-1 text-sm text-outline">Registered {formatDate(referral.registered_at)}</div>
@@ -237,7 +237,7 @@ export default function OverviewPage() {
         <Panel>
         <SectionHeading eyebrow="Discord status" title="Link Discord for 100 hosted credits" body="The connect API grants 100 account hosted credits after trusted Discord membership verification succeeds." />
           {discordConnection ? (
-            <div className="panel-muted p-5">
+            <div className="app-card-muted p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold text-white">{discordConnection.username}</div>
@@ -249,12 +249,12 @@ export default function OverviewPage() {
                 {discordConnection.verification_blocked_reason ?? 'Guild membership verified.'}
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="panel-muted p-4">
+                <div className="app-card-muted p-4">
                   <div className="info-eyebrow-tight text-outline">Guild member</div>
                   <div className="mt-2 text-2xl font-bold text-white">{discordConnection.guild_member ? 'YES' : 'NO'}</div>
                   <div className="mt-1 text-xs text-outline">Trusted backend verification only</div>
                 </div>
-                <div className="panel-muted p-4">
+                <div className="app-card-muted p-4">
                   <div className="info-eyebrow-tight text-outline">Reward granted</div>
                   <div className="mt-2 text-2xl font-bold text-white">{discordConnection.reward_granted_at ? 'YES' : 'NO'}</div>
                   <div className="mt-1 text-xs text-outline">Updated {formatDate(discordConnection.reward_granted_at)}</div>
@@ -265,11 +265,11 @@ export default function OverviewPage() {
             <EmptyState title="Discord not linked" body="Add the Discord user ID and username from your community profile to create the first connection record." />
           )}
 
-          <div className="panel-muted mt-6 grid gap-4 p-5">
+          <div className="app-card-muted mt-6 grid gap-4 p-5">
             <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 p-4 text-sm text-outline">
               OAuth-based Discord linking is now the primary path. With empty production config, the backend will keep redirecting back with an explicit blocker instead of pretending guild verification succeeded.
             </div>
-            <a className="tonal-button w-full justify-center" href={discordLoginHref}>
+            <a className="app-primary-button w-full justify-center" href={discordLoginHref}>
               Continue with Discord OAuth
             </a>
           </div>

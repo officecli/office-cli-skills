@@ -1,5 +1,6 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Button, Form, Input } from 'antd'
 import { Copy, KeyRound, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
@@ -71,36 +72,34 @@ export default function ApiKeysPage() {
           eyebrow="Credential control"
           title="Access credential management"
           body="Provision account API keys for advanced automation, copy retained plaintext keys, and pause any credential that should stop receiving production traffic."
-          action={<button type="button" className="tonal-button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> Generate API Key</button>}
+          action={<Button type="primary" icon={<Plus size={16} />} onClick={() => setShowCreate((value) => !value)}>Generate API Key</Button>}
         />
 
         {showCreate ? (
-          <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
-            event.preventDefault()
+          <Form className="app-card-muted mb-6 grid gap-4 p-5 md:grid-cols-3" layout="vertical" onFinish={() => {
             create.mutate({
               plan_name: createForm.plan_name,
             })
           }}>
-            <label className="text-sm text-outline">
-              Plan name
-              <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
-            </label>
+            <Form.Item className="mb-0" label="Plan name" required>
+              <Input value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} required />
+            </Form.Item>
             <div className="md:col-span-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low/60 p-4 text-sm text-outline">
               API keys are credentials for your account. Hosted credits live on the account balance and are shared across login sessions and all active keys.
             </div>
             <div className="md:col-span-3 flex gap-3">
-              <button type="submit" className="tonal-button" disabled={create.isPending}>Create key</button>
-              <button type="button" className="ghost-button" onClick={() => setShowCreate(false)}>Dismiss</button>
+              <Button type="primary" htmlType="submit" loading={create.isPending}>Create key</Button>
+              <Button onClick={() => setShowCreate(false)}>Dismiss</Button>
             </div>
-          </form>
+          </Form>
         ) : null}
 
         {revealedKey ? (
-          <div className="soft-panel mb-6 border border-secondary/20 bg-secondary/10 p-4">
+          <div className="app-surface-panel mb-6 border border-secondary/20 bg-secondary/10 p-4">
             <div className="info-eyebrow text-secondary">Copy this plaintext key now</div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <code className="surface-console rounded-2xl px-4 py-3 font-mono text-sm text-white">{revealedKey}</code>
-              <button type="button" className="ghost-button" onClick={() => navigator.clipboard?.writeText(revealedKey)}><Copy size={14} /> Copy</button>
+              <code className="app-code-surface rounded-2xl px-4 py-3 font-mono text-sm text-white">{revealedKey}</code>
+              <Button icon={<Copy size={14} />} onClick={() => navigator.clipboard?.writeText(revealedKey)}>Copy</Button>
             </div>
           </div>
         ) : null}
@@ -110,7 +109,7 @@ export default function ApiKeysPage() {
             {keys.map((key) => {
               const draft = activeDraft(key)
               return (
-                <div key={key.id} className="panel-muted p-5">
+                <div key={key.id} className="app-card-muted p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 text-white"><KeyRound size={16} className="text-primary" /> {key.key_prefix}</div>
@@ -120,32 +119,30 @@ export default function ApiKeysPage() {
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Access</div><div className="mt-2 text-white">{key.status === 'active' ? 'Enabled' : 'Paused'}</div></div>
+                    <div className="app-code-surface rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
+                    <div className="app-code-surface rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Access</div><div className="mt-2 text-white">{key.status === 'active' ? 'Enabled' : 'Paused'}</div></div>
                   </div>
 
                   {editingId === key.id ? (
                     <div className="mt-5 grid gap-4">
-                      <textarea className="surface-console min-h-24 rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
+                      <Input.TextArea value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} autoSize={{ minRows: 3, maxRows: 6 }} />
                       <div className="text-xs text-outline">User workspace edits are intentionally limited to note and enable/disable state. Hosted credits stay under account billing.</div>
                     </div>
                   ) : key.note ? <div className="mt-5 text-sm text-outline">{key.note}</div> : null}
 
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <button type="button" className="ghost-button" disabled={!key.plaintext_available || copyingKeyID === key.id} onClick={() => copyStoredKey(key)}>
-                      <Copy size={16} />
+                    <Button disabled={!key.plaintext_available || copyingKeyID === key.id} loading={copyingKeyID === key.id} icon={<Copy size={16} />} onClick={() => copyStoredKey(key)}>
                       {copyingKeyID === key.id ? 'Copying...' : copiedKeyID === key.id ? 'Copied' : 'Copy full key'}
-                    </button>
-                    <button type="button" className="ghost-button" onClick={() => update.mutate({ id: key.id, payload: { status: key.status === 'active' ? 'disabled' : 'active' } })}>
-                      {key.status === 'active' ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
+                    </Button>
+                    <Button icon={key.status === 'active' ? <ToggleLeft size={16} /> : <ToggleRight size={16} />} onClick={() => update.mutate({ id: key.id, payload: { status: key.status === 'active' ? 'disabled' : 'active' } })}>
                       {key.status === 'active' ? 'Disable key' : 'Enable key'}
-                    </button>
+                    </Button>
                     {editingId === key.id ? (
-                      <button type="button" className="tonal-button" onClick={() => update.mutate({ id: key.id, payload: { note: draft.note || undefined } })}>
-                        <Save size={16} /> Save changes
-                      </button>
+                      <Button type="primary" icon={<Save size={16} />} onClick={() => update.mutate({ id: key.id, payload: { note: draft.note || undefined } })}>
+                        Save changes
+                      </Button>
                     ) : (
-                      <button type="button" className="ghost-button" onClick={() => setEditingId(key.id)}>Edit metadata</button>
+                      <Button onClick={() => setEditingId(key.id)}>Edit metadata</Button>
                     )}
                   </div>
                   {!key.plaintext_available ? (

@@ -59,6 +59,9 @@ type fakeAdminRouteService struct {
 	sessionEmail string
 	sessionName  string
 	loginURL     string
+	mockEmail    string
+	mockName     string
+	mockCookie   string
 	callbackUser *admin.AdminIdentity
 	callbackRaw  string
 	callbackTo   string
@@ -78,6 +81,14 @@ func (f *fakeAdminRouteService) LoginURL(_ context.Context, returnTo string) (st
 }
 func (f *fakeAdminRouteService) HandleGoogleCallback(_ context.Context, code, state string) (*admin.AdminIdentity, string, string, error) {
 	return f.callbackUser, f.callbackRaw, f.callbackTo, f.callbackErr
+}
+func (f *fakeAdminRouteService) MockGoogleLogin(_ context.Context, email, name string) (*admin.AdminIdentity, string, error) {
+	f.mockEmail = email
+	f.mockName = name
+	if f.mockCookie != "" {
+		return &admin.AdminIdentity{Email: email, Name: name, AuthMethod: "google_mock"}, f.mockCookie, nil
+	}
+	return &admin.AdminIdentity{Email: email, Name: name, AuthMethod: "google_mock"}, "encoded-mock-admin-cookie", nil
 }
 func (f *fakeAdminRouteService) Login(_ context.Context, password string) (string, error) {
 	return f.loginCookie, nil
@@ -360,6 +371,41 @@ func TestRegisterAdminRoutesGoogleCallbackSetsSecureCookieAndRedirects(t *testin
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
 	if !strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "Secure") || !strings.Contains(cookie, "SameSite=Lax") {
+		t.Fatalf("Set-Cookie = %q", cookie)
+	}
+}
+
+func TestRegisterAdminRoutesMockGoogleLoginSetsCookieAndRedirectsInDevelopment(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{}
+	registerAdminRoutes(api, Config{
+		AppEnv:                 "development",
+		AdminSessionTTL:        time.Hour,
+		AdminGoogleMockEnabled: true,
+		AdminGoogleMockEmail:   "mock-admin@example.com",
+		AdminGoogleMockName:    "Mock Admin",
+	}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/auth/google/login?return_to=%2Fadmin%2Fusers", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != "/admin/users" {
+		t.Fatalf("location = %q", location)
+	}
+	if adminSvc.mockEmail != "mock-admin@example.com" || adminSvc.mockName != "Mock Admin" {
+		t.Fatalf("mock identity = %q %q", adminSvc.mockEmail, adminSvc.mockName)
+	}
+	cookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(cookie, "cop_admin_session=encoded-mock-admin-cookie") {
+		t.Fatalf("Set-Cookie = %q", cookie)
+	}
+	if !strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "SameSite=Lax") {
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
 }

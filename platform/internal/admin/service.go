@@ -40,6 +40,7 @@ type Service struct {
 	oauthProvider      auth.OAuthProvider
 	adminAllowlist     map[string]struct{}
 	hostedPricing      HostedPricingManager
+	mockData           bool
 }
 
 type GrowthSnapshot struct {
@@ -47,6 +48,10 @@ type GrowthSnapshot struct {
 	HostedCreditGrants []model.HostedCreditGrant `json:"hosted_credit_grants"`
 	Referrals          []model.UserReferral      `json:"referrals"`
 	DiscordConnections []model.DiscordConnection `json:"discord_connections"`
+}
+
+func (s *Service) UseMockData(enabled bool) {
+	s.mockData = enabled
 }
 
 type DailyFreeQuotaView struct {
@@ -121,18 +126,27 @@ func (s *Service) Login(ctx context.Context, password string) (string, error) {
 	if strings.TrimSpace(password) == "" || password != s.adminPassword {
 		return "", fmt.Errorf("invalid admin password")
 	}
-	sessionID := uuid.NewString()
-	payload := SessionPayload{SessionID: sessionID, CreatedAt: time.Now().UTC(), AuthMethod: "password"}
-	if err := s.redis.SaveSession(ctx, sessionID, payload, s.sessionTTL); err != nil {
-		return "", err
+	return s.createSession(ctx, SessionPayload{AuthMethod: "password"}, "admin.login")
+}
+
+func (s *Service) MockGoogleLogin(ctx context.Context, email, name string) (*AdminIdentity, string, error) {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	displayName := strings.TrimSpace(name)
+	if normalizedEmail == "" {
+		return nil, "", fmt.Errorf("mock admin email is required")
 	}
-	raw, err := s.sessionCookieCodec.Encode(sessionID)
+	if displayName == "" {
+		displayName = normalizedEmail
+	}
+	raw, err := s.createSession(ctx, SessionPayload{
+		PrincipalEmail: normalizedEmail,
+		PrincipalName:  displayName,
+		AuthMethod:     "google_mock",
+	}, "admin.google_mock_login")
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
-	body, _ := json.Marshal(payload)
-	_ = s.store.CreateAuditLog(ctx, "admin.login", "session", sessionID, string(body))
-	return raw, nil
+	return &AdminIdentity{Email: normalizedEmail, Name: displayName, AuthMethod: "google_mock"}, raw, nil
 }
 
 func (s *Service) LoginURL(ctx context.Context, returnTo string) (string, error) {
@@ -200,6 +214,22 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code, state string) 
 	return &AdminIdentity{Email: normalizedEmail, Name: googleUser.Name, AuthMethod: "google"}, rawCookie, returnTo, nil
 }
 
+func (s *Service) createSession(ctx context.Context, payload SessionPayload, auditAction string) (string, error) {
+	sessionID := uuid.NewString()
+	payload.SessionID = sessionID
+	payload.CreatedAt = time.Now().UTC()
+	if err := s.redis.SaveSession(ctx, sessionID, payload, s.sessionTTL); err != nil {
+		return "", err
+	}
+	raw, err := s.sessionCookieCodec.Encode(sessionID)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(payload)
+	_ = s.store.CreateAuditLog(ctx, auditAction, "session", sessionID, string(body))
+	return raw, nil
+}
+
 func (s *Service) CurrentIdentity(ctx context.Context, rawCookie string) (*AdminIdentity, error) {
 	sessionID, err := s.sessionCookieCodec.Decode(rawCookie)
 	if err != nil {
@@ -230,9 +260,15 @@ func (s *Service) Logout(ctx context.Context, rawCookie string) error {
 }
 
 func (s *Service) Overview(ctx context.Context) (*model.OverviewStats, error) {
+	if s.mockData {
+		return mockOverview(), nil
+	}
 	return s.store.Overview(ctx)
 }
 func (s *Service) ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error) {
+	if s.mockData {
+		return mockAPIKeys(ownerUserID), nil
+	}
 	if ownerUserID != nil {
 		return s.store.FindAPIKeysByOwner(ctx, *ownerUserID)
 	}
@@ -389,6 +425,9 @@ func (s *Service) UpdateAPIKey(ctx context.Context, id uint64, req UpdateAPIKeyR
 }
 
 func (s *Service) ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]DailyFreeQuotaView, error) {
+	if s.mockData {
+		return mockFreeQuotas(fingerprint, usageDate), nil
+	}
 	quotas, err := s.store.ListDailyFreeQuotas(ctx, fingerprint, usageDate)
 	if err != nil {
 		return nil, err
@@ -409,10 +448,16 @@ func (s *Service) UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int)
 }
 
 func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
+	if s.mockData {
+		return mockUsageEvents(filter), nil
+	}
 	return s.store.ListUsageEvents(ctx, filter)
 }
 
 func (s *Service) ListUsers(ctx context.Context, query string) ([]model.User, error) {
+	if s.mockData {
+		return mockUsers(query), nil
+	}
 	return s.store.ListUsers(ctx, query)
 }
 
@@ -441,6 +486,9 @@ func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserReque
 }
 
 func (s *Service) ListOrders(ctx context.Context) ([]model.Order, error) {
+	if s.mockData {
+		return mockOrders(), nil
+	}
 	return s.store.ListOrders(ctx)
 }
 
@@ -462,10 +510,16 @@ func (s *Service) UpdateOrder(ctx context.Context, id uint64, req UpdateOrderReq
 }
 
 func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error) {
+	if s.mockData {
+		return mockBillingEvents(), nil
+	}
 	return s.store.ListBillingEvents(ctx)
 }
 
 func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
+	if s.mockData {
+		return mockGrowth(), nil
+	}
 	rewardGrants, err := s.store.ListRewardGrants(ctx)
 	if err != nil {
 		return nil, err
@@ -491,6 +545,9 @@ func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
 }
 
 func (s *Service) QuotaSources(ctx context.Context, filter QuotaSourcesFilter) (*QuotaSources, error) {
+	if s.mockData {
+		return mockQuotaSources(filter), nil
+	}
 	freeQuotas, err := s.store.ListDailyFreeQuotas(ctx, filter.Fingerprint, filter.UsageDate)
 	if err != nil {
 		return nil, err
@@ -554,10 +611,16 @@ func newDailyFreeQuotaView(quota model.DailyFreeQuota) DailyFreeQuotaView {
 }
 
 func (s *Service) HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error) {
+	if s.mockData {
+		return mockHostedPricingRules(), nil
+	}
 	return s.store.ListHostedPricingRules(ctx, false)
 }
 
 func (s *Service) HostedBillingConfig(ctx context.Context) (*HostedBillingConfig, error) {
+	if s.mockData {
+		return mockHostedBillingConfig(), nil
+	}
 	settings, err := s.store.HostedPricingSettings(ctx)
 	if err != nil {
 		return nil, err

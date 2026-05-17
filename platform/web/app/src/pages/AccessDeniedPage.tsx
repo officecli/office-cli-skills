@@ -9,7 +9,7 @@ export default function AccessDeniedPage() {
   return (
     <div className="min-h-screen bg-background px-6 py-8 text-on-surface">
       <div className="centered-auth-shell mx-auto flex max-w-4xl items-center">
-        <section className="panel relative w-full overflow-hidden p-8 md:p-12">
+        <section className="app-panel relative w-full overflow-hidden p-8 md:p-12">
           <div className="access-denied-glow absolute inset-0" />
           <div className="relative">
             <OfficeCliBrand
@@ -22,7 +22,7 @@ export default function AccessDeniedPage() {
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an app session because it is not authorized by the current app access policy or has been disabled.</p>
 
-            <div className="terminal-card mt-8 p-5">
+            <div className="app-code-card mt-8 p-5">
               <div className="flex items-start gap-3">
                 <MailWarning size={18} className="mt-0.5 text-tertiary" />
                 <div>
@@ -33,15 +33,15 @@ export default function AccessDeniedPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <a href="/api/auth/google/login?return_to=%2Fapp" className="tonal-button">
+              <a href="/api/auth/google/login?return_to=%2Fapp" className="app-primary-button">
                 <RefreshCcw size={16} />
                 Try another Google account
               </a>
-              <Link to="/login" className="ghost-button">
+              <Link to="/login" className="app-secondary-button">
                 <ArrowLeft size={16} />
                 Back to sign in
               </Link>
-              <a href="mailto:hello@officecli.io?subject=App%20access%20request" className="ghost-button">
+              <a href="mailto:hello@officecli.io?subject=App%20access%20request" className="app-secondary-button">
                 <ShieldBan size={16} />
                 Contact an administrator
               </a>

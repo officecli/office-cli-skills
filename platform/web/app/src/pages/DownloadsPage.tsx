@@ -1,3 +1,4 @@
+import { Button } from 'antd'
 import { Copy, DownloadCloud, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { Panel, SectionHeading } from '../components/ui'
 
@@ -26,14 +27,14 @@ export default function DownloadsPage() {
         <SectionHeading eyebrow="Download / integrate" title="Install OfficeCLI for document operations" body="Use Homebrew, npm, or the official shell installer to bring the same lightweight CLI into local workflows, CI, or account-hosted setups." />
         <div className="grid gap-4 lg:grid-cols-3">
           {commands.map((item) => (
-            <div key={item.title} className="panel-muted p-5">
+            <div key={item.title} className="app-card-muted min-w-0 p-5">
               <div className="flex items-center gap-2 text-primary">
                 <DownloadCloud size={16} />
                 <span className="info-eyebrow">{item.title}</span>
               </div>
-              <code className="surface-console mt-4 block rounded-2xl p-4 font-mono text-sm text-white">{item.command}</code>
+              <code className="app-code-surface mt-4 block rounded-2xl p-4 font-mono text-sm text-white">{item.command}</code>
               <p className="mt-3 text-sm text-outline">{item.detail}</p>
-              <button type="button" className="ghost-button mt-4" onClick={() => navigator.clipboard?.writeText(item.command)}><Copy size={14} /> Copy command</button>
+              <Button className="mt-4" icon={<Copy size={14} />} onClick={() => navigator.clipboard?.writeText(item.command)}>Copy command</Button>
             </div>
           ))}
         </div>
@@ -52,11 +53,11 @@ export default function DownloadsPage() {
         <Panel>
           <SectionHeading eyebrow="Current scope" title="What works now and what stays optional" />
           <div className="space-y-4">
-            <div className="soft-panel flex items-start gap-3 border border-outline-variant/15 bg-surface-container-high/40 p-5 text-sm text-outline">
+            <div className="app-surface-panel flex items-start gap-3 border border-outline-variant/15 bg-surface-container-high/40 p-5 text-sm text-outline">
               <TerminalSquare size={18} className="mt-0.5 text-secondary" />
               <p>The current public release generates PPTX, DOCX, XLSX, and workbook-backed Report outputs, and can review or score local PPTX files.</p>
             </div>
-            <div className="soft-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
+            <div className="app-surface-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
               <ShieldCheck size={18} className="mt-0.5 text-primary" />
               <p>Platform access is optional. Use it for account hosted credits, access credentials, billing, and online preview publishing, not for basic External Mode setup.</p>
             </div>
@@ -64,7 +65,7 @@ export default function DownloadsPage() {
         </Panel>
         <Panel>
           <SectionHeading eyebrow="Security note" title="Use production keys deliberately" />
-          <div className="soft-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
+          <div className="app-surface-panel flex items-start gap-3 border border-primary/15 bg-primary/10 p-5 text-sm text-outline">
             <ShieldCheck size={18} className="mt-0.5 text-primary" />
             <p>Keep live keys in a secret manager, rotate them from the API Keys view when a pipeline changes ownership, and avoid baking plaintext credentials into local scripts.</p>
           </div>

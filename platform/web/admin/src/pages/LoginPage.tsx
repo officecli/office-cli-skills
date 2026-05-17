@@ -26,16 +26,16 @@ export default function LoginPage() {
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Enter the OfficeCLI admin plane to manage API key governance, tune free quotas, investigate blocked traffic, and keep platform controls under explicit operator access. The current production allowlist is intentionally narrowed to a single operator account: <span className="text-white">luyang950@gmail.com</span>.</p>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <button type="button" className="tonal-button" onClick={() => api.login('/admin')}>
+              <button type="button" className="admin-primary-button" onClick={() => api.login('/admin')}>
                 <ShieldCheck size={16} />
                 Continue with Google
               </button>
-              <a href="https://platform.officecli.io/app/" className="ghost-button">Go to user app</a>
+              <a href="https://platform.officecli.io/app/" className="admin-secondary-button">Go to user app</a>
             </div>
 
             <div className="mt-12 grid gap-4 md:grid-cols-3">
               {valuePoints.map((item) => (
-                <div key={item.title} className="panel-muted p-5">
+                <div key={item.title} className="admin-card-muted p-5">
                   <item.icon size={18} className="text-primary" />
                   <div className="mt-4 text-lg font-semibold text-white">{item.title}</div>
                   <div className="mt-2 text-sm text-outline">{item.body}</div>
@@ -54,7 +54,7 @@ export default function LoginPage() {
               subtitle="governance console / allowlist required"
             />
 
-            <div className="mt-10 panel-muted p-6">
+            <div className="mt-10 admin-card-muted p-6">
               <div className="info-eyebrow text-tertiary">Access contract</div>
               <div className="mt-4 space-y-5">
                 <div>
@@ -73,7 +73,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="terminal-card mt-8 p-6 font-mono text-xs text-outline">
+          <div className="admin-code-card mt-8 p-6 font-mono text-xs text-outline">
             <div className="info-eyebrow mb-3 flex items-center gap-2 text-primary">
               <Workflow size={14} />
               admin gate

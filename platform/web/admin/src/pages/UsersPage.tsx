@@ -43,14 +43,14 @@ export default function UsersPage() {
               <div key={`action-${user.id}`} className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="ghost-button"
+                  className="admin-secondary-button"
                   onClick={() => setSelectedUserID((current) => (current === user.id ? null : user.id))}
                 >
                   {selectedUserID === user.id ? 'Hide API keys' : 'View API keys'}
                 </button>
                 <button
                   type="button"
-                  className="ghost-button"
+                  className="admin-secondary-button"
                   disabled={update.isPending}
                   onClick={() => update.mutate({ id: user.id, status: user.status === 'active' ? 'disabled' : 'active' })}
                 >
@@ -61,14 +61,14 @@ export default function UsersPage() {
           />
 
           {selectedUserID !== null ? (
-            <div className="panel-muted p-5">
+            <div className="admin-card-muted p-5">
               <div className="info-eyebrow text-primary">User API keys</div>
               {isFetchingKeys ? (
                 <div className="mt-3 text-sm text-outline">Loading keys...</div>
               ) : selectedUserKeys.length ? (
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   {selectedUserKeys.map((key) => (
-                    <div key={key.id} className="surface-console rounded-2xl border border-outline-variant/20 p-4">
+                    <div key={key.id} className="admin-code-card rounded-2xl border border-outline-variant/20 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="font-mono text-sm text-white">{key.key_prefix}</div>

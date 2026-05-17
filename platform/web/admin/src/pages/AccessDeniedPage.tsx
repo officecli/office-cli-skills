@@ -23,7 +23,7 @@ export default function AccessDeniedPage() {
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an admin session because the account is not present in the admin allowlist.</p>
 
-            <div className="terminal-card mt-8 p-5">
+            <div className="admin-code-card mt-8 p-5">
               <div className="flex items-start gap-3">
                 <MailWarning size={18} className="mt-0.5 text-tertiary" />
                 <div>
@@ -34,15 +34,15 @@ export default function AccessDeniedPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <a href="/api/admin/auth/google/login?return_to=%2Fadmin" className="tonal-button">
+              <a href="/api/admin/auth/google/login?return_to=%2Fadmin" className="admin-primary-button">
                 <RefreshCcw size={16} />
                 Try another Google account
               </a>
-              <Link to="/" className="ghost-button">
+              <Link to="/" className="admin-secondary-button">
                 <ArrowLeft size={16} />
                 Retry admin access
               </Link>
-              <a href="mailto:hello@officecli.io?subject=Admin%20allowlist%20request" className="ghost-button">
+              <a href="mailto:hello@officecli.io?subject=Admin%20allowlist%20request" className="admin-secondary-button">
                 <ShieldBan size={16} />
                 Contact an administrator
               </a>

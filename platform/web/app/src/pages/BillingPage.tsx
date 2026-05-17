@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
+import { Alert, Button } from 'antd'
 import { ArrowRight, Copy, CreditCard } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { trackEvent } from '../analytics'
@@ -68,13 +69,13 @@ export default function BillingPage() {
       <Panel>
         <SectionHeading eyebrow="Secure checkout" title="Buy account hosted credits" body="External Mode is free and unlimited. Checkout adds hosted credits to your signed-in account, and all CLI sessions or API keys on that account share the same balance." />
         <div className="billing-shell mb-6">
-          <div className="panel-muted p-5">
+          <div className="app-card-muted p-5">
             <div className="info-eyebrow text-primary">Target destination</div>
             <div className="mt-4 text-sm text-outline">
               Credits are added to your account balance. `officecli login` sessions and `officecli set-key` API key mode consume the same account hosted credits.
             </div>
           </div>
-          <div className="panel-muted p-5">
+          <div className="app-card-muted p-5">
             <div className="info-eyebrow text-tertiary">Billing flow</div>
             <ol className="mt-4 space-y-3 text-sm text-outline">
               <li>1. Pick a hosted credits pack below.</li>
@@ -84,14 +85,12 @@ export default function BillingPage() {
           </div>
         </div>
         {checkoutError ? (
-          <div className="mb-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-            Checkout failed: {checkoutError}
-          </div>
+          <Alert className="mb-6" type="error" showIcon title={`Checkout failed: ${checkoutError}`} />
         ) : null}
         {pricing.length ? (
           <div className="grid gap-4 lg:grid-cols-3">
             {pricing.map((pack) => (
-              <div key={pack.code} className="panel-muted flex flex-col justify-between p-5">
+              <div key={pack.code} className="app-card-muted flex flex-col justify-between p-5">
                 <div>
                   <div className="info-eyebrow text-outline">{pack.code}</div>
                   <div className="mt-3 text-2xl font-bold text-white">{pack.name}</div>
@@ -99,17 +98,18 @@ export default function BillingPage() {
                   <div className="mt-6 text-4xl font-bold text-primary">{packPrimaryLabel(pack)}</div>
                   <div className="mt-2 text-sm text-outline">{packSecondaryLabel(pack)}</div>
                 </div>
-                <button
-                  type="button"
-                  className="tonal-button mt-8 w-full"
-                  disabled={checkout.isPending}
+                <Button
+                  type="primary"
+                  className="mt-8 w-full"
+                  loading={checkout.isPending}
+                  icon={<CreditCard size={16} />}
                   onClick={() => {
                     trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', pack_code: pack.code })
                     checkout.mutate({ packCode: pack.code })
                   }}
                 >
-                  <CreditCard size={16} /> Continue to Stripe Checkout
-                </button>
+                  Continue to Stripe Checkout
+                </Button>
               </div>
             ))}
           </div>
@@ -121,19 +121,15 @@ export default function BillingPage() {
       <Panel>
         <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase remains visible here for reconciliation." />
         {reconcile.isPending ? (
-          <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 p-4 text-sm text-white">
-            Payment returned from Stripe. Syncing the latest checkout status into this workspace now.
-          </div>
+          <Alert className="mb-4" type="info" showIcon title="Syncing payment status" description="Payment returned from Stripe. Syncing the latest checkout status into this workspace now." />
         ) : null}
         {reconcileError ? (
-          <div className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-            Stripe payment sync failed: {reconcileError}
-          </div>
+          <Alert className="mb-4" type="warning" showIcon title={`Stripe payment sync failed: ${reconcileError}`} />
         ) : null}
         {orders.length ? (
           <div className="space-y-3">
             {orders.map((order) => (
-              <div key={order.id} className="panel-muted flex flex-wrap items-center justify-between gap-4 p-5">
+              <div key={order.id} className="app-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
                 <div>
                   <div className="text-lg font-semibold text-white">{order.pack_name}</div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-outline">
@@ -142,9 +138,9 @@ export default function BillingPage() {
                       {stripeOrderReference(order) || 'pending assignment'}
                     </span>
                     {stripeOrderReference(order) ? (
-                      <button type="button" className="ghost-button" onClick={() => copyReference(stripeOrderReference(order)!)}>
-                        <Copy size={14} /> {copiedReference === stripeOrderReference(order) ? 'Copied' : 'Copy'}
-                      </button>
+                      <Button size="small" icon={<Copy size={14} />} onClick={() => copyReference(stripeOrderReference(order)!)}>
+                        {copiedReference === stripeOrderReference(order) ? 'Copied' : 'Copy'}
+                      </Button>
                     ) : null}
                   </div>
                   <div className="mt-2 text-sm text-outline">{targetAccountLabel(order)}</div>

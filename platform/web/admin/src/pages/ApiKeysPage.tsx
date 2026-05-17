@@ -164,11 +164,11 @@ export default function ApiKeysPage() {
           eyebrow="Credential governance"
           title="Review and edit platform API keys"
           body="Use this surface for audit-safe credential creation, owner assignment, and status changes across the platform fleet."
-          action={<button type="button" className="tonal-button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> Create API Key</button>}
+          action={<button type="button" className="admin-primary-button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> Create API Key</button>}
         />
 
         {showCreate ? (
-          <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
+          <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-3" onSubmit={(event: FormEvent) => {
             event.preventDefault()
             if (createRequiresUser && !createForm.owner_user_id) {
               setCreateUserError('Select a user before creating a hosted access credential.')
@@ -178,7 +178,7 @@ export default function ApiKeysPage() {
           }}>
             <label className="text-sm text-outline">
               Key type
-              <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.key_type} onChange={(event) => setCreateForm((current) => formForKeyType(current, event.target.value as KeyType))}>
+              <select className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.key_type} onChange={(event) => setCreateForm((current) => formForKeyType(current, event.target.value as KeyType))}>
                 <option value="hosted_only">Hosted Only</option>
                 <option value="external_only">External Only</option>
                 <option value="hybrid">Hybrid</option>
@@ -188,7 +188,7 @@ export default function ApiKeysPage() {
               <label className="relative text-sm text-outline">
                 User
                 <input
-                  className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40"
+                  className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40"
                   placeholder="Search uid or email"
                   value={createUserSearch}
                   onChange={(event) => {
@@ -224,40 +224,40 @@ export default function ApiKeysPage() {
             {createForm.key_type !== 'hosted_only' ? (
               <label className="text-sm text-outline">
                 External quota
-                <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.quota_total} onChange={(event) => setCreateForm((current) => ({ ...current, quota_total: event.target.value }))} />
+                <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={createForm.quota_total} onChange={(event) => setCreateForm((current) => ({ ...current, quota_total: event.target.value }))} />
               </label>
             ) : null}
             {createForm.key_type !== 'external_only' ? (
-              <div className="panel-muted rounded-2xl p-4 text-sm text-outline">
+              <div className="admin-card-muted rounded-2xl p-4 text-sm text-outline">
                 Hosted credentials spend the owner's account hosted credits. Add credits through Billing or account credit ledgers, not on the key.
               </div>
             ) : null}
             <div className="md:col-span-3">
-              <button type="button" className="ghost-button" onClick={() => setShowCreateAdvanced((value) => !value)}>{showCreateAdvanced ? 'Hide advanced' : 'Advanced'}</button>
+              <button type="button" className="admin-secondary-button" onClick={() => setShowCreateAdvanced((value) => !value)}>{showCreateAdvanced ? 'Hide advanced' : 'Advanced'}</button>
             </div>
             {showCreateAdvanced ? (
               <div className="md:col-span-3 grid gap-4 rounded-2xl border border-outline-variant/20 p-4 md:grid-cols-3">
                 <label className="text-sm text-outline">
                   Plan name override
-                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} />
+                  <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_name} onChange={(event) => setCreateForm((current) => ({ ...current, plan_name: event.target.value }))} />
                 </label>
                 <label className="text-sm text-outline">
                   Plan code
-                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_code} onChange={(event) => setCreateForm((current) => ({ ...current, plan_code: event.target.value }))} />
+                  <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.plan_code} onChange={(event) => setCreateForm((current) => ({ ...current, plan_code: event.target.value }))} />
                 </label>
                 <label className="text-sm text-outline">
                   Expires at
-                  <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={createForm.expires_at} onChange={(event) => setCreateForm((current) => ({ ...current, expires_at: event.target.value }))} />
+                  <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={createForm.expires_at} onChange={(event) => setCreateForm((current) => ({ ...current, expires_at: event.target.value }))} />
                 </label>
                 <label className="text-sm text-outline md:col-span-3">
                   Note
-                  <textarea className="surface-console mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} />
+                  <textarea className="admin-code-card mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={createForm.note} onChange={(event) => setCreateForm((current) => ({ ...current, note: event.target.value }))} />
                 </label>
               </div>
             ) : null}
             <div className="md:col-span-3 flex gap-3">
-              <button type="submit" className="tonal-button" disabled={create.isPending || (createRequiresUser && !createForm.owner_user_id)}>Create key</button>
-              <button type="button" className="ghost-button" onClick={() => {
+              <button type="submit" className="admin-primary-button" disabled={create.isPending || (createRequiresUser && !createForm.owner_user_id)}>Create key</button>
+              <button type="button" className="admin-secondary-button" onClick={() => {
                 setShowCreate(false)
                 setShowCreateAdvanced(false)
                 setCreateUserSearch('')
@@ -269,11 +269,11 @@ export default function ApiKeysPage() {
         ) : null}
 
         {revealedKey ? (
-          <div className="soft-panel mb-6 border border-secondary/20 bg-secondary/10 p-4">
+          <div className="admin-surface-panel mb-6 border border-secondary/20 bg-secondary/10 p-4">
             <div className="info-eyebrow text-secondary">Copy this plaintext key now</div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <code className="surface-console rounded-2xl px-4 py-3 font-mono text-sm text-white">{revealedKey}</code>
-              <button type="button" className="ghost-button" onClick={() => navigator.clipboard?.writeText(revealedKey)}><Copy size={14} /> Copy</button>
+              <code className="admin-code-card rounded-2xl px-4 py-3 font-mono text-sm text-white">{revealedKey}</code>
+              <button type="button" className="admin-secondary-button" onClick={() => navigator.clipboard?.writeText(revealedKey)}><Copy size={14} /> Copy</button>
             </div>
           </div>
         ) : null}
@@ -283,7 +283,7 @@ export default function ApiKeysPage() {
             {keys.map((key) => {
               const draft = activeDraft(key)
               return (
-                <div key={key.id} className="panel-muted p-5">
+                <div key={key.id} className="admin-card-muted p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 text-white"><KeyRound size={16} className="text-primary" /> {key.key_prefix}</div>
@@ -299,20 +299,20 @@ export default function ApiKeysPage() {
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Owner</div><div className="mt-2 text-white">{key.owner_user_id ?? '—'}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External quota</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">Account-level</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan code</div><div className="mt-2 text-white">{key.plan_code || '—'}</div></div>
-                    <div className="surface-console rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Expires</div><div className="mt-2 text-white">{formatDate(key.expires_at)}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan</div><div className="mt-2 text-white">{key.plan_name}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Owner</div><div className="mt-2 text-white">{key.owner_user_id ?? '—'}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External used</div><div className="mt-2 text-white">{formatNumber(key.quota_used)}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">External quota</div><div className="mt-2 text-white">{formatNumber(key.quota_remaining ?? key.quota_total)}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Hosted credits</div><div className="mt-2 text-white">Account-level</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Plan code</div><div className="mt-2 text-white">{key.plan_code || '—'}</div></div>
+                    <div className="admin-code-card rounded-2xl p-4"><div className="info-eyebrow-tight text-outline">Expires</div><div className="mt-2 text-white">{formatDate(key.expires_at)}</div></div>
                   </div>
 
                   {editingId === key.id ? (
                     <div className="mt-5 grid gap-4">
                       <label className="text-sm text-outline">
                         Edit key type
-                        <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.key_type} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: formForKeyType(draft, event.target.value as KeyType) }))}>
+                        <select className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.key_type} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: formForKeyType(draft, event.target.value as KeyType) }))}>
                           <option value="hosted_only">Hosted Only</option>
                           <option value="external_only">External Only</option>
                           <option value="hybrid">Hybrid</option>
@@ -321,38 +321,38 @@ export default function ApiKeysPage() {
                       {draft.key_type !== 'hosted_only' ? (
                         <label className="text-sm text-outline">
                           External quota
-                          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.quota_total} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, quota_total: event.target.value } }))} />
+                          <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="0" value={draft.quota_total} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, quota_total: event.target.value } }))} />
                         </label>
                       ) : null}
                       {draft.key_type !== 'external_only' ? (
-                        <div className="panel-muted rounded-2xl p-4 text-sm text-outline">
+                        <div className="admin-card-muted rounded-2xl p-4 text-sm text-outline">
                           Hosted credits are account-level; editing this credential cannot grant or remove credits.
                         </div>
                       ) : null}
                       <div>
-                        <button type="button" className="ghost-button" onClick={() => setShowEditAdvanced((current) => ({ ...current, [key.id]: !current[key.id] }))}>{showEditAdvanced[key.id] ? 'Hide advanced' : 'Advanced'}</button>
+                        <button type="button" className="admin-secondary-button" onClick={() => setShowEditAdvanced((current) => ({ ...current, [key.id]: !current[key.id] }))}>{showEditAdvanced[key.id] ? 'Hide advanced' : 'Advanced'}</button>
                       </div>
                       {showEditAdvanced[key.id] ? (
                         <div className="grid gap-4 rounded-2xl border border-outline-variant/20 p-4 md:grid-cols-2">
                           <label className="text-sm text-outline">
                             Plan name
-                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_name} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_name: event.target.value } }))} />
+                            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_name} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_name: event.target.value } }))} />
                           </label>
                           <label className="text-sm text-outline">
                             Owner user ID
-                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={draft.owner_user_id} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, owner_user_id: event.target.value } }))} />
+                            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="number" min="1" value={draft.owner_user_id} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, owner_user_id: event.target.value } }))} />
                           </label>
                           <label className="text-sm text-outline">
                             Plan code
-                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_code} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_code: event.target.value } }))} />
+                            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.plan_code} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, plan_code: event.target.value } }))} />
                           </label>
                           <label className="text-sm text-outline">
                             Expires at
-                            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={draft.expires_at} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, expires_at: event.target.value } }))} />
+                            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" type="datetime-local" value={draft.expires_at} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, expires_at: event.target.value } }))} />
                           </label>
                           <label className="text-sm text-outline md:col-span-2">
                             Note
-                            <textarea className="surface-console mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
+                            <textarea className="admin-code-card mt-2 min-h-24 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.note} onChange={(event) => setDrafts((current) => ({ ...current, [key.id]: { ...draft, note: event.target.value } }))} />
                           </label>
                         </div>
                       ) : null}
@@ -360,20 +360,20 @@ export default function ApiKeysPage() {
                   ) : key.note ? <div className="mt-5 text-sm text-outline">{key.note}</div> : null}
 
                   <div className="mt-5 flex flex-wrap gap-3">
-                    <button type="button" className="ghost-button" disabled={!key.plaintext_available || copyingKeyID === key.id} onClick={() => copyStoredKey(key)}>
+                    <button type="button" className="admin-secondary-button" disabled={!key.plaintext_available || copyingKeyID === key.id} onClick={() => copyStoredKey(key)}>
                       <Copy size={16} />
                       {copyingKeyID === key.id ? 'Copying...' : copiedKeyID === key.id ? 'Copied' : 'Copy full key'}
                     </button>
-                    <button type="button" className="ghost-button" onClick={() => update.mutate({ id: key.id, payload: { status: key.status === 'active' ? 'disabled' : 'active' } })}>
+                    <button type="button" className="admin-secondary-button" onClick={() => update.mutate({ id: key.id, payload: { status: key.status === 'active' ? 'disabled' : 'active' } })}>
                       {key.status === 'active' ? <ToggleLeft size={16} /> : <ToggleRight size={16} />}
                       {key.status === 'active' ? 'Disable key' : 'Enable key'}
                     </button>
                     {editingId === key.id ? (
-                      <button type="button" className="tonal-button" onClick={() => update.mutate({ id: key.id, payload: buildUpdatePayload(draft) })}>
+                      <button type="button" className="admin-primary-button" onClick={() => update.mutate({ id: key.id, payload: buildUpdatePayload(draft) })}>
                         <Save size={16} /> Save changes
                       </button>
                     ) : (
-                      <button type="button" className="ghost-button" onClick={() => {
+                      <button type="button" className="admin-secondary-button" onClick={() => {
                         setEditingId(key.id)
                         setShowEditAdvanced((current) => ({ ...current, [key.id]: false }))
                       }}>Edit metadata</button>

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Layout, Spin, Typography } from 'antd'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import { initAnalytics, trackPageView } from './analytics'
@@ -15,9 +16,14 @@ const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
 const BillingPage = lazy(() => import('./pages/BillingPage'))
 const UsagePage = lazy(() => import('./pages/UsagePage'))
 const DownloadsPage = lazy(() => import('./pages/DownloadsPage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function LoadingScreen() {
-  return <div className="info-eyebrow grid min-h-screen place-items-center bg-background text-sm text-outline">Loading workspace…</div>
+  return (
+    <div className="grid min-h-screen place-items-center bg-background text-sm text-outline">
+      <Spin description={<Typography.Text type="secondary">Loading workspace...</Typography.Text>} />
+    </div>
+  )
 }
 
 function ProtectedShell() {
@@ -32,27 +38,29 @@ function ProtectedShell() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <Layout className="min-h-screen bg-background text-on-surface">
       <AppSidebar user={user} />
-      <main className="px-4 py-4 lg:ml-72 lg:p-6">
-        <div className="mx-auto max-w-7xl">
+      <Layout className="min-w-0 bg-background px-4 py-4 lg:p-6">
+        <div className="mx-auto w-full min-w-0 max-w-7xl">
           <AppTopBar user={user} />
           <ErrorBoundary>
             <Suspense fallback={<LoadingScreen />}>
-              <Routes>
-                <Route path="/" element={<OverviewPage />} />
-                <Route path="/quota" element={<QuotaPage />} />
-                <Route path="/api-keys" element={<ApiKeysPage />} />
-                <Route path="/billing" element={<BillingPage />} />
-                <Route path="/usage" element={<UsagePage />} />
-                <Route path="/downloads" element={<DownloadsPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+              <Layout.Content>
+                <Routes>
+                  <Route path="/" element={<OverviewPage />} />
+                  <Route path="/quota" element={<QuotaPage />} />
+                  <Route path="/api-keys" element={<ApiKeysPage />} />
+                  <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/usage" element={<UsagePage />} />
+                  <Route path="/downloads" element={<DownloadsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Layout.Content>
             </Suspense>
           </ErrorBoundary>
         </div>
-      </main>
-    </div>
+      </Layout>
+    </Layout>
   )
 }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -30,7 +30,7 @@ describe('platform app shell', () => {
     renderApp('/')
 
     expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
-    expect(document.title).toBe('OfficeCLI App | Sign In')
+    await waitFor(() => expect(document.title).toBe('OfficeCLI App | Sign In'))
     expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
     expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()

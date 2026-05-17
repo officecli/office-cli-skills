@@ -68,6 +68,7 @@ type adminRouteService interface {
 	ResolveSession(raw string) (string, error)
 	LoginURL(ctx context.Context, returnTo string) (string, error)
 	HandleGoogleCallback(ctx context.Context, code, state string) (*admin.AdminIdentity, string, string, error)
+	MockGoogleLogin(ctx context.Context, email, name string) (*admin.AdminIdentity, string, error)
 	Login(ctx context.Context, password string) (string, error)
 	CurrentIdentity(ctx context.Context, rawCookie string) (*admin.AdminIdentity, error)
 	Logout(ctx context.Context, rawCookie string) error
@@ -189,9 +190,11 @@ func New() (*Application, error) {
 	}, lic)
 	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	adminSvc.UseMockData(cfg.AdminMockDataEnabled && cfg.AppEnv == "development")
 	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, apiKeyCipher, growthService)
+	appSvc.UseMockData(cfg.AppMockDataEnabled && cfg.AppEnv == "development")
 	fileStore := officesdk.NewFileStore(redisRepo)
 	previewShares := previewshare.NewService(dbStore.DB(), cfg.AppSessionSecret, cfg.AppSessionCookieDomain, fileStore, previewObjects)
 	sdkProvider := officesdk.NewFileProvider(fileStore, previewObjects, previewShares)
@@ -522,6 +525,23 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 	api.GET("/auth/google/login", func(c *gin.Context) {
 		returnTo := c.Query("return_to")
 		inviteCode := c.Query("invite")
+		if cfg.AppGoogleMockEnabled && cfg.AppEnv == "development" {
+			mockSvc, ok := authSvc.(interface {
+				MockGoogleLogin(ctx context.Context, email, name, returnTo string) (*model.User, string, string, error)
+			})
+			if !ok {
+				httpapi.Error(c, http.StatusInternalServerError, "app mock google login is unavailable")
+				return
+			}
+			_, rawCookie, redirectTo, err := mockSvc.MockGoogleLogin(c.Request.Context(), cfg.AppGoogleMockEmail, cfg.AppGoogleMockName, returnTo)
+			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
+			c.Redirect(http.StatusFound, redirectTo)
+			return
+		}
 		url, err := authSvc.LoginURL(c.Request.Context(), returnTo, inviteCode)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
@@ -695,6 +715,16 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	)
 	api.GET("/admin/auth/google/login", func(c *gin.Context) {
 		returnTo := c.DefaultQuery("return_to", "/admin")
+		if cfg.AdminGoogleMockEnabled && cfg.AppEnv == "development" {
+			_, rawCookie, err := adminSvc.MockGoogleLogin(c.Request.Context(), cfg.AdminGoogleMockEmail, cfg.AdminGoogleMockName)
+			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			setSessionCookie(c, cfg, "cop_admin_session", rawCookie, cfg.AdminSessionTTL)
+			c.Redirect(http.StatusFound, returnTo)
+			return
+		}
 		url, err := adminSvc.LoginURL(c.Request.Context(), returnTo)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
@@ -1566,6 +1596,10 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 		httpapi.JSON(c, http.StatusOK, data)
 	})
 	protected.GET("/orders", func(c *gin.Context) {
+		if cfg.AppMockDataEnabled && cfg.AppEnv == "development" {
+			httpapi.JSON(c, http.StatusOK, appuser.MockOrders())
+			return
+		}
 		data, err := billingSvc.ListOrdersByUser(c.Request.Context(), currentUserID(c))
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())

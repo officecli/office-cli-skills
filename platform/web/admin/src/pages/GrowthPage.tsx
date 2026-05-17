@@ -50,15 +50,15 @@ export default function GrowthPage() {
           body="This panel consumes the real `/api/admin/growth` ledger so operations can trace account hosted credit grants, referrals, and Discord records."
         />
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="panel-muted p-5">
+          <div className="admin-card-muted p-5">
             <div className="info-eyebrow text-outline">Hosted credit grants</div>
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.hosted_credit_grants?.length)}</div>
           </div>
-          <div className="panel-muted p-5">
+          <div className="admin-card-muted p-5">
             <div className="info-eyebrow text-outline">Referrals</div>
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.referrals.length)}</div>
           </div>
-          <div className="panel-muted p-5">
+          <div className="admin-card-muted p-5">
             <div className="info-eyebrow text-outline">Discord connections</div>
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.discord_connections.length)}</div>
           </div>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { Layout, Spin, Typography } from 'antd'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import { AdminSidebar, AdminTopBar } from './components/chrome'
@@ -18,7 +19,11 @@ import UsageEventsPage from './pages/UsageEventsPage'
 import { applyDocumentSEO, getRouteSEO } from './seo'
 
 function LoadingScreen() {
-  return <div className="info-eyebrow grid min-h-screen place-items-center bg-background text-sm text-outline">Loading admin session...</div>
+  return (
+    <div className="grid min-h-screen place-items-center bg-background text-sm text-outline">
+      <Spin description={<Typography.Text type="secondary">Loading admin session...</Typography.Text>} />
+    </div>
+  )
 }
 
 function AdminAuthRedirect() {
@@ -37,27 +42,29 @@ function ProtectedShell() {
   if (error || !admin) return <AdminAuthRedirect />
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <Layout className="min-h-screen bg-background text-on-surface">
       <AdminSidebar admin={admin} />
-      <main className="px-4 py-4 lg:ml-72 lg:p-6">
-        <div className="mx-auto max-w-7xl">
+      <Layout className="min-w-0 bg-background px-4 py-4 lg:p-6">
+        <div className="mx-auto w-full min-w-0 max-w-7xl">
           <AdminTopBar admin={admin} />
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/growth" element={<GrowthPage />} />
-            <Route path="/hosted-pricing" element={<HostedPricingRulesPage />} />
-            <Route path="/api-keys" element={<ApiKeysPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/orders" element={<OrdersPage />} />
-            <Route path="/billing-events" element={<BillingEventsPage />} />
-            <Route path="/quota-sources" element={<QuotaSourcesPage />} />
-            <Route path="/free-quotas" element={<FreeQuotasPage />} />
-            <Route path="/usage-events" element={<UsageEventsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Layout.Content>
+            <Routes>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/growth" element={<GrowthPage />} />
+              <Route path="/hosted-pricing" element={<HostedPricingRulesPage />} />
+              <Route path="/api-keys" element={<ApiKeysPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/orders" element={<OrdersPage />} />
+              <Route path="/billing-events" element={<BillingEventsPage />} />
+              <Route path="/quota-sources" element={<QuotaSourcesPage />} />
+              <Route path="/free-quotas" element={<FreeQuotasPage />} />
+              <Route path="/usage-events" element={<UsageEventsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Layout.Content>
         </div>
-      </main>
-    </div>
+      </Layout>
+    </Layout>
   )
 }
 

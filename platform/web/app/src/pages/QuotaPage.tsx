@@ -21,7 +21,7 @@ export default function QuotaPage() {
           body="External Mode is free and unlimited now. This page preserves legacy quota visibility for older grants and historical keys; Hosted credits are shown on Overview and Billing."
         />
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="panel-muted p-5">
+          <div className="app-card-muted p-5">
             <div className="info-eyebrow text-primary">Legacy reward quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(rewardQuota?.remaining)}</div>
             <div className="mt-2 text-sm text-outline">
@@ -31,7 +31,7 @@ export default function QuotaPage() {
               </a>
             </div>
           </div>
-          <div className="panel-muted p-5">
+          <div className="app-card-muted p-5">
             <div className="info-eyebrow text-tertiary">Legacy paid external quota</div>
             <div className="mt-3 text-4xl font-bold text-white">{formatNumber(paidQuota?.total_remaining)}</div>
             <div className="mt-2 text-sm text-outline">Historical paid document-generation quota across active and disabled keys. New external packs are no longer sold.</div>
@@ -45,7 +45,7 @@ export default function QuotaPage() {
           title="External Mode free unlimited"
           body="External Mode generation no longer depends on anonymous trial buckets. Hosted Mode continues to use hosted credits."
         />
-        <div className="panel-muted p-5">
+        <div className="app-card-muted p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-white">External generation is free and unlimited</div>
@@ -62,7 +62,7 @@ export default function QuotaPage() {
           title="Legacy reward grant detail"
           body="Each legacy grant shows the original amount, what has been consumed, and what remains available now."
           action={(
-            <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="ghost-button self-start text-xs">
+            <a href={inviteRewardGuideHref} target="_blank" rel="noreferrer" className="app-secondary-button self-start text-xs">
               Referral rules
             </a>
           )}
@@ -70,7 +70,7 @@ export default function QuotaPage() {
         {isLoading ? null : grants.length ? (
           <div className="space-y-3">
             {grants.map((grant) => (
-              <div key={`${grant.source_type}-${grant.created_at}`} className="panel-muted p-5">
+              <div key={`${grant.source_type}-${grant.created_at}`} className="app-card-muted p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="text-white">{grant.reason}</div>
@@ -100,7 +100,7 @@ export default function QuotaPage() {
         {isLoading ? null : keys.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {keys.map((key) => (
-              <div key={key.id} className="panel-muted p-5">
+              <div key={key.id} className="app-card-muted p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-white">{key.key_prefix}</div>

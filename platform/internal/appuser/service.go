@@ -205,6 +205,7 @@ type Service struct {
 	salt         string
 	apiKeyCipher *apikey.Cipher
 	growth       GrowthManager
+	mockData     bool
 }
 
 const defaultDiscordJoinRewardAmount = growthsvc.DiscordJoinRewardAmount
@@ -217,7 +218,14 @@ func NewService(store Store, billing Billing, salt string, apiKeyCipher *apikey.
 	return &Service{store: store, billing: billing, salt: salt, apiKeyCipher: apiKeyCipher, growth: manager}
 }
 
+func (s *Service) UseMockData(enabled bool) {
+	s.mockData = enabled
+}
+
 func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error) {
+	if s.mockData {
+		return mockOverview(), nil
+	}
 	if err := s.ensureSignupHostedCredits(ctx, userID); err != nil {
 		return nil, err
 	}
@@ -299,6 +307,9 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 }
 
 func (s *Service) ListAPIKeys(ctx context.Context, userID uint64) ([]APIKeyView, error) {
+	if s.mockData {
+		return mockAPIKeys(), nil
+	}
 	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -311,6 +322,13 @@ func (s *Service) ListAPIKeys(ctx context.Context, userID uint64) ([]APIKeyView,
 }
 
 func (s *Service) CreateAPIKey(ctx context.Context, userID uint64, req CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
+	if s.mockData {
+		key := mockAPIKeys()[0]
+		if planName := strings.TrimSpace(req.PlanName); planName != "" {
+			key.PlanName = planName
+		}
+		return &CreateAPIKeyResponse{PlaintextKey: "ocli_live_mock_created_secret", Key: key}, nil
+	}
 	return s.createAPIKeyWithoutSignupGrant(ctx, userID, req)
 }
 
@@ -369,6 +387,9 @@ func signupHostedCreditsIdempotencyKey(userID uint64) string {
 }
 
 func (s *Service) GetAPIKeyPlaintext(ctx context.Context, userID, apiKeyID uint64) (string, error) {
+	if s.mockData {
+		return mockAPIKeyPlaintext(apiKeyID)
+	}
 	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
 	if err != nil {
 		return "", err
@@ -395,6 +416,9 @@ func (s *Service) GetAPIKeyPlaintext(ctx context.Context, userID, apiKeyID uint6
 }
 
 func (s *Service) UpdateAPIKey(ctx context.Context, userID, apiKeyID uint64, req UpdateAPIKeyRequest) error {
+	if s.mockData {
+		return nil
+	}
 	owned, err := s.store.IsAPIKeyOwnedByUser(ctx, apiKeyID, userID)
 	if err != nil {
 		return err
@@ -420,6 +444,9 @@ func (s *Service) UpdateAPIKey(ctx context.Context, userID, apiKeyID uint64, req
 }
 
 func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]UsageEventView, error) {
+	if s.mockData {
+		return mockUsageEvents(), nil
+	}
 	events, err := s.store.ListAppUsageEvents(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -432,6 +459,9 @@ func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]UsageEv
 }
 
 func (s *Service) QuotaSummary(ctx context.Context, userID uint64) (*QuotaSummary, error) {
+	if s.mockData {
+		return mockQuotaSummary(), nil
+	}
 	keys, err := s.store.FindAPIKeysByOwner(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -477,6 +507,9 @@ func (s *Service) QuotaSummary(ctx context.Context, userID uint64) (*QuotaSummar
 }
 
 func (s *Service) Growth(ctx context.Context, userID uint64) (*GrowthSnapshot, error) {
+	if s.mockData {
+		return mockGrowth(), nil
+	}
 	user, err := s.store.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -573,6 +606,10 @@ func (s *Service) ConnectDiscord(ctx context.Context, userID uint64, req Connect
 }
 
 func (s *Service) DiscordStatus(ctx context.Context, userID uint64) (*DiscordStatusResponse, error) {
+	if s.mockData {
+		growth := mockGrowth()
+		return &DiscordStatusResponse{Connection: growth.DiscordConnection, RewardRemaining: growth.RewardRemaining}, nil
+	}
 	growthSnapshot, err := s.Growth(ctx, userID)
 	if err != nil {
 		return nil, err

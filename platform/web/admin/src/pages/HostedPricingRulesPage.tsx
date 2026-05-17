@@ -114,16 +114,16 @@ export default function HostedPricingRulesPage() {
     <div className="space-y-8">
       <Panel>
         <SectionHeading eyebrow="Hosted billing" title="Hosted pricing controls" body="Configure aigateway base cost, margin, and prepaid credit packs without restarting the platform." />
-        <form className="panel-muted flex flex-wrap items-end gap-4 p-5" onSubmit={handleSettingsSubmit}>
+        <form className="admin-card-muted flex flex-wrap items-end gap-4 p-5" onSubmit={handleSettingsSubmit}>
           <label className="w-40 text-sm text-outline">Global markup %
-            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkupPercent} onChange={(event) => setMarkupPercent(event.target.value)} />
+            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkupPercent} onChange={(event) => setMarkupPercent(event.target.value)} />
           </label>
           <label className="w-44 text-sm text-outline">Credits per USD
-            <input type="number" min="1" className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-60 focus:border-primary/40" value={creditsPerUSDDraft} disabled={!creditRatioUnlocked} onChange={(event) => setCreditsPerUSDDraft(event.target.value)} />
+            <input type="number" min="1" className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-60 focus:border-primary/40" value={creditsPerUSDDraft} disabled={!creditRatioUnlocked} onChange={(event) => setCreditsPerUSDDraft(event.target.value)} />
           </label>
           <div className="pb-3 text-sm text-outline">Credit ratio: {formatNumber(normalizeCreditsPerUSD(creditsPerUSDDraft, creditsPerUSD))} credits = $1 USD</div>
-          <button type="button" className="ghost-button self-end" onClick={unlockCreditRatio} disabled={creditRatioUnlocked}>Unlock credit ratio</button>
-          <button type="submit" className="tonal-button self-end px-5" disabled={updateSettings.isPending} aria-label="Save pricing settings">Save settings</button>
+          <button type="button" className="admin-secondary-button self-end" onClick={unlockCreditRatio} disabled={creditRatioUnlocked}>Unlock credit ratio</button>
+          <button type="submit" className="admin-primary-button self-end px-5" disabled={updateSettings.isPending} aria-label="Save pricing settings">Save settings</button>
         </form>
       </Panel>
 
@@ -143,7 +143,7 @@ export default function HostedPricingRulesPage() {
 
       <Panel>
         <SectionHeading eyebrow="Hosted profiles" title="Pricing rules" body="Profiles choose shared model pricing and keep only reservation, minimum charge, and markup policy." />
-        <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+        <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           createRule.mutate(normalizeRule(ruleDraft))
         }}>
@@ -154,7 +154,7 @@ export default function HostedPricingRulesPage() {
           <NumberField label="Reservation credits" value={ruleDraft.reservation_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, reservation_credits: Number(value) })} />
           <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
           <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
-          <button type="submit" className="tonal-button self-end" disabled={createRule.isPending}>Create rule</button>
+          <button type="submit" className="admin-primary-button self-end" disabled={createRule.isPending}>Create rule</button>
         </form>
         {data?.rules.length ? (
           <div className="space-y-3">
@@ -174,7 +174,7 @@ export default function HostedPricingRulesPage() {
 
       <Panel>
         <SectionHeading eyebrow="Prepaid packs" title="Hosted credit packs" body="Enabled packs are visible to users and can be purchased through Stripe Checkout." />
-        <form className="panel-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+        <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           createPack.mutate(normalizePack(packDraft))
         }}>
@@ -183,9 +183,9 @@ export default function HostedPricingRulesPage() {
           <NumberField label="Credits" value={packDraft.credit_amount} onChange={(value) => setPackDraft({ ...packDraft, credit_amount: Number(value) })} />
           <div className="self-end text-sm text-outline">{creditUSDLabel(packDraft.credit_amount, creditsPerUSD)}</div>
           <label className="md:col-span-3 text-sm text-outline">Description
-            <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
+            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
           </label>
-          <button type="submit" className="tonal-button self-end" disabled={createPack.isPending}>Create pack</button>
+          <button type="submit" className="admin-primary-button self-end" disabled={createPack.isPending}>Create pack</button>
         </form>
         {data?.packs.length ? (
           <div className="space-y-3">
@@ -215,7 +215,7 @@ function ModelConfigRow({ config, creditsPerUSD, onSave }: { config: HostedModel
   }, [config])
 
   return (
-    <div className="panel-muted grid gap-4 p-5">
+    <div className="admin-card-muted grid gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 text-white">{config.key} / {config.model}<StatusPill value={config.enabled ? 'active' : 'disabled'} /></div>
@@ -229,7 +229,7 @@ function ModelConfigRow({ config, creditsPerUSD, onSave }: { config: HostedModel
         <NumberField label={`Output USD per 1M ${config.key}`} value={costDraft.output} type="text" inputMode="decimal" onChange={(value) => setCostDraft({ ...costDraft, output: value })} />
         <NumberField label={`Reasoning USD per 1M ${config.key}`} value={costDraft.reasoning} type="text" inputMode="decimal" onChange={(value) => setCostDraft({ ...costDraft, reasoning: value })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
-        <button type="button" className="tonal-button self-end" aria-label={`Save hosted model pricing config ${config.key}`} onClick={() => onSave(normalizeModelConfig(draft, costDraft, creditsPerUSD))}>Save model</button>
+        <button type="button" className="admin-primary-button self-end" aria-label={`Save hosted model pricing config ${config.key}`} onClick={() => onSave(normalizeModelConfig(draft, costDraft, creditsPerUSD))}>Save model</button>
       </div>
     </div>
   )
@@ -243,13 +243,13 @@ function RuleRow({ rule, textModelConfigs, imageModelConfigs, onSave, onToggle }
   }, [rule])
 
   return (
-    <div className="panel-muted grid gap-4 p-5">
+    <div className="admin-card-muted grid gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 text-white">{profileLabel(rule.document_profile)} / text {rule.text_model_key || '-'} / image {rule.image_model_key || '-'}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
           <div className="mt-1 text-sm text-outline">Reservation {rule.reservation_credits} credits; minimum {rule.minimum_charge_credits} credits; markup {markupLabel(rule.markup_bps)}</div>
         </div>
-        <button type="button" className="ghost-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
+        <button type="button" className="admin-secondary-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <ProfileSelect label={`Profile ${rule.id ?? rule.document_profile}`} value={draft.document_profile} onChange={(value) => setDraft({ ...draft, document_profile: value })} />
@@ -259,7 +259,7 @@ function RuleRow({ rule, textModelConfigs, imageModelConfigs, onSave, onToggle }
         <NumberField label={`Reservation ${rule.id ?? rule.document_profile}`} value={draft.reservation_credits} onChange={(value) => setDraft({ ...draft, reservation_credits: Number(value) })} />
         <NumberField label={`Minimum ${rule.id ?? rule.document_profile}`} value={draft.minimum_charge_credits} onChange={(value) => setDraft({ ...draft, minimum_charge_credits: Number(value) })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
-        <button type="button" className="tonal-button self-end" aria-label={`Save hosted pricing rule ${rule.id ?? rule.document_profile}`} onClick={() => onSave(normalizeRule(draft))}>Save rule</button>
+        <button type="button" className="admin-primary-button self-end" aria-label={`Save hosted pricing rule ${rule.id ?? rule.document_profile}`} onClick={() => onSave(normalizeRule(draft))}>Save rule</button>
       </div>
     </div>
   )
@@ -273,13 +273,13 @@ function PackRow({ pack, creditsPerUSD, onSave, onToggle }: { pack: HostedCredit
   }, [pack])
 
   return (
-    <div className="panel-muted grid gap-4 p-5">
+    <div className="admin-card-muted grid gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-white">{pack.name}</div>
           <div className="mt-1 text-sm text-outline">{pack.code} / {formatNumber(pack.credit_amount)} credits / {creditUSDLabel(pack.credit_amount, creditsPerUSD)}</div>
         </div>
-        <button type="button" className="ghost-button" onClick={onToggle}>{pack.enabled ? 'Disable' : 'Enable'}</button>
+        <button type="button" className="admin-secondary-button" onClick={onToggle}>{pack.enabled ? 'Disable' : 'Enable'}</button>
       </div>
       <div className="grid gap-4 md:grid-cols-4">
         <TextField label={`Pack code ${pack.id ?? pack.code}`} value={draft.code} onChange={(value) => setDraft({ ...draft, code: value })} />
@@ -287,22 +287,22 @@ function PackRow({ pack, creditsPerUSD, onSave, onToggle }: { pack: HostedCredit
         <NumberField label={`Pack credits ${pack.id ?? pack.code}`} value={draft.credit_amount} onChange={(value) => setDraft({ ...draft, credit_amount: Number(value) })} />
         <div className="self-end text-sm text-outline">{creditUSDLabel(draft.credit_amount, creditsPerUSD)}</div>
         <label className="md:col-span-3 text-sm text-outline">Pack description {pack.id ?? pack.code}
-          <input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+          <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
         </label>
-        <button type="button" className="tonal-button self-end" aria-label={`Save hosted credit pack ${pack.id ?? pack.code}`} onClick={() => onSave(normalizePack(draft))}>Save pack</button>
+        <button type="button" className="admin-primary-button self-end" aria-label={`Save hosted credit pack ${pack.id ?? pack.code}`} onClick={() => onSave(normalizePack(draft))}>Save pack</button>
       </div>
     </div>
   )
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="text-sm text-outline">{label}<input className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
+  return <label className="text-sm text-outline">{label}<input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
 function ProfileSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="text-sm text-outline">{label}
-      <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)}>
         {profileOptions.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
@@ -314,7 +314,7 @@ function ProfileSelect({ label, value, onChange }: { label: string; value: strin
 function ModelSelect({ label, value, options, onChange }: { label: string; value: string; options: HostedModelPricingConfig[]; onChange: (value: string) => void }) {
   return (
     <label className="text-sm text-outline">{label}
-      <select className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">None</option>
         {options.map((option) => (
           <option key={option.key} value={option.key}>{option.key} / {option.model}</option>
@@ -329,7 +329,7 @@ function profileLabel(value: string) {
 }
 
 function NumberField({ label, value, type = 'number', inputMode, step, onChange }: { label: string; value: number | string; type?: 'number' | 'text'; inputMode?: 'decimal'; step?: string; onChange: (value: string) => void }) {
-  return <label className="text-sm text-outline">{label}<input type={type} inputMode={inputMode} step={step} className="surface-console mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
+  return <label className="text-sm text-outline">{label}<input type={type} inputMode={inputMode} step={step} className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={value} onChange={(event) => onChange(event.target.value)} /></label>
 }
 
 interface ModelCostDraft {

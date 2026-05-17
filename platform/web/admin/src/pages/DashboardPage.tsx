@@ -42,9 +42,9 @@ export default function DashboardPage() {
         <Panel>
           <SectionHeading eyebrow="Operator brief" title="Current stance" />
           <div className="space-y-4">
-            <div className="panel-muted flex items-start gap-3 p-4"><ShieldAlert size={18} className="mt-0.5 text-tertiary" /><p className="text-sm text-outline">Use API key edits for metadata, status flips, and corrective quota work. Avoid treating the admin plane as a billing replacement.</p></div>
-            <div className="panel-muted flex items-start gap-3 p-4"><Activity size={18} className="mt-0.5 text-primary" /><p className="text-sm text-outline">Blocked traffic spikes should be reviewed in Usage Events before relaxing any quota control.</p></div>
-            <div className="panel-muted flex items-start gap-3 p-4"><Waypoints size={18} className="mt-0.5 text-secondary" /><p className="text-sm text-outline">All admin interactions assume an English-first operator experience and OfficeCLI brand naming.</p></div>
+            <div className="admin-card-muted flex items-start gap-3 p-4"><ShieldAlert size={18} className="mt-0.5 text-tertiary" /><p className="text-sm text-outline">Use API key edits for metadata, status flips, and corrective quota work. Avoid treating the admin plane as a billing replacement.</p></div>
+            <div className="admin-card-muted flex items-start gap-3 p-4"><Activity size={18} className="mt-0.5 text-primary" /><p className="text-sm text-outline">Blocked traffic spikes should be reviewed in Usage Events before relaxing any quota control.</p></div>
+            <div className="admin-card-muted flex items-start gap-3 p-4"><Waypoints size={18} className="mt-0.5 text-secondary" /><p className="text-sm text-outline">All admin interactions assume an English-first operator experience and OfficeCLI brand naming.</p></div>
           </div>
         </Panel>
       </div>
@@ -53,7 +53,7 @@ export default function DashboardPage() {
         <SectionHeading eyebrow="Guardrails" title="What operators should verify before changing state" />
         <div className="grid gap-4 md:grid-cols-3">
           {guardrails.map((item) => (
-            <div key={item} className="panel-muted p-5 text-sm text-outline">{item}</div>
+            <div key={item} className="admin-card-muted p-5 text-sm text-outline">{item}</div>
           ))}
         </div>
       </Panel>

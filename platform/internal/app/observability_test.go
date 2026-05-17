@@ -44,6 +44,9 @@ func (fakeAdminRouteFailureService) LoginURL(_ context.Context, returnTo string)
 func (fakeAdminRouteFailureService) HandleGoogleCallback(_ context.Context, code, state string) (*admin.AdminIdentity, string, string, error) {
 	return nil, "", "", errors.New("admin google callback failed")
 }
+func (fakeAdminRouteFailureService) MockGoogleLogin(_ context.Context, email, name string) (*admin.AdminIdentity, string, error) {
+	return nil, "", errors.New("admin mock google login failed")
+}
 func (fakeAdminRouteFailureService) Login(_ context.Context, password string) (string, error) {
 	return "", errors.New("invalid admin password")
 }

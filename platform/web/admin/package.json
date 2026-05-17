@@ -16,6 +16,7 @@
     "@fontsource/space-grotesk": "^5.2.6",
     "@tailwindcss/vite": "^4.1.14",
     "@tanstack/react-query": "^5.66.9",
+    "antd": "^6.4.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.546.0",
     "react": "^19.0.0",
