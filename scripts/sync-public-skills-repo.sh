@@ -367,42 +367,27 @@ chmod +x scripts/install-openclaw-skill.sh
 cat > README.md <<'README'
 # OfficeCLI
 
-OfficeCLI is a command-line tool for generating Office files and standalone images from natural-language
-prompts. Use the `officecli` binary directly when you want to create `PPTX`, `DOCX`, `XLSX`,
-workbook-backed `Report`, or `img` outputs from a terminal, script, CI job, or local automation flow.
+**AI document generation CLI for PPTX, DOCX, XLSX, reports, and images.**
 
-This repository is the public installation and documentation surface for the OfficeCLI binary. It also
-includes optional AI-agent skill wrappers for Claude Code, Codex-style local agents, and OpenClaw, but
-those integrations are secondary to the CLI itself.
+[![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
+[![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
+[![License](https://img.shields.io/github/license/officecli/officecli)](./LICENSE)
+[![Website](https://img.shields.io/badge/website-officecli.io-0f766e)](https://officecli.io/officecli)
+[![Discord](https://img.shields.io/badge/community-Discord-5865F2)](https://discord.gg/ezAHMkdG)
+
+OfficeCLI turns natural-language prompts into editable Office files and standalone images from a terminal,
+script, CI job, or local automation flow. Use one `officecli` binary to generate `PPTX`, `DOCX`, `XLSX`,
+workbook-backed `Report`, and `img` outputs, with hosted trial access for first runs and External Mode
+when you want to bring your own LLM endpoint.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
-## Fast links
+- Website: [officecli.io/officecli](https://officecli.io/officecli)
+- Demo gallery: [demos/README.md](./demos/README.md)
+- Optional agent skills: [Claude Code](./claude-code/README.md), [Codex](./codex/README.md), [OpenClaw](./openclaw/README.md)
+- Community: [Discord](https://discord.gg/ezAHMkdG)
 
-Site pages:
-
-- [Overview](https://officecli.io/officecli)
-- [Install](https://officecli.io/officecli/install)
-- [Claude Code](https://officecli.io/officecli/claude-code)
-- [Codex](https://officecli.io/officecli/codex)
-- [OpenClaw](https://officecli.io/officecli/openclaw)
-- [FAQ](https://officecli.io/officecli/faq)
-
-GitHub guides in this repository:
-
-- [中文文档](./README.zh-CN.md)
-- [Install](./install/README.md)
-- [Generation demos](./demos/README.md)
-- [Claude Code](./claude-code/README.md)
-- [Codex](./codex/README.md)
-- [OpenClaw](./openclaw/README.md)
-- [FAQ](./faq/README.md)
-
-Related product page:
-
-- `https://officecli.io/officecli`
-
-## Install with npm
+## Install in one command
 
 npm is the recommended install path for most users:
 
@@ -473,6 +458,17 @@ Generated files are written to `./output` by default. Use `--out <dir>` to choos
 For `PPTX`, OfficeCLI generates and embeds suitable images by default. Use `--no-images` for a
 text-only deck.
 
+## What OfficeCLI is best for
+
+| Search intent | OfficeCLI capability |
+| --- | --- |
+| AI PPTX generator | Create editable PowerPoint decks from prompts, with images by default and `--no-images` for text-only decks. |
+| DOCX generator CLI | Draft editable Word documents for briefs, memos, proposals, and customer-facing documents. |
+| XLSX automation | Generate workbooks, trackers, dashboards, and analysis sheets from structured prompts. |
+| Report generation | Use an existing workbook as evidence and generate a readable workbook-backed report. |
+| Image generation CLI | Generate standalone `img` outputs with `--ratio square\|landscape\|portrait` and optional reference images. |
+| Local-first document automation | Run from a terminal, script, CI job, or agent workflow with one installable binary. |
+
 ## Runtime and access modes
 
 Check the current access mode:
@@ -533,14 +529,14 @@ These checked-in demos show the visible result and the reproducible inputs toget
 a preview image, the generated artifact, `prompt.md`, `metadata.json`, and the command used to reproduce
 the flow with a configured OfficeCLI runtime.
 
-| Demo | Preview | Files |
+| AI PPTX, DOCX, XLSX, report, and image demos | Preview | Files |
 | --- | --- | --- |
-| Image-rich strategy deck | ![Image-rich strategy deck](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
-| Text-only executive briefing | ![Text-only executive briefing](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
-| OfficeCLI customer brief | ![OfficeCLI customer brief](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
-| Demo adoption dashboard | ![Demo adoption dashboard](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
-| Demo program readiness report | ![Demo program readiness report](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
-| OfficeCLI deadline automation image | ![OfficeCLI deadline automation image](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+| AI PPTX generator with images | ![AI PPTX generator preview created by OfficeCLI](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
+| Text-only AI PPTX generator | ![Text-only AI PPTX generator preview created by OfficeCLI](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
+| DOCX generator CLI | ![DOCX generator CLI preview created by OfficeCLI](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| XLSX automation dashboard | ![XLSX automation preview created by OfficeCLI](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
+| Workbook-backed report generation | ![Report generation preview created by OfficeCLI](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
+| Image generation CLI | ![Image generation CLI preview created by OfficeCLI](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
 
 See [demos/README.md](./demos/README.md) for the complete reproducibility table and verification notes.
 
@@ -552,9 +548,9 @@ local binary instead of calling the CLI manually. This is optional: the primary 
 
 ### Claude Code
 
-Use the marketplace source when you want Claude Code to install the OfficeCLI plugin directly.
+OfficeCLI can be installed directly by Claude Code from the marketplace source.
 
-Add the OfficeCLI marketplace source:
+OfficeCLI marketplace source:
 
 ```text
 /plugin marketplace add __PUBLIC_SKILLS_REPO__
@@ -637,7 +633,7 @@ For OpenClaw, also verify:
 officecli agent-bridge
 ```
 
-## How OfficeCLI and officecli fit together
+## OfficeCLI and officecli fit together
 
 - `officecli` is the command-line binary you use to generate Office files and images
 - this repository is the public install, docs, demos, and integration surface for that binary
@@ -700,13 +696,23 @@ PY
 cat > README.zh-CN.md <<'README'
 # OfficeCLI
 
-OfficeCLI 是一个命令行工具，可以用自然语言 prompt 生成 Office 文件和独立图片。直接使用 `officecli` 二进制即可在终端、脚本、CI 或本地自动化流程中生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。
+**面向 PPTX、DOCX、XLSX、报告和图片的 AI 文档生成 CLI。**
 
-这个仓库是 OfficeCLI 二进制的公开安装和文档入口，同时也包含 Claude Code、Codex 风格本地 Agent 和 OpenClaw 的可选 skill 封装。AI Agent 使用 OfficeCLI 是非重点功能；主入口仍然是 `officecli` 命令本身。
+[![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
+[![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
+[![License](https://img.shields.io/github/license/officecli/officecli)](./LICENSE)
+[![Website](https://img.shields.io/badge/website-officecli.io-0f766e)](https://officecli.io/officecli)
+[![Discord](https://img.shields.io/badge/community-Discord-5865F2)](https://discord.gg/ezAHMkdG)
 
-主 README 仍然使用英文：[README.md](./README.md)
+OfficeCLI 可以把自然语言 prompt 生成可编辑的 Office 文件和独立图片。你可以在终端、脚本、CI 或本地自动化流程中直接使用一个 `officecli` 二进制生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。首次运行默认可用 hosted trial；如果要接入自己的模型 endpoint，可以切换到 External Mode。
 
-## 使用 npm 安装
+- 官网：[officecli.io/officecli](https://officecli.io/officecli)
+- 英文 README：[README.md](./README.md)
+- 生成示例：[demos/README.md](./demos/README.md)
+- 可选 Agent 集成：[Claude Code](./claude-code/README.md)、[Codex](./codex/README.md)、[OpenClaw](./openclaw/README.md)
+- 社区：[Discord](https://discord.gg/ezAHMkdG)
+
+## 一行安装
 
 npm 是大多数用户的推荐安装方式：
 
@@ -794,6 +800,17 @@ officecli new img "Launch Visual" --prompt "Create a polished product launch her
 
 生成 `PPTX` 时，OfficeCLI 会默认生成并嵌入合适的图片；如果只想要纯文本 deck，使用 `--no-images`。
 
+## 适合哪些搜索和场景
+
+| 搜索意图 | OfficeCLI 能力 |
+| --- | --- |
+| AI PPTX generator | 从 prompt 生成可编辑 PowerPoint，默认支持图片，也支持 `--no-images` 纯文本 deck。 |
+| DOCX generator CLI | 生成可编辑 Word 文档，适合 brief、memo、proposal 和客户文档。 |
+| XLSX automation | 生成 workbook、tracker、dashboard 和分析表格。 |
+| Report generation | 以现有 workbook 为数据来源，生成可阅读的工作簿报告。 |
+| Image generation CLI | 使用 `--ratio square\|landscape\|portrait` 和可选 reference image 生成独立图片。 |
+| 本地优先文档自动化 | 一个二进制即可在终端、脚本、CI 或 Agent workflow 中运行。 |
+
 ## Runtime 和访问模式
 
 查看当前访问模式：
@@ -846,7 +863,18 @@ officecli review pptx ./output/Enterprise-Collaboration-Platform.pptx
 
 ## 生成示例
 
-示例目录见 [demos/README.md](./demos/README.md)。每个示例都包含预览图、输出文件、`prompt.md`、`metadata.json` 和可复现命令，方便确认实际生成效果。
+这些示例把可视预览、生成文件、`prompt.md`、`metadata.json` 和可复现命令放在一起，方便确认 OfficeCLI 的实际输出效果。
+
+| AI PPTX、DOCX、XLSX、report 和 image 示例 | 预览 | 文件 |
+| --- | --- | --- |
+| 带图 AI PPTX generator | ![AI PPTX generator preview created by OfficeCLI](./demos/pptx-image-rich/preview.png) | [PPTX](./demos/pptx-image-rich/image-rich-strategy-deck.pptx) · [Prompt](./demos/pptx-image-rich/prompt.md) · [Metadata](./demos/pptx-image-rich/metadata.json) |
+| 纯文本 AI PPTX generator | ![Text-only AI PPTX generator preview created by OfficeCLI](./demos/pptx-text-only/preview.png) | [PPTX](./demos/pptx-text-only/text-only-executive-briefing.pptx) · [Prompt](./demos/pptx-text-only/prompt.md) · [Metadata](./demos/pptx-text-only/metadata.json) |
+| DOCX generator CLI | ![DOCX generator CLI preview created by OfficeCLI](./demos/docx-brief/preview.png) | [DOCX](./demos/docx-brief/officecli-customer-brief.docx) · [Prompt](./demos/docx-brief/prompt.md) · [Metadata](./demos/docx-brief/metadata.json) |
+| XLSX automation dashboard | ![XLSX automation preview created by OfficeCLI](./demos/xlsx-dashboard/preview.png) | [XLSX](./demos/xlsx-dashboard/demo-adoption-dashboard.xlsx) · [Prompt](./demos/xlsx-dashboard/prompt.md) · [Metadata](./demos/xlsx-dashboard/metadata.json) |
+| workbook-backed report generation | ![Report generation preview created by OfficeCLI](./demos/report-workbook/preview.png) | [HTML report](./demos/report-workbook/demo-program-readiness-report.html) · [Source XLSX](./demos/report-workbook/demo-program-source-workbook.xlsx) · [Prompt](./demos/report-workbook/prompt.md) |
+| image generation CLI | ![Image generation CLI preview created by OfficeCLI](./demos/standalone-img/preview.png) | [PNG](./demos/standalone-img/officecli-hero-image.png) · [Prompt](./demos/standalone-img/prompt.md) · [Metadata](./demos/standalone-img/metadata.json) |
+
+完整可复现命令见 [demos/README.md](./demos/README.md)。
 
 ## 可选 AI Agent 集成
 
@@ -1088,13 +1116,31 @@ if demo_root.is_dir():
         rows.append((slug, meta))
 
 if rows:
+    keyword_map = {
+        "pptx-image-rich": "AI PPTX generator, PowerPoint automation, image-rich deck",
+        "pptx-text-only": "text-only AI PPTX generator, executive briefing",
+        "docx-brief": "DOCX generator CLI, AI Word document generator",
+        "xlsx-dashboard": "XLSX automation, AI spreadsheet generator, dashboard workbook",
+        "report-workbook": "report generation, workbook-backed report, XLSX to report",
+        "standalone-img": "image generation CLI, AI image generator, standalone image",
+    }
+    alt_map = {
+        "pptx-image-rich": "AI PPTX generator preview created by OfficeCLI",
+        "pptx-text-only": "Text-only AI PPTX generator preview created by OfficeCLI",
+        "docx-brief": "DOCX generator CLI preview created by OfficeCLI",
+        "xlsx-dashboard": "XLSX automation preview created by OfficeCLI",
+        "report-workbook": "Report generation preview created by OfficeCLI",
+        "standalone-img": "Image generation CLI preview created by OfficeCLI",
+    }
     lines = [
-        "# officecli generation demos",
+        "# OfficeCLI generation demos",
         "",
-        "Each demo includes a preview image, generated artifact, prompt, metadata, and a reproducible OfficeCLI command.",
+        "This gallery gives GitHub visitors and search engines concrete proof that OfficeCLI is an AI document generation CLI, not only an install script. Every demo includes a preview image, generated artifact, prompt, metadata, and a reproducible OfficeCLI command.",
         "",
-        "| Demo | Type | Preview | Artifact | Reproduce |",
-        "| --- | --- | --- | --- | --- |",
+        "## Reproducible demo matrix",
+        "",
+        "| Demo | Output type | Search keywords | Preview | Artifact | Reproduce |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for slug, meta in rows:
         title = meta["title"]
@@ -1103,11 +1149,20 @@ if rows:
         prompt = meta["prompt_file"]
         preview = meta["preview"]
         command = meta["command"].replace("|", "\\|")
+        keywords = keyword_map.get(slug, f"OfficeCLI {typ} generation")
+        alt = alt_map.get(slug, f"OfficeCLI {typ} generation preview")
         lines.append(
-            f"| {title} | `{typ}` | [preview](./{slug}/{preview}) | "
+            f"| {title} | `{typ}` | {keywords} | ![{alt}](./{slug}/{preview}) | "
             f"[{artifact}](./{slug}/{artifact}) | `{command}` with [prompt](./{slug}/{prompt}) |"
         )
     lines.extend([
+        "",
+        "## How to read a demo",
+        "",
+        "- `preview.png` is the GitHub-friendly visual proof shown in the README gallery.",
+        "- The artifact is the generated `PPTX`, `DOCX`, `XLSX`, report, or `PNG` output.",
+        "- `prompt.md` is the reusable input for the command.",
+        "- `metadata.json` records the command, output type, verification timestamp, and checksums.",
         "",
         "## Verification",
         "",

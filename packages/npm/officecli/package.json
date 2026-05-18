@@ -1,7 +1,7 @@
 {
   "name": "officecli",
   "version": "0.2.67",
-  "description": "NPM wrapper that installs the OfficeCLI binary from GitHub Releases.",
+  "description": "AI document generation CLI for PPTX, DOCX, XLSX, reports, and images.",
   "license": "UNLICENSED",
   "private": false,
   "bin": {
@@ -38,9 +38,17 @@
   },
   "keywords": [
     "officecli",
+    "ai",
     "cli",
+    "ai-document-generator",
+    "document-automation",
     "pptx",
+    "powerpoint",
     "docx",
-    "xlsx"
+    "xlsx",
+    "report-generation",
+    "image-generation",
+    "office-documents",
+    "ai-agents"
   ]
 }
