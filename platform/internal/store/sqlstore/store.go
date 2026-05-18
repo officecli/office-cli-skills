@@ -1876,6 +1876,8 @@ func (s *Store) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, er
 func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	now := time.Now().UTC()
 	dayAgo := now.Add(-24 * time.Hour)
+	trendStart := utcDayStart(now).AddDate(0, 0, -6)
+	trendEnd := trendStart.AddDate(0, 0, 7)
 	stats := &model.OverviewStats{}
 
 	if err := s.db.WithContext(ctx).Model(&model.APIKey{}).Count(&stats.TotalAPIKeys).Error; err != nil {
@@ -1923,7 +1925,115 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 		stats.RemainingPaidQuota += int64(key.PaidQuotaRemaining())
 	}
 
+	var usageEvents []model.UsageEvent
+	if err := s.db.WithContext(ctx).
+		Where("created_at >= ? AND created_at < ?", trendStart, trendEnd).
+		Order("created_at asc").
+		Find(&usageEvents).Error; err != nil {
+		return nil, err
+	}
+	stats.UsageTrend = buildOverviewUsageTrend(trendStart, usageEvents)
+	stats.ModeBreakdown = buildOverviewModeBreakdown(usageEvents)
+	stats.ResultBreakdown = buildOverviewResultBreakdown(usageEvents)
+	stats.APIKeyStatusBreakdown = buildOverviewAPIKeyStatusBreakdown(now, keys)
+
 	return stats, nil
+}
+
+func utcDayStart(t time.Time) time.Time {
+	utc := t.UTC()
+	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func buildOverviewUsageTrend(start time.Time, events []model.UsageEvent) []model.OverviewUsageTrendPoint {
+	points := make([]model.OverviewUsageTrendPoint, 7)
+	indexByDate := make(map[string]int, len(points))
+	for i := range points {
+		date := start.AddDate(0, 0, i).Format("2006-01-02")
+		points[i] = model.OverviewUsageTrendPoint{Date: date}
+		indexByDate[date] = i
+	}
+	for _, event := range events {
+		date := utcDayStart(event.CreatedAt).Format("2006-01-02")
+		index, ok := indexByDate[date]
+		if !ok {
+			continue
+		}
+		points[index].Total++
+		if event.Charged {
+			points[index].Consumes++
+		} else {
+			points[index].Checks++
+		}
+		switch event.Result {
+		case model.UsageResultBlocked:
+			points[index].Blocked++
+		case model.UsageResultAllowed:
+			points[index].Allowed++
+		}
+	}
+	return points
+}
+
+func buildOverviewModeBreakdown(events []model.UsageEvent) []model.OverviewBreakdownItem {
+	items := []model.OverviewBreakdownItem{
+		{Key: string(model.UsageModeFree), Label: "Free"},
+		{Key: string(model.UsageModeReward), Label: "Reward"},
+		{Key: string(model.UsageModePaid), Label: "Paid"},
+		{Key: string(model.UsageModeHosted), Label: "Hosted"},
+	}
+	indexByKey := map[string]int{}
+	for i := range items {
+		indexByKey[items[i].Key] = i
+	}
+	for _, event := range events {
+		if index, ok := indexByKey[string(event.Mode)]; ok {
+			items[index].Value++
+		}
+	}
+	return items
+}
+
+func buildOverviewResultBreakdown(events []model.UsageEvent) []model.OverviewBreakdownItem {
+	items := []model.OverviewBreakdownItem{
+		{Key: string(model.UsageResultAllowed), Label: "Allowed"},
+		{Key: string(model.UsageResultBlocked), Label: "Blocked"},
+	}
+	indexByKey := map[string]int{}
+	for i := range items {
+		indexByKey[items[i].Key] = i
+	}
+	for _, event := range events {
+		if index, ok := indexByKey[string(event.Result)]; ok {
+			items[index].Value++
+		}
+	}
+	return items
+}
+
+func buildOverviewAPIKeyStatusBreakdown(now time.Time, keys []model.APIKey) []model.OverviewBreakdownItem {
+	items := []model.OverviewBreakdownItem{
+		{Key: "active", Label: "Active"},
+		{Key: "disabled", Label: "Disabled"},
+		{Key: "expired", Label: "Expired"},
+		{Key: "other", Label: "Other"},
+	}
+	indexByKey := map[string]int{}
+	for i := range items {
+		indexByKey[items[i].Key] = i
+	}
+	for _, key := range keys {
+		bucket := "other"
+		if key.ExpiresAt != nil && key.ExpiresAt.Before(now) {
+			bucket = "expired"
+		} else if key.Status == model.APIKeyStatusActive {
+			bucket = "active"
+		} else if key.Status == model.APIKeyStatusDisabled {
+			bucket = "disabled"
+		}
+		items[indexByKey[bucket]].Value++
+	}
+	return items
 }
 
 func (s *Store) SeedDemoData(ctx context.Context, defaultFreeLimit int) error {

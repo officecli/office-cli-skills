@@ -117,6 +117,66 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestOverviewIncludesChartData(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:overview_chart_data?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.UsageEvent{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}))
+	store := NewWithDB(db)
+
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 12, 0, 0, 0, time.UTC)
+	yesterday := today.AddDate(0, 0, -1)
+	threeDaysAgo := today.AddDate(0, 0, -3)
+	outsideWindow := today.AddDate(0, 0, -8)
+
+	expiredAt := now.Add(-time.Hour)
+	futureExpiry := now.Add(24 * time.Hour)
+	require.NoError(t, db.Create(&[]model.APIKey{
+		{KeyHash: "active-hash", KeyPrefix: "active", Status: model.APIKeyStatusActive, PlanName: "Active", QuotaUsed: 0},
+		{KeyHash: "disabled-hash", KeyPrefix: "disabled", Status: model.APIKeyStatusDisabled, PlanName: "Disabled", QuotaUsed: 0, ExpiresAt: &futureExpiry},
+		{KeyHash: "expired-hash", KeyPrefix: "expired", Status: model.APIKeyStatusActive, PlanName: "Expired", QuotaUsed: 0, ExpiresAt: &expiredAt},
+		{KeyHash: "other-hash", KeyPrefix: "other", Status: model.APIKeyStatus("pending"), PlanName: "Other", QuotaUsed: 0},
+	}).Error)
+
+	events := []model.UsageEvent{
+		{FingerprintHash: "fp-allowed-check", Mode: model.UsageModeFree, Action: model.UsageActionStatus, Result: model.UsageResultAllowed, Charged: false, CreatedAt: today},
+		{FingerprintHash: "fp-hosted-consume", Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, Charged: true, CreatedAt: today.Add(time.Hour)},
+		{FingerprintHash: "fp-blocked", Mode: model.UsageModeReward, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, Charged: false, CreatedAt: yesterday},
+		{FingerprintHash: "fp-paid", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, Charged: true, CreatedAt: threeDaysAgo},
+		{FingerprintHash: "fp-old", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, Charged: true, CreatedAt: outsideWindow},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	overview, err := store.Overview(context.Background())
+	require.NoError(t, err)
+	require.Len(t, overview.UsageTrend, 7)
+	require.Equal(t, today.Format("2006-01-02"), overview.UsageTrend[6].Date)
+	require.EqualValues(t, 2, overview.UsageTrend[6].Total)
+	require.EqualValues(t, 1, overview.UsageTrend[6].Checks)
+	require.EqualValues(t, 1, overview.UsageTrend[6].Consumes)
+	require.EqualValues(t, 0, overview.UsageTrend[6].Blocked)
+	require.EqualValues(t, 2, overview.UsageTrend[6].Allowed)
+	require.Equal(t, threeDaysAgo.Format("2006-01-02"), overview.UsageTrend[3].Date)
+	require.EqualValues(t, 1, overview.UsageTrend[3].Consumes)
+
+	require.Equal(t, []model.OverviewBreakdownItem{
+		{Key: "free", Label: "Free", Value: 1},
+		{Key: "reward", Label: "Reward", Value: 1},
+		{Key: "paid", Label: "Paid", Value: 1},
+		{Key: "hosted", Label: "Hosted", Value: 1},
+	}, overview.ModeBreakdown)
+	require.Equal(t, []model.OverviewBreakdownItem{
+		{Key: "allowed", Label: "Allowed", Value: 3},
+		{Key: "blocked", Label: "Blocked", Value: 1},
+	}, overview.ResultBreakdown)
+	require.Equal(t, []model.OverviewBreakdownItem{
+		{Key: "active", Label: "Active", Value: 1},
+		{Key: "disabled", Label: "Disabled", Value: 1},
+		{Key: "expired", Label: "Expired", Value: 1},
+		{Key: "other", Label: "Other", Value: 1},
+	}, overview.APIKeyStatusBreakdown)
+}
+
 func TestAdminUserPreferenceUpsertGetAndIsolation(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:admin_user_preferences?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
