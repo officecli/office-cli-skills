@@ -15,19 +15,24 @@ export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
 export const navItems: NavItem[] = [
   { to: '/#', label: 'Home' },
   { to: '/officecli', label: 'Agent Skills' },
-  { to: '/#pricing', label: 'Pricing' },
-  { to: '/#download', label: 'Install the CLI' },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/download', label: 'Install the CLI' },
   { to: '/docs', label: 'Product Docs', newTab: true },
-  { to: '/#faq', label: 'FAQ' },
+  { to: '/faq', label: 'FAQ' },
 ]
 
 export const footerGroups = [
   {
     title: 'Product',
     links: [
-      { label: 'Install the CLI', to: '/#download', external: false },
+      { label: 'Install the CLI', to: '/download', external: false },
       { label: 'Agent Skills', to: '/officecli', external: false },
       { label: 'Product Docs', to: '/docs', external: false },
+      { label: 'AI PPTX Generator', to: '/ai-pptx-generator', external: false },
+      { label: 'DOCX Generator CLI', to: '/docx-generator-cli', external: false },
+      { label: 'XLSX Reports', to: '/xlsx-report-generation', external: false },
+      { label: 'Agent Automation', to: '/office-automation-ai-agents', external: false },
+      { label: 'Compare Libraries', to: '/officecli-vs-python-docx-openpyxl-libreoffice', external: false },
       { label: 'Console', to: platformAppURL, external: true },
     ],
   },
@@ -45,7 +50,7 @@ export const footerGroups = [
     links: [
       { label: 'Login', to: platformAppURL, external: true },
       { label: 'Billing', to: platformBillingURL, external: true },
-      { label: 'Security', to: '/#faq', external: false },
+      { label: 'Security', to: '/faq', external: false },
     ],
   },
   {

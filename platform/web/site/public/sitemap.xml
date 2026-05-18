@@ -28,12 +28,24 @@
     <loc>https://officecli.io/officecli/faq</loc>
   </url>
   <url>
-    <loc>https://officecli.io/claude-code-codex-office-skills</loc>
-  </url>
-  <url>
     <loc>https://officecli.io/pricing</loc>
   </url>
   <url>
     <loc>https://officecli.io/faq</loc>
+  </url>
+  <url>
+    <loc>https://officecli.io/ai-pptx-generator</loc>
+  </url>
+  <url>
+    <loc>https://officecli.io/docx-generator-cli</loc>
+  </url>
+  <url>
+    <loc>https://officecli.io/xlsx-report-generation</loc>
+  </url>
+  <url>
+    <loc>https://officecli.io/office-automation-ai-agents</loc>
+  </url>
+  <url>
+    <loc>https://officecli.io/officecli-vs-python-docx-openpyxl-libreoffice</loc>
   </url>
 </urlset>

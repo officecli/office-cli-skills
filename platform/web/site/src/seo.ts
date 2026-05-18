@@ -7,6 +7,7 @@ import {
   getAgentSkillsRoute,
   legacyAgentSkillsPath,
 } from './agentSkillsData'
+import { seoLandingPages } from './seoLandingPages'
 
 export interface RouteSEO {
   title: string
@@ -253,6 +254,25 @@ const agentSkillsRouteSEO = agentSkillsRoutes.reduce<Record<string, RouteSEO>>((
   return acc
 }, {})
 
+const seoLandingRouteSEO = seoLandingPages.reduce<Record<string, RouteSEO>>((acc, page) => {
+  acc[page.path] = buildRouteSEO(page.path, page.seoTitle, page.seoDescription, [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: page.seoTitle,
+      url: buildCanonical(page.path),
+      description: page.seoDescription,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: siteName,
+        url: buildCanonical('/'),
+      },
+    },
+    buildFAQJSONLD(page.faqs),
+  ])
+  return acc
+}, {})
+
 const agentSkillsOverviewSEO = agentSkillsRouteSEO[agentSkillsHubPath]
 agentSkillsRouteSEO[legacyAgentSkillsPath] = buildRouteSEO(
   legacyAgentSkillsPath,
@@ -268,6 +288,7 @@ agentSkillsRouteSEO[legacyAgentSkillsPath] = buildRouteSEO(
 export const routeSEO: Record<string, RouteSEO> = {
   '/': buildRouteSEO('/', homeTitle, homeDescription, homeJSONLD),
   ...agentSkillsRouteSEO,
+  ...seoLandingRouteSEO,
   '/docs': buildRouteSEO(
     '/docs',
     'OfficeCLI Docs | PPTX, DOCX, XLSX, REPORT, IMG, and one-command online publish',

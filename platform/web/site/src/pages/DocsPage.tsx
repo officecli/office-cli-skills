@@ -21,6 +21,7 @@ import {
   updateMethods,
   usageRules,
 } from '../docsData'
+import { seoLandingPages } from '../seoLandingPages'
 
 function SectionHeading({
   id,
@@ -129,6 +130,13 @@ export default function DocsPage() {
           <p className="text-outline-variant text-lg leading-relaxed">
             Use this page as the product docs hub for installation, command patterns, prompting guidance, agent integration, OpenClaw setup, troubleshooting, and pricing-aware usage rules.
           </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            {seoLandingPages.map((page) => (
+              <Link key={page.path} to={page.path} className="rounded-full border border-outline-variant/20 px-4 py-2 text-sm font-semibold text-primary hover:border-primary/30 hover:text-tertiary">
+                {page.navLabel}
+              </Link>
+            ))}
+          </div>
         </section>
 
         <div className="space-y-24">

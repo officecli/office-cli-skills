@@ -1,4 +1,5 @@
 import { motion } from 'motion/react'
+import { Link } from 'react-router-dom'
 import { Bolt, LaptopMinimal, Share2, ScanSearch, Terminal, Bot, Plug, ArrowRight, Link2, Lock } from 'lucide-react'
 
 export default function Features() {
@@ -9,8 +10,14 @@ export default function Features() {
           What Is <span className="text-primary italic">OfficeCLI</span>
         </h2>
         <p className="text-outline-variant text-lg max-w-2xl">
-          OfficeCLI is a local-first AI document generation CLI for developers and automation teams. Choose free unlimited External Mode with your own model endpoint, or Hosted Mode with OfficeCLI-managed runtime and hosted credits.
+          OfficeCLI, sometimes searched as office cli, is a local-first AI document generation CLI for developers and automation teams. Choose free unlimited External Mode with your own model endpoint, or Hosted Mode with OfficeCLI-managed runtime and hosted credits.
         </p>
+        <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold">
+          <Link className="rounded-full border border-outline-variant/20 px-4 py-2 text-primary hover:border-primary/30 hover:text-tertiary" to="/ai-pptx-generator">AI PPTX generator</Link>
+          <Link className="rounded-full border border-outline-variant/20 px-4 py-2 text-primary hover:border-primary/30 hover:text-tertiary" to="/docx-generator-cli">DOCX generator CLI</Link>
+          <Link className="rounded-full border border-outline-variant/20 px-4 py-2 text-primary hover:border-primary/30 hover:text-tertiary" to="/xlsx-report-generation">XLSX reports</Link>
+          <Link className="rounded-full border border-outline-variant/20 px-4 py-2 text-primary hover:border-primary/30 hover:text-tertiary" to="/office-automation-ai-agents">Agent automation</Link>
+        </div>
       </div>
 
       <div className="mb-8 grid gap-6 md:grid-cols-2">

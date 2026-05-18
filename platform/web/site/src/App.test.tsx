@@ -6,6 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { detectOperatingSystem } from './installData'
 import { renderRouteApp } from './prerender'
+import { routeSEO } from './seo'
+
+const seoLandingPaths = [
+  '/ai-pptx-generator',
+  '/docx-generator-cli',
+  '/xlsx-report-generation',
+  '/office-automation-ai-agents',
+  '/officecli-vs-python-docx-openpyxl-libreoffice',
+]
 
 afterEach(() => {
   cleanup()
@@ -246,6 +255,20 @@ describe('marketing site shell', () => {
     expect(screen.getAllByText(/officecli new pptx "Q3 Business Review"/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/officecli whoami/i).length).toBeGreaterThan(0)
   })
+
+  it('renders SEO landing pages as first-class routes', () => {
+    render(
+      <MemoryRouter initialEntries={['/ai-pptx-generator']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: /AI PPTX Generator for Agent Workflows/i, level: 1 })).toBeInTheDocument()
+    expect(screen.getByText(/officecli new pptx "Q3 Business Review"/i)).toBeInTheDocument()
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      'https://officecli.io/ai-pptx-generator',
+    )
+  })
 })
 
 describe('site metadata and assets', () => {
@@ -295,12 +318,23 @@ describe('site metadata and assets', () => {
     const sitemap = fs.readFileSync(path.resolve(__dirname, '..', 'public', 'sitemap.xml'), 'utf8')
 
     expect(robots).toContain('Sitemap: https://officecli.io/sitemap.xml')
+    expect(sitemap).toContain('<loc>https://officecli.io/</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/download</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/docs</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/pricing</loc>')
+    expect(sitemap).toContain('<loc>https://officecli.io/faq</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/officecli</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/officecli/install</loc>')
     expect(sitemap).toContain('<loc>https://officecli.io/officecli/codex</loc>')
-    expect(sitemap).toContain('<loc>https://officecli.io/claude-code-codex-office-skills</loc>')
-    expect(sitemap).toContain('<loc>https://officecli.io/download</loc>')
+    expect(sitemap).not.toContain('<loc>https://officecli.io/claude-code-codex-office-skills</loc>')
+    for (const seoPath of seoLandingPaths) {
+      expect(sitemap).toContain(`<loc>https://officecli.io${seoPath}</loc>`)
+    }
+
+    const locs = [...sitemap.matchAll(/<loc>https:\/\/officecli\.io([^<]*)<\/loc>/g)].map((match) => match[1] || '/')
+    for (const loc of locs) {
+      expect(routeSEO[loc]?.canonical).toBe(`https://officecli.io${loc === '/' ? '/' : loc}`)
+    }
   })
 
   it('renders prerendered home app html with main content', () => {
@@ -310,6 +344,31 @@ describe('site metadata and assets', () => {
     expect(html).toContain('External + Hosted modes')
     expect(html).toContain('External: free unlimited with your own model endpoint')
     expect(html).toContain('id="faq"')
+  })
+
+  it('renders prerendered canonical product pages with route-specific content', () => {
+    const cases = [
+      ['/download', 'Install OfficeCLI for AI document generation'],
+      ['/docs', 'OfficeCLI documentation for AI document generation'],
+      ['/pricing', 'OfficeCLI Pricing'],
+      ['/faq', 'OfficeCLI FAQ'],
+    ]
+
+    for (const [route, heading] of cases) {
+      const html = renderRouteApp(route)
+
+      expect(html).toContain(`<h1 class="font-headline text-5xl md:text-6xl font-bold text-white tracking-tight mb-6">${heading}</h1>`)
+      expect(html).not.toBe('<main class="overflow-x-hidden"></main>')
+    }
+  })
+
+  it('renders prerendered SEO landing pages with long-form search copy', () => {
+    const html = renderRouteApp('/ai-pptx-generator')
+
+    expect(html).toContain('AI PPTX Generator for Agent Workflows')
+    expect(html).toContain('officecli new pptx &quot;Q3 Business Review&quot;')
+    expect(html).toContain('External Mode is free and unlimited')
+    expect(html).toContain('Hosted Mode uses hosted credits')
   })
 
   it('renders prerendered agent skills html with search-focused copy', () => {

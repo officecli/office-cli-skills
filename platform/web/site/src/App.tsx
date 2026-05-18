@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { initAnalytics, trackPageView } from './analytics'
 import Navbar from './components/Navbar'
@@ -15,7 +15,9 @@ import AgentSkillsClaudeCodePage from './pages/AgentSkillsClaudeCodePage'
 import AgentSkillsCodexPage from './pages/AgentSkillsCodexPage'
 import AgentSkillsOpenClawPage from './pages/AgentSkillsOpenClawPage'
 import AgentSkillsFAQPage from './pages/AgentSkillsFAQPage'
+import SEOLandingPage from './pages/SEOLandingPage'
 import { applyDocumentSEO, getRouteSEO } from './seo'
+import { seoLandingPages } from './seoLandingPages'
 
 function LegacyAgentSkillsRedirect() {
   const location = useLocation()
@@ -52,6 +54,11 @@ function SiteShell() {
         <Route path="/officecli/codex" element={<AgentSkillsCodexPage />} />
         <Route path="/officecli/openclaw" element={<AgentSkillsOpenClawPage />} />
         <Route path="/officecli/faq" element={<AgentSkillsFAQPage />} />
+        {seoLandingPages.map((page) => (
+          <Fragment key={page.path}>
+            <Route path={page.path} element={<SEOLandingPage page={page} />} />
+          </Fragment>
+        ))}
         <Route path="/officecli-skills/*" element={<LegacyAgentSkillsRedirect />} />
         <Route path="/claude-code-codex-office-skills" element={<AgentSkillsPage />} />
         <Route path="/faq" element={<FAQPage />} />

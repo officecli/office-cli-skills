@@ -1847,7 +1847,7 @@ func registerStatic(router *gin.Engine, cfg Config) {
 				c.Redirect(http.StatusFound, joinURL(cfg.PlatformBaseURL, path))
 				return
 			}
-			serveIndexOr404(c, siteDir, "site ui not built")
+			serveSiteIndexOr404(c, siteDir, path, "site ui not built")
 			return
 		}
 		switch {
@@ -1856,7 +1856,7 @@ func registerStatic(router *gin.Engine, cfg Config) {
 		case strings.HasPrefix(path, "/app"):
 			serveIndexOr404(c, appDir, "app ui not built")
 		default:
-			serveIndexOr404(c, siteDir, "site ui not built")
+			serveSiteIndexOr404(c, siteDir, path, "site ui not built")
 		}
 	})
 }
@@ -1927,6 +1927,22 @@ func serveIndexOr404(c *gin.Context, rootDir, fallbackMessage string) {
 		return
 	}
 	httpapi.Error(c, http.StatusNotFound, fallbackMessage)
+}
+
+func serveSiteIndexOr404(c *gin.Context, rootDir, requestPath, fallbackMessage string) {
+	if rootDir == "" {
+		httpapi.Error(c, http.StatusNotFound, fallbackMessage)
+		return
+	}
+	cleanPath := strings.TrimPrefix(filepath.Clean("/"+requestPath), "/")
+	if cleanPath != "." && cleanPath != "" {
+		routeIndex := filepath.Join(cleanPath, "index.html")
+		if _, err := fs.Stat(os.DirFS(rootDir), routeIndex); err == nil {
+			c.File(filepath.Join(rootDir, routeIndex))
+			return
+		}
+	}
+	serveIndexOr404(c, rootDir, fallbackMessage)
 }
 
 func absIfExists(dir string) string {
