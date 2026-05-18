@@ -162,6 +162,8 @@ describe('platform admin shell', () => {
       </QueryClientProvider>,
     )
 
+    expect((await screen.findAllByRole('table')).length).toBeGreaterThan(0)
+    expect(document.querySelector('.max-w-7xl')).not.toBeInTheDocument()
     expect((await screen.findAllByText(/203\.0\.113\.42/i)).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/fp-audit-machine/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/req-audit-99/i)).toBeInTheDocument()
@@ -174,12 +176,101 @@ describe('platform admin shell', () => {
 
     fireEvent.change(screen.getByLabelText(/API key ID/i), { target: { value: '7' } })
     fireEvent.change(screen.getByLabelText(/User ID/i), { target: { value: '42' } })
-    fireEvent.change(screen.getByLabelText(/Client IP/i), { target: { value: '203.0.113' } })
-    fireEvent.change(screen.getByLabelText(/Request ID/i), { target: { value: 'req-audit' } })
+    fireEvent.change(screen.getByLabelText(/Client IP/i, { selector: 'input' }), { target: { value: '203.0.113' } })
+    fireEvent.change(screen.getByLabelText(/Request ID/i, { selector: 'input' }), { target: { value: 'req-audit' } })
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/i }))
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
+    })
+  })
+
+  it('loads and saves usage-event table column preferences', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/preferences/usage-events-table' && init?.method === 'PUT') {
+        return { ok: true, status: 200, json: async () => ({ data: requestBody([input, init]) }) }
+      }
+      if (url === '/api/admin/preferences/usage-events-table') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              version: 1,
+              columns: [
+                { key: 'created_at', visible: true, fixed: 'left', width: 210 },
+                { key: 'mode_result', visible: true },
+                { key: 'user_agent', visible: false },
+              ],
+            },
+          }),
+        }
+      }
+      if (url.startsWith('/api/admin/usage-events?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 100,
+              request_id: 'req-config-100',
+              fingerprint_hash: 'fp-config-machine',
+              mode: 'paid',
+              action: 'generate',
+              result: 'blocked',
+              client_ip: '203.0.113.100',
+              user_agent: 'hidden-agent',
+              created_at: '2026-05-15T09:00:00Z',
+            }],
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/usage-events']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('columnheader', { name: /Timestamp/i })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: /User-Agent/i })).not.toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getAllByRole('button', { name: /Resize Timestamp/i })[0], { clientX: 210 })
+    fireEvent.mouseMove(document, { clientX: 260 })
+    fireEvent.mouseUp(document, { clientX: 260 })
+
+    await waitFor(() => {
+      const resizeCall = fetchMock.mock.calls.find(([url, init]) => {
+        if (url !== '/api/admin/preferences/usage-events-table' || (init as RequestInit)?.method !== 'PUT') return false
+        return requestBody([url, init]).columns?.some((column: { key: string; width?: number }) => column.key === 'created_at' && column.width === 260)
+      })
+      expect(resizeCall).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Columns/i }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: /User-Agent/i }))
+
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(([url, init]) => {
+        if (url !== '/api/admin/preferences/usage-events-table' || (init as RequestInit)?.method !== 'PUT') return false
+        return requestBody([url, init]).columns?.some((column: { key: string; visible?: boolean }) => column.key === 'user_agent' && column.visible === true)
+      })
+      expect(saveCall).toBeTruthy()
+      expect(requestBody(saveCall!)).toMatchObject({
+        version: 1,
+        columns: expect.arrayContaining([
+          expect.objectContaining({ key: 'user_agent', visible: true }),
+        ]),
+      })
     })
   })
 

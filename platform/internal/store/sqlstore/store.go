@@ -1313,6 +1313,44 @@ func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([
 	return events, err
 }
 
+func (s *Store) GetAdminUserPreference(ctx context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error) {
+	adminEmail = strings.ToLower(strings.TrimSpace(adminEmail))
+	pageKey = strings.TrimSpace(pageKey)
+	if adminEmail == "" || pageKey == "" {
+		return nil, nil
+	}
+	var preference model.AdminUserPreference
+	err := s.db.WithContext(ctx).
+		Where("admin_email = ? AND page_key = ?", adminEmail, pageKey).
+		First(&preference).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &preference, nil
+}
+
+func (s *Store) UpsertAdminUserPreference(ctx context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error) {
+	preference := model.AdminUserPreference{
+		AdminEmail:      strings.ToLower(strings.TrimSpace(adminEmail)),
+		PageKey:         strings.TrimSpace(pageKey),
+		PreferencesJSON: preferencesJSON,
+	}
+	if preference.AdminEmail == "" || preference.PageKey == "" {
+		return nil, fmt.Errorf("admin email and page key are required")
+	}
+	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "admin_email"}, {Name: "page_key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"preferences_json", "updated_at"}),
+	}).Create(&preference).Error
+	if err != nil {
+		return nil, err
+	}
+	return s.GetAdminUserPreference(ctx, preference.AdminEmail, preference.PageKey)
+}
+
 func (s *Store) CreateAuditLog(ctx context.Context, action, targetType, targetID string, payload string) error {
 	return s.db.WithContext(ctx).Create(&model.AdminAuditLog{
 		Action:      action,

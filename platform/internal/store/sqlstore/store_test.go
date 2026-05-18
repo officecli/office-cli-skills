@@ -117,6 +117,33 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestAdminUserPreferenceUpsertGetAndIsolation(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:admin_user_preferences?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.AdminUserPreference{}))
+	store := NewWithDB(db)
+
+	ctx := context.Background()
+	first, err := store.UpsertAdminUserPreference(ctx, "Ops@Example.com ", "usage-events-table", `{"version":1,"columns":[{"key":"created_at","visible":true}]}`)
+	require.NoError(t, err)
+	require.Equal(t, "ops@example.com", first.AdminEmail)
+	require.Equal(t, "usage-events-table", first.PageKey)
+
+	found, err := store.GetAdminUserPreference(ctx, "ops@example.com", "usage-events-table")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	require.JSONEq(t, `{"version":1,"columns":[{"key":"created_at","visible":true}]}`, found.PreferencesJSON)
+
+	updated, err := store.UpsertAdminUserPreference(ctx, "ops@example.com", "usage-events-table", `{"version":1,"columns":[{"key":"mode_result","visible":false,"fixed":"left"}]}`)
+	require.NoError(t, err)
+	require.Equal(t, first.ID, updated.ID)
+	require.JSONEq(t, `{"version":1,"columns":[{"key":"mode_result","visible":false,"fixed":"left"}]}`, updated.PreferencesJSON)
+
+	other, err := store.GetAdminUserPreference(ctx, "other@example.com", "usage-events-table")
+	require.NoError(t, err)
+	require.Nil(t, other)
+}
+
 func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
 	requiredColumns := []string{"flow", "user_code_hash"}
 	migrationPaths := []string{

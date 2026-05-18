@@ -45,7 +45,7 @@ function ProtectedShell() {
     <Layout className="min-h-screen bg-background text-on-surface">
       <AdminSidebar admin={admin} />
       <Layout className="min-w-0 bg-background px-4 py-4 lg:p-6">
-        <div className="mx-auto w-full min-w-0 max-w-7xl">
+        <div className="w-full min-w-0">
           <AdminTopBar admin={admin} />
           <Layout.Content>
             <Routes>

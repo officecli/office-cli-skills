@@ -58,6 +58,7 @@ type fakeAdminRouteService struct {
 	logoutCookie string
 	sessionEmail string
 	sessionName  string
+	preferences  map[string]string
 	loginURL     string
 	mockEmail    string
 	mockName     string
@@ -123,6 +124,22 @@ func (f *fakeAdminRouteService) UpdateFreeQuota(_ context.Context, id uint64, fr
 }
 func (f *fakeAdminRouteService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
+}
+func (f *fakeAdminRouteService) GetPreference(_ context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error) {
+	if f.preferences == nil {
+		return nil, nil
+	}
+	if payload, ok := f.preferences[adminEmail+"|"+pageKey]; ok {
+		return &model.AdminUserPreference{AdminEmail: adminEmail, PageKey: pageKey, PreferencesJSON: payload}, nil
+	}
+	return nil, nil
+}
+func (f *fakeAdminRouteService) SavePreference(_ context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error) {
+	if f.preferences == nil {
+		f.preferences = map[string]string{}
+	}
+	f.preferences[adminEmail+"|"+pageKey] = preferencesJSON
+	return &model.AdminUserPreference{AdminEmail: adminEmail, PageKey: pageKey, PreferencesJSON: preferencesJSON}, nil
 }
 func (f *fakeAdminRouteService) ListUsers(_ context.Context, _ string) ([]model.User, error) {
 	return nil, nil
@@ -475,6 +492,58 @@ func TestRegisterAdminRoutesSessionReturnsCurrentIdentity(t *testing.T) {
 	}
 	if body := rec.Body.String(); !strings.Contains(body, "ops@example.com") || !strings.Contains(body, "Ops Lead") {
 		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestRegisterAdminRoutesPreferencesPersistByAdminEmail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{sessionEmail: "ops@example.com", sessionName: "Ops Lead"}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	body := strings.NewReader(`{"version":1,"columns":[{"key":"created_at","visible":true,"fixed":"left"}]}`)
+	putReq := httptest.NewRequest(http.MethodPut, "/api/admin/preferences/usage-events-table", body)
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	putRec := httptest.NewRecorder()
+	router.ServeHTTP(putRec, putReq)
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d body = %s", putRec.Code, putRec.Body.String())
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/admin/preferences/usage-events-table", nil)
+	getReq.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET status = %d body = %s", getRec.Code, getRec.Body.String())
+	}
+	var payload struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(getRec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Data["version"].(float64) != 1 {
+		t.Fatalf("preference payload = %#v", payload.Data)
+	}
+}
+
+func TestRegisterAdminRoutesPreferencesRejectMissingAdminEmail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/preferences/usage-events-table", strings.NewReader(`{"version":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
 }
 

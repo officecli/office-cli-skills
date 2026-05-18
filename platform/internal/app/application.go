@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -80,6 +81,8 @@ type adminRouteService interface {
 	ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error)
 	UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error
 	ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error)
+	GetPreference(ctx context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error)
+	SavePreference(ctx context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error)
 	ListUsers(ctx context.Context, query string) ([]model.User, error)
 	UpdateUser(ctx context.Context, id uint64, req admin.UpdateUserRequest) error
 	ListOrders(ctx context.Context) ([]model.Order, error)
@@ -922,6 +925,51 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+	protected.GET("/preferences/:page_key", func(c *gin.Context) {
+		adminEmail, ok := currentAdminEmail(c, adminSvc)
+		if !ok {
+			httpapi.Error(c, http.StatusBadRequest, "admin email is required")
+			return
+		}
+		preference, err := adminSvc.GetPreference(c.Request.Context(), adminEmail, c.Param("page_key"))
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if preference == nil || strings.TrimSpace(preference.PreferencesJSON) == "" {
+			httpapi.JSON(c, http.StatusOK, gin.H{})
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, json.RawMessage(preference.PreferencesJSON))
+	})
+	protected.PUT("/preferences/:page_key", func(c *gin.Context) {
+		adminEmail, ok := currentAdminEmail(c, adminSvc)
+		if !ok {
+			httpapi.Error(c, http.StatusBadRequest, "admin email is required")
+			return
+		}
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		var payload any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "preferences must be valid JSON")
+			return
+		}
+		normalized, err := json.Marshal(payload)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		preference, err := adminSvc.SavePreference(c.Request.Context(), adminEmail, c.Param("page_key"), string(normalized))
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, json.RawMessage(preference.PreferencesJSON))
+	})
 	protected.GET("/users", func(c *gin.Context) {
 		data, err := adminSvc.ListUsers(c.Request.Context(), c.Query("query"))
 		if err != nil {
@@ -1106,6 +1154,19 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+}
+
+func currentAdminEmail(c *gin.Context, adminSvc adminRouteService) (string, bool) {
+	raw, err := c.Cookie("cop_admin_session")
+	if err != nil || raw == "" {
+		return "", false
+	}
+	identity, err := adminSvc.CurrentIdentity(c.Request.Context(), raw)
+	if err != nil || identity == nil {
+		return "", false
+	}
+	email := strings.ToLower(strings.TrimSpace(identity.Email))
+	return email, email != ""
 }
 
 func registerPreviewRoutes(r *egin.Component, cfg Config, authSvc authRouteService, shares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
