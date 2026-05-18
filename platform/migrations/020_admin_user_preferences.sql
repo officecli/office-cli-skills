@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS admin_user_preferences (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  admin_email VARCHAR(191) NOT NULL,
+  page_key VARCHAR(128) NOT NULL,
+  preferences_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY idx_admin_user_preferences_email_page (admin_email, page_key)
+);

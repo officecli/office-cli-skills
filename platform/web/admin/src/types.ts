@@ -4,6 +4,16 @@ export interface AdminIdentity {
   auth_method?: string
 }
 
+export interface AdminPreference {
+  version?: number
+  columns?: Array<{
+    key: string
+    visible?: boolean
+    fixed?: 'left' | 'right' | null
+    width?: number
+  }>
+}
+
 export interface ApiKey {
   id: number
   key_prefix: string

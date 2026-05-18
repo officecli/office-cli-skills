@@ -126,7 +126,7 @@ func (s *Service) Login(ctx context.Context, password string) (string, error) {
 	if strings.TrimSpace(password) == "" || password != s.adminPassword {
 		return "", fmt.Errorf("invalid admin password")
 	}
-	return s.createSession(ctx, SessionPayload{AuthMethod: "password"}, "admin.login")
+	return s.createSession(ctx, SessionPayload{PrincipalEmail: "admin", PrincipalName: "Admin", AuthMethod: "password"}, "admin.login")
 }
 
 func (s *Service) MockGoogleLogin(ctx context.Context, email, name string) (*AdminIdentity, string, error) {
@@ -452,6 +452,29 @@ func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEven
 		return mockUsageEvents(filter), nil
 	}
 	return s.store.ListUsageEvents(ctx, filter)
+}
+
+func (s *Service) GetPreference(ctx context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error) {
+	if strings.TrimSpace(adminEmail) == "" {
+		return nil, fmt.Errorf("admin email is required")
+	}
+	return s.store.GetAdminUserPreference(ctx, adminEmail, pageKey)
+}
+
+func (s *Service) SavePreference(ctx context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error) {
+	if strings.TrimSpace(adminEmail) == "" {
+		return nil, fmt.Errorf("admin email is required")
+	}
+	var payload any
+	if err := json.Unmarshal([]byte(preferencesJSON), &payload); err != nil {
+		return nil, fmt.Errorf("preferences must be valid JSON")
+	}
+	preference, err := s.store.UpsertAdminUserPreference(ctx, adminEmail, pageKey, preferencesJSON)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "admin.preference.update", "admin_user_preference", strings.ToLower(strings.TrimSpace(adminEmail))+":"+strings.TrimSpace(pageKey), preferencesJSON)
+	return preference, nil
 }
 
 func (s *Service) ListUsers(ctx context.Context, query string) ([]model.User, error) {

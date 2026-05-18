@@ -99,6 +99,17 @@ type User struct {
 
 func (User) TableName() string { return "users" }
 
+type AdminUserPreference struct {
+	ID              uint64    `gorm:"primaryKey" json:"id"`
+	AdminEmail      string    `gorm:"column:admin_email;size:191;uniqueIndex:idx_admin_user_preferences_email_page;not null" json:"admin_email"`
+	PageKey         string    `gorm:"column:page_key;size:128;uniqueIndex:idx_admin_user_preferences_email_page;not null" json:"page_key"`
+	PreferencesJSON string    `gorm:"column:preferences_json;type:json;not null" json:"preferences_json"`
+	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (AdminUserPreference) TableName() string { return "admin_user_preferences" }
+
 type APIKey struct {
 	ID                 uint64       `gorm:"primaryKey" json:"id"`
 	OwnerUserID        *uint64      `gorm:"column:owner_user_id;index" json:"owner_user_id,omitempty"`

@@ -78,6 +78,12 @@ func (fakeAdminRouteFailureService) UpdateFreeQuota(_ context.Context, id uint64
 func (fakeAdminRouteFailureService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
 }
+func (fakeAdminRouteFailureService) GetPreference(_ context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error) {
+	return nil, nil
+}
+func (fakeAdminRouteFailureService) SavePreference(_ context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error) {
+	return nil, nil
+}
 func (fakeAdminRouteFailureService) ListUsers(_ context.Context, _ string) ([]model.User, error) {
 	return nil, nil
 }

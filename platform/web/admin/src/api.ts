@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, Order, Overview, QuotaSources, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -45,6 +45,8 @@ export const api = {
   updateFreeQuota: (id: number, free_limit: number) => request(`/api/admin/free-quotas/${id}`, { method: 'PATCH', body: JSON.stringify({ free_limit }) }),
   quotaSources: (params: URLSearchParams) => request<QuotaSources>(`/api/admin/quota-sources?${params.toString()}`),
   usageEvents: (params: URLSearchParams) => request<UsageEvent[]>(`/api/admin/usage-events?${params.toString()}`),
+  adminPreference: (pageKey: string) => request<AdminPreference>(`/api/admin/preferences/${encodeURIComponent(pageKey)}`),
+  saveAdminPreference: (pageKey: string, payload: AdminPreference) => request<AdminPreference>(`/api/admin/preferences/${encodeURIComponent(pageKey)}`, { method: 'PUT', body: JSON.stringify(payload) }),
   users: (query = '') => request<User[]>(query ? `/api/admin/users?query=${encodeURIComponent(query)}` : '/api/admin/users'),
   updateUser: (id: number, payload: Record<string, unknown>) => request(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   orders: () => request<Order[]>('/api/admin/orders'),

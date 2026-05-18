@@ -1,8 +1,15 @@
-import { FormEvent, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react'
+import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Button, Dropdown, Space, Table, Tooltip, Typography } from 'antd'
+import type { MenuProps } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { GripVertical, MoreVertical, RotateCcw, Settings2 } from 'lucide-react'
 import { api } from '../api'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
-import type { UsageEvent } from '../types'
+import type { AdminPreference, UsageEvent } from '../types'
 
 interface FilterState {
   mode: string
@@ -17,6 +24,24 @@ interface FilterState {
   end_time: string
 }
 
+type ColumnFixed = 'left' | 'right' | undefined
+
+interface ColumnPreference {
+  key: string
+  visible: boolean
+  fixed?: ColumnFixed
+  width: number
+}
+
+interface UsageColumn {
+  key: string
+  label: string
+  width: number
+  render: (event: UsageEvent) => ReactNode
+}
+
+const preferenceKey = 'usage-events-table'
+
 const defaultFilters: FilterState = {
   mode: '',
   result: '',
@@ -30,9 +55,54 @@ const defaultFilters: FilterState = {
   end_time: '',
 }
 
+const usageColumns: UsageColumn[] = [
+  { key: 'created_at', label: 'Timestamp', width: 180, render: (event) => compactText(formatDate(event.created_at)) },
+  { key: 'mode_result', label: 'Mode / Result', width: 160, render: (event) => <Space size={6}><Typography.Text strong>{event.mode}</Typography.Text><StatusPill value={event.result} /></Space> },
+  { key: 'action_reason', label: 'Action / Reason', width: 170, render: (event) => compactText(`${event.action}${event.reason_code ? ` / ${event.reason_code}` : ''}`) },
+  { key: 'user_key', label: 'User / Key', width: 150, render: (event) => compactText(`user ${valueOrDash(event.user_id)} / key ${valueOrDash(event.api_key_id)}`) },
+  { key: 'fingerprint_hash', label: 'Fingerprint', width: 220, render: (event) => monoText(event.fingerprint_hash) },
+  { key: 'client_ip', label: 'Client IP', width: 150, render: (event) => monoText(valueOrDash(event.client_ip)) },
+  { key: 'request', label: 'Request', width: 260, render: (event) => monoText(`${valueOrDash(event.request_method)} ${valueOrDash(event.request_host)}${valueOrDash(event.request_path)}`) },
+  { key: 'request_id', label: 'Request ID', width: 180, render: (event) => monoText(valueOrDash(event.request_id)) },
+  { key: 'cli_document', label: 'CLI / Document', width: 160, render: (event) => compactText(`${valueOrDash(event.cli_version)} / ${valueOrDash(event.document_type)}`) },
+  { key: 'runtime_provider', label: 'Runtime / Provider', width: 170, render: (event) => compactText(`${valueOrDash(event.runtime_mode)} / ${valueOrDash(event.provider)}`) },
+  { key: 'model_charge', label: 'Model / Charge', width: 180, render: (event) => compactText(`${event.model_name || event.provider || '--'} / ${chargeLabel(event)}`) },
+  { key: 'tokens', label: 'Tokens', width: 150, render: (event) => compactText(`${event.prompt_tokens ?? 0} / ${event.completion_tokens ?? 0} / ${event.reasoning_tokens ?? 0}`) },
+  { key: 'images', label: 'Images', width: 100, render: (event) => compactText(`${event.image_count ?? 0}`) },
+  { key: 'credits', label: 'Credits', width: 240, render: (event) => compactText(`reserved ${event.reserved_credits ?? 0} / settled ${event.settled_credits ?? 0} / refund ${event.refund_credits ?? 0}`) },
+  { key: 'cost_profit', label: 'Cost / Profit', width: 180, render: (event) => compactText(`${creditsFromMicrousd(event.upstream_cost_microusd)} / ${creditsFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}`) },
+  { key: 'user_agent', label: 'User-Agent', width: 260, render: (event) => monoText(valueOrDash(event.user_agent)) },
+  { key: 'forwarded_for', label: 'Forwarded-For', width: 220, render: (event) => monoText(valueOrDash(event.forwarded_for)) },
+]
+
+const defaultPreferences: ColumnPreference[] = usageColumns.map((column) => ({
+  key: column.key,
+  visible: true,
+  width: column.width,
+}))
+
+const columnByKey = new Map(usageColumns.map((column) => [column.key, column]))
+
 export default function UsageEventsPage() {
   const [draft, setDraft] = useState<FilterState>(defaultFilters)
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
+  const [columnPreferences, setColumnPreferences] = useState<ColumnPreference[]>(defaultPreferences)
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+
+  const { data: savedPreferences } = useQuery({
+    queryKey: ['admin-preference', preferenceKey],
+    queryFn: () => api.adminPreference(preferenceKey),
+    retry: false,
+  })
+
+  const savePreferences = useMutation({
+    mutationFn: (preferences: ColumnPreference[]) => api.saveAdminPreference(preferenceKey, toPreferencePayload(preferences)),
+  })
+
+  useEffect(() => {
+    setColumnPreferences(mergePreferences(savedPreferences))
+  }, [savedPreferences])
 
   const { data = [] } = useQuery({
     queryKey: ['admin-usage-events', filters],
@@ -52,11 +122,109 @@ export default function UsageEventsPage() {
     },
   })
 
+  const visiblePreferences = columnPreferences.filter((preference) => preference.visible && columnByKey.has(preference.key))
+  const visibleKeys = visiblePreferences.map((preference) => preference.key)
+  const tableColumns = useMemo<ColumnsType<UsageEvent>>(() => {
+    return visiblePreferences.map((preference) => {
+      const definition = columnByKey.get(preference.key)!
+      const width = preference.width || definition.width
+      return {
+        title: (
+          <SortableHeader
+            columnKey={definition.key}
+            label={definition.label}
+            fixed={preference.fixed}
+            width={width}
+            onFixedChange={(fixed) => updateColumn(preference.key, { fixed })}
+            onHide={() => updateColumn(preference.key, { visible: false })}
+            onWidthChange={(nextWidth, save) => updateColumnWidth(preference.key, nextWidth, save)}
+          />
+        ),
+        key: definition.key,
+        dataIndex: definition.key,
+        width,
+        fixed: preference.fixed,
+        render: (_value: unknown, event: UsageEvent) => definition.render(event),
+      }
+    })
+  }, [visiblePreferences])
+
+  const scrollWidth = visiblePreferences.reduce((sum, preference) => sum + (preference.width || columnByKey.get(preference.key)?.width || 160), 0)
+
+  function persist(next: ColumnPreference[]) {
+    setColumnPreferences(next)
+    savePreferences.mutate(next)
+  }
+
+  function updateColumn(key: string, patch: Partial<ColumnPreference>) {
+    const next = columnPreferences.map((preference) => (
+      preference.key === key ? { ...preference, ...patch, fixed: Object.prototype.hasOwnProperty.call(patch, 'fixed') ? patch.fixed : preference.fixed } : preference
+    ))
+    persist(next)
+  }
+
+  function updateColumnWidth(key: string, width: number, save: boolean) {
+    const normalizedWidth = normalizeWidth(width)
+    setColumnPreferences((current) => {
+      const next = current.map((preference) => (
+        preference.key === key ? { ...preference, width: normalizedWidth } : preference
+      ))
+      if (save) {
+        savePreferences.mutate(next)
+      }
+      return next
+    })
+  }
+
+  function resetColumns() {
+    persist(defaultPreferences)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = columnPreferences.findIndex((preference) => preference.key === active.id)
+    const newIndex = columnPreferences.findIndex((preference) => preference.key === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    persist(arrayMove(columnPreferences, oldIndex, newIndex))
+  }
+
   return (
-    <div className="space-y-8">
-      <Panel>
-        <SectionHeading eyebrow="Audit visibility" title="Recent usage events" body="Filter the event stream to understand why requests were allowed, blocked, or routed through a specific mode." />
-        <form className="admin-code-card admin-surface-panel mb-6 grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+    <div className="space-y-4">
+      <Panel className="admin-usage-events-panel">
+        <SectionHeading
+          eyebrow="Audit visibility"
+          title="Recent usage events"
+          body="Filter the event stream to understand why requests were allowed, blocked, or routed through a specific mode."
+          action={(
+            <Space wrap>
+              <Button icon={<Settings2 size={14} />} onClick={() => setColumnMenuOpen((open) => !open)}>Columns</Button>
+              <Button icon={<RotateCcw size={14} />} onClick={resetColumns}>Restore defaults</Button>
+            </Space>
+          )}
+        />
+        {columnMenuOpen ? (
+          <div className="admin-column-menu mb-4" role="menu" aria-label="Usage event columns">
+            {usageColumns.map((column) => {
+              const preference = columnPreferences.find((item) => item.key === column.key)
+              const visible = preference?.visible !== false
+              return (
+                <button
+                  key={column.key}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={visible}
+                  className="admin-column-menu-item"
+                  onClick={() => updateColumn(column.key, { visible: !visible })}
+                >
+                  <span>{column.label}</span>
+                  <span>{visible ? 'Shown' : 'Hidden'}</span>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
+        <form className="admin-code-card admin-surface-panel admin-usage-filter-bar mb-3 grid gap-3 border border-outline-variant/20 p-4 md:grid-cols-5 xl:grid-cols-10" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           setFilters(draft)
         }}>
@@ -100,7 +268,7 @@ export default function UsageEventsPage() {
           <label className="text-sm text-outline">End time
             <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-16T00:00:00Z" value={draft.end_time} onChange={(event) => setDraft((current) => ({ ...current, end_time: event.target.value }))} />
           </label>
-          <div className="md:col-span-4 flex gap-3">
+          <div className="flex items-end gap-3 md:col-span-5 xl:col-span-10">
             <button type="submit" className="admin-primary-button">Apply filters</button>
             <button type="button" className="admin-secondary-button" onClick={() => {
               setDraft(defaultFilters)
@@ -109,9 +277,19 @@ export default function UsageEventsPage() {
           </div>
         </form>
         {data.length ? (
-          <div className="space-y-4">
-            {data.map((event) => <UsageAuditEvent key={event.id} event={event} />)}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={visibleKeys} strategy={horizontalListSortingStrategy}>
+              <Table
+                className="admin-table admin-usage-table"
+                columns={tableColumns}
+                dataSource={data}
+                pagination={false}
+                rowKey="id"
+                scroll={{ x: Math.max(scrollWidth, 960) }}
+                size="small"
+              />
+            </SortableContext>
+          </DndContext>
         ) : (
           <EmptyState title="No usage events matched" body="Adjust the filter set or wait for fresh policy traffic to enter the audit stream." />
         )}
@@ -120,48 +298,113 @@ export default function UsageEventsPage() {
   )
 }
 
-function UsageAuditEvent({ event }: { event: UsageEvent }) {
+function SortableHeader({ columnKey, label, fixed, width, onFixedChange, onHide, onWidthChange }: { columnKey: string; label: string; fixed?: ColumnFixed; width: number; onFixedChange: (fixed: ColumnFixed) => void; onHide: () => void; onWidthChange: (width: number, save: boolean) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: columnKey })
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  }
+  const items: MenuProps['items'] = [
+    { key: 'left', label: 'Fix left' },
+    { key: 'right', label: 'Fix right' },
+    { key: 'none', label: 'Unfix' },
+    { type: 'divider' },
+    { key: 'hide', label: 'Hide column' },
+  ]
+
   return (
-    <article className="admin-surface-panel overflow-hidden border border-outline-variant/15">
-      <div className="grid gap-4 bg-surface-container-high/60 p-5 text-sm lg:grid-cols-[1fr_1fr_1.3fr_1fr_1fr]">
-        <div>
-          <div className="info-eyebrow-tight text-outline">Mode / Result</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-white">{event.mode}</span>
-            <StatusPill value={event.result} />
-          </div>
-          <div className="mt-2 text-outline">{event.action}{event.reason_code ? ` / ${event.reason_code}` : ''}</div>
-        </div>
-        <AuditBlock label="User / Key" value={`user ${valueOrDash(event.user_id)} / key ${valueOrDash(event.api_key_id)}`} />
-        <AuditBlock label="Machine / IP" value={`${event.fingerprint_hash} / ${valueOrDash(event.client_ip)}`} mono />
-        <AuditBlock label="Model / Charge" value={`${event.model_name || event.provider || '--'} / ${chargeLabel(event)}`} />
-        <AuditBlock label="Timestamp" value={formatDate(event.created_at)} />
-      </div>
-      <div className="grid gap-4 p-5 text-sm md:grid-cols-2 xl:grid-cols-3">
-        <AuditBlock label="Request" value={`${valueOrDash(event.request_method)} ${valueOrDash(event.request_host)}${valueOrDash(event.request_path)}`} mono />
-        <AuditBlock label="Request ID" value={valueOrDash(event.request_id)} mono />
-        <AuditBlock label="Machine fingerprint" value={event.fingerprint_hash} mono />
-        <AuditBlock label="Client IP" value={valueOrDash(event.client_ip)} mono />
-        <AuditBlock label="Forwarded-For" value={valueOrDash(event.forwarded_for)} mono />
-        <AuditBlock label="User-Agent" value={valueOrDash(event.user_agent)} mono />
-        <AuditBlock label="CLI / Document" value={`${valueOrDash(event.cli_version)} / ${valueOrDash(event.document_type)}`} />
-        <AuditBlock label="Runtime / Provider" value={`${valueOrDash(event.runtime_mode)} / ${valueOrDash(event.provider)}`} />
-        <AuditBlock label="Tokens" value={`${event.prompt_tokens ?? 0} / ${event.completion_tokens ?? 0} / ${event.reasoning_tokens ?? 0}`} />
-        <AuditBlock label="Images" value={`${event.image_count ?? 0}`} />
-        <AuditBlock label="Credits" value={`reserved ${event.reserved_credits ?? 0} / settled ${event.settled_credits ?? 0} / refund ${event.refund_credits ?? 0}`} />
-        <AuditBlock label="Cost / Profit" value={`${creditsFromMicrousd(event.upstream_cost_microusd)} / ${creditsFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}`} />
-      </div>
-    </article>
+    <div ref={setNodeRef} style={style} className="admin-draggable-header">
+      <button type="button" className="admin-drag-handle" aria-label="Drag column" title={`Drag ${label}`} {...attributes} {...listeners}>
+        <GripVertical size={13} />
+      </button>
+      <span className="min-w-0 truncate">{label}{fixed ? ` (${fixed})` : ''}</span>
+      <Dropdown
+        menu={{
+          items,
+          onClick: ({ key }) => {
+            if (key === 'hide') {
+              onHide()
+              return
+            }
+            onFixedChange(key === 'left' || key === 'right' ? key : undefined)
+          },
+        }}
+        trigger={['click']}
+      >
+        <Button className="admin-column-action" size="small" type="text" icon={<MoreVertical size={14} />} aria-label="Column actions" title={`Column actions ${label}`} />
+      </Dropdown>
+      <button
+        type="button"
+        className="admin-column-resizer"
+        aria-label={`Resize ${label}`}
+        title={`Resize ${label}`}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const startX = event.clientX
+          const startWidth = width
+          const handleMouseMove = (moveEvent: MouseEvent) => {
+            onWidthChange(startWidth + moveEvent.clientX - startX, false)
+          }
+          const handleMouseUp = (upEvent: MouseEvent) => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+            onWidthChange(startWidth + upEvent.clientX - startX, true)
+          }
+          document.addEventListener('mousemove', handleMouseMove)
+          document.addEventListener('mouseup', handleMouseUp)
+        }}
+      />
+    </div>
   )
 }
 
-function AuditBlock({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="min-w-0">
-      <div className="info-eyebrow-tight text-outline">{label}</div>
-      <div className={`mt-2 break-words text-white ${mono ? 'font-mono text-xs' : ''}`}>{value}</div>
-    </div>
-  )
+function mergePreferences(saved?: AdminPreference): ColumnPreference[] {
+  const savedColumns = Array.isArray(saved?.columns) ? saved.columns : []
+  const merged: ColumnPreference[] = []
+  for (const savedColumn of savedColumns) {
+    if (!columnByKey.has(savedColumn.key)) continue
+    merged.push({
+      key: savedColumn.key,
+      visible: savedColumn.visible !== false,
+      fixed: savedColumn.fixed === 'left' || savedColumn.fixed === 'right' ? savedColumn.fixed : undefined,
+      width: normalizeWidth(savedColumn.width, columnByKey.get(savedColumn.key)?.width),
+    })
+  }
+  for (const column of usageColumns) {
+    if (!merged.some((preference) => preference.key === column.key)) {
+      merged.push({ key: column.key, visible: true, width: column.width })
+    }
+  }
+  return merged
+}
+
+function toPreferencePayload(columns: ColumnPreference[]): AdminPreference {
+  return {
+    version: 1,
+    columns: columns.map((column) => ({
+      key: column.key,
+      visible: column.visible,
+      fixed: column.fixed,
+      width: column.width,
+    })),
+  }
+}
+
+function normalizeWidth(width?: number, fallback = 160) {
+  if (!Number.isFinite(width)) {
+    return fallback
+  }
+  return Math.min(720, Math.max(96, Math.round(width || fallback)))
+}
+
+function compactText(value: string) {
+  return <Tooltip title={value}><span className="block max-w-full truncate">{value}</span></Tooltip>
+}
+
+function monoText(value: string) {
+  return <Tooltip title={value}><span className="admin-table-mono block max-w-full truncate font-mono">{value}</span></Tooltip>
 }
 
 function chargeLabel(event: UsageEvent) {

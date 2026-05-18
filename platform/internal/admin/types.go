@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/officecli/officecli-internal/platform/internal/model"
@@ -59,6 +60,10 @@ type UpdateAPIKeyRequest struct {
 
 type UpdateFreeQuotaRequest struct {
 	FreeLimit int `json:"free_limit"`
+}
+
+type AdminPreferenceResponse struct {
+	Preferences json.RawMessage `json:"preferences"`
 }
 
 type QuotaSourcesFilter struct {
