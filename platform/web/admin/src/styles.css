@@ -403,6 +403,41 @@ button:disabled,
   color: var(--color-outline);
 }
 
+.admin-chart-panel .ant-card-body {
+  height: 100%;
+}
+
+.admin-chart-body {
+  min-height: 220px;
+}
+
+.admin-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+
+.admin-chart-legend span {
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 999px;
+  background: var(--color-surface-container-low);
+  padding: 0.125rem 0.5rem;
+  color: var(--color-outline);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-chart-empty {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+}
+
+.admin-chart-empty-compact {
+  min-height: 170px;
+}
+
 .admin-empty {
   padding: 2rem 1rem;
 }

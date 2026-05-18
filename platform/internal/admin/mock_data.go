@@ -12,6 +12,22 @@ import (
 var mockBaseTime = time.Date(2026, 5, 17, 9, 30, 0, 0, time.UTC)
 
 func mockOverview() *model.OverviewStats {
+	usageTrend := make([]model.OverviewUsageTrendPoint, 0, 7)
+	start := mockBaseTime.AddDate(0, 0, -6)
+	for i := 0; i < 7; i++ {
+		date := start.AddDate(0, 0, i)
+		checks := int64(48 + i*9)
+		consumes := int64(30 + i*7)
+		blocked := int64(i % 3)
+		usageTrend = append(usageTrend, model.OverviewUsageTrendPoint{
+			Date:     date.Format("2006-01-02"),
+			Checks:   checks,
+			Consumes: consumes,
+			Blocked:  blocked,
+			Allowed:  checks + consumes - blocked,
+			Total:    checks + consumes,
+		})
+	}
 	return &model.OverviewStats{
 		TotalAPIKeys:          4,
 		ActiveAPIKeys:         3,
@@ -25,6 +41,23 @@ func mockOverview() *model.OverviewStats {
 		PaidOrdersLast24h:     2,
 		PaidQuotaAddedLast24h: 1200,
 		RemainingPaidQuota:    3950,
+		UsageTrend:            usageTrend,
+		ModeBreakdown: []model.OverviewBreakdownItem{
+			{Key: "free", Label: "Free", Value: 34},
+			{Key: "reward", Label: "Reward", Value: 18},
+			{Key: "paid", Label: "Paid", Value: 27},
+			{Key: "hosted", Label: "Hosted", Value: 49},
+		},
+		ResultBreakdown: []model.OverviewBreakdownItem{
+			{Key: "allowed", Label: "Allowed", Value: 121},
+			{Key: "blocked", Label: "Blocked", Value: 7},
+		},
+		APIKeyStatusBreakdown: []model.OverviewBreakdownItem{
+			{Key: "active", Label: "Active", Value: 2},
+			{Key: "disabled", Label: "Disabled", Value: 1},
+			{Key: "expired", Label: "Expired", Value: 1},
+			{Key: "other", Label: "Other", Value: 0},
+		},
 	}
 }
 

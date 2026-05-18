@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/officecli/officecli-internal/platform/internal/admin"
 	"github.com/officecli/officecli-internal/platform/internal/auth"
@@ -69,6 +70,7 @@ type fakeAdminRouteService struct {
 	callbackErr  error
 	plaintext    string
 	plaintextErr error
+	overview     *model.OverviewStats
 }
 
 func (f *fakeAdminRouteService) ResolveSession(cookieValue string) (string, error) {
@@ -102,6 +104,9 @@ func (f *fakeAdminRouteService) Logout(_ context.Context, rawCookie string) erro
 	return nil
 }
 func (f *fakeAdminRouteService) Overview(_ context.Context) (*model.OverviewStats, error) {
+	if f.overview != nil {
+		return f.overview, nil
+	}
 	return &model.OverviewStats{}, nil
 }
 func (f *fakeAdminRouteService) ListAPIKeys(_ context.Context, _ *uint64) ([]model.APIKey, error) {
@@ -186,6 +191,51 @@ func (f *fakeAdminRouteService) CreateHostedCreditPack(_ context.Context, req ad
 }
 func (f *fakeAdminRouteService) UpdateHostedCreditPack(_ context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
 	return &model.HostedCreditPack{}, nil
+}
+
+func TestAdminOverviewRouteReturnsChartData(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{
+		overview: &model.OverviewStats{
+			UsageTrend: []model.OverviewUsageTrendPoint{{
+				Date:     "2026-05-18",
+				Checks:   3,
+				Consumes: 2,
+				Blocked:  1,
+				Allowed:  4,
+				Total:    5,
+			}},
+			ResultBreakdown: []model.OverviewBreakdownItem{{Key: "allowed", Label: "Allowed", Value: 4}},
+			ModeBreakdown:   []model.OverviewBreakdownItem{{Key: "hosted", Label: "Hosted", Value: 2}},
+			APIKeyStatusBreakdown: []model.OverviewBreakdownItem{{
+				Key:   "active",
+				Label: "Active",
+				Value: 7,
+			}},
+		},
+	}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data model.OverviewStats `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Data.UsageTrend, 1)
+	require.Equal(t, "2026-05-18", body.Data.UsageTrend[0].Date)
+	require.EqualValues(t, 5, body.Data.UsageTrend[0].Total)
+	require.EqualValues(t, 4, body.Data.ResultBreakdown[0].Value)
+	require.EqualValues(t, 2, body.Data.ModeBreakdown[0].Value)
+	require.EqualValues(t, 7, body.Data.APIKeyStatusBreakdown[0].Value)
 }
 
 func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T) {

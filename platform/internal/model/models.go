@@ -601,16 +601,35 @@ func (p HostedCreditPack) PricingPack() PricingPack {
 }
 
 type OverviewStats struct {
-	TotalAPIKeys          int64 `json:"total_api_keys"`
-	ActiveAPIKeys         int64 `json:"active_api_keys"`
-	DisabledAPIKeys       int64 `json:"disabled_api_keys"`
-	ExpiredAPIKeys        int64 `json:"expired_api_keys"`
-	FreeMachines          int64 `json:"free_machines"`
-	ChecksLast24h         int64 `json:"checks_last_24h"`
-	ConsumesLast24h       int64 `json:"consumes_last_24h"`
-	BlockedLast24h        int64 `json:"blocked_last_24h"`
-	TotalUsers            int64 `json:"total_users"`
-	PaidOrdersLast24h     int64 `json:"paid_orders_last_24h"`
-	PaidQuotaAddedLast24h int64 `json:"paid_quota_added_last_24h"`
-	RemainingPaidQuota    int64 `json:"remaining_paid_quota"`
+	TotalAPIKeys          int64                     `json:"total_api_keys"`
+	ActiveAPIKeys         int64                     `json:"active_api_keys"`
+	DisabledAPIKeys       int64                     `json:"disabled_api_keys"`
+	ExpiredAPIKeys        int64                     `json:"expired_api_keys"`
+	FreeMachines          int64                     `json:"free_machines"`
+	ChecksLast24h         int64                     `json:"checks_last_24h"`
+	ConsumesLast24h       int64                     `json:"consumes_last_24h"`
+	BlockedLast24h        int64                     `json:"blocked_last_24h"`
+	TotalUsers            int64                     `json:"total_users"`
+	PaidOrdersLast24h     int64                     `json:"paid_orders_last_24h"`
+	PaidQuotaAddedLast24h int64                     `json:"paid_quota_added_last_24h"`
+	RemainingPaidQuota    int64                     `json:"remaining_paid_quota"`
+	UsageTrend            []OverviewUsageTrendPoint `json:"usage_trend"`
+	ModeBreakdown         []OverviewBreakdownItem   `json:"mode_breakdown"`
+	ResultBreakdown       []OverviewBreakdownItem   `json:"result_breakdown"`
+	APIKeyStatusBreakdown []OverviewBreakdownItem   `json:"api_key_status_breakdown"`
+}
+
+type OverviewUsageTrendPoint struct {
+	Date     string `json:"date"`
+	Checks   int64  `json:"checks"`
+	Consumes int64  `json:"consumes"`
+	Blocked  int64  `json:"blocked"`
+	Allowed  int64  `json:"allowed"`
+	Total    int64  `json:"total"`
+}
+
+type OverviewBreakdownItem struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Value int64  `json:"value"`
 }

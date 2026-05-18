@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 import App from './App'
 
+vi.mock('@ant-design/plots', () => ({
+  Line: () => <div data-testid="overview-line-chart" />,
+  Pie: () => <div data-testid="overview-pie-chart" />,
+}))
+
 const fetchMock = vi.fn()
 
 function requestBody(call: unknown[]) {
@@ -75,6 +80,124 @@ describe('platform admin shell', () => {
     await waitFor(() => {
       expect(loginSpy).toHaveBeenCalledWith('/admin/users?tab=ops#team')
     })
+  })
+
+  it('renders overview trend and breakdown charts', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/overview') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              total_api_keys: 9,
+              active_api_keys: 6,
+              disabled_api_keys: 2,
+              expired_api_keys: 1,
+              free_machines: 4,
+              checks_last_24h: 12,
+              consumes_last_24h: 8,
+              blocked_last_24h: 3,
+              total_users: 5,
+              paid_orders_last_24h: 1,
+              paid_quota_added_last_24h: 100,
+              remaining_paid_quota: 500,
+              usage_trend: [
+                { date: '2026-05-12', checks: 2, consumes: 1, blocked: 0, allowed: 3, total: 3 },
+                { date: '2026-05-13', checks: 4, consumes: 3, blocked: 1, allowed: 6, total: 7 },
+              ],
+              result_breakdown: [
+                { key: 'allowed', label: 'Allowed', value: 9 },
+                { key: 'blocked', label: 'Blocked', value: 1 },
+              ],
+              mode_breakdown: [
+                { key: 'free', label: 'Free', value: 3 },
+                { key: 'reward', label: 'Reward', value: 2 },
+                { key: 'paid', label: 'Paid', value: 1 },
+                { key: 'hosted', label: 'Hosted', value: 4 },
+              ],
+              api_key_status_breakdown: [
+                { key: 'active', label: 'Active', value: 6 },
+                { key: 'disabled', label: 'Disabled', value: 2 },
+                { key: 'expired', label: 'Expired', value: 1 },
+                { key: 'other', label: 'Other', value: 0 },
+              ],
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /7-day usage trend/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Result mix/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Mode mix/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /API key status/i })).toBeInTheDocument()
+    expect((await screen.findAllByText(/Checks/i)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Consumes/i)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Blocked/i)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Hosted/i)).length).toBeGreaterThan(0)
+  })
+
+  it('shows overview chart empty states when chart data is empty', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/overview') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              total_api_keys: 0,
+              active_api_keys: 0,
+              disabled_api_keys: 0,
+              expired_api_keys: 0,
+              free_machines: 0,
+              checks_last_24h: 0,
+              consumes_last_24h: 0,
+              blocked_last_24h: 0,
+              total_users: 0,
+              paid_orders_last_24h: 0,
+              paid_quota_added_last_24h: 0,
+              remaining_paid_quota: 0,
+              usage_trend: [],
+              result_breakdown: [],
+              mode_breakdown: [],
+              api_key_status_breakdown: [],
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /7-day usage trend/i })).toBeInTheDocument()
+    expect((await screen.findAllByText(/No chart data available/i)).length).toBeGreaterThanOrEqual(4)
   })
 
   it('shows reward as an available usage-event mode filter', async () => {

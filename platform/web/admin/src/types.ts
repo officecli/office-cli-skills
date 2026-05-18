@@ -254,6 +254,25 @@ export interface Overview {
   paid_orders_last_24h: number
   paid_quota_added_last_24h: number
   remaining_paid_quota: number
+  usage_trend?: OverviewUsageTrendPoint[]
+  mode_breakdown?: OverviewBreakdownItem[]
+  result_breakdown?: OverviewBreakdownItem[]
+  api_key_status_breakdown?: OverviewBreakdownItem[]
+}
+
+export interface OverviewUsageTrendPoint {
+  date: string
+  checks: number
+  consumes: number
+  blocked: number
+  allowed: number
+  total: number
+}
+
+export interface OverviewBreakdownItem {
+  key: string
+  label: string
+  value: number
 }
 
 export interface Envelope<T> {
