@@ -389,6 +389,9 @@ Useful checks:
   officecli login
   officecli new --help
   officecli set-key <api-key>   # advanced automation credential
+
+Community:
+  Discord: ` + discordInviteURL + `
 `
 }
 

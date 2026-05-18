@@ -2157,6 +2157,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 		"officecli set-key <api-key>",
 		"Commands:",
 		"officecli new --help",
+		"Discord: https://discord.gg/ezAHMkdG",
 	} {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("help output missing %q: %s", needle, output)

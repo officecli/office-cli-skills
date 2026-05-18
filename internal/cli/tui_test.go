@@ -344,7 +344,7 @@ func TestTUIModelHelpWrapsAndListsCurrentCommands(t *testing.T) {
 	model = updated.(tuiModel)
 
 	view := model.View()
-	for _, needle := range []string{"/help", "/login", "/exit"} {
+	for _, needle := range []string{"/help", "/login", "/exit", "Discord: https://discord.gg/ezAHMkdG"} {
 		if !strings.Contains(view, needle) {
 			t.Fatalf("help/footer missing %q:\n%s", needle, view)
 		}

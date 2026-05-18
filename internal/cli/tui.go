@@ -515,6 +515,9 @@ Commands:
   /login  Log in to use account hosted credits
   /exit   Exit the TUI
 
+Community:
+  Discord: ` + discordInviteURL + `
+
 Ctrl+C clears the current input; press Ctrl+C again to exit. During generation or login, Ctrl+C cancels the current run. For scripts, use officecli new ...`
 
 func (m tuiModel) startLogin() (tea.Model, tea.Cmd) {
