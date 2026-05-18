@@ -58,7 +58,7 @@ export function AdminSidebar({ admin }: { admin: AdminIdentity }) {
           <TerminalSquare size={14} />
           access policy
         </div>
-        <p className="mt-3">Google authentication is required first, then the exact account email must exist in the OfficeCLI admin allowlist. The default production expectation is a single operator: luyang950@gmail.com.</p>
+        <p className="mt-3">Company OAuth2 authentication is required first, then the exact account email must exist in the OfficeCLI admin allowlist. The default production expectation is a single operator: luyang950@gmail.com.</p>
       </div>
     </aside>
   )

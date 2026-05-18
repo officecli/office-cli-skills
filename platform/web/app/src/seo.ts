@@ -55,8 +55,8 @@ const routeSEO: Record<string, RouteSEO> = {
   '/billing': buildRouteSEO('/billing', 'OfficeCLI App | Billing', 'Buy account hosted credits and review checkout history for the current workspace.'),
   '/usage': buildRouteSEO('/usage', 'OfficeCLI App | Usage', 'Inspect recent OfficeCLI app usage events and policy outcomes for this workspace.'),
   '/downloads': buildRouteSEO('/downloads', 'OfficeCLI App | Downloads', 'Install or update OfficeCLI from the app workspace using the supported public distribution channels.'),
-  '/login': buildRouteSEO('/login', 'OfficeCLI App | Sign In', 'Sign in to the OfficeCLI app workspace with Google authentication.'),
-  '/access-denied': buildRouteSEO('/access-denied', 'OfficeCLI App | Access Denied', 'This Google account is not allowed to open the current OfficeCLI app workspace.'),
+  '/login': buildRouteSEO('/login', 'OfficeCLI App | Sign In', 'Sign in to the OfficeCLI app workspace with company OAuth2 authentication.'),
+  '/access-denied': buildRouteSEO('/access-denied', 'OfficeCLI App | Access Denied', 'This company account is not allowed to open the current OfficeCLI app workspace.'),
 }
 
 function normalizePathname(pathname: string) {

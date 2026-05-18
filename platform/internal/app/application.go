@@ -187,9 +187,9 @@ func New() (*Application, error) {
 		AIGatewayCreateKeyPath: cfg.AIGatewayCreateAPIKeyPath,
 		AIGatewayKeyCipher:     apiKeyCipher,
 	}, lic)
-	adminGoogleProvider := auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AdminGoogleRedirectURL)
-	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminGoogleProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
-	authSvc := auth.NewService(auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
+	adminProvider := newAdminOAuthProvider(cfg)
+	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	authSvc := auth.NewService(newAppOAuthProvider(cfg), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, apiKeyCipher, growthService)
 	fileStore := officesdk.NewFileStore(redisRepo)
@@ -218,6 +218,33 @@ func New() (*Application, error) {
 	application := ego.New()
 	application.Serve(server)
 	return &Application{ego: application}, nil
+}
+
+func newAppOAuthProvider(cfg Config) auth.OAuthProvider {
+	return newOAuthProvider(cfg, cfg.OAuth2ClientID, cfg.OAuth2ClientSecret, cfg.OAuth2RedirectURL, cfg.GoogleRedirectURL)
+}
+
+func newAdminOAuthProvider(cfg Config) auth.OAuthProvider {
+	return newOAuthProvider(cfg, cfg.AdminOAuth2ClientID, cfg.AdminOAuth2ClientSecret, cfg.AdminOAuth2RedirectURL, cfg.AdminGoogleRedirectURL)
+}
+
+func newOAuthProvider(cfg Config, oauth2ClientID, oauth2ClientSecret, oauth2RedirectURL, googleRedirectURL string) auth.OAuthProvider {
+	if strings.TrimSpace(cfg.OAuth2AuthURL) != "" || strings.TrimSpace(cfg.OAuth2TokenURL) != "" || strings.TrimSpace(cfg.OAuth2UserinfoURL) != "" {
+		return auth.NewOAuth2Provider(auth.OAuth2ProviderConfig{
+			ClientID:     oauth2ClientID,
+			ClientSecret: oauth2ClientSecret,
+			RedirectURL:  oauth2RedirectURL,
+			AuthURL:      cfg.OAuth2AuthURL,
+			TokenURL:     cfg.OAuth2TokenURL,
+			UserinfoURL:  cfg.OAuth2UserinfoURL,
+			Scopes:       cfg.OAuth2Scopes,
+			SubjectField: cfg.OAuth2SubjectField,
+			EmailField:   cfg.OAuth2EmailField,
+			NameField:    cfg.OAuth2NameField,
+			AvatarField:  cfg.OAuth2AvatarField,
+		})
+	}
+	return auth.NewGoogleOAuthProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, googleRedirectURL)
 }
 
 func (a *Application) Run() error { return a.ego.Run() }
@@ -519,7 +546,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 }
 
 func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService) {
-	api.GET("/auth/google/login", func(c *gin.Context) {
+	login := func(c *gin.Context) {
 		returnTo := c.Query("return_to")
 		inviteCode := c.Query("invite")
 		url, err := authSvc.LoginURL(c.Request.Context(), returnTo, inviteCode)
@@ -528,8 +555,8 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 			return
 		}
 		c.Redirect(http.StatusFound, url)
-	})
-	api.GET("/auth/google/callback", func(c *gin.Context) {
+	}
+	callback := func(c *gin.Context) {
 		user, rawCookie, returnTo, err := authSvc.HandleCallback(c.Request.Context(), c.Query("code"), c.Query("state"))
 		if err != nil {
 			var denied *auth.AccessDeniedError
@@ -552,7 +579,11 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 		setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
 		_ = user
 		c.Redirect(http.StatusFound, returnTo)
-	})
+	}
+	api.GET("/auth/oauth2/login", login)
+	api.GET("/auth/oauth2/callback", callback)
+	api.GET("/auth/google/login", login)
+	api.GET("/auth/google/callback", callback)
 	api.GET("/auth/me", func(c *gin.Context) {
 		raw, err := c.Cookie("cop_app_session")
 		if err != nil {
@@ -598,7 +629,7 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		if err != nil || raw == "" {
 			values := url.Values{}
 			values.Set("return_to", c.Request.URL.RequestURI())
-			c.Redirect(http.StatusFound, "/api/auth/google/login?"+values.Encode())
+			c.Redirect(http.StatusFound, "/api/auth/oauth2/login?"+values.Encode())
 			return
 		}
 		user, err := authSvc.Me(c.Request.Context(), raw)
@@ -633,7 +664,7 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		if err != nil || raw == "" {
 			values := url.Values{}
 			values.Set("return_to", c.Request.URL.RequestURI())
-			c.Redirect(http.StatusFound, "/api/auth/google/login?"+values.Encode())
+			c.Redirect(http.StatusFound, "/api/auth/oauth2/login?"+values.Encode())
 			return
 		}
 		user, err := authSvc.Me(c.Request.Context(), raw)
@@ -693,7 +724,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		adminLoginRatePerMinute,
 		rateLimitTTL,
 	)
-	api.GET("/admin/auth/google/login", func(c *gin.Context) {
+	adminOAuthLogin := func(c *gin.Context) {
 		returnTo := c.DefaultQuery("return_to", "/admin")
 		url, err := adminSvc.LoginURL(c.Request.Context(), returnTo)
 		if err != nil {
@@ -701,8 +732,8 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 			return
 		}
 		c.Redirect(http.StatusFound, url)
-	})
-	api.GET("/admin/auth/google/callback", func(c *gin.Context) {
+	}
+	adminOAuthCallback := func(c *gin.Context) {
 		_, rawCookie, returnTo, err := adminSvc.HandleGoogleCallback(c.Request.Context(), c.Query("code"), c.Query("state"))
 		if err != nil {
 			var denied *admin.AccessDeniedError
@@ -724,7 +755,11 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		setSessionCookie(c, cfg, "cop_admin_session", rawCookie, cfg.AdminSessionTTL)
 		c.Redirect(http.StatusFound, returnTo)
-	})
+	}
+	api.GET("/admin/auth/oauth2/login", adminOAuthLogin)
+	api.GET("/admin/auth/oauth2/callback", adminOAuthCallback)
+	api.GET("/admin/auth/google/login", adminOAuthLogin)
+	api.GET("/admin/auth/google/callback", adminOAuthCallback)
 	api.POST("/admin/login", loginLimiter, func(c *gin.Context) {
 		var req admin.LoginRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1223,7 +1258,7 @@ func previewLoginURL(cfg Config, r *http.Request) string {
 	currentURL := currentRequestURL(r)
 	values := url.Values{}
 	values.Set("return_to", currentURL)
-	return joinURL(cfg.PlatformBaseURL, "/api/auth/google/login?"+values.Encode())
+	return joinURL(cfg.PlatformBaseURL, "/api/auth/oauth2/login?"+values.Encode())
 }
 
 func currentRequestURL(r *http.Request) string {

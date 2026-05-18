@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli-internal/internal/httpclient"
 )
 
 type Config struct {
@@ -81,7 +82,7 @@ func (p *openAIProvider) NewClient() (engine.LLMClient, error) {
 		imageBaseURL: strings.TrimRight(strings.TrimSpace(p.cfg.ImageBaseURL), "/"),
 		imageAPIKey:  strings.TrimSpace(p.cfg.ImageAPIKey),
 		imageModel:   strings.TrimSpace(p.cfg.ImageModel),
-		client:       &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
+		client:       httpclient.New(timeoutFor(p.cfg.TimeoutSec)),
 	}, nil
 }
 
@@ -96,7 +97,7 @@ func (p *internalProvider) NewClient() (engine.LLMClient, error) {
 		apiKey:      strings.TrimSpace(p.cfg.APIKey),
 		model:       strings.TrimSpace(p.cfg.Model),
 		imageAccess: p.cfg.ImageAccess,
-		client:      &http.Client{Timeout: timeoutFor(p.cfg.TimeoutSec)},
+		client:      httpclient.New(timeoutFor(p.cfg.TimeoutSec)),
 	}, nil
 }
 

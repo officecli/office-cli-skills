@@ -1,5 +1,5 @@
 import type { ApiKey, AppGrowth, AppOverview, AppQuotaSummary, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, UsageEvent, User } from './types'
-import { buildGoogleLoginURL } from './analytics'
+import { buildOAuth2LoginURL } from './analytics'
 
 export class ApiError extends Error {
   status: number
@@ -37,7 +37,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => request<User>('/api/auth/me'),
-  login: (returnTo = '/app') => { window.location.href = buildGoogleLoginURL(returnTo) },
+  login: (returnTo = '/app') => { window.location.href = buildOAuth2LoginURL(returnTo) },
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   overview: () => request<AppOverview>('/api/app/overview'),
   quotaSummary: () => request<AppQuotaSummary>('/api/app/quota-summary'),

@@ -12,6 +12,8 @@ import (
 	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
 )
 
+const defaultDevPlatformBaseURL = "https://officecli.shimodev.com"
+
 func LoadConfig(path string) (Config, error) {
 	cfg := Config{}
 	licenseEnabledSet := false
@@ -71,6 +73,15 @@ func ResolveConfigPath(path string) string {
 	if configPath == "" {
 		configPath = os.Getenv("OFFICE_CLI_CONFIG")
 	}
+	if configPath == "" && isDevProfile() {
+		configPath = os.Getenv("OFFICECLI_DEV_CONFIG")
+	}
+	if configPath == "" && isDevProfile() {
+		home, err := os.UserHomeDir()
+		if err == nil && strings.TrimSpace(home) != "" {
+			configPath = filepath.Join(home, ".config", "officecli-dev", "config.json")
+		}
+	}
 	if configPath == "" {
 		dir, err := os.UserConfigDir()
 		if err == nil {
@@ -80,7 +91,22 @@ func ResolveConfigPath(path string) string {
 	return configPath
 }
 
+func isDevProfile() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("OFFICE_CLI_PROFILE")), "dev")
+}
+
+func devPlatformBaseURL() string {
+	if value := strings.TrimRight(strings.TrimSpace(os.Getenv("OFFICECLI_DEV_PLATFORM_BASE_URL")), "/"); value != "" {
+		return value
+	}
+	return defaultDevPlatformBaseURL
+}
+
 func WriteDefaultConfig(path string) (string, error) {
+	platformBaseURL := "https://platform.officecli.io"
+	if isDevProfile() {
+		platformBaseURL = devPlatformBaseURL()
+	}
 	defaultConfig := Config{
 		Defaults: DefaultsConfig{
 			OutputDir:       "./output",
@@ -103,14 +129,14 @@ func WriteDefaultConfig(path string) (string, error) {
 			TimeoutSec:   60,
 		},
 		License: licenseprovider.Config{
-			BaseURL:    "https://platform.officecli.io",
+			BaseURL:    platformBaseURL,
 			APIKey:     "",
 			Enabled:    true,
 			TimeoutSec: 30,
 		},
 		Publish: publishprovider.Config{
 			Provider:   "http",
-			BaseURL:    "https://platform.officecli.io",
+			BaseURL:    platformBaseURL,
 			APIKey:     "",
 			Enabled:    true,
 			TimeoutSec: 60,

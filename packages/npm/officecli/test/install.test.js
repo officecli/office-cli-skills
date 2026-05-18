@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const pkg = require("../package.json");
 
 const modulePath = "../lib/install.js";
@@ -69,4 +71,15 @@ test("install next steps show copy-paste hosted examples", () => {
   assert.match(output, /officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review\. Cover growth, retention, risks, and next-quarter actions\."/);
   assert.match(output, /officecli auth status/);
   assert.match(output, /officecli auth set-key <api-key>/);
+});
+
+test("package exposes officecli-dev wrapper with dev profile defaults", () => {
+  assert.equal(pkg.bin["officecli-dev"], "bin/officecli-dev.js");
+
+  const wrapperPath = path.resolve(__dirname, "..", "bin", "officecli-dev.js");
+  const wrapper = fs.readFileSync(wrapperPath, "utf8");
+  assert.match(wrapper, /OFFICE_CLI_PROFILE/);
+  assert.match(wrapper, /OFFICECLI_DEV_PLATFORM_BASE_URL/);
+  assert.match(wrapper, /NO_PROXY/);
+  assert.match(wrapper, /https:\/\/officecli\.shimodev\.com/);
 });

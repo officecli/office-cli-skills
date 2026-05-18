@@ -136,7 +136,7 @@ func (s *Service) Start(ctx context.Context, req StartRequest) (*StartResponse, 
 		return nil, err
 	}
 	if flow == model.CLILoginChallengeFlowCallback {
-		loginURL := s.platformURL + "/api/auth/google/login?return_to=" + url.QueryEscape("/api/cli/login/complete?challenge_id="+url.QueryEscape(challengeID))
+		loginURL := s.platformURL + "/api/auth/oauth2/login?return_to=" + url.QueryEscape("/api/cli/login/complete?challenge_id="+url.QueryEscape(challengeID))
 		return &StartResponse{ChallengeID: challengeID, LoginURL: loginURL, ExpiresAt: expiresAt}, nil
 	}
 	verificationURL := s.platformURL + "/api/cli/login/verify"

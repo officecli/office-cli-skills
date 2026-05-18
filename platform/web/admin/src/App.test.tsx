@@ -30,8 +30,8 @@ describe('platform admin shell', () => {
 
     expect(await screen.findByRole('heading', { name: /Page not found/i })).toBeInTheDocument()
     expect(document.title).toBe('OfficeCLI Admin | Page Not Found')
-    expect(screen.queryByText(/Authorized Google accounts only/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Continue with Google/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Authorized company accounts only/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Continue with company OAuth2/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/luyang950@gmail.com/i)).not.toBeInTheDocument()
   })
 
@@ -51,7 +51,7 @@ describe('platform admin shell', () => {
     expect(screen.getByText(/blocked@example.com/i)).toBeInTheDocument()
   })
 
-  it('redirects unauthenticated protected routes to the admin Google login endpoint', async () => {
+  it('redirects unauthenticated protected routes to the admin OAuth2 login endpoint', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
     vi.stubGlobal('fetch', fetchMock)
 

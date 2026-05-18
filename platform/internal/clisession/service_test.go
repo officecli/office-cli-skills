@@ -213,3 +213,24 @@ func TestDeviceLoginFlowCreatesSessionWithoutLocalRedirect(t *testing.T) {
 		t.Fatalf("UserEmail = %q", resp.UserEmail)
 	}
 }
+
+func TestCallbackLoginFlowUsesProviderNeutralOAuth2Route(t *testing.T) {
+	store := newFakeStore()
+	svc := NewService(store, "https://platform.example.com")
+
+	start, err := svc.Start(context.Background(), StartRequest{
+		CodeChallenge:       expectedS256("test-verifier"),
+		CodeChallengeMethod: "S256",
+		RedirectURI:         "http://127.0.0.1:12345/callback",
+		State:               "state",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if !strings.HasPrefix(start.LoginURL, "https://platform.example.com/api/auth/oauth2/login?") {
+		t.Fatalf("LoginURL = %q", start.LoginURL)
+	}
+	if !strings.Contains(start.LoginURL, "return_to=") {
+		t.Fatalf("LoginURL missing return_to: %q", start.LoginURL)
+	}
+}
