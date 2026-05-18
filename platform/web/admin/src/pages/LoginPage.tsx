@@ -5,7 +5,7 @@ import { OfficeCliBrand } from '../components/branding'
 const valuePoints = [
   { icon: Radar, title: 'Platform health at a glance', body: 'Track key inventory, blocked traffic, and free-machine pressure from one operator surface.' },
   { icon: Workflow, title: 'Audit-first workflow review', body: 'Inspect recent usage events before quota abuse expands into production incidents.' },
-  { icon: Siren, title: 'Restricted governance actions', body: 'Only allowlisted Google accounts can enter the admin plane and change controls.' },
+  { icon: Siren, title: 'Restricted governance actions', body: 'Only allowlisted company accounts can enter the admin plane and change controls.' },
 ]
 
 export default function LoginPage() {
@@ -21,14 +21,14 @@ export default function LoginPage() {
               titleClassName="text-xl font-bold text-white"
               subtitle="admin plane / allowlist required"
             />
-            <span className="chip">Google sign-in / admin</span>
-            <h1 className="mt-6 max-w-xl text-5xl font-bold leading-[0.92] text-white md:text-6xl">Authorized Google accounts only</h1>
+            <span className="chip">Company OAuth2 / admin</span>
+            <h1 className="mt-6 max-w-xl text-5xl font-bold leading-[0.92] text-white md:text-6xl">Authorized company accounts only</h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Enter the OfficeCLI admin plane to manage API key governance, tune free quotas, investigate blocked traffic, and keep platform controls under explicit operator access. The current production allowlist is intentionally narrowed to a single operator account: <span className="text-white">luyang950@gmail.com</span>.</p>
 
             <div className="mt-10 flex flex-wrap gap-3">
               <button type="button" className="admin-primary-button" onClick={() => api.login('/admin')}>
                 <ShieldCheck size={16} />
-                Continue with Google
+                Continue with company OAuth2
               </button>
               <a href="https://platform.officecli.io/app/" className="admin-secondary-button">Go to user app</a>
             </div>
@@ -59,7 +59,7 @@ export default function LoginPage() {
               <div className="mt-4 space-y-5">
                 <div>
                   <div className="text-sm font-semibold text-white">Authentication source</div>
-                  <div className="mt-1 text-sm text-outline">Use Google as the identity source for all admin sessions.</div>
+                  <div className="mt-1 text-sm text-outline">Use the company OAuth2 identity source for all admin sessions.</div>
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-white">Authorization rule</div>
@@ -67,7 +67,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <div className="text-sm font-semibold text-white">Rejected accounts</div>
-                  <div className="mt-1 text-sm text-outline">Accounts that pass Google auth but miss the allowlist are redirected to a dedicated access denied view.</div>
+                  <div className="mt-1 text-sm text-outline">Accounts that pass OAuth2 auth but miss the allowlist are redirected to a dedicated access denied view.</div>
                 </div>
               </div>
             </div>
@@ -78,8 +78,8 @@ export default function LoginPage() {
               <Workflow size={14} />
               admin gate
             </div>
-            <div>$ google_oauth redirect --target admin</div>
-            <div className="mt-2 text-secondary">identity: waiting_for_google_sign_in</div>
+            <div>$ oauth2 redirect --target admin</div>
+            <div className="mt-2 text-secondary">identity: waiting_for_oauth2_sign_in</div>
             <div className="mt-1">policy: allowlist_enforced</div>
           </div>
         </aside>

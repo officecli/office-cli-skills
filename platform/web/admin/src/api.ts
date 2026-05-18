@@ -32,7 +32,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   session: () => request<AdminIdentity>('/api/admin/session'),
   login: (returnTo = '/admin') => {
-    window.location.href = `/api/admin/auth/google/login?return_to=${encodeURIComponent(returnTo)}`
+    window.location.href = `/api/admin/auth/oauth2/login?return_to=${encodeURIComponent(returnTo)}`
   },
   logout: () => request('/api/admin/logout', { method: 'POST' }),
   overview: () => request<Overview>('/api/admin/overview'),

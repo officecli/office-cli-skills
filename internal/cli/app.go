@@ -18,6 +18,7 @@ import (
 
 	"github.com/officecli/officecli-internal/engine"
 	planengine "github.com/officecli/officecli-internal/engine/plan"
+	"github.com/officecli/officecli-internal/internal/httpclient"
 	licenseprovider "github.com/officecli/officecli-internal/internal/license"
 	llmprovider "github.com/officecli/officecli-internal/internal/providers/llm"
 	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
@@ -188,6 +189,12 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 		return err
 	}
 	switch args[0] {
+	case "doctor":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runDoctor(ctx, cfg)
 	case "config":
 		return a.runConfig(args[1:])
 	case "login":
@@ -266,7 +273,7 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 
 func isKnownCommand(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge":
+	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge", "doctor":
 		return true
 	default:
 		return false
@@ -307,6 +314,10 @@ func (a *App) collectInitConfigFromEnv() (Config, error) {
 }
 
 func defaultInitConfig() Config {
+	platformBaseURL := "https://platform.officecli.io"
+	if isDevProfile() {
+		platformBaseURL = devPlatformBaseURL()
+	}
 	return Config{
 		Defaults: DefaultsConfig{
 			OutputDir:       "./output",
@@ -326,13 +337,13 @@ func defaultInitConfig() Config {
 			TimeoutSec:  60,
 		},
 		License: LicenseConfig{
-			BaseURL:    "https://platform.officecli.io",
+			BaseURL:    platformBaseURL,
 			Enabled:    true,
 			TimeoutSec: 30,
 		},
 		Publish: publishprovider.Config{
 			Provider:   "http",
-			BaseURL:    "https://platform.officecli.io",
+			BaseURL:    platformBaseURL,
 			Enabled:    true,
 			TimeoutSec: 60,
 		},
@@ -377,6 +388,7 @@ Scripted usage:
 
 Commands:
   new                     Generate a PPTX, DOCX, XLSX, report, or image
+  doctor                  Check the configured platform environment
   login                   Log in to use account hosted credits
   logout                  Clear local account session, user ID, and API key
   whoami                  Show anonymous, account, or API key mode
@@ -511,6 +523,104 @@ func (a *App) runConfig(args []string) error {
 	default:
 		return fmt.Errorf("unsupported config command: %s", args[0])
 	}
+}
+
+func (a *App) runDoctor(ctx context.Context, cfg Config) error {
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.License.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultInitConfig().License.BaseURL
+	}
+	configPath := ResolveConfigPath("")
+	profile := strings.TrimSpace(os.Getenv("OFFICE_CLI_PROFILE"))
+	if profile == "" {
+		profile = "default"
+	}
+	if _, err := fmt.Fprintln(a.Stdout, "OfficeCLI dev environment doctor"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Config profile: %s\n", profile); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Config file: %s\n", configPath); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Platform base URL: %s\n", baseURL); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Config isolation: %s\n", configIsolationStatus(configPath)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Account session configured: %t\n", strings.TrimSpace(cfg.License.SessionToken) != ""); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "API key configured: %t\n", strings.TrimSpace(cfg.License.APIKey) != ""); err != nil {
+		return err
+	}
+	checks := []struct {
+		label   string
+		method  string
+		path    string
+		payload any
+	}{
+		{label: "GET /healthz", method: http.MethodGet, path: "/healthz"},
+		{label: "GET /api/pricing", method: http.MethodGet, path: "/api/pricing"},
+		{label: "POST /api/cli/login/start", method: http.MethodPost, path: "/api/cli/login/start", payload: map[string]any{
+			"code_challenge":        s256Challenge("officecli-dev-doctor"),
+			"code_challenge_method": "S256",
+		}},
+	}
+	for _, check := range checks {
+		if err := a.doctorHTTPCheck(ctx, baseURL, check.method, check.path, check.payload); err != nil {
+			return fmt.Errorf("%s failed: %w", check.label, err)
+		}
+		if _, err := fmt.Fprintf(a.Stdout, "%s: ok\n", check.label); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func configIsolationStatus(configPath string) string {
+	if !isDevProfile() {
+		return "not dev profile"
+	}
+	if strings.TrimSpace(os.Getenv("OFFICE_CLI_CONFIG")) != "" ||
+		strings.TrimSpace(os.Getenv("OFFICECLI_DEV_CONFIG")) != "" ||
+		strings.Contains(configPath, "officecli-dev") {
+		return "ok"
+	}
+	return "warning"
+}
+
+func (a *App) doctorHTTPCheck(ctx context.Context, baseURL, method, path string, payload any) error {
+	var body io.Reader
+	if payload != nil {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = strings.NewReader(string(raw))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(baseURL, "/")+path, body)
+	if err != nil {
+		return err
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := httpclient.New(30 * time.Second).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return nil
 }
 
 func (a *App) runUpgrade(ctx context.Context, args []string) error {
@@ -1382,7 +1492,7 @@ func (a *App) platformJSON(ctx context.Context, baseURL, method, path string, pa
 	if strings.TrimSpace(bearer) != "" {
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(bearer))
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := httpclient.New(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

@@ -27,12 +27,12 @@ describe('platform app shell', () => {
     fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) })
     vi.stubGlobal('fetch', fetchMock)
 
-    renderApp('/')
+	    renderApp('/')
 
-    expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
-    await waitFor(() => expect(document.title).toBe('OfficeCLI App | Sign In'))
-    expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
-    expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
+	    expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
+	    await waitFor(() => expect(document.title).toBe('OfficeCLI App | Sign In'))
+	    expect(screen.getByRole('button', { name: /Continue with company OAuth2/i })).toBeInTheDocument()
+	    expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Buy quota for an API key/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Ship faster from the terminal/i)).not.toBeInTheDocument()
@@ -48,7 +48,7 @@ describe('platform app shell', () => {
     renderApp('/billing?status=success')
 
     expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Continue with Google/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue with company OAuth2/i }))
 
     expect(loginSpy).toHaveBeenCalledWith('/billing?status=success')
   })
@@ -60,7 +60,7 @@ describe('platform app shell', () => {
 
     expect(await screen.findByRole('heading', { name: /Access not granted/i })).toBeInTheDocument()
     expect(screen.getByText('blocked@example.com')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Try another Google account/i })).toHaveAttribute('href', '/api/auth/google/login?return_to=%2Fapp')
+    expect(screen.getByRole('link', { name: /Try another account/i })).toHaveAttribute('href', '/api/auth/oauth2/login?return_to=%2Fapp')
   })
 
   it('renders the overview after login and shows the remaining quota board', async () => {

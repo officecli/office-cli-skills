@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/officecli/officecli-internal/internal/httpclient"
 )
 
 type Config struct {
@@ -51,7 +53,7 @@ func NewPublisher(cfg Config) (Publisher, error) {
 		return &httpPublisher{
 			baseURL: strings.TrimRight(strings.TrimSpace(effectiveBaseURL(cfg)), "/"),
 			apiKey:  strings.TrimSpace(cfg.APIKey),
-			client:  &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
+			client:  httpclient.New(timeoutFor(cfg.TimeoutSec)),
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported publish provider: %s", cfg.Provider)

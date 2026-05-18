@@ -92,7 +92,7 @@ export default function UsersPage() {
           ) : null}
         </div>
       ) : (
-        <EmptyState title="No users yet" body="User accounts created through Google OAuth will appear here." />
+        <EmptyState title="No users yet" body="User accounts created through company OAuth2 will appear here." />
       )}
     </Panel>
   )

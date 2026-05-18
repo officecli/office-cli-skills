@@ -42,6 +42,17 @@ type Config struct {
 	GoogleClientID               string
 	GoogleClientSecret           string
 	GoogleRedirectURL            string
+	OAuth2ClientID               string
+	OAuth2ClientSecret           string
+	OAuth2AuthURL                string
+	OAuth2TokenURL               string
+	OAuth2UserinfoURL            string
+	OAuth2RedirectURL            string
+	OAuth2Scopes                 []string
+	OAuth2SubjectField           string
+	OAuth2EmailField             string
+	OAuth2NameField              string
+	OAuth2AvatarField            string
 	AppGoogleAllowlist           []string
 	AppGoogleMockEnabled         bool
 	AppGoogleMockEmail           string
@@ -75,7 +86,10 @@ type Config struct {
 	PublishDefaultExpireSeconds  int
 	HostedModelPricingConfigs    []model.HostedModelPricingConfig
 	HostedPricingRules           []model.HostedPricingRule
+	AdminOAuth2ClientID          string
+	AdminOAuth2ClientSecret      string
 	AdminGoogleRedirectURL       string
+	AdminOAuth2RedirectURL       string
 	AdminGoogleAllowlist         []string
 	AdminGoogleMockEnabled       bool
 	AdminGoogleMockEmail         string
@@ -93,6 +107,10 @@ type Config struct {
 const defaultHostedLLMBaseURL = "https://aigateway.claudeoffice.com/v1"
 
 func LoadConfig() (Config, error) {
+	adminOAuth2ClientID, adminOAuth2ClientSecret, err := adminOAuth2ClientCredentials(os.Getenv("OAUTH2_CLIENT_ID"), os.Getenv("OAUTH2_CLIENT_SECRET"))
+	if err != nil {
+		return Config{}, err
+	}
 	cfg := Config{
 		AppEnv:                       normalizeAppEnv(mustEnvDefault("APP_ENV", "development")),
 		HTTPAddr:                     mustEnvDefault("HTTP_ADDR", ":8080"),
@@ -121,6 +139,17 @@ func LoadConfig() (Config, error) {
 		GoogleClientID:               os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),
+		OAuth2ClientID:               os.Getenv("OAUTH2_CLIENT_ID"),
+		OAuth2ClientSecret:           os.Getenv("OAUTH2_CLIENT_SECRET"),
+		OAuth2AuthURL:                os.Getenv("OAUTH2_AUTH_URL"),
+		OAuth2TokenURL:               os.Getenv("OAUTH2_TOKEN_URL"),
+		OAuth2UserinfoURL:            os.Getenv("OAUTH2_USERINFO_URL"),
+		OAuth2RedirectURL:            mustEnvDefault("OAUTH2_REDIRECT_URL", "https://platform.officecli.io/api/auth/oauth2/callback"),
+		OAuth2Scopes:                 parseCSVList(mustEnvDefault("OAUTH2_SCOPES", "openid,profile,email")),
+		OAuth2SubjectField:           mustEnvDefault("OAUTH2_SUBJECT_FIELD", "sub"),
+		OAuth2EmailField:             mustEnvDefault("OAUTH2_EMAIL_FIELD", "email"),
+		OAuth2NameField:              mustEnvDefault("OAUTH2_NAME_FIELD", "name"),
+		OAuth2AvatarField:            mustEnvDefault("OAUTH2_AVATAR_FIELD", "picture"),
 		AppGoogleAllowlist:           parseCSVList(os.Getenv("APP_GOOGLE_ALLOWLIST")),
 		AppGoogleMockEnabled:         mustEnvBool("APP_GOOGLE_MOCK_ENABLED", false),
 		AppGoogleMockEmail:           mustEnvDefault("APP_GOOGLE_MOCK_EMAIL", "mock-user@example.com"),
@@ -153,7 +182,10 @@ func LoadConfig() (Config, error) {
 		PublishMaxFileBytes:          mustEnvInt64("PUBLISH_MAX_FILE_BYTES", 50<<20),
 		PublishDefaultExpireSeconds:  mustEnvInt("PUBLISH_DEFAULT_EXPIRE_SECONDS", 30*24*60*60),
 		HostedPricingRules:           defaultHostedPricingRules(),
+		AdminOAuth2ClientID:          adminOAuth2ClientID,
+		AdminOAuth2ClientSecret:      adminOAuth2ClientSecret,
 		AdminGoogleRedirectURL:       mustEnvDefault("ADMIN_GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/admin/auth/google/callback"),
+		AdminOAuth2RedirectURL:       mustEnvDefault("ADMIN_OAUTH2_REDIRECT_URL", "https://platform.officecli.io/api/admin/auth/oauth2/callback"),
 		AdminGoogleAllowlist:         parseCSVList(os.Getenv("ADMIN_GOOGLE_ALLOWLIST")),
 		AdminGoogleMockEnabled:       mustEnvBool("ADMIN_GOOGLE_MOCK_ENABLED", false),
 		AdminGoogleMockEmail:         mustEnvDefault("ADMIN_GOOGLE_MOCK_EMAIL", "mock-admin@example.com"),
@@ -194,6 +226,18 @@ func LoadConfig() (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+func adminOAuth2ClientCredentials(appClientID, appClientSecret string) (string, string, error) {
+	adminClientID := strings.TrimSpace(os.Getenv("ADMIN_OAUTH2_CLIENT_ID"))
+	adminClientSecret := strings.TrimSpace(os.Getenv("ADMIN_OAUTH2_CLIENT_SECRET"))
+	if adminClientID == "" && adminClientSecret == "" {
+		return appClientID, appClientSecret, nil
+	}
+	if adminClientID == "" || adminClientSecret == "" {
+		return "", "", fmt.Errorf("ADMIN_OAUTH2_CLIENT_ID and ADMIN_OAUTH2_CLIENT_SECRET must be configured together")
+	}
+	return adminClientID, adminClientSecret, nil
 }
 
 func parseCSVList(value string) []string {

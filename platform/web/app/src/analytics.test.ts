@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildGoogleLoginURL, normalizeAppReturnTo } from './analytics'
+import { buildOAuth2LoginURL, normalizeAppReturnTo } from './analytics'
 
 describe('app analytics helpers', () => {
   afterEach(() => {
@@ -11,20 +11,20 @@ describe('app analytics helpers', () => {
     delete window.dataLayer
   })
 
-  it('propagates invite and utm params into google login redirects', () => {
+  it('propagates invite and utm params into oauth2 login redirects', () => {
     window.history.replaceState({}, '', '/app/login?invite=invite-xyz&utm_source=pricing')
 
-    const loginURL = buildGoogleLoginURL('/app')
+    const loginURL = buildOAuth2LoginURL('/app')
     const url = new URL(loginURL, 'https://platform.officecli.io')
 
-    expect(url.pathname).toBe('/api/auth/google/login')
+    expect(url.pathname).toBe('/api/auth/oauth2/login')
     expect(url.searchParams.get('return_to')).toBe('/app')
     expect(url.searchParams.get('invite')).toBe('invite-xyz')
     expect(url.searchParams.get('utm_source')).toBe('pricing')
   })
 
-  it('normalizes app-internal return targets under /app before redirecting to google login', () => {
-    const loginURL = buildGoogleLoginURL('/billing?status=success&session_id=cs_test_123')
+  it('normalizes app-internal return targets under /app before redirecting to oauth2 login', () => {
+    const loginURL = buildOAuth2LoginURL('/billing?status=success&session_id=cs_test_123')
     const url = new URL(loginURL, 'https://platform.officecli.io')
 
     expect(url.searchParams.get('return_to')).toBe('/app/billing?status=success&session_id=cs_test_123')

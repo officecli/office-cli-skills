@@ -35,7 +35,7 @@ func newTestCLISessionService(t *testing.T) (*clisession.Service, *sqlstore.Stor
 	return clisession.NewService(store, "https://platform.example.com"), store
 }
 
-func TestCLILoginVerifyRedirectsAnonymousUserToGoogle(t *testing.T) {
+func TestCLILoginVerifyRedirectsAnonymousUserToOAuth2(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
@@ -49,7 +49,7 @@ func TestCLILoginVerifyRedirectsAnonymousUserToGoogle(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	location := rec.Header().Get("Location")
-	require.Contains(t, location, "/api/auth/google/login")
+	require.Contains(t, location, "/api/auth/oauth2/login")
 	require.Contains(t, location, "return_to=")
 	require.Contains(t, location, "user_code%3DABCD-EFGH")
 }

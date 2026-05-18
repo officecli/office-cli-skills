@@ -80,8 +80,8 @@ export function normalizeAppReturnTo(returnTo = appBasePath) {
   return `${appBasePath}${requested}`
 }
 
-export function buildGoogleLoginURL(returnTo = '/app', currentSearch = window.location.search) {
-  const url = new URL('/api/auth/google/login', window.location.origin)
+export function buildOAuth2LoginURL(returnTo = '/app', currentSearch = window.location.search) {
+  const url = new URL('/api/auth/oauth2/login', window.location.origin)
   url.searchParams.set('return_to', normalizeAppReturnTo(returnTo))
 
   const attrs = extractAttributionParams(currentSearch)
@@ -93,6 +93,8 @@ export function buildGoogleLoginURL(returnTo = '/app', currentSearch = window.lo
 
   return `${url.pathname}${url.search}`
 }
+
+export const buildGoogleLoginURL = buildOAuth2LoginURL
 
 export function trackEvent(name: string, params: EventParams = {}) {
   if (!analyticsEnabled()) return

@@ -61,7 +61,7 @@ export function AdminSidebar({ admin }: { admin: AdminIdentity }) {
             <TerminalSquare size={14} />
             access policy
           </Typography.Text>
-          <Typography.Paragraph className="!mb-0 !mt-3" type="secondary">Google authentication is required first, then the exact account email must exist in the OfficeCLI admin allowlist. The default production expectation is a single operator: luyang950@gmail.com.</Typography.Paragraph>
+          <Typography.Paragraph className="!mb-0 !mt-3" type="secondary">Company OAuth2 authentication is required first, then the exact account email must exist in the OfficeCLI admin allowlist. The default production expectation is a single operator: luyang950@gmail.com.</Typography.Paragraph>
         </div>
       </div>
     </Layout.Sider>

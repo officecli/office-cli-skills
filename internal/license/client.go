@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/officecli/officecli-internal/internal/httpclient"
 )
 
 type Service struct {
@@ -30,7 +32,7 @@ func NewService(cfg Config) (*Service, error) {
 		baseURL:      baseURL,
 		apiKey:       strings.TrimSpace(cfg.APIKey),
 		sessionToken: strings.TrimSpace(cfg.SessionToken),
-		client:       &http.Client{Timeout: timeoutFor(cfg.TimeoutSec)},
+		client:       httpclient.New(timeoutFor(cfg.TimeoutSec)),
 	}, nil
 }
 

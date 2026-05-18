@@ -20,7 +20,7 @@ export default function AccessDeniedPage() {
             />
             <span className="chip border-error/20 bg-error/10 text-error">App access denied</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an app session because it is not authorized by the current app access policy or has been disabled.</p>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This company account completed authentication, but OfficeCLI did not issue an app session because it is not authorized by the current app access policy or has been disabled.</p>
 
             <div className="app-code-card mt-8 p-5">
               <div className="flex items-start gap-3">
@@ -33,9 +33,9 @@ export default function AccessDeniedPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <a href="/api/auth/google/login?return_to=%2Fapp" className="app-primary-button">
+              <a href="/api/auth/oauth2/login?return_to=%2Fapp" className="app-primary-button">
                 <RefreshCcw size={16} />
-                Try another Google account
+                Try another account
               </a>
               <Link to="/login" className="app-secondary-button">
                 <ArrowLeft size={16} />

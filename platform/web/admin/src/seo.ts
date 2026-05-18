@@ -59,7 +59,7 @@ const routeSEO: Record<string, RouteSEO> = {
   '/quota-sources': buildRouteSEO('/quota-sources', 'OfficeCLI Admin | Quota Sources', 'Audit OfficeCLI quota sources across free, reward, paid, and hosted surfaces.'),
   '/free-quotas': buildRouteSEO('/free-quotas', 'OfficeCLI Admin | Free Trial Devices', 'Inspect daily anonymous free-trial device quota for OfficeCLI.'),
   '/usage-events': buildRouteSEO('/usage-events', 'OfficeCLI Admin | Usage Events', 'Filter OfficeCLI usage events to investigate blocked or allowed traffic.'),
-  '/access-denied': buildRouteSEO('/access-denied', 'OfficeCLI Admin | Access Denied', 'This Google account is not present in the OfficeCLI admin allowlist.'),
+  '/access-denied': buildRouteSEO('/access-denied', 'OfficeCLI Admin | Access Denied', 'This company account is not present in the OfficeCLI admin allowlist.'),
   '/login': buildRouteSEO('/login', 'OfficeCLI Admin | Page Not Found', 'The requested OfficeCLI admin route could not be found.'),
 }
 

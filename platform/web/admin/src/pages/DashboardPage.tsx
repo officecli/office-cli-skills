@@ -4,7 +4,7 @@ import { api } from '../api'
 import { MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
 
 const guardrails = [
-  'Admin sessions are issued only after Google auth plus an exact allowlist match.',
+  'Admin sessions are issued only after company OAuth2 auth plus an exact allowlist match.',
   'Free quota edits should be used for abuse control and onboarding exceptions only.',
   'Usage event review is the fastest way to verify blocked traffic before touching billing-backed keys.',
 ]

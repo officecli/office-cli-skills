@@ -21,7 +21,7 @@ export default function AccessDeniedPage() {
             />
             <span className="chip border-error/20 bg-error/10 text-error">Admin access denied</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Access not granted</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This Google account completed authentication, but OfficeCLI did not issue an admin session because the account is not present in the admin allowlist.</p>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">This company account completed authentication, but OfficeCLI did not issue an admin session because the account is not present in the admin allowlist.</p>
 
             <div className="admin-code-card mt-8 p-5">
               <div className="flex items-start gap-3">
@@ -34,9 +34,9 @@ export default function AccessDeniedPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <a href="/api/admin/auth/google/login?return_to=%2Fadmin" className="admin-primary-button">
+              <a href="/api/admin/auth/oauth2/login?return_to=%2Fadmin" className="admin-primary-button">
                 <RefreshCcw size={16} />
-                Try another Google account
+                Try another account
               </a>
               <Link to="/" className="admin-secondary-button">
                 <ArrowLeft size={16} />

@@ -2631,6 +2631,69 @@ func TestAppRun_ConfigRuntimeShowsCurrentMode(t *testing.T) {
 	}
 }
 
+func TestAppRun_DoctorChecksDevPlatformWithoutDNSAssumption(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	t.Setenv("OFFICE_CLI_PROFILE", "dev")
+
+	requests := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/healthz":
+			_, _ = w.Write([]byte("ok"))
+		case "/api/pricing":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"plans":[]}`))
+		case "/api/cli/login/start":
+			if r.Method != http.MethodPost {
+				t.Fatalf("login start method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"challenge_id":"doctor","login_url":"https://officecli.shimodev.com/api/cli/login/verify?user_code=DOCTOR","user_code":"DOCTOR","expires_at":"2030-01-01T00:00:00Z"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, err := WriteConfig("", Config{
+		Defaults: DefaultsConfig{Publish: true, Mode: "fast"},
+		Runtime:  RuntimeConfig{Mode: RuntimeModeHosted},
+		License:  LicenseConfig{BaseURL: server.URL, Enabled: true, TimeoutSec: 5},
+		Publish:  publishprovider.Config{Provider: "http", BaseURL: server.URL, Enabled: true, TimeoutSec: 5},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	if err := app.Run(t.Context(), []string{"doctor"}); err != nil {
+		t.Fatalf("Run(doctor): %v", err)
+	}
+	output := stdout.String()
+	for _, needle := range []string{
+		"OfficeCLI dev environment doctor",
+		"Config profile: dev",
+		"Config isolation: ok",
+		"GET /healthz: ok",
+		"GET /api/pricing: ok",
+		"POST /api/cli/login/start: ok",
+	} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("doctor output missing %q:\n%s", needle, output)
+		}
+	}
+	if strings.Contains(output, "172.17.9.196") || strings.Contains(strings.ToLower(output), "direct server") {
+		t.Fatalf("doctor should not make direct-server assertions:\n%s", output)
+	}
+	if strings.Join(requests, ",") != "GET /healthz,GET /api/pricing,POST /api/cli/login/start" {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
 func TestAppRun_ConfigSetRuntimePersistsMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

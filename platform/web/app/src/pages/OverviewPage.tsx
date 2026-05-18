@@ -229,7 +229,7 @@ export default function OverviewPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState title="No referrals captured" body={`Invite registrations appear here after a new user completes the Google login flow through your invite link. Each account can capture up to ${formatNumber(inviteLimit)} invited users.`} />
+              <EmptyState title="No referrals captured" body={`Invite registrations appear here after a new user completes the OAuth2 login flow through your invite link. Each account can capture up to ${formatNumber(inviteLimit)} invited users.`} />
             )}
           </div>
         </Panel>
