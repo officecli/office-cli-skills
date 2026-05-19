@@ -1,6 +1,6 @@
 # OfficeCLI
 
-**AI document generation CLI for PPTX, DOCX, XLSX, reports, and images.**
+**OfficeCLI is AI document generation CLI for PPTX, DOCX, XLSX, Reports, and Images.**
 
 [![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
 [![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
