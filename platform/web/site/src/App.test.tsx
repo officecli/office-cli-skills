@@ -98,7 +98,12 @@ describe('marketing site shell', () => {
   })
 
   it('shows a non-price placeholder when the pricing api fails', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network error'))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/events/track') {
+        return { ok: true, json: async () => ({ data: { success: true } }) } as Response
+      }
+      throw new Error('network error')
+    })
 
     render(
       <MemoryRouter initialEntries={['/pricing']}>
@@ -107,20 +112,25 @@ describe('marketing site shell', () => {
     )
 
     expect((await screen.findAllByText(/Live pricing is currently unavailable/i)).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: /Open Billing Workspace/i })[0]).toHaveAttribute('href', 'https://platform.officecli.io/app/billing')
+    expect(screen.getAllByRole('link', { name: /Open Billing Workspace/i })[0].getAttribute('href')).toContain('https://platform.officecli.io/app/billing')
     expect(screen.queryByText('External 100')).not.toBeInTheDocument()
   })
 
   it('renders hosted pricing with credits as the primary unit and USD as auxiliary copy', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        data: [
-          { code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, quota_amount: 0, credit_amount: 300, pack_kind: 'hosted_credits' },
-          { code: 'hosted-1000', name: 'Hosted 1000', description: '1000 hosted credits', currency: 'usd', amount_total: 1000, quota_amount: 0, credit_amount: 1000, pack_kind: 'hosted_credits' },
-        ],
-      }),
-    } as Response)
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/events/track') {
+        return { ok: true, json: async () => ({ data: { success: true } }) } as Response
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          data: [
+            { code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, quota_amount: 0, credit_amount: 300, pack_kind: 'hosted_credits' },
+            { code: 'hosted-1000', name: 'Hosted 1000', description: '1000 hosted credits', currency: 'usd', amount_total: 1000, quota_amount: 0, credit_amount: 1000, pack_kind: 'hosted_credits' },
+          ],
+        }),
+      } as Response
+    })
 
     render(
       <MemoryRouter initialEntries={['/pricing']}>
@@ -217,6 +227,26 @@ describe('marketing site shell', () => {
     expect(docsLink).toHaveAttribute('href', '/docs')
     expect(docsLink).toHaveAttribute('target', '_blank')
     expect(docsLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
+  it('resets scroll position when navigating from footer links', () => {
+    const scrollTo = vi.fn()
+    Object.defineProperty(window, 'scrollTo', {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    scrollTo.mockClear()
+    fireEvent.click(screen.getAllByRole('link', { name: 'Install the CLI' }).at(-1)!)
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 
   it('renders the docs page sections, prompt examples, and pricing fallback', async () => {

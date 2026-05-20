@@ -44,6 +44,8 @@ type InternalImageAccess struct {
 	CommitToken     json.RawMessage
 }
 
+const defaultInternalTransportRetries = 3
+
 type Provider interface {
 	NewClient() (engine.LLMClient, error)
 }
@@ -854,27 +856,71 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt <= defaultInternalTransportRetries; attempt++ {
+		if attempt > 0 {
+			if err := sleepBeforeInternalRetry(ctx); err != nil {
+				return nil, err
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		}
+		resp, err := c.client.Do(req)
+		if err != nil {
+			lastErr = err
+			if isRetryableInternalTransportError(err) && attempt < defaultInternalTransportRetries {
+				continue
+			}
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			if isRetryableInternalTransportError(readErr) && attempt < defaultInternalTransportRetries {
+				continue
+			}
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("internal llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return body, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	return nil, lastErr
+}
+
+func sleepBeforeInternalRetry(ctx context.Context) error {
+	timer := time.NewTimer(200 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
+}
+
+func isRetryableInternalTransportError(err error) bool {
+	if err == nil {
+		return false
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
 	}
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("internal llm request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return body, nil
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "unexpected eof") ||
+		strings.Contains(text, "server closed idle connection") ||
+		strings.Contains(text, "connection reset by peer")
 }
 
 func ensureInternalRequestID(payload map[string]any) {

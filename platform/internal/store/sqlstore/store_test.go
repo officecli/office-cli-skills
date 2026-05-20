@@ -17,6 +17,10 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
+func strPtr(value string) *string { return &value }
+
+func timePtr(value time.Time) *time.Time { return &value }
+
 func TestPostgresMigrationVersionsAreUnique(t *testing.T) {
 	migrationPaths, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "postgres", "*.sql"))
 	require.NoError(t, err)
@@ -117,10 +121,131 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestOperationsFunnelUsesWindowedOperationalAndFactTables(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:operations_funnel?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&model.OperationalEvent{},
+		&model.User{},
+		&model.CLILoginChallenge{},
+		&model.CLISession{},
+		&model.UsageEvent{},
+		&model.Order{},
+	))
+	store := NewWithDB(db)
+
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	windowStart := now.AddDate(0, 0, -30)
+	outside := windowStart.Add(-time.Hour)
+	recent := now.Add(-2 * time.Hour)
+	user1 := uint64(1)
+	user2 := uint64(2)
+	user4 := uint64(4)
+
+	require.NoError(t, db.Create(&[]model.OperationalEvent{
+		{EventName: "pricing_view", Surface: "site", VisitorID: strPtr("visitor-1"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "download_click", Surface: "site", VisitorID: strPtr("visitor-2"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "console_open", Surface: "site", VisitorID: strPtr("visitor-2"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "cta_click", Surface: "app", VisitorID: strPtr("visitor-3"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "login_start", Surface: "app", VisitorID: strPtr("visitor-3"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "checkout_start", Surface: "app", VisitorID: strPtr("visitor-3"), MetadataJSON: `{}`, CreatedAt: recent},
+		{EventName: "pricing_view", Surface: "site", VisitorID: strPtr("visitor-old"), MetadataJSON: `{}`, CreatedAt: outside},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.User{
+		{ID: 1, GoogleSub: "sub-1", Email: "u1@example.com", Name: "U1", InviteCode: "invite-1", Status: model.UserStatusActive, CreatedAt: recent},
+		{ID: 2, GoogleSub: "sub-2", Email: "u2@example.com", Name: "U2", InviteCode: "invite-2", Status: model.UserStatusActive, CreatedAt: recent},
+		{ID: 3, GoogleSub: "sub-3", Email: "u3@example.com", Name: "U3", InviteCode: "invite-3", Status: model.UserStatusActive, CreatedAt: outside},
+		{ID: 4, GoogleSub: "sub-4", Email: "u4@example.com", Name: "U4", InviteCode: "invite-4", Status: model.UserStatusActive, CreatedAt: outside},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.CLILoginChallenge{
+		{ChallengeID: "challenge-1", Flow: model.CLILoginChallengeFlowCallback, CodeChallenge: "cc", CodeChallengeMethod: "plain", RedirectURI: "http://localhost", State: "s1", Status: model.CLILoginChallengeStatusCompleted, ExpiresAt: now, CompletedAt: timePtr(recent), CreatedAt: recent},
+		{ChallengeID: "challenge-2", Flow: model.CLILoginChallengeFlowCallback, CodeChallenge: "cc", CodeChallengeMethod: "plain", RedirectURI: "http://localhost", State: "s2", Status: model.CLILoginChallengeStatusPending, ExpiresAt: now, CreatedAt: recent},
+		{ChallengeID: "challenge-old", Flow: model.CLILoginChallengeFlowCallback, CodeChallenge: "cc", CodeChallengeMethod: "plain", RedirectURI: "http://localhost", State: "s3", Status: model.CLILoginChallengeStatusCompleted, ExpiresAt: now, CompletedAt: timePtr(outside), CreatedAt: outside},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.CLISession{
+		{UserID: 1, TokenHash: "token-1", TokenPrefix: "tok1", Name: "laptop", ExpiresAt: now, CreatedAt: recent},
+		{UserID: 3, TokenHash: "token-old", TokenPrefix: "tok2", Name: "old", ExpiresAt: now, CreatedAt: outside},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.UsageEvent{
+		{FingerprintHash: "machine-u1", UserID: &user1, Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent},
+		{FingerprintHash: "machine-u1", UserID: &user1, Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, CreatedAt: recent.Add(time.Minute)},
+		{FingerprintHash: "machine-u2", UserID: &user2, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: outside},
+		{FingerprintHash: "machine-u2", UserID: &user2, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent},
+		{FingerprintHash: "machine-u4", UserID: &user4, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent},
+		{FingerprintHash: "machine-anon", Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent},
+		{FingerprintHash: "machine-anon", Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent.Add(time.Minute)},
+		{FingerprintHash: "hosted-fp", Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Order{
+		{UserID: 1, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 1000, PackCode: "p1", PackName: "P1", QuotaAmount: 100, CreatedAt: recent, UpdatedAt: recent},
+		{UserID: 1, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 2000, PackCode: "p2", PackName: "P2", QuotaAmount: 200, CreatedAt: outside, UpdatedAt: recent},
+		{UserID: 2, Status: model.OrderStatusPending, Currency: "usd", AmountTotal: 3000, PackCode: "p3", PackName: "P3", QuotaAmount: 300, CreatedAt: recent, UpdatedAt: recent},
+		{UserID: 3, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 4000, PackCode: "p4", PackName: "P4", QuotaAmount: 400, CreatedAt: outside, UpdatedAt: outside},
+		{UserID: 4, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 5000, PackCode: "p5", PackName: "P5", QuotaAmount: 500, CreatedAt: outside, UpdatedAt: recent},
+	}).Error)
+
+	funnel, err := store.OperationsFunnel(context.Background(), windowStart, now)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, funnel.Visitors)
+	require.EqualValues(t, 1, funnel.PricingViews)
+	require.EqualValues(t, 3, funnel.CTAClicks)
+	require.EqualValues(t, 1, funnel.LoginStarts)
+	require.EqualValues(t, 2, funnel.RegisteredUsers)
+	require.EqualValues(t, 3, funnel.ActivatedUsers)
+	require.EqualValues(t, 2, funnel.ActivatedRegisteredUsers)
+	require.Equal(t, 1.0, funnel.ActivationRate)
+	require.EqualValues(t, 2, funnel.CLILoginStarted)
+	require.EqualValues(t, 1, funnel.CLILoginCompleted)
+	require.EqualValues(t, 1, funnel.CLISessionsCreated)
+	require.EqualValues(t, 3, funnel.FirstUsageUsers)
+	require.EqualValues(t, 2, funnel.RepeatUsageUsers)
+	require.InDelta(t, 1.0/7.0, funnel.BlockedRate, 0.0001)
+	require.EqualValues(t, 1, funnel.CheckoutStarts)
+	require.EqualValues(t, 2, funnel.OrdersCreated)
+	require.EqualValues(t, 3, funnel.PaidOrders)
+	require.EqualValues(t, 2, funnel.PaidUsers)
+	require.EqualValues(t, 1, funnel.PaidRegisteredUsers)
+	require.EqualValues(t, 8000, funnel.Revenue)
+	require.Equal(t, 0.5, funnel.PaidConversionRate)
+	require.Equal(t, 3.0, funnel.CheckoutToPaidRate)
+	require.EqualValues(t, 1, funnel.RepeatPaidUsers)
+	require.EqualValues(t, 4, funnel.MachineQuality.TotalMachines)
+	require.EqualValues(t, 4, funnel.MachineQuality.ActiveMachines24h)
+	require.EqualValues(t, 4, funnel.MachineQuality.ActiveMachines7d)
+	require.EqualValues(t, funnel.FirstUsageUsers, funnel.UsageQuality.FirstUsageUsers)
+	require.EqualValues(t, funnel.Revenue, funnel.RevenueQuality.Revenue)
+}
+
+func TestOperationsFunnelRatesAreZeroWithoutRegisteredUsers(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:operations_funnel_zero_registered?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.CLISession{}, &model.UsageEvent{}, &model.Order{}, &model.OperationalEvent{}, &model.CLILoginChallenge{}))
+	store := NewWithDB(db)
+
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	windowStart := now.AddDate(0, 0, -30)
+	outside := windowStart.Add(-time.Hour)
+	recent := now.Add(-time.Hour)
+	oldUserID := uint64(10)
+	require.NoError(t, db.Create(&model.User{ID: oldUserID, GoogleSub: "old-sub", Email: "old@example.com", Name: "Old", InviteCode: "invite-old", Status: model.UserStatusActive, CreatedAt: outside}).Error)
+	require.NoError(t, db.Create(&model.UsageEvent{FingerprintHash: "old-machine", UserID: &oldUserID, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent}).Error)
+	require.NoError(t, db.Create(&model.Order{UserID: oldUserID, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 1000, PackCode: "old", PackName: "Old", QuotaAmount: 100, CreatedAt: outside, UpdatedAt: recent}).Error)
+
+	funnel, err := store.OperationsFunnel(context.Background(), windowStart, now)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, funnel.RegisteredUsers)
+	require.EqualValues(t, 1, funnel.ActivatedUsers)
+	require.EqualValues(t, 0, funnel.ActivatedRegisteredUsers)
+	require.Equal(t, 0.0, funnel.ActivationRate)
+	require.EqualValues(t, 1, funnel.PaidUsers)
+	require.EqualValues(t, 0, funnel.PaidRegisteredUsers)
+	require.Equal(t, 0.0, funnel.PaidConversionRate)
+}
+
 func TestOverviewIncludesChartData(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:overview_chart_data?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.UsageEvent{}, &model.FreeQuota{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}))
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.OperationalEvent{}, &model.UsageEvent{}, &model.FreeQuota{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}, &model.CLILoginChallenge{}, &model.CLISession{}))
 	store := NewWithDB(db)
 
 	now := time.Now().UTC()
@@ -185,6 +310,7 @@ func TestOverviewIncludesChartData(t *testing.T) {
 		{Key: "expired", Label: "Expired", Value: 1},
 		{Key: "other", Label: "Other", Value: 1},
 	}, overview.APIKeyStatusBreakdown)
+	require.NotNil(t, overview.OperationsFunnel30d)
 }
 
 func TestAdminUserPreferenceUpsertGetAndIsolation(t *testing.T) {

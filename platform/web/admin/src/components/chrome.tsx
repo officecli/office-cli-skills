@@ -1,4 +1,4 @@
-import { Activity, CreditCard, Fingerprint, Gift, KeyRound, Layers3, LogOut, ReceiptText, ShieldCheck, TerminalSquare, Users, SlidersHorizontal } from 'lucide-react'
+import { Activity, CreditCard, Fingerprint, Funnel, Gift, KeyRound, Layers3, LogOut, ReceiptText, ShieldCheck, TerminalSquare, Users, SlidersHorizontal } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Button, Layout, Space, Tag, Typography } from 'antd'
@@ -9,6 +9,7 @@ import { OfficeCliBrand } from './branding'
 
 const navItems = [
   { to: '/', label: 'Overview', icon: ShieldCheck },
+  { to: '/operations/funnel', label: 'Operations / Funnel', icon: Funnel },
   { to: '/growth', label: 'Growth', icon: Gift },
   { to: '/hosted-pricing', label: 'Hosted Pricing', icon: SlidersHorizontal },
   { to: '/api-keys', label: 'API Keys', icon: KeyRound },

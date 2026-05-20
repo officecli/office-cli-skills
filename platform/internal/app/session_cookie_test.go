@@ -109,6 +109,9 @@ func (f *fakeAdminRouteService) Overview(_ context.Context) (*model.OverviewStat
 	}
 	return &model.OverviewStats{}, nil
 }
+func (f *fakeAdminRouteService) OperationsFunnel(_ context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
+	return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil
+}
 func (f *fakeAdminRouteService) ListAPIKeys(_ context.Context, _ *uint64) ([]model.APIKey, error) {
 	return nil, nil
 }

@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { Button } from 'antd'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
+import { trackEvent } from '../analytics'
+import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { api } from '../api'
 import { OfficeCliBrand } from '../components/branding'
 
@@ -34,7 +36,10 @@ export default function LoginPage() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
-              <Button type="primary" icon={<ShieldCheck size={16} />} onClick={() => api.login(returnTo)}>
+              <Button type="primary" icon={<ShieldCheck size={16} />} onClick={() => {
+                trackEvent(APP_ANALYTICS_EVENTS.loginStart, { surface: 'app', placement: 'login-page' })
+                api.login(returnTo)
+              }}>
                 Continue with company OAuth2
               </Button>
               <Button href="https://officecli.io/" icon={<ArrowLeft size={16} />}>

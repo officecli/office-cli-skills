@@ -16,6 +16,7 @@ import AgentSkillsCodexPage from './pages/AgentSkillsCodexPage'
 import AgentSkillsOpenClawPage from './pages/AgentSkillsOpenClawPage'
 import AgentSkillsFAQPage from './pages/AgentSkillsFAQPage'
 import SEOLandingPage from './pages/SEOLandingPage'
+import { scrollToHashTarget, scrollToPageTop } from './scrolling'
 import { applyDocumentSEO, getRouteSEO } from './seo'
 import { seoLandingPages } from './seoLandingPages'
 
@@ -23,6 +24,20 @@ function LegacyAgentSkillsRedirect() {
   const location = useLocation()
   const target = `${location.pathname.replace(/^\/officecli-skills/, '/officecli')}${location.search}${location.hash}`
   return <Navigate to={target} replace />
+}
+
+function ScrollToRouteTarget() {
+  const location = useLocation()
+
+  useEffect(() => {
+    if (location.hash) {
+      if (scrollToHashTarget(location.hash)) return
+    }
+
+    scrollToPageTop()
+  }, [location.pathname, location.hash])
+
+  return null
 }
 
 function SiteShell() {
@@ -42,6 +57,7 @@ function SiteShell() {
 
   return (
     <div className="min-h-screen bg-background text-white selection:bg-primary/30">
+      <ScrollToRouteTarget />
       {location.pathname !== '/docs' && <Navbar />}
       <Routes>
         <Route path="/" element={<HomePage />} />

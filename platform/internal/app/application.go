@@ -40,6 +40,7 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/model"
 	"github.com/officecli/officecli-internal/platform/internal/objectstore"
 	"github.com/officecli/officecli-internal/platform/internal/officesdk"
+	"github.com/officecli/officecli-internal/platform/internal/operations"
 	"github.com/officecli/officecli-internal/platform/internal/previewshare"
 	publishsvc "github.com/officecli/officecli-internal/platform/internal/publish"
 	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
@@ -74,6 +75,7 @@ type adminRouteService interface {
 	CurrentIdentity(ctx context.Context, rawCookie string) (*admin.AdminIdentity, error)
 	Logout(ctx context.Context, rawCookie string) error
 	Overview(ctx context.Context) (*model.OverviewStats, error)
+	OperationsFunnel(ctx context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error)
 	ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error)
 	GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error)
 	CreateAPIKey(ctx context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error)
@@ -213,13 +215,14 @@ func New() (*Application, error) {
 		growthService,
 	)
 	cliSessionSvc := clisession.NewService(dbStore, cfg.PlatformBaseURL)
+	operationsSvc := operations.NewService(dbStore)
 
 	port, err := parsePort(cfg.HTTPAddr)
 	if err != nil {
 		return nil, err
 	}
 	server := egin.DefaultContainer().Build(egin.WithHost(hostPart(cfg.HTTPAddr)), egin.WithPort(port))
-	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider)
+	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider, operationsSvc)
 
 	application := ego.New()
 	application.Serve(server)
@@ -256,10 +259,10 @@ func newOAuthProvider(cfg Config, oauth2ClientID, oauth2ClientSecret, oauth2Redi
 func (a *Application) Run() error { return a.ego.Run() }
 
 func registerRoutes(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
-	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil)
+	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil, nil)
 }
 
-func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider) {
+func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider, operationsSvc *operations.Service) {
 	r.Use(httpapi.RequestIDMiddleware())
 	r.Use(httpapi.AccessLogMiddleware(time.Second))
 	r.Use(gin.Recovery())
@@ -269,6 +272,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
 	registerHostedLLMRoutes(api, hostedSvc)
 	registerPublishRoutes(api, cfg, publishService)
+	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
 	registerAuthRoutes(api, cfg, authSvc)
 	registerCLIRoutes(api, cfg, authSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
@@ -549,6 +553,109 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			"paid_quota_remaining": resp.PaidQuotaRemaining,
 		})
 	})
+}
+
+func registerOperationsRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, operationsSvc *operations.Service) {
+	if operationsSvc == nil {
+		return
+	}
+	limitPerMinute := 120
+	rateLimitTTL := cfg.RateLimitVisitorTTL
+	if rateLimitTTL <= 0 {
+		rateLimitTTL = defaultRateLimitVisitorTTL(cfg.AppEnv)
+	}
+	limiter := httpapi.NewRateLimitMiddleware(rate.Every(time.Minute/time.Duration(limitPerMinute)), limitPerMinute, rateLimitTTL)
+	api.POST("/events/track", limiter, func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				httpapi.Error(c, http.StatusRequestEntityTooLarge, "request body too large")
+				return
+			}
+			httpapi.Error(c, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.DisallowUnknownFields()
+		var req operations.TrackRequest
+		if err := decoder.Decode(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			httpapi.Error(c, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(req.VisitorID) == "" {
+			req.VisitorID = c.Query("visitor_id")
+		}
+		if strings.TrimSpace(req.Invite) == "" {
+			req.Invite = c.Query("invite")
+		}
+		fillOperationalUTMFromQuery(&req, c)
+
+		var userID *uint64
+		if authSvc != nil {
+			if raw, err := c.Cookie("cop_app_session"); err == nil && raw != "" {
+				if resolver, ok := authSvc.(interface {
+					ResolveSession(string) (*auth.SessionPayload, error)
+				}); ok {
+					if payload, err := resolver.ResolveSession(raw); err == nil && payload != nil && payload.UserID > 0 {
+						id := payload.UserID
+						userID = &id
+					}
+				}
+			}
+		}
+
+		result, err := operationsSvc.Track(c.Request.Context(), req, operations.TrackContext{
+			UserID:    userID,
+			Host:      c.Request.Host,
+			Secure:    shouldUseVisitorSecureCookie(c, cfg),
+			UserAgent: c.GetHeader("User-Agent"),
+		})
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		if result != nil && result.VisitorCookie != nil {
+			http.SetCookie(c.Writer, result.VisitorCookie)
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
+	})
+}
+
+func fillOperationalUTMFromQuery(req *operations.TrackRequest, c *gin.Context) {
+	if strings.TrimSpace(req.UTMSource) == "" {
+		req.UTMSource = c.Query("utm_source")
+	}
+	if strings.TrimSpace(req.UTMMedium) == "" {
+		req.UTMMedium = c.Query("utm_medium")
+	}
+	if strings.TrimSpace(req.UTMCampaign) == "" {
+		req.UTMCampaign = c.Query("utm_campaign")
+	}
+	if strings.TrimSpace(req.UTMTerm) == "" {
+		req.UTMTerm = c.Query("utm_term")
+	}
+	if strings.TrimSpace(req.UTMContent) == "" {
+		req.UTMContent = c.Query("utm_content")
+	}
+	if strings.TrimSpace(req.UTMID) == "" {
+		req.UTMID = c.Query("utm_id")
+	}
+}
+
+func shouldUseVisitorSecureCookie(c *gin.Context, cfg Config) bool {
+	if c != nil && c.Request != nil && c.Request.TLS != nil {
+		return true
+	}
+	if c != nil && strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+		return true
+	}
+	return cfg.AppEnv == "production"
 }
 
 func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService) {
@@ -838,6 +945,27 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	protected.Use(httpapi.RequireAdmin(adminSvc.ResolveSession, "cop_admin_session"))
 	protected.GET("/overview", func(c *gin.Context) {
 		data, err := adminSvc.Overview(c.Request.Context())
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/operations/funnel", func(c *gin.Context) {
+		now := time.Now().UTC()
+		var windowStart time.Time
+		switch c.DefaultQuery("range", "30d") {
+		case "24h":
+			windowStart = now.Add(-24 * time.Hour)
+		case "7d":
+			windowStart = now.AddDate(0, 0, -7)
+		case "30d":
+			windowStart = now.AddDate(0, 0, -30)
+		default:
+			httpapi.Error(c, http.StatusBadRequest, "range must be 24h, 7d, or 30d")
+			return
+		}
+		data, err := adminSvc.OperationsFunnel(c.Request.Context(), windowStart, now)
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return

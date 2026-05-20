@@ -200,6 +200,59 @@ describe('platform admin shell', () => {
     expect((await screen.findAllByText(/No chart data available/i)).length).toBeGreaterThanOrEqual(4)
   })
 
+  it('renders operations funnel page and dashboard funnel entry', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/session') {
+        return { ok: true, status: 200, json: async () => ({ data: { email: 'admin@example.com', name: 'Admin User', auth_method: 'google' } }) }
+      }
+      if (url === '/api/admin/overview') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              total_api_keys: 0,
+              active_api_keys: 0,
+              disabled_api_keys: 0,
+              expired_api_keys: 0,
+              free_machines: 0,
+              checks_last_24h: 0,
+              consumes_last_24h: 0,
+              blocked_last_24h: 0,
+              total_users: 0,
+              paid_orders_last_24h: 0,
+              paid_quota_added_last_24h: 0,
+              remaining_paid_quota: 0,
+              usage_trend: [],
+              result_breakdown: [],
+              mode_breakdown: [],
+              api_key_status_breakdown: [],
+            },
+          }),
+        }
+      }
+      if (url.startsWith('/api/admin/operations/funnel?')) {
+        return { ok: true, status: 200, json: async () => ({ data: operationsFunnelFixture() }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/operations/funnel']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: /Acquisition, activation, usage, and revenue/i })).toBeInTheDocument()
+    expect(document.title).toBe('OfficeCLI Admin | Operations Funnel')
+    expect(await screen.findByText('Total Machines')).toBeInTheDocument()
+    expect(await screen.findByText('Paid Conversion')).toBeInTheDocument()
+  })
+
   it('shows reward as an available usage-event mode filter', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -610,3 +663,36 @@ describe('platform admin shell', () => {
     expect(await screen.findByText(/fp-demo-01/i)).toBeInTheDocument()
   })
 })
+
+function operationsFunnelFixture() {
+  return {
+    window_start: '2026-04-20T00:00:00Z',
+    window_end: '2026-05-20T00:00:00Z',
+    visitors: 10,
+    pricing_views: 8,
+    cta_clicks: 6,
+    login_starts: 5,
+    registered_users: 4,
+    activated_users: 3,
+    activated_registered_users: 3,
+    activation_rate: 0.75,
+    cli_login_started: 3,
+    cli_login_completed: 2,
+    cli_sessions_created: 2,
+    first_usage_users: 2,
+    repeat_usage_users: 1,
+    blocked_rate: 0.1,
+    checkout_starts: 2,
+    orders_created: 2,
+    paid_orders: 1,
+    paid_users: 1,
+    paid_registered_users: 1,
+    revenue: 2900,
+    paid_conversion_rate: 0.25,
+    checkout_to_paid_rate: 0.5,
+    repeat_paid_users: 0,
+    machine_quality: { total_machines: 9, active_machines_24h: 3, active_machines_7d: 7 },
+    usage_quality: { first_usage_users: 2, repeat_usage_users: 1, blocked_rate: 0.1 },
+    revenue_quality: { paid_orders: 1, paid_users: 1, paid_registered_users: 1, revenue: 2900, repeat_paid_users: 0, paid_conversion_rate: 0.25, checkout_to_paid_rate: 0.5 },
+  }
+}

@@ -265,6 +265,14 @@ func (s *Service) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	}
 	return s.store.Overview(ctx)
 }
+
+func (s *Service) OperationsFunnel(ctx context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
+	if s.mockData {
+		return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil
+	}
+	return s.store.OperationsFunnel(ctx, windowStart, now)
+}
+
 func (s *Service) ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error) {
 	if s.mockData {
 		return mockAPIKeys(ownerUserID), nil

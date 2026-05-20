@@ -1,9 +1,22 @@
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL } from '../analytics'
+import { scrollToHashTarget, scrollToPageTop } from '../scrolling'
 import { footerGroups } from '../siteData'
 
 export default function Footer() {
   const location = useLocation()
+
+  const scrollToFooterTarget = (to: string) => {
+    const target = new URL(to, window.location.origin)
+    if (target.pathname !== location.pathname) return
+
+    if (target.hash) {
+      scrollToHashTarget(target.hash)
+      return
+    }
+
+    scrollToPageTop()
+  }
 
   return (
     <footer className="bg-surface-low w-full border-t border-white/5">
@@ -17,9 +30,9 @@ export default function Footer() {
         <div>
           <h5 className="text-white font-bold mb-6">Explore</h5>
           <ul className="space-y-4 text-gray-500 font-headline text-sm uppercase tracking-widest">
-            <li><Link className="hover:text-primary transition-colors" to="/">Home</Link></li>
-            <li><Link className="hover:text-primary transition-colors" to="/download">Install the CLI</Link></li>
-            <li><Link className="hover:text-primary transition-colors" to="/docs">Product Docs</Link></li>
+            <li><Link className="hover:text-primary transition-colors" to="/" onClick={() => scrollToFooterTarget('/')}>Home</Link></li>
+            <li><Link className="hover:text-primary transition-colors" to="/download" onClick={() => scrollToFooterTarget('/download')}>Install the CLI</Link></li>
+            <li><Link className="hover:text-primary transition-colors" to="/docs" onClick={() => scrollToFooterTarget('/docs')}>Product Docs</Link></li>
           </ul>
         </div>
         {footerGroups.map((group) => (
@@ -31,7 +44,7 @@ export default function Footer() {
                   {link.external ? (
                     <a className="hover:text-primary transition-colors" href={buildTrackedURL(link.to, location.search)}>{link.label}</a>
                   ) : (
-                    <Link className="hover:text-primary transition-colors" to={link.to}>{link.label}</Link>
+                    <Link className="hover:text-primary transition-colors" to={link.to} onClick={() => scrollToFooterTarget(link.to)}>{link.label}</Link>
                   )}
                 </li>
               ))}

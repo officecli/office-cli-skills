@@ -57,6 +57,9 @@ func (fakeAdminRouteFailureService) Logout(_ context.Context, rawCookie string) 
 func (fakeAdminRouteFailureService) Overview(_ context.Context) (*model.OverviewStats, error) {
 	return &model.OverviewStats{}, nil
 }
+func (fakeAdminRouteFailureService) OperationsFunnel(_ context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
+	return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil
+}
 func (fakeAdminRouteFailureService) ListAPIKeys(_ context.Context, _ *uint64) ([]model.APIKey, error) {
 	return nil, nil
 }

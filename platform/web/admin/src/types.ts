@@ -258,6 +258,7 @@ export interface Overview {
   mode_breakdown?: OverviewBreakdownItem[]
   result_breakdown?: OverviewBreakdownItem[]
   api_key_status_breakdown?: OverviewBreakdownItem[]
+  operations_funnel_30d?: OperationsFunnel
 }
 
 export interface OverviewUsageTrendPoint {
@@ -277,4 +278,57 @@ export interface OverviewBreakdownItem {
 
 export interface Envelope<T> {
   data: T
+}
+
+export interface OperationsFunnel {
+  window_start: string
+  window_end: string
+  visitors: number
+  pricing_views: number
+  cta_clicks: number
+  login_starts: number
+  registered_users: number
+  activated_users: number
+  activated_registered_users?: number
+  activation_rate: number
+  cli_login_started: number
+  cli_login_completed: number
+  cli_sessions_created: number
+  first_usage_users: number
+  repeat_usage_users: number
+  blocked_rate: number
+  checkout_starts: number
+  orders_created: number
+  paid_orders: number
+  paid_users: number
+  paid_registered_users?: number
+  revenue: number
+  paid_conversion_rate: number
+  checkout_to_paid_rate: number
+  repeat_paid_users: number
+  machine_quality: OperationsMachineQuality
+  usage_quality: OperationsUsageQuality
+  revenue_quality: OperationsRevenueQuality
+}
+
+export interface OperationsMachineQuality {
+  total_machines: number
+  active_machines_24h: number
+  active_machines_7d: number
+}
+
+export interface OperationsUsageQuality {
+  first_usage_users: number
+  repeat_usage_users: number
+  blocked_rate: number
+}
+
+export interface OperationsRevenueQuality {
+  paid_orders: number
+  paid_users: number
+  paid_registered_users?: number
+  revenue: number
+  repeat_paid_users: number
+  paid_conversion_rate: number
+  checkout_to_paid_rate: number
 }

@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, Order, Overview, QuotaSources, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, DailyFreeQuota, Envelope, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -36,6 +36,7 @@ export const api = {
   },
   logout: () => request('/api/admin/logout', { method: 'POST' }),
   overview: () => request<Overview>('/api/admin/overview'),
+  operationsFunnel: (range: '24h' | '7d' | '30d') => request<OperationsFunnel>(`/api/admin/operations/funnel?range=${encodeURIComponent(range)}`),
   growth: () => request<AdminGrowth>('/api/admin/growth'),
   apiKeys: (userID?: number) => request<ApiKey[]>(userID ? `/api/admin/api-keys?user_id=${encodeURIComponent(String(userID))}` : '/api/admin/api-keys'),
   getApiKeyPlaintext: (id: number) => request<{ plaintext_key: string }>(`/api/admin/api-keys/${id}/plaintext`),

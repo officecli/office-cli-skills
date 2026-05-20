@@ -315,6 +315,31 @@ type UsageEvent struct {
 
 func (UsageEvent) TableName() string { return "usage_events" }
 
+type OperationalEvent struct {
+	ID              uint64    `gorm:"primaryKey" json:"id"`
+	EventName       string    `gorm:"column:event_name;size:64;index:idx_operational_events_event_name_created_at,priority:1;not null" json:"event_name"`
+	Surface         string    `gorm:"column:surface;size:16;index:idx_operational_events_surface_created_at,priority:1;not null" json:"surface"`
+	VisitorID       *string   `gorm:"column:visitor_id;size:96;index:idx_operational_events_visitor_id_created_at,priority:1" json:"visitor_id,omitempty"`
+	FingerprintHash *string   `gorm:"column:fingerprint_hash;size:128;index:idx_operational_events_fingerprint_hash_created_at,priority:1" json:"fingerprint_hash,omitempty"`
+	UserID          *uint64   `gorm:"column:user_id;index:idx_operational_events_user_id_created_at,priority:1" json:"user_id,omitempty"`
+	APIKeyID        *uint64   `gorm:"column:api_key_id" json:"api_key_id,omitempty"`
+	OrderID         *uint64   `gorm:"column:order_id" json:"order_id,omitempty"`
+	Invite          *string   `gorm:"column:invite;size:191" json:"invite,omitempty"`
+	UTMSource       *string   `gorm:"column:utm_source;size:191" json:"utm_source,omitempty"`
+	UTMMedium       *string   `gorm:"column:utm_medium;size:191" json:"utm_medium,omitempty"`
+	UTMCampaign     *string   `gorm:"column:utm_campaign;size:191" json:"utm_campaign,omitempty"`
+	UTMTerm         *string   `gorm:"column:utm_term;size:191" json:"utm_term,omitempty"`
+	UTMContent      *string   `gorm:"column:utm_content;size:191" json:"utm_content,omitempty"`
+	UTMID           *string   `gorm:"column:utm_id;size:191" json:"utm_id,omitempty"`
+	PagePath        *string   `gorm:"column:page_path;size:512" json:"page_path,omitempty"`
+	Referrer        *string   `gorm:"column:referrer;size:512" json:"referrer,omitempty"`
+	UserAgent       *string   `gorm:"column:user_agent;size:512" json:"user_agent,omitempty"`
+	MetadataJSON    string    `gorm:"column:metadata_json;type:json;not null" json:"metadata_json"`
+	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime;index:idx_operational_events_event_name_created_at,priority:2;index:idx_operational_events_surface_created_at,priority:2;index:idx_operational_events_visitor_id_created_at,priority:2;index:idx_operational_events_fingerprint_hash_created_at,priority:2;index:idx_operational_events_user_id_created_at,priority:2" json:"created_at"`
+}
+
+func (OperationalEvent) TableName() string { return "operational_events" }
+
 type UsageAuditContext struct {
 	ClientIP      string
 	ForwardedFor  string
@@ -617,6 +642,7 @@ type OverviewStats struct {
 	ModeBreakdown         []OverviewBreakdownItem   `json:"mode_breakdown"`
 	ResultBreakdown       []OverviewBreakdownItem   `json:"result_breakdown"`
 	APIKeyStatusBreakdown []OverviewBreakdownItem   `json:"api_key_status_breakdown"`
+	OperationsFunnel30d   *OperationsFunnel         `json:"operations_funnel_30d,omitempty"`
 }
 
 type OverviewUsageTrendPoint struct {
@@ -632,4 +658,64 @@ type OverviewBreakdownItem struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 	Value int64  `json:"value"`
+}
+
+type OperationsFunnel struct {
+	WindowStart              time.Time                `json:"window_start"`
+	WindowEnd                time.Time                `json:"window_end"`
+	Visitors                 int64                    `json:"visitors"`
+	PricingViews             int64                    `json:"pricing_views"`
+	CTAClicks                int64                    `json:"cta_clicks"`
+	LoginStarts              int64                    `json:"login_starts"`
+	RegisteredUsers          int64                    `json:"registered_users"`
+	ActivatedUsers           int64                    `json:"activated_users"`
+	ActivatedRegisteredUsers int64                    `json:"activated_registered_users"`
+	ActivationRate           float64                  `json:"activation_rate"`
+	CLILoginStarted          int64                    `json:"cli_login_started"`
+	CLILoginCompleted        int64                    `json:"cli_login_completed"`
+	CLISessionsCreated       int64                    `json:"cli_sessions_created"`
+	FirstUsageUsers          int64                    `json:"first_usage_users"`
+	RepeatUsageUsers         int64                    `json:"repeat_usage_users"`
+	BlockedRate              float64                  `json:"blocked_rate"`
+	CheckoutStarts           int64                    `json:"checkout_starts"`
+	OrdersCreated            int64                    `json:"orders_created"`
+	PaidOrders               int64                    `json:"paid_orders"`
+	PaidUsers                int64                    `json:"paid_users"`
+	PaidRegisteredUsers      int64                    `json:"paid_registered_users"`
+	Revenue                  int64                    `json:"revenue"`
+	PaidConversionRate       float64                  `json:"paid_conversion_rate"`
+	CheckoutToPaidRate       float64                  `json:"checkout_to_paid_rate"`
+	RepeatPaidUsers          int64                    `json:"repeat_paid_users"`
+	MachineQuality           OperationsMachineQuality `json:"machine_quality"`
+	UsageQuality             OperationsUsageQuality   `json:"usage_quality"`
+	RevenueQuality           OperationsRevenueQuality `json:"revenue_quality"`
+}
+
+type OperationsMachineQuality struct {
+	TotalMachines     int64 `json:"total_machines"`
+	ActiveMachines24h int64 `json:"active_machines_24h"`
+	ActiveMachines7d  int64 `json:"active_machines_7d"`
+}
+
+type OperationsUsageQuality struct {
+	FirstUsageUsers  int64   `json:"first_usage_users"`
+	RepeatUsageUsers int64   `json:"repeat_usage_users"`
+	BlockedRate      float64 `json:"blocked_rate"`
+}
+
+type OperationsRevenueQuality struct {
+	PaidOrders          int64   `json:"paid_orders"`
+	PaidUsers           int64   `json:"paid_users"`
+	PaidRegisteredUsers int64   `json:"paid_registered_users"`
+	Revenue             int64   `json:"revenue"`
+	RepeatPaidUsers     int64   `json:"repeat_paid_users"`
+	PaidConversionRate  float64 `json:"paid_conversion_rate"`
+	CheckoutToPaidRate  float64 `json:"checkout_to_paid_rate"`
+}
+
+func Rate(numerator, denominator int64) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return float64(numerator) / float64(denominator)
 }

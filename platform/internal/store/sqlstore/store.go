@@ -1030,6 +1030,210 @@ func (s *Store) CreateUsageEvent(ctx context.Context, event *model.UsageEvent) e
 	return s.db.WithContext(ctx).Create(event).Error
 }
 
+func (s *Store) CreateOperationalEvent(ctx context.Context, event *model.OperationalEvent) error {
+	return s.db.WithContext(ctx).Create(event).Error
+}
+
+func (s *Store) OperationsFunnel(ctx context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
+	windowStart = windowStart.UTC()
+	now = now.UTC()
+	funnel := &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}
+
+	if err := s.countOperationalVisitors(ctx, windowStart, now, &funnel.Visitors); err != nil {
+		return nil, err
+	}
+	if err := s.countOperationalEvents(ctx, windowStart, now, []string{"pricing_view"}, &funnel.PricingViews); err != nil {
+		return nil, err
+	}
+	if err := s.countOperationalEvents(ctx, windowStart, now, []string{"cta_click", "download_click", "console_open"}, &funnel.CTAClicks); err != nil {
+		return nil, err
+	}
+	if err := s.countOperationalEvents(ctx, windowStart, now, []string{"login_start"}, &funnel.LoginStarts); err != nil {
+		return nil, err
+	}
+	if err := s.countOperationalEvents(ctx, windowStart, now, []string{"checkout_start"}, &funnel.CheckoutStarts); err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.User{}).Where("created_at >= ? AND created_at < ?", windowStart, now).Count(&funnel.RegisteredUsers).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.Order{}).Where("created_at >= ? AND created_at < ?", windowStart, now).Count(&funnel.OrdersCreated).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.CLILoginChallenge{}).Where("created_at >= ? AND created_at < ?", windowStart, now).Count(&funnel.CLILoginStarted).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.CLILoginChallenge{}).Where("completed_at IS NOT NULL AND completed_at >= ? AND completed_at < ?", windowStart, now).Count(&funnel.CLILoginCompleted).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.CLISession{}).Where("created_at >= ? AND created_at < ?", windowStart, now).Count(&funnel.CLISessionsCreated).Error; err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.ActivatedUsers, `
+		SELECT COUNT(*) FROM (
+			SELECT user_id FROM cli_sessions WHERE created_at >= ? AND created_at < ? AND user_id IS NOT NULL AND user_id <> 0
+			UNION
+			SELECT user_id FROM usage_events WHERE created_at >= ? AND created_at < ? AND user_id IS NOT NULL AND user_id <> 0
+		) activated_users
+	`, windowStart, now, windowStart, now); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.ActivatedRegisteredUsers, `
+		SELECT COUNT(DISTINCT users.id)
+		FROM users
+		WHERE users.created_at >= ? AND users.created_at < ?
+			AND EXISTS (
+				SELECT 1 FROM cli_sessions
+				WHERE cli_sessions.user_id = users.id AND cli_sessions.created_at >= ? AND cli_sessions.created_at < ?
+				UNION
+				SELECT 1 FROM usage_events
+				WHERE usage_events.user_id = users.id AND usage_events.created_at >= ? AND usage_events.created_at < ?
+			)
+	`, windowStart, now, windowStart, now, windowStart, now); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.FirstUsageUsers, `
+		SELECT COUNT(*) FROM (
+			SELECT identity, MIN(created_at) AS first_at
+			FROM (
+				SELECT CASE
+					WHEN user_id IS NOT NULL AND user_id <> 0 THEN 'u:' || CAST(user_id AS TEXT)
+					WHEN COALESCE(fingerprint_hash, '') <> '' AND COALESCE(mode, '') <> ? THEN 'f:' || fingerprint_hash
+					ELSE NULL
+				END AS identity, created_at
+				FROM usage_events
+			) identities
+			WHERE identity IS NOT NULL
+			GROUP BY identity
+			HAVING MIN(created_at) >= ? AND MIN(created_at) < ?
+		) first_usage
+	`, string(model.UsageModeHosted), windowStart, now); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.RepeatUsageUsers, `
+		SELECT COUNT(*) FROM (
+			SELECT identity
+			FROM (
+				SELECT CASE
+					WHEN user_id IS NOT NULL AND user_id <> 0 THEN 'u:' || CAST(user_id AS TEXT)
+					WHEN COALESCE(fingerprint_hash, '') <> '' AND COALESCE(mode, '') <> ? THEN 'f:' || fingerprint_hash
+					ELSE NULL
+				END AS identity
+				FROM usage_events
+				WHERE created_at >= ? AND created_at < ?
+			) identities
+			WHERE identity IS NOT NULL
+			GROUP BY identity
+			HAVING COUNT(*) >= 2
+		) repeat_usage
+	`, string(model.UsageModeHosted), windowStart, now); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.MachineQuality.TotalMachines, `
+		SELECT COUNT(DISTINCT fingerprint_hash) FROM usage_events
+		WHERE COALESCE(fingerprint_hash, '') <> '' AND COALESCE(mode, '') <> ?
+	`, string(model.UsageModeHosted)); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.MachineQuality.ActiveMachines24h, `
+		SELECT COUNT(DISTINCT fingerprint_hash) FROM usage_events
+		WHERE created_at >= ? AND created_at < ? AND COALESCE(fingerprint_hash, '') <> '' AND COALESCE(mode, '') <> ?
+	`, now.Add(-24*time.Hour), now, string(model.UsageModeHosted)); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.MachineQuality.ActiveMachines7d, `
+		SELECT COUNT(DISTINCT fingerprint_hash) FROM usage_events
+		WHERE created_at >= ? AND created_at < ? AND COALESCE(fingerprint_hash, '') <> '' AND COALESCE(mode, '') <> ?
+	`, now.AddDate(0, 0, -7), now, string(model.UsageModeHosted)); err != nil {
+		return nil, err
+	}
+
+	var usageTotal int64
+	var blockedTotal int64
+	if err := s.db.WithContext(ctx).Model(&model.UsageEvent{}).Where("created_at >= ? AND created_at < ?", windowStart, now).Count(&usageTotal).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&model.UsageEvent{}).Where("created_at >= ? AND created_at < ? AND result = ?", windowStart, now, model.UsageResultBlocked).Count(&blockedTotal).Error; err != nil {
+		return nil, err
+	}
+	funnel.BlockedRate = model.Rate(blockedTotal, usageTotal)
+
+	if err := s.scanInt64(ctx, &funnel.PaidOrders, `
+		SELECT COUNT(*) FROM orders WHERE updated_at >= ? AND updated_at < ? AND status = ?
+	`, windowStart, now, string(model.OrderStatusPaid)); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.PaidUsers, `
+		SELECT COUNT(DISTINCT user_id) FROM orders WHERE updated_at >= ? AND updated_at < ? AND status = ? AND user_id IS NOT NULL AND user_id <> 0
+	`, windowStart, now, string(model.OrderStatusPaid)); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.PaidRegisteredUsers, `
+		SELECT COUNT(DISTINCT orders.user_id)
+		FROM orders
+		INNER JOIN users ON users.id = orders.user_id
+		WHERE orders.updated_at >= ? AND orders.updated_at < ?
+			AND orders.status = ?
+			AND users.created_at >= ? AND users.created_at < ?
+			AND orders.user_id IS NOT NULL AND orders.user_id <> 0
+	`, windowStart, now, string(model.OrderStatusPaid), windowStart, now); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.Revenue, `
+		SELECT COALESCE(SUM(amount_total), 0) FROM orders WHERE updated_at >= ? AND updated_at < ? AND status = ?
+	`, windowStart, now, string(model.OrderStatusPaid)); err != nil {
+		return nil, err
+	}
+	if err := s.scanInt64(ctx, &funnel.RepeatPaidUsers, `
+		SELECT COUNT(*) FROM (
+			SELECT user_id
+			FROM orders
+			WHERE status = ? AND user_id IS NOT NULL AND user_id <> 0
+			GROUP BY user_id
+			HAVING COUNT(*) >= 2
+				AND SUM(CASE WHEN updated_at >= ? AND updated_at < ? THEN 1 ELSE 0 END) > 0
+		) repeat_paid
+	`, string(model.OrderStatusPaid), windowStart, now); err != nil {
+		return nil, err
+	}
+
+	funnel.ActivationRate = model.Rate(funnel.ActivatedRegisteredUsers, funnel.RegisteredUsers)
+	funnel.PaidConversionRate = model.Rate(funnel.PaidRegisteredUsers, funnel.RegisteredUsers)
+	funnel.CheckoutToPaidRate = model.Rate(funnel.PaidOrders, funnel.CheckoutStarts)
+	funnel.UsageQuality = model.OperationsUsageQuality{
+		FirstUsageUsers:  funnel.FirstUsageUsers,
+		RepeatUsageUsers: funnel.RepeatUsageUsers,
+		BlockedRate:      funnel.BlockedRate,
+	}
+	funnel.RevenueQuality = model.OperationsRevenueQuality{
+		PaidOrders:          funnel.PaidOrders,
+		PaidUsers:           funnel.PaidUsers,
+		PaidRegisteredUsers: funnel.PaidRegisteredUsers,
+		Revenue:             funnel.Revenue,
+		RepeatPaidUsers:     funnel.RepeatPaidUsers,
+		PaidConversionRate:  funnel.PaidConversionRate,
+		CheckoutToPaidRate:  funnel.CheckoutToPaidRate,
+	}
+	return funnel, nil
+}
+
+func (s *Store) countOperationalVisitors(ctx context.Context, windowStart, now time.Time, dest *int64) error {
+	return s.db.WithContext(ctx).Model(&model.OperationalEvent{}).
+		Where("created_at >= ? AND created_at < ? AND visitor_id IS NOT NULL AND visitor_id <> ''", windowStart, now).
+		Distinct("visitor_id").
+		Count(dest).Error
+}
+
+func (s *Store) countOperationalEvents(ctx context.Context, windowStart, now time.Time, eventNames []string, dest *int64) error {
+	return s.db.WithContext(ctx).Model(&model.OperationalEvent{}).
+		Where("created_at >= ? AND created_at < ? AND event_name IN ?", windowStart, now, eventNames).
+		Count(dest).Error
+}
+
+func (s *Store) scanInt64(ctx context.Context, dest *int64, query string, args ...any) error {
+	return s.db.WithContext(ctx).Raw(query, args...).Scan(dest).Error
+}
+
 func (s *Store) HostedPricingSettings(ctx context.Context) (*model.HostedPricingSetting, error) {
 	var settings model.HostedPricingSetting
 	err := s.db.WithContext(ctx).First(&settings, 1).Error
@@ -1936,6 +2140,11 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	stats.ModeBreakdown = buildOverviewModeBreakdown(usageEvents)
 	stats.ResultBreakdown = buildOverviewResultBreakdown(usageEvents)
 	stats.APIKeyStatusBreakdown = buildOverviewAPIKeyStatusBreakdown(now, keys)
+	funnel, err := s.OperationsFunnel(ctx, now.AddDate(0, 0, -30), now)
+	if err != nil {
+		return nil, err
+	}
+	stats.OperationsFunnel30d = funnel
 
 	return stats, nil
 }

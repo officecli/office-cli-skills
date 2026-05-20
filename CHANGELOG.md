@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.68 - 2026-05-20
+
+### Added
+
+- Added operational event tracking and an admin operations funnel view for acquisition, activation, usage, and revenue health.
+
+### Fixed
+
+- Retry transient internal platform transport failures up to three times so standalone image generation can recover from temporary EOF or connection reset errors.
+
 ## 0.2.67 - 2026-05-15
 
 ### Fixed

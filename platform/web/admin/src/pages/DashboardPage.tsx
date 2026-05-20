@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Line, Pie } from '@ant-design/plots'
-import { Empty, Typography } from 'antd'
+import { Button, Empty, Typography } from 'antd'
 import { Activity, ShieldAlert, Waypoints } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
 import type { OverviewBreakdownItem, OverviewUsageTrendPoint } from '../types'
@@ -15,6 +16,8 @@ const guardrails = [
 
 export default function DashboardPage() {
   const { data: overview } = useQuery({ queryKey: ['admin-overview'], queryFn: api.overview })
+  const { data: funnel30d } = useQuery({ queryKey: ['admin-operations-funnel', '30d', 'dashboard'], queryFn: () => api.operationsFunnel('30d') })
+  const funnel = funnel30d ?? overview?.operations_funnel_30d
   const trendData = toTrendChartData(overview?.usage_trend ?? [])
   const hasTrendData = trendData.some((item) => item.value > 0)
   const resultData = positiveBreakdown(overview?.result_breakdown ?? [])
@@ -29,11 +32,12 @@ export default function DashboardPage() {
           eyebrow="Platform overview"
           title="Governance metrics in one pass"
           body="Review key posture, free-machine pressure, and blocked traffic before taking any action on the platform."
+          action={<Link to="/operations/funnel"><Button>Operations / Funnel</Button></Link>}
         />
         <div className="grid gap-4 xl:grid-cols-4">
           <MetricCard label="Total API Keys" value={formatNumber(overview?.total_api_keys)} detail="All managed credentials across the platform" />
           <MetricCard label="Active Keys" value={formatNumber(overview?.active_api_keys)} detail="Keys currently allowed to process traffic" />
-          <MetricCard label="Free Machines" value={formatNumber(overview?.free_machines)} detail="Distinct anonymous trial fingerprints ever seen in free_quotas" tone="warning" />
+          <MetricCard label="Total Machines" value={formatNumber(funnel?.machine_quality?.total_machines ?? overview?.free_machines)} detail="Distinct non-hosted fingerprints from usage events" tone="warning" />
           <MetricCard label="Blocked 24H" value={formatNumber(overview?.blocked_last_24h)} detail="Requests denied by policy in the last 24 hours" tone="critical" />
         </div>
       </Panel>
@@ -70,6 +74,16 @@ export default function DashboardPage() {
             <MetricCard label="Checks 24H" value={formatNumber(overview?.checks_last_24h)} detail="Requests that reached policy evaluation" />
             <MetricCard label="Consumes 24H" value={formatNumber(overview?.consumes_last_24h)} detail="Requests that consumed free/reward/paid quota or hosted credits" />
             <MetricCard label="Expired Keys" value={formatNumber(overview?.expired_api_keys)} detail="Credentials that need attention or archival" />
+          </div>
+        </Panel>
+
+        <Panel>
+          <SectionHeading eyebrow="30-day operations funnel" title="Activation and revenue signal" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <MetricCard label="Activated Users" value={formatNumber(funnel?.activated_users)} detail="CLI sessions or usage users in the last 30 days" />
+            <MetricCard label="Paid Users" value={formatNumber(funnel?.paid_users)} detail="Distinct users with paid orders in the last 30 days" />
+            <MetricCard label="Activation Rate" value={formatPercent(funnel?.activation_rate)} detail="Registered cohort activated in the selected window" />
+            <MetricCard label="Paid Conversion Rate" value={formatPercent(funnel?.paid_conversion_rate)} detail="Registered cohort paid in the selected window" />
           </div>
         </Panel>
 
@@ -160,4 +174,9 @@ function toTrendChartData(points: OverviewUsageTrendPoint[]) {
 
 function positiveBreakdown(items: OverviewBreakdownItem[]) {
   return items.filter((item) => item.value > 0)
+}
+
+function formatPercent(value?: number | null) {
+  if (value == null) return '--'
+  return `${(value * 100).toFixed(1)}%`
 }

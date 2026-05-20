@@ -519,6 +519,69 @@ func TestInternalClient_GenerateImageReturnsCreditBalance(t *testing.T) {
 	}
 }
 
+func TestInternalClient_GenerateImageRetriesTransientEOF(t *testing.T) {
+	t.Parallel()
+
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	var attempts int
+	var requestIDs []string
+	client := &internalClient{
+		baseURL: "https://platform.example/api/llm",
+		apiKey:  "hosted-key",
+		model:   "hosted/image",
+		client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			attempts++
+			if r.URL.String() != "https://platform.example/api/llm/v1/image" {
+				t.Fatalf("unexpected url: %s", r.URL.String())
+			}
+			if r.Header.Get("Authorization") != "Bearer hosted-key" {
+				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			var payload struct {
+				RequestID string `json:"request_id"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			requestIDs = append(requestIDs, payload.RequestID)
+			if attempts <= 3 {
+				return nil, io.ErrUnexpectedEOF
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(fmt.Sprintf(`{"data":"%s","mime":"image/png"}`, imageData))),
+			}, nil
+		})},
+	}
+
+	image, err := client.GenerateImage(context.Background(), engine.ImageGenerationRequest{
+		Prompt:            "Generate an illustration of an orange cat",
+		TargetAspectRatio: 1,
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage: %v", err)
+	}
+	if string(image.Data) != "png-bytes" {
+		t.Fatalf("unexpected image data: %q", string(image.Data))
+	}
+	if attempts != 4 {
+		t.Fatalf("attempts = %d, want 4", attempts)
+	}
+	if len(requestIDs) != 4 || requestIDs[0] == "" {
+		t.Fatalf("request ids = %#v, want same non-empty id across retry", requestIDs)
+	}
+	for _, requestID := range requestIDs[1:] {
+		if requestID != requestIDs[0] {
+			t.Fatalf("request ids = %#v, want same non-empty id across retry", requestIDs)
+		}
+	}
+}
+
 func TestInternalClient_CompleteSendsAnonymousAccessFields(t *testing.T) {
 	t.Parallel()
 
@@ -782,4 +845,10 @@ func TestInternalClient_GenerateImageSendsReferenceImage(t *testing.T) {
 	if payload.ReferenceImage.MIME != "image/png" || payload.ReferenceImage.Data != "cmVmZXJlbmNlLWJ5dGVz" {
 		t.Fatalf("reference image = %#v", payload.ReferenceImage)
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

@@ -12,6 +12,7 @@ import FreeQuotasPage from './pages/FreeQuotasPage'
 import GrowthPage from './pages/GrowthPage'
 import HostedPricingRulesPage from './pages/HostedPricingRulesPage'
 import NotFoundPage from './pages/NotFoundPage'
+import OperationsFunnelPage from './pages/OperationsFunnelPage'
 import OrdersPage from './pages/OrdersPage'
 import QuotaSourcesPage from './pages/QuotaSourcesPage'
 import UsersPage from './pages/UsersPage'
@@ -50,6 +51,7 @@ function ProtectedShell() {
           <Layout.Content>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/operations/funnel" element={<OperationsFunnelPage />} />
               <Route path="/growth" element={<GrowthPage />} />
               <Route path="/hosted-pricing" element={<HostedPricingRulesPage />} />
               <Route path="/api-keys" element={<ApiKeysPage />} />
