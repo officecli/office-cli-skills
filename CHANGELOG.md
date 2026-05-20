@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.69 - 2026-05-20
+
+### Fixed
+
+- Check for updates before launching the interactive TUI from empty input or a natural-language prompt while keeping explicit command entrypoints unchanged.
+
 ## 0.2.68 - 2026-05-20
 
 ### Added

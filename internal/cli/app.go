@@ -92,9 +92,16 @@ func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 }
 
 func (a *App) Run(ctx context.Context, args []string) error {
+	originalArgs := append([]string(nil), args...)
 	tuiOpts := TUIOptions{}
 	args = consumeTopLevelTUIOptions(args, &tuiOpts)
 	if len(args) == 0 {
+		if err := a.maybeHandleUpdate(ctx, originalArgs); err != nil {
+			if errors.Is(err, errCommandHandledByRestart) {
+				return nil
+			}
+			return err
+		}
 		return a.startTUI(ctx, "", tuiOpts)
 	}
 	if isHelpArg(args[0]) {
@@ -109,6 +116,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("unsupported command: exec")
 	}
 	if !isKnownCommand(args[0]) {
+		if err := a.maybeHandleUpdate(ctx, originalArgs); err != nil {
+			if errors.Is(err, errCommandHandledByRestart) {
+				return nil
+			}
+			return err
+		}
 		return a.startTUI(ctx, strings.TrimSpace(strings.Join(args, " ")), tuiOpts)
 	}
 	return a.runCommand(ctx, args)

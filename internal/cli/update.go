@@ -156,7 +156,7 @@ func (a *App) checkForUpdatesNow(ctx context.Context) (UpdateInfo, error) {
 }
 
 func shouldCheckForUpdates(a *App, args []string) bool {
-	if a == nil || len(args) == 0 {
+	if a == nil {
 		return false
 	}
 	if truthy(os.Getenv(updateCheckSkipEnv)) {
@@ -168,7 +168,7 @@ func shouldCheckForUpdates(a *App, args []string) bool {
 	if !isTerminalWriter(a.Stdout) || !isTerminalReader(a.Stdin) {
 		return false
 	}
-	if isHelpArg(args[0]) || isVersionArg(args[0]) || args[0] == "agent-bridge" || args[0] == "upgrade" {
+	if len(args) > 0 && (isHelpArg(args[0]) || isVersionArg(args[0]) || args[0] == "agent-bridge" || args[0] == "upgrade") {
 		return false
 	}
 	for _, arg := range args {

@@ -442,6 +442,48 @@ func TestAppRun_DefaultStartsTUIWhenTTY(t *testing.T) {
 	}
 }
 
+func TestAppRun_DefaultTUIChecksForUpdatesWhenTTY(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	var stdout terminalBuffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+
+	checkCalls := 0
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		checkCalls++
+		return UpdateInfo{Available: false}, nil
+	}
+	tuiCalls := 0
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		tuiCalls++
+		if initialPrompt != "" {
+			t.Fatalf("initialPrompt = %q, want empty", initialPrompt)
+		}
+		return nil
+	}
+
+	if err := app.Run(t.Context(), nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if checkCalls != 1 {
+		t.Fatalf("checkForUpdates calls = %d, want 1", checkCalls)
+	}
+	if tuiCalls != 1 {
+		t.Fatalf("runTUI calls = %d, want 1", tuiCalls)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestAppRun_DefaultNonTTYAsksForNew(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -479,6 +521,110 @@ func TestAppRun_InitialPromptStartsTUIWhenTTY(t *testing.T) {
 	}
 	if gotInitial != "做一个 Q3 复盘 PPT" {
 		t.Fatalf("initialPrompt = %q", gotInitial)
+	}
+}
+
+func TestAppRun_InitialPromptTUIChecksForUpdatesWhenTTY(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	var stdout terminalBuffer
+	var stderr bytes.Buffer
+	app := NewApp(&stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+
+	checkCalls := 0
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		checkCalls++
+		return UpdateInfo{Available: false}, nil
+	}
+	var gotInitial string
+	tuiCalls := 0
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		tuiCalls++
+		gotInitial = initialPrompt
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"做一个 Q3 复盘 PPT"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if checkCalls != 1 {
+		t.Fatalf("checkForUpdates calls = %d, want 1", checkCalls)
+	}
+	if tuiCalls != 1 {
+		t.Fatalf("runTUI calls = %d, want 1", tuiCalls)
+	}
+	if gotInitial != "做一个 Q3 复盘 PPT" {
+		t.Fatalf("initialPrompt = %q", gotInitial)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAppRun_TUIAcceptedUpdateRestartsWithOriginalArgs(t *testing.T) {
+	t.Setenv(updateCheckSkipEnv, "0")
+	stdout := &terminalBuffer{}
+	var stderr bytes.Buffer
+	app := NewApp(stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("1\n")})
+	originalVersion := Version
+	originalBuildDate := BuildDate
+	Version = "0.2.2"
+	BuildDate = "2026-04-09T09:07:59Z"
+	defer func() {
+		Version = originalVersion
+		BuildDate = originalBuildDate
+	}()
+
+	checkCalls := 0
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		checkCalls++
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.2",
+			LatestVersionLabel:  "0.2.6",
+			InstallMethod:       InstallMethodScript,
+			Channel:             UpdateChannelLatest,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "curl -fsSL https://example.com/install.sh | bash",
+		}, nil
+	}
+	updated := false
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		updated = true
+		return nil
+	}
+	restarted := false
+	app.restartCommand = func(ctx context.Context, info UpdateInfo, args []string) error {
+		restarted = true
+		want := []string{"--no-alt-screen", "做一个 Q3 复盘 PPT"}
+		if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
+			t.Fatalf("restart args = %#v, want %#v", args, want)
+		}
+		return nil
+	}
+	app.runTUI = func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
+		t.Fatal("runTUI should not be called after accepted update restart")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"--no-alt-screen", "做一个 Q3 复盘 PPT"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if checkCalls != 1 {
+		t.Fatalf("checkForUpdates calls = %d, want 1", checkCalls)
+	}
+	if !updated || !restarted {
+		t.Fatalf("updated=%t restarted=%t", updated, restarted)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
@@ -2566,7 +2712,7 @@ func TestAppRun_InteractiveUpdatePromptCanSkipUpdate(t *testing.T) {
 	}
 }
 
-func TestAppRun_UpdateCheckSkipsJSONAndHelp(t *testing.T) {
+func TestAppRun_UpdateCheckSkipsExplicitEntrypoints(t *testing.T) {
 	t.Setenv(updateCheckSkipEnv, "0")
 	t.Setenv("OFFICE_CLI_CONFIG", filepath.Join(t.TempDir(), "config.json"))
 	originalVersion := Version
@@ -2578,24 +2724,81 @@ func TestAppRun_UpdateCheckSkipsJSONAndHelp(t *testing.T) {
 		BuildDate = originalBuildDate
 	}()
 
-	var stdout bytes.Buffer
-	app := NewApp(&terminalBuffer{}, bytes.NewBuffer(nil), &terminalInputBuffer{Reader: strings.NewReader("1\n")})
-	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
-		t.Fatal("checkForUpdates should not be called")
-		return UpdateInfo{}, nil
+	upgradeCheckCalls := 0
+	tests := []struct {
+		name      string
+		args      []string
+		wantError bool
+		setup     func(*App)
+		verify    func(*testing.T)
+	}{
+		{
+			name: "--help",
+			args: []string{"--help"},
+		},
+		{
+			name: "--version",
+			args: []string{"--version"},
+		},
+		{
+			name: "upgrade",
+			args: []string{"upgrade"},
+			setup: func(app *App) {
+				app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+					upgradeCheckCalls++
+					return UpdateInfo{Available: false, CurrentVersion: "0.2.2"}, nil
+				}
+			},
+			verify: func(t *testing.T) {
+				t.Helper()
+				if upgradeCheckCalls != 1 {
+					t.Fatalf("checkForUpdates calls = %d, want 1", upgradeCheckCalls)
+				}
+			},
+		},
+		{
+			name: "agent-bridge",
+			args: []string{"agent-bridge"},
+			setup: func(app *App) {
+				app.officeTaskPreflight = func(ctx context.Context, command string, args []string) error {
+					return fmt.Errorf("stop after skipped update check")
+				}
+			},
+			wantError: true,
+		},
+		{
+			name:      "new-json",
+			args:      []string{"new", "docx", "Quarterly Retrospective", "--json", "--no-publish"},
+			wantError: true,
+		},
 	}
 
-	if err := app.Run(t.Context(), []string{"--help"}); err != nil {
-		t.Fatalf("Run(help): %v", err)
-	}
-
-	app = NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString(""))
-	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
-		t.Fatal("checkForUpdates should not be called")
-		return UpdateInfo{}, nil
-	}
-	if err := app.Run(t.Context(), []string{"new", "docx", "Quarterly Retrospective", "--json", "--no-publish"}); err == nil {
-		t.Fatal("expected config-related error for missing setup")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout terminalBuffer
+			var stderr bytes.Buffer
+			app := NewApp(&stdout, &stderr, &terminalInputBuffer{Reader: strings.NewReader("1\n")})
+			app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+				t.Fatal("checkForUpdates should not be called")
+				return UpdateInfo{}, nil
+			}
+			if tt.setup != nil {
+				tt.setup(app)
+			}
+			err := app.Run(t.Context(), tt.args)
+			if tt.wantError {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if tt.verify != nil {
+				tt.verify(t)
+			}
+		})
 	}
 }
 
