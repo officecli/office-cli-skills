@@ -24,27 +24,33 @@ func newHostedLLMClient(cfg LicenseConfig, job GenerateJob) (GeneratorLLMClient,
 		authToken = strings.TrimSpace(cfg.SessionToken)
 	}
 	var imageAccess *llmprovider.InternalImageAccess
-	if job.LicenseCheck != nil && job.LicenseCheck.AccessMode != LicenseAccessModeHosted {
-		tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
-		if err != nil {
-			return nil, fmt.Errorf("marshal hosted access token: %w", err)
-		}
-		imageAccess = &llmprovider.InternalImageAccess{
-			FingerprintHash: job.LicenseCheck.CommitToken.FingerprintHash,
-			UserID:          job.LicenseCheck.CommitToken.UserID,
-			APIKey:          authToken,
-			AccessMode:      string(job.LicenseCheck.AccessMode),
-			CommitToken:     json.RawMessage(tokenBytes),
+	var accountHostedFingerprintHash string
+	if job.LicenseCheck != nil {
+		if job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
+			accountHostedFingerprintHash = strings.TrimSpace(job.LicenseCheck.CommitToken.FingerprintHash)
+		} else {
+			tokenBytes, err := json.Marshal(job.LicenseCheck.CommitToken)
+			if err != nil {
+				return nil, fmt.Errorf("marshal hosted access token: %w", err)
+			}
+			imageAccess = &llmprovider.InternalImageAccess{
+				FingerprintHash: job.LicenseCheck.CommitToken.FingerprintHash,
+				UserID:          job.LicenseCheck.CommitToken.UserID,
+				APIKey:          authToken,
+				AccessMode:      string(job.LicenseCheck.AccessMode),
+				CommitToken:     json.RawMessage(tokenBytes),
+			}
 		}
 	}
 	return llmprovider.NewClient(llmprovider.Config{
-		Provider:    "internal",
-		BaseURL:     baseURL + "/api/llm",
-		APIKey:      authToken,
-		Model:       textModelName,
-		ImageModel:  imageModelName,
-		TimeoutSec:  hostedTimeoutSec(cfg.TimeoutSec, job),
-		ImageAccess: imageAccess,
+		Provider:                     "internal",
+		BaseURL:                      baseURL + "/api/llm",
+		APIKey:                       authToken,
+		Model:                        textModelName,
+		ImageModel:                   imageModelName,
+		TimeoutSec:                   hostedTimeoutSec(cfg.TimeoutSec, job),
+		ImageAccess:                  imageAccess,
+		AccountHostedFingerprintHash: accountHostedFingerprintHash,
 	})
 }
 

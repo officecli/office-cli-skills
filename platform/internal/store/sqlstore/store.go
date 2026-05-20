@@ -1892,7 +1892,7 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	if err := s.db.WithContext(ctx).Model(&model.APIKey{}).Where("expires_at IS NOT NULL AND expires_at < ?", now).Count(&stats.ExpiredAPIKeys).Error; err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Model(&model.DailyFreeQuota{}).Distinct("fingerprint_hash").Count(&stats.FreeMachines).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&model.FreeQuota{}).Distinct("fingerprint_hash").Count(&stats.FreeMachines).Error; err != nil {
 		return nil, err
 	}
 	if err := s.db.WithContext(ctx).Model(&model.UsageEvent{}).Where("created_at >= ? AND charged = ?", dayAgo, true).Count(&stats.ConsumesLast24h).Error; err != nil {

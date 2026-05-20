@@ -33,7 +33,7 @@ export default function DashboardPage() {
         <div className="grid gap-4 xl:grid-cols-4">
           <MetricCard label="Total API Keys" value={formatNumber(overview?.total_api_keys)} detail="All managed credentials across the platform" />
           <MetricCard label="Active Keys" value={formatNumber(overview?.active_api_keys)} detail="Keys currently allowed to process traffic" />
-          <MetricCard label="Free Machines" value={formatNumber(overview?.free_machines)} detail="Fingerprints still operating inside the free tier" tone="warning" />
+          <MetricCard label="Free Machines" value={formatNumber(overview?.free_machines)} detail="Distinct anonymous trial fingerprints ever seen in free_quotas" tone="warning" />
           <MetricCard label="Blocked 24H" value={formatNumber(overview?.blocked_last_24h)} detail="Requests denied by policy in the last 24 hours" tone="critical" />
         </div>
       </Panel>

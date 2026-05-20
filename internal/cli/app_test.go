@@ -1648,6 +1648,12 @@ func TestExecuteGenerateJob_IMGHostedRuntimeUsesHostedCreditBilling(t *testing.T
 	if _, ok := gotPayload["access_mode"]; ok {
 		t.Fatalf("hosted image payload must not include quota access_mode: %#v", gotPayload)
 	}
+	if _, ok := gotPayload["api_key"]; ok {
+		t.Fatalf("hosted image payload must not include api_key: %#v", gotPayload)
+	}
+	if gotPayload["fingerprint_hash"] == "" {
+		t.Fatalf("hosted image payload must include fingerprint_hash: %#v", gotPayload)
+	}
 	if result.AccessMode != string(LicenseAccessModeHosted) || !result.HostedEnabled || result.CreditBalance != 17 {
 		t.Fatalf("hosted result = %+v", result)
 	}

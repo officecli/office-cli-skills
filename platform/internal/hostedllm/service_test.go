@@ -501,6 +501,92 @@ func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
 	require.Empty(t, store.settlements)
 }
 
+func TestRecordUsageFingerprintSource(t *testing.T) {
+	tests := []struct {
+		name string
+		req  CompletionRequest
+		want string
+	}{
+		{
+			name: "request fingerprint wins",
+			req: CompletionRequest{
+				RequestID:       "req-text-request",
+				FingerprintHash: "fp-request",
+				CommitToken:     &licensesvc.CommitToken{FingerprintHash: "fp-token"},
+			},
+			want: "fp-request",
+		},
+		{
+			name: "commit token fallback",
+			req: CompletionRequest{
+				RequestID:   "req-text-token",
+				CommitToken: &licensesvc.CommitToken{FingerprintHash: "fp-token"},
+			},
+			want: "fp-token",
+		},
+		{
+			name: "missing fingerprint fallback",
+			req:  CompletionRequest{RequestID: "req-text-hosted"},
+			want: "hosted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeAPIKeyStore{}
+			svc := NewService(store, Config{})
+			svc.recordUsage(context.Background(), nil, tt.req, "gpt-text-test", usageSummary{}, 1, 1, 0, hostedPriceSnapshot{})
+
+			require.Len(t, store.events, 1)
+			require.Equal(t, tt.want, store.events[0].FingerprintHash)
+		})
+	}
+}
+
+func TestRecordImageUsageFingerprintSource(t *testing.T) {
+	tests := []struct {
+		name string
+		req  ImageRequest
+		want string
+	}{
+		{
+			name: "request fingerprint wins",
+			req: ImageRequest{
+				RequestID:       "req-image-request",
+				FingerprintHash: "fp-request",
+				CommitToken:     &licensesvc.CommitToken{FingerprintHash: "fp-token"},
+			},
+			want: "fp-request",
+		},
+		{
+			name: "commit token fallback",
+			req: ImageRequest{
+				RequestID:   "req-image-token",
+				CommitToken: &licensesvc.CommitToken{FingerprintHash: "fp-token"},
+			},
+			want: "fp-token",
+		},
+		{
+			name: "missing fingerprint fallback",
+			req:  ImageRequest{RequestID: "req-image-hosted"},
+			want: "hosted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeAPIKeyStore{}
+			svc := NewService(store, Config{})
+			svc.recordImageUsage(context.Background(), nil, tt.req, "gpt-image-test", usageSummary{ImageCount: 1}, 1, 1, 0, hostedPriceSnapshot{})
+
+			require.Len(t, store.events, 1)
+			require.Equal(t, tt.want, store.events[0].FingerprintHash)
+			require.NotNil(t, store.events[0].DocumentType)
+			require.Equal(t, "img", *store.events[0].DocumentType)
+		})
+	}
+}
+
 func TestCompleteWithInvalidCommitTokenRejectsBeforeUpstream(t *testing.T) {
 	upstreamCalls := 0
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

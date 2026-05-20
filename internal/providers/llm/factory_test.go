@@ -568,6 +568,49 @@ func TestInternalClient_CompleteSendsAnonymousAccessFields(t *testing.T) {
 	}
 }
 
+func TestInternalClient_CompleteSendsOnlyFingerprintForAccountHosted(t *testing.T) {
+	t.Parallel()
+
+	var payload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer session-token" {
+			t.Fatalf("authorization = %q", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		_, _ = fmt.Fprint(w, `{"content":"{\"ok\":true}"}`)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(Config{
+		Provider:                     "internal",
+		BaseURL:                      server.URL,
+		APIKey:                       "session-token",
+		Model:                        "hosted/text",
+		AccountHostedFingerprintHash: "fp-account",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, err = client.CompleteJSON(context.Background(), []engine.LLMMessage{{Role: "user", Content: "Return JSON"}})
+	if err != nil {
+		t.Fatalf("CompleteJSON: %v", err)
+	}
+	if payload["fingerprint_hash"] != "fp-account" {
+		t.Fatalf("fingerprint_hash = %#v, payload = %#v", payload["fingerprint_hash"], payload)
+	}
+	for _, key := range []string{"commit_token", "access_mode", "api_key"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("account hosted payload must not include %s: %#v", key, payload)
+		}
+	}
+}
+
 func TestInternalClient_CompleteAddsRequestIDForHostedAccountBilling(t *testing.T) {
 	t.Parallel()
 

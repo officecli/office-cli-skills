@@ -23,16 +23,17 @@ import (
 )
 
 type Config struct {
-	Provider     string `json:"provider"`
-	BaseURL      string `json:"base_url"`
-	APIKey       string `json:"api_key"`
-	Model        string `json:"model"`
-	ImageBaseURL string `json:"image_base_url,omitempty"`
-	ImageAPIKey  string `json:"image_api_key,omitempty"`
-	ImageModel   string `json:"image_model"`
-	ReviewModel  string `json:"review_model,omitempty"`
-	TimeoutSec   int    `json:"timeout_sec"`
-	ImageAccess  *InternalImageAccess
+	Provider                     string `json:"provider"`
+	BaseURL                      string `json:"base_url"`
+	APIKey                       string `json:"api_key"`
+	Model                        string `json:"model"`
+	ImageBaseURL                 string `json:"image_base_url,omitempty"`
+	ImageAPIKey                  string `json:"image_api_key,omitempty"`
+	ImageModel                   string `json:"image_model"`
+	ReviewModel                  string `json:"review_model,omitempty"`
+	TimeoutSec                   int    `json:"timeout_sec"`
+	ImageAccess                  *InternalImageAccess
+	AccountHostedFingerprintHash string
 }
 
 type InternalImageAccess struct {
@@ -93,11 +94,12 @@ func (p *internalProvider) NewClient() (engine.LLMClient, error) {
 		return nil, fmt.Errorf("llm base_url is required")
 	}
 	return &internalClient{
-		baseURL:     strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
-		apiKey:      strings.TrimSpace(p.cfg.APIKey),
-		model:       strings.TrimSpace(p.cfg.Model),
-		imageAccess: p.cfg.ImageAccess,
-		client:      httpclient.New(timeoutFor(p.cfg.TimeoutSec)),
+		baseURL:                      strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
+		apiKey:                       strings.TrimSpace(p.cfg.APIKey),
+		model:                        strings.TrimSpace(p.cfg.Model),
+		imageAccess:                  p.cfg.ImageAccess,
+		accountHostedFingerprintHash: strings.TrimSpace(p.cfg.AccountHostedFingerprintHash),
+		client:                       httpclient.New(timeoutFor(p.cfg.TimeoutSec)),
 	}, nil
 }
 
@@ -675,11 +677,12 @@ func (c *openAIClient) doPost(ctx context.Context, url, apiKey string, payload m
 }
 
 type internalClient struct {
-	baseURL     string
-	apiKey      string
-	model       string
-	imageAccess *InternalImageAccess
-	client      *http.Client
+	baseURL                      string
+	apiKey                       string
+	model                        string
+	imageAccess                  *InternalImageAccess
+	accountHostedFingerprintHash string
+	client                       *http.Client
 }
 
 func (c *internalClient) CompleteText(ctx context.Context, messages []engine.LLMMessage) (string, error) {
@@ -712,6 +715,8 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		if len(c.imageAccess.CommitToken) > 0 {
 			payload["commit_token"] = c.imageAccess.CommitToken
 		}
+	} else if c.accountHostedFingerprintHash != "" {
+		payload["fingerprint_hash"] = c.accountHostedFingerprintHash
 	}
 	if len(req.ReferenceImages) > 0 {
 		payload["reference_image"] = req.ReferenceImages[0]
@@ -769,6 +774,8 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 		if len(c.imageAccess.CommitToken) > 0 {
 			payload["commit_token"] = c.imageAccess.CommitToken
 		}
+	} else if c.accountHostedFingerprintHash != "" {
+		payload["fingerprint_hash"] = c.accountHostedFingerprintHash
 	}
 	for k, v := range extra {
 		payload[k] = v

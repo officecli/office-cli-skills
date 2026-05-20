@@ -22,7 +22,7 @@ export default function FreeQuotasPage() {
         <SectionHeading
           eyebrow="Abuse control"
           title="Free trial devices"
-          body="Inspect daily anonymous trial state by CLI machine fingerprint and raise the daily limit only when onboarding or abuse review justifies it."
+          body="Inspect legacy daily audit rows for anonymous trial fingerprints. Current license truth is free_quotas; adjust daily rows only for compatibility review."
         />
         <div className="mb-6 grid gap-4 md:grid-cols-2">
           <label className="admin-code-card admin-surface-panel flex items-center gap-3 border border-outline-variant/20 px-4 py-3 text-sm text-outline">
@@ -60,7 +60,7 @@ export default function FreeQuotasPage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No matching free quota records" body="Try a different fingerprint filter or wait for free-tier traffic to be recorded." />
+          <EmptyState title="No matching free quota records" body="Try a different fingerprint filter or wait for legacy daily audit rows to be recorded." />
         )}
       </Panel>
     </div>

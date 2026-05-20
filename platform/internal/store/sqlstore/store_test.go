@@ -120,7 +120,7 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 func TestOverviewIncludesChartData(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:overview_chart_data?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.UsageEvent{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}))
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.UsageEvent{}, &model.FreeQuota{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}))
 	store := NewWithDB(db)
 
 	now := time.Now().UTC()
@@ -146,9 +146,19 @@ func TestOverviewIncludesChartData(t *testing.T) {
 		{FingerprintHash: "fp-old", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, Charged: true, CreatedAt: outsideWindow},
 	}
 	require.NoError(t, db.Create(&events).Error)
+	require.NoError(t, db.Create(&[]model.FreeQuota{
+		{FingerprintHash: "fp-free-lifetime-1", FreeLimit: 3, FreeUsed: 1},
+		{FingerprintHash: "fp-free-lifetime-2", FreeLimit: 3, FreeUsed: 0},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.DailyFreeQuota{
+		{FingerprintHash: "fp-daily-legacy-1", UsageDate: today.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1},
+		{FingerprintHash: "fp-daily-legacy-2", UsageDate: today.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 0},
+		{FingerprintHash: "fp-daily-legacy-3", UsageDate: yesterday.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1},
+	}).Error)
 
 	overview, err := store.Overview(context.Background())
 	require.NoError(t, err)
+	require.EqualValues(t, 2, overview.FreeMachines)
 	require.Len(t, overview.UsageTrend, 7)
 	require.Equal(t, today.Format("2006-01-02"), overview.UsageTrend[6].Date)
 	require.EqualValues(t, 2, overview.UsageTrend[6].Total)

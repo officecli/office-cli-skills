@@ -44,7 +44,7 @@ export default function QuotaSourcesPage() {
         <SectionHeading
           eyebrow="Unified quota audit"
           title="Quota sources"
-          body="Inspect anonymous CLI trial devices, legacy reward grants, paid external quota keys, and account hosted credits from one operator surface."
+          body="Inspect anonymous trial compatibility views, legacy reward grants, paid external quota keys, and account hosted credits from one operator surface."
         />
         <form className="admin-code-card admin-surface-panel grid gap-4 border border-outline-variant/20 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
           event.preventDefault()
@@ -73,7 +73,7 @@ export default function QuotaSourcesPage() {
       </Panel>
 
       <Panel>
-        <SectionHeading eyebrow="Anonymous trial" title="CLI free trial devices" body="These rows reflect the real daily_free_quotas records used by the license service." />
+        <SectionHeading eyebrow="Anonymous trial" title="CLI free trial devices" body="These daily_free_quotas rows are a legacy daily audit and compatibility view. Current anonymous license state is tracked in free_quotas." />
         {freeTrialDevices.length ? (
           <div className="grid gap-4 xl:grid-cols-2">
             {freeTrialDevices.map((quota) => (
@@ -89,7 +89,7 @@ export default function QuotaSourcesPage() {
             ))}
           </div>
         ) : (
-          <EmptyState title="No free trial devices matched" body="Adjust the filters or wait for CLI anonymous traffic to create daily records." />
+          <EmptyState title="No free trial devices matched" body="Adjust the filters or wait for legacy daily audit rows to be recorded." />
         )}
       </Panel>
 

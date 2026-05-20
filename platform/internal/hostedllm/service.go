@@ -1272,6 +1272,18 @@ func effectiveReferenceImages(req ImageRequest) []ImageReference {
 	return out
 }
 
+func hostedUsageFingerprint(requestFingerprint string, token *licensesvc.CommitToken) string {
+	if fingerprint := strings.TrimSpace(requestFingerprint); fingerprint != "" {
+		return fingerprint
+	}
+	if token != nil {
+		if fingerprint := strings.TrimSpace(token.FingerprintHash); fingerprint != "" {
+			return fingerprint
+		}
+	}
+	return "hosted"
+}
+
 func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
 	ctx, cancel := settlementContext(ctx)
 	defer cancel()
@@ -1282,7 +1294,7 @@ func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req C
 	}
 	event := &model.UsageEvent{
 		RequestID:             stringPtr(req.RequestID),
-		FingerprintHash:       "hosted",
+		FingerprintHash:       hostedUsageFingerprint(req.FingerprintHash, req.CommitToken),
 		Mode:                  model.UsageModeHosted,
 		Action:                model.UsageActionGenerate,
 		Result:                model.UsageResultAllowed,
@@ -1325,7 +1337,7 @@ func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, 
 	documentType := "img"
 	event := &model.UsageEvent{
 		RequestID:             stringPtr(req.RequestID),
-		FingerprintHash:       "hosted",
+		FingerprintHash:       hostedUsageFingerprint(req.FingerprintHash, req.CommitToken),
 		Mode:                  model.UsageModeHosted,
 		Action:                model.UsageActionGenerate,
 		Result:                model.UsageResultAllowed,

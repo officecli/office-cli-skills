@@ -85,6 +85,77 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 	}
 }
 
+func TestExecuteGenerateJob_HostedAccountSendsOnlyFingerprintToTextLLM(t *testing.T) {
+	var gotPayload map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/json" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer hosted-key" {
+			t.Fatalf("authorization = %q", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"content":"{\"title\":\"Account Hosted\",\"sections\":[{\"heading\":\"Summary\",\"level\":1,\"paragraphs\":[\"Account hosted generation works.\"]}]}"}`)
+	}))
+	defer server.Close()
+
+	var checkedRuntime RuntimeMode
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return countingLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				checkedRuntime = RuntimeMode(req.RuntimeMode)
+				return &LicenseCheckResult{
+					Allowed:       true,
+					AccessMode:    LicenseAccessModeHosted,
+					HostedEnabled: true,
+					CreditBalance: 18,
+					CommitToken:   signTestCommitToken(req, LicenseAccessModeHosted, UsageCommitToken{}),
+				}, nil
+			},
+			consume: func(token UsageCommitToken) (*UsageConsumeResult, error) {
+				t.Fatalf("account hosted text generation should not consume external quota token: %+v", token)
+				return nil, nil
+			},
+		}, nil
+	}
+
+	outputDir := t.TempDir()
+	result, err := app.executeGenerateJob(context.Background(), Config{
+		Defaults: DefaultsConfig{OutputDir: outputDir, Publish: false, Mode: "fast"},
+		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
+		Publish:  disabledPublishConfig(),
+	}, GenerateJob{
+		DocumentType: engine.DocumentTypeDOCX,
+		Topic:        "Account Hosted",
+		Prompt:       "Write a short status note",
+		RuntimeMode:  RuntimeModeHosted,
+		Mode:         "fast",
+		OutputDir:    outputDir,
+	}, false, noopProgressController{}, nil)
+
+	if err != nil {
+		t.Fatalf("executeGenerateJob: %v", err)
+	}
+	if checkedRuntime != RuntimeModeHosted {
+		t.Fatalf("license runtime = %q, want hosted", checkedRuntime)
+	}
+	if gotPayload["fingerprint_hash"] == "" {
+		t.Fatalf("fingerprint_hash missing from account hosted payload: %#v", gotPayload)
+	}
+	for _, key := range []string{"commit_token", "access_mode", "api_key"} {
+		if _, ok := gotPayload[key]; ok {
+			t.Fatalf("account hosted payload must not include %s: %#v", key, gotPayload)
+		}
+	}
+	if result.AccessMode != string(LicenseAccessModeHosted) || !result.HostedEnabled {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
 func TestExecuteGenerateJobRefreshesAccessAfterBestModeQuestions(t *testing.T) {
 	app := NewApp(nil, nil, nil)
 	llm := &fakeBestModeLLMClient{
