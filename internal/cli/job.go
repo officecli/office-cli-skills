@@ -173,7 +173,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		finalMode = strings.TrimSpace(cfg.Defaults.Mode)
 	}
 	if finalMode == "" {
-		finalMode = "fast"
+		finalMode = "best"
 	}
 	switch strings.ToLower(finalMode) {
 	case "fast", "best":

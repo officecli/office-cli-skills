@@ -99,6 +99,7 @@ func (p *internalProvider) NewClient() (engine.LLMClient, error) {
 		baseURL:                      strings.TrimRight(strings.TrimSpace(p.cfg.BaseURL), "/"),
 		apiKey:                       strings.TrimSpace(p.cfg.APIKey),
 		model:                        strings.TrimSpace(p.cfg.Model),
+		imageModel:                   strings.TrimSpace(p.cfg.ImageModel),
 		imageAccess:                  p.cfg.ImageAccess,
 		accountHostedFingerprintHash: strings.TrimSpace(p.cfg.AccountHostedFingerprintHash),
 		client:                       httpclient.New(timeoutFor(p.cfg.TimeoutSec)),
@@ -682,6 +683,7 @@ type internalClient struct {
 	baseURL                      string
 	apiKey                       string
 	model                        string
+	imageModel                   string
 	imageAccess                  *InternalImageAccess
 	accountHostedFingerprintHash string
 	client                       *http.Client
@@ -704,8 +706,12 @@ func (c *internalClient) CompleteStructured(ctx context.Context, req engine.Stru
 }
 
 func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	model := c.imageModel
+	if model == "" {
+		model = c.model
+	}
 	payload := map[string]any{
-		"model":        c.model,
+		"model":        model,
 		"prompt":       req.Prompt,
 		"aspect_ratio": req.TargetAspectRatio,
 	}

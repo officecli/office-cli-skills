@@ -266,6 +266,13 @@ func (s *Service) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	return s.store.Overview(ctx)
 }
 
+func (s *Service) FingerprintQuality(ctx context.Context) (*model.FingerprintQuality, error) {
+	if s.mockData {
+		return &model.FingerprintQuality{}, nil
+	}
+	return s.store.FingerprintQuality(ctx)
+}
+
 func (s *Service) OperationsFunnel(ctx context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
 	if s.mockData {
 		return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil

@@ -334,7 +334,7 @@ func defaultInitConfig() Config {
 	return Config{
 		Defaults: DefaultsConfig{
 			OutputDir:       "./output",
-			Mode:            "fast",
+			Mode:            "best",
 			Publish:         true,
 			PPTXStylePreset: "tech-contrast",
 		},
@@ -696,7 +696,7 @@ func (a *App) runConfigStatus(cfg Config) error {
 	if _, err := fmt.Fprintf(a.Stdout, "Default output directory: %s\n", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(a.Stdout, "Default generation mode: %s\n", fallbackString(cfg.Defaults.Mode, "fast")); err != nil {
+	if _, err := fmt.Fprintf(a.Stdout, "Default generation mode: %s\n", fallbackString(cfg.Defaults.Mode, "best")); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Default runtime mode: %s\n", runtimeModeLabel(cfg.RuntimeModeOrDefault())); err != nil {
@@ -865,14 +865,14 @@ func (a *App) runConfigSetDefaults(cfg Config) error {
 	if cfg.Defaults.OutputDir, err = a.promptLine(reader, "Enter the default output directory", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
 		return err
 	}
-	modeChoice, err := a.promptChoice(reader, "Choose the default generation mode", []string{"fast", "best"})
+	modeChoice, err := a.promptChoice(reader, "Choose the default generation mode", []string{"best", "fast"})
 	if err != nil {
 		return err
 	}
 	if modeChoice == 2 {
-		cfg.Defaults.Mode = "best"
-	} else {
 		cfg.Defaults.Mode = "fast"
+	} else {
+		cfg.Defaults.Mode = "best"
 	}
 	cfg.Defaults.Publish, err = a.promptYesNo(reader, "Publish online preview by default after generation? (yes/no)", cfg.Defaults.Publish)
 	if err != nil {

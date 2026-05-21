@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Line, Pie } from '@ant-design/plots'
-import { Button, Empty, Typography } from 'antd'
-import { Activity, ShieldAlert, Waypoints } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Button, Checkbox, Empty, Typography } from 'antd'
+import { Activity, Download, ShieldAlert, Waypoints } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
-import type { OverviewBreakdownItem, OverviewUsageTrendPoint } from '../types'
+import { DataTable, MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
+import { buildFingerprintQualityCsv } from '../fingerprintQualityCsv'
+import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewUsageTrendPoint } from '../types'
 
 const guardrails = [
   'Admin sessions are issued only after company OAuth2 auth plus an exact allowlist match.',
@@ -15,14 +16,22 @@ const guardrails = [
 ]
 
 export default function DashboardPage() {
+  const [hideDefaultFiltered, setHideDefaultFiltered] = useState(true)
   const { data: overview } = useQuery({ queryKey: ['admin-overview'], queryFn: api.overview })
   const { data: funnel30d } = useQuery({ queryKey: ['admin-operations-funnel', '30d', 'dashboard'], queryFn: () => api.operationsFunnel('30d') })
+  const { data: fingerprintQuality } = useQuery({ queryKey: ['admin-fingerprint-quality'], queryFn: api.fingerprintQuality })
   const funnel = funnel30d ?? overview?.operations_funnel_30d
   const trendData = toTrendChartData(overview?.usage_trend ?? [])
   const hasTrendData = trendData.some((item) => item.value > 0)
   const resultData = positiveBreakdown(overview?.result_breakdown ?? [])
   const modeData = positiveBreakdown(overview?.mode_breakdown ?? [])
   const apiKeyStatusData = positiveBreakdown(overview?.api_key_status_breakdown ?? [])
+  const defaultFilteredBuckets = useMemo(() => new Set((fingerprintQuality?.summary ?? []).filter((item) => item.default_filtered).map((item) => item.bucket)), [fingerprintQuality?.summary])
+  const fingerprintRows = useMemo(() => {
+    const rows = fingerprintQuality?.rows ?? []
+    if (!hideDefaultFiltered) return rows
+    return rows.filter((row) => !defaultFilteredBuckets.has(row.bucket))
+  }, [defaultFilteredBuckets, fingerprintQuality?.rows, hideDefaultFiltered])
 
   return (
     <div className="space-y-8">
@@ -96,6 +105,68 @@ export default function DashboardPage() {
           </div>
         </Panel>
       </div>
+
+      <Panel>
+        <SectionHeading
+          eyebrow="Fingerprint quality"
+          title="Machine and CI fingerprint review"
+          body="Filter probable Docker, CI, and internal test fingerprints from the detailed device view while keeping every bucket visible in the summary."
+          action={(
+            <div className="flex flex-col items-start gap-3 md:items-end">
+              <Checkbox checked={hideDefaultFiltered} onChange={(event) => setHideDefaultFiltered(event.target.checked)}>
+                Hide default-filtered buckets
+              </Checkbox>
+              <Button icon={<Download size={16} />} onClick={() => exportFingerprintRows(fingerprintRows)} disabled={!fingerprintRows.length}>
+                Export CSV
+              </Button>
+            </div>
+          )}
+        />
+        <div data-testid="fingerprint-quality-summary" className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(fingerprintQuality?.summary ?? []).map((item) => (
+            <div key={item.bucket} className="admin-card-muted p-4">
+              <div className="flex items-start justify-between gap-3">
+                <Typography.Text strong>{item.bucket}</Typography.Text>
+                <Typography.Text type={item.default_filtered ? 'warning' : 'secondary'}>
+                  {item.default_filtered ? 'filtered by default' : 'kept by default'}
+                </Typography.Text>
+              </div>
+              <Typography.Paragraph className="!mb-3 !mt-2 text-sm" type="secondary">{item.reason}</Typography.Paragraph>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><Typography.Text type="secondary">Fingerprints</Typography.Text><div>{formatNumber(item.fingerprints)}</div></div>
+                <div><Typography.Text type="secondary">Events</Typography.Text><div>{formatNumber(item.events)}</div></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {fingerprintRows.length ? (
+          <DataTable
+            headers={['Bucket', 'Reason', 'Fingerprint', 'Prefix', 'First', 'Last', 'Events', 'Generate', 'Status', 'Blocked', 'User-bound', 'IP count', 'IPs', 'CLI versions', 'Runtime modes', 'Document types', 'User agents']}
+            rows={fingerprintRows.map((row) => [
+              row.bucket,
+              row.reason,
+              row.fingerprint_hash,
+              row.fingerprint_prefix,
+              formatTimestamp(row.first_at),
+              formatTimestamp(row.last_at),
+              formatNumber(row.events),
+              formatNumber(row.generate_events),
+              formatNumber(row.status_events),
+              formatNumber(row.blocked_events),
+              formatNumber(row.user_bound_events),
+              formatNumber(row.ip_count),
+              joinList(row.ips),
+              joinList(row.cli_versions),
+              joinList(row.runtime_modes),
+              joinList(row.document_types),
+              joinList(row.user_agents),
+            ])}
+            columns="fingerprint-quality"
+          />
+        ) : (
+          <Empty description="No fingerprint rows in the current filter" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+      </Panel>
 
       <Panel>
         <SectionHeading eyebrow="Guardrails" title="What operators should verify before changing state" />
@@ -174,6 +245,30 @@ function toTrendChartData(points: OverviewUsageTrendPoint[]) {
 
 function positiveBreakdown(items: OverviewBreakdownItem[]) {
   return items.filter((item) => item.value > 0)
+}
+
+function joinList(values: string[]) {
+  return values.length ? values.join('; ') : '--'
+}
+
+function formatTimestamp(value?: string) {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+function exportFingerprintRows(rows: FingerprintQualityRow[]) {
+  const csv = buildFingerprintQualityCsv(rows)
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `fingerprint-quality-${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function formatPercent(value?: number | null) {

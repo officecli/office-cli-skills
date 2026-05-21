@@ -2,11 +2,13 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +40,10 @@ type UsageEventFilter struct {
 	StartTime   *time.Time
 	EndTime     *time.Time
 }
+
+var fingerprintSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+const fingerprintQualityDistinctValueLimit = 25
 
 type schemaMigration struct {
 	Version   string    `gorm:"column:version;primaryKey"`
@@ -1515,6 +1521,369 @@ func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([
 	var events []model.UsageEvent
 	err := query.Order("created_at desc").Limit(200).Find(&events).Error
 	return events, err
+}
+
+type fingerprintQualityAggregate struct {
+	FingerprintHash string
+	FirstAt         fingerprintQualityTime
+	LastAt          fingerprintQualityTime
+	Events          int64
+	GenerateEvents  int64
+	StatusEvents    int64
+	BlockedEvents   int64
+	UserBoundEvents int64
+	IPCount         int64
+}
+
+type fingerprintQualityDistinctValue struct {
+	FingerprintHash string
+	Value           string
+}
+
+type fingerprintQualityTime struct {
+	time.Time
+}
+
+func (t *fingerprintQualityTime) Scan(value any) error {
+	switch v := value.(type) {
+	case nil:
+		t.Time = time.Time{}
+		return nil
+	case time.Time:
+		t.Time = v.UTC()
+		return nil
+	case string:
+		return t.scanString(v)
+	case []byte:
+		return t.scanString(string(v))
+	default:
+		return fmt.Errorf("unsupported fingerprint quality time value %T", value)
+	}
+}
+
+func (t fingerprintQualityTime) Value() (driver.Value, error) {
+	return t.Time, nil
+}
+
+func (t *fingerprintQualityTime) scanString(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		t.Time = time.Time{}
+		return nil
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05",
+	} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			t.Time = parsed.UTC()
+			return nil
+		}
+	}
+	return fmt.Errorf("parse fingerprint quality time %q", value)
+}
+
+func (s *Store) FingerprintQuality(ctx context.Context) (*model.FingerprintQuality, error) {
+	var aggregates []fingerprintQualityAggregate
+	if err := s.db.WithContext(ctx).
+		Model(&model.UsageEvent{}).
+		Select(`
+			fingerprint_hash,
+			MIN(created_at) AS first_at,
+			MAX(created_at) AS last_at,
+			COUNT(*) AS events,
+			SUM(CASE WHEN action = ? THEN 1 ELSE 0 END) AS generate_events,
+			SUM(CASE WHEN action = ? THEN 1 ELSE 0 END) AS status_events,
+			SUM(CASE WHEN result = ? THEN 1 ELSE 0 END) AS blocked_events,
+			SUM(CASE WHEN user_id IS NOT NULL AND user_id <> 0 THEN 1 ELSE 0 END) AS user_bound_events,
+			COUNT(DISTINCT NULLIF(TRIM(COALESCE(client_ip, '')), '')) AS ip_count
+		`, model.UsageActionGenerate, model.UsageActionStatus, model.UsageResultBlocked).
+		Group("fingerprint_hash").
+		Find(&aggregates).Error; err != nil {
+		return nil, err
+	}
+
+	distinctValues := map[string]map[string][]string{}
+	for _, column := range []string{"client_ip", "cli_version", "runtime_mode", "document_type", "user_agent"} {
+		values, err := s.fingerprintQualityDistinctValues(ctx, column)
+		if err != nil {
+			return nil, err
+		}
+		distinctValues[column] = values
+	}
+
+	rows := make([]model.FingerprintQualityRow, 0, len(aggregates))
+	summary := map[string]*model.FingerprintQualityBucketSummary{}
+	for _, bucket := range fingerprintQualityBuckets() {
+		summary[bucket] = &model.FingerprintQualityBucketSummary{
+			Bucket:          bucket,
+			Reason:          fingerprintQualityBucketReason(bucket),
+			DefaultFiltered: defaultFilterFingerprintQualityBucket(bucket),
+		}
+	}
+	for _, aggregate := range aggregates {
+		row := model.FingerprintQualityRow{
+			FingerprintHash:   aggregate.FingerprintHash,
+			FingerprintPrefix: fingerprintPrefix(aggregate.FingerprintHash),
+			FirstAt:           aggregate.FirstAt.Time,
+			LastAt:            aggregate.LastAt.Time,
+			Events:            aggregate.Events,
+			GenerateEvents:    aggregate.GenerateEvents,
+			StatusEvents:      aggregate.StatusEvents,
+			BlockedEvents:     aggregate.BlockedEvents,
+			UserBoundEvents:   aggregate.UserBoundEvents,
+			IPCount:           aggregate.IPCount,
+			IPs:               distinctValues["client_ip"][aggregate.FingerprintHash],
+			CLIVersions:       distinctValues["cli_version"][aggregate.FingerprintHash],
+			RuntimeModes:      distinctValues["runtime_mode"][aggregate.FingerprintHash],
+			DocumentTypes:     distinctValues["document_type"][aggregate.FingerprintHash],
+			UserAgents:        distinctValues["user_agent"][aggregate.FingerprintHash],
+		}
+		row.Bucket, row.Reason = classifyFingerprintQuality(row)
+		rows = append(rows, row)
+
+		item := summary[row.Bucket]
+		if item == nil {
+			item = &model.FingerprintQualityBucketSummary{
+				Bucket:          row.Bucket,
+				Reason:          fingerprintQualityBucketReason(row.Bucket),
+				DefaultFiltered: defaultFilterFingerprintQualityBucket(row.Bucket),
+			}
+			summary[row.Bucket] = item
+		}
+		item.Fingerprints++
+		item.Events += row.Events
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		leftRank := fingerprintQualityBucketRank(rows[i].Bucket)
+		rightRank := fingerprintQualityBucketRank(rows[j].Bucket)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return rows[i].FingerprintHash < rows[j].FingerprintHash
+	})
+
+	summaryRows := make([]model.FingerprintQualityBucketSummary, 0, len(summary))
+	for _, bucket := range fingerprintQualityBuckets() {
+		if item := summary[bucket]; item != nil {
+			summaryRows = append(summaryRows, *item)
+		}
+	}
+
+	return &model.FingerprintQuality{Summary: summaryRows, Rows: rows}, nil
+}
+
+func (s *Store) fingerprintQualityDistinctValues(ctx context.Context, column string) (map[string][]string, error) {
+	if !isFingerprintQualityDistinctColumn(column) {
+		return nil, fmt.Errorf("unsupported fingerprint quality distinct column %q", column)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT fingerprint_hash, value
+		FROM (
+			SELECT fingerprint_hash, value, ROW_NUMBER() OVER (PARTITION BY fingerprint_hash ORDER BY value) AS rn
+			FROM (
+				SELECT DISTINCT fingerprint_hash, TRIM(%s) AS value
+				FROM usage_events
+				WHERE TRIM(COALESCE(%s, '')) <> ''
+			) distinct_values
+		) ranked_values
+		WHERE rn <= ?
+		ORDER BY fingerprint_hash, value
+	`, column, column)
+
+	var pairs []fingerprintQualityDistinctValue
+	if err := s.db.WithContext(ctx).Raw(query, fingerprintQualityDistinctValueLimit).Scan(&pairs).Error; err != nil {
+		return nil, err
+	}
+	valuesByFingerprint := map[string][]string{}
+	for _, pair := range pairs {
+		valuesByFingerprint[pair.FingerprintHash] = append(valuesByFingerprint[pair.FingerprintHash], pair.Value)
+	}
+	return valuesByFingerprint, nil
+}
+
+func isFingerprintQualityDistinctColumn(column string) bool {
+	switch column {
+	case "client_ip", "cli_version", "runtime_mode", "document_type", "user_agent":
+		return true
+	default:
+		return false
+	}
+}
+
+func classifyFingerprintQuality(row model.FingerprintQualityRow) (string, string) {
+	if anyNormalizedContains(row.UserAgents, "officecli-production-inspection/1.0") {
+		return "internal_inspection", "production inspection agent"
+	}
+	if !fingerprintSHA256Pattern.MatchString(strings.ToLower(strings.TrimSpace(row.FingerprintHash))) {
+		return "test_fake_fingerprint", "empty or non sha256 fingerprint hash"
+	}
+	if anyNormalizedHasPrefix(row.CLIVersions, "current-") {
+		return "likely_docker_ci_current_build", "cli version uses current-* build marker"
+	}
+	if hasExactNormalized(row.CLIVersions, "dev") && hasExactNormalized(row.RuntimeModes, "hosted") && hasAllDocumentTypes(row.DocumentTypes, "docx", "xlsx") && len(normalizedSet(row.DocumentTypes)) >= 2 {
+		reason := "dev cli with hosted runtime and docx/xlsx matrix"
+		extras := []string{}
+		if hasAnyDocumentType(row.DocumentTypes, "pptx", "report", "img") {
+			extras = append(extras, "extra document profiles")
+		}
+		if row.GenerateEvents > 0 && row.StatusEvents > 0 {
+			extras = append(extras, "generate/status mix")
+		}
+		if len(extras) > 0 {
+			reason += "; " + strings.Join(extras, "; ")
+		}
+		return "likely_docker_dev_hosted_matrix", reason
+	}
+	if anyInternalTestVersion(row.CLIVersions) {
+		return "likely_internal_test_dev_latest_local", "dev/latest/local cli version marker"
+	}
+	return "candidate_real_or_unknown", "no machine/test signals matched"
+}
+
+func defaultFilterFingerprintQualityBucket(bucket string) bool {
+	switch bucket {
+	case "internal_inspection", "test_fake_fingerprint", "likely_docker_ci_current_build", "likely_docker_dev_hosted_matrix", "likely_internal_test_dev_latest_local":
+		return true
+	default:
+		return false
+	}
+}
+
+func fingerprintQualityBuckets() []string {
+	return []string{
+		"internal_inspection",
+		"test_fake_fingerprint",
+		"likely_docker_ci_current_build",
+		"likely_docker_dev_hosted_matrix",
+		"likely_internal_test_dev_latest_local",
+		"candidate_real_or_unknown",
+	}
+}
+
+func fingerprintQualityBucketReason(bucket string) string {
+	switch bucket {
+	case "internal_inspection":
+		return "production inspection agent"
+	case "test_fake_fingerprint":
+		return "empty or non sha256 fingerprint hash"
+	case "likely_docker_ci_current_build":
+		return "cli version uses current-* build marker"
+	case "likely_docker_dev_hosted_matrix":
+		return "dev cli with hosted runtime and docx/xlsx matrix"
+	case "likely_internal_test_dev_latest_local":
+		return "dev/latest/local cli version marker"
+	default:
+		return "no machine/test signals matched"
+	}
+}
+
+func fingerprintQualityBucketRank(bucket string) int {
+	switch bucket {
+	case "internal_inspection":
+		return 0
+	case "test_fake_fingerprint":
+		return 1
+	case "likely_docker_ci_current_build":
+		return 2
+	case "likely_docker_dev_hosted_matrix":
+		return 3
+	case "likely_internal_test_dev_latest_local":
+		return 4
+	case "candidate_real_or_unknown":
+		return 5
+	default:
+		return 99
+	}
+}
+
+func fingerprintPrefix(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:12]
+}
+
+func normalized(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func normalizedSet(values []string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, value := range values {
+		if item := normalized(value); item != "" {
+			out[item] = struct{}{}
+		}
+	}
+	return out
+}
+
+func hasExactNormalized(values []string, target string) bool {
+	target = normalized(target)
+	for _, value := range values {
+		if normalized(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func anyNormalizedContains(values []string, needle string) bool {
+	needle = normalized(needle)
+	for _, value := range values {
+		if strings.Contains(normalized(value), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyNormalizedHasPrefix(values []string, prefix string) bool {
+	prefix = normalized(prefix)
+	for _, value := range values {
+		if strings.HasPrefix(normalized(value), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyInternalTestVersion(values []string) bool {
+	for _, value := range values {
+		item := normalized(value)
+		if item == "dev" || strings.HasPrefix(item, "latest-") || strings.HasPrefix(item, "local-") || strings.HasSuffix(item, "-local-smoke") {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAllDocumentTypes(values []string, required ...string) bool {
+	set := normalizedSet(values)
+	for _, value := range required {
+		if _, ok := set[normalized(value)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func hasAnyDocumentType(values []string, candidates ...string) bool {
+	set := normalizedSet(values)
+	for _, value := range candidates {
+		if _, ok := set[normalized(value)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) GetAdminUserPreference(ctx context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error) {

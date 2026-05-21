@@ -110,7 +110,7 @@ func WriteDefaultConfig(path string) (string, error) {
 	defaultConfig := Config{
 		Defaults: DefaultsConfig{
 			OutputDir:       "./output",
-			Mode:            "fast",
+			Mode:            "best",
 			Publish:         true,
 			PPTXStylePreset: "tech-contrast",
 		},

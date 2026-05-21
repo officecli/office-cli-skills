@@ -55,22 +55,23 @@ func (f *fakeAuthRouteService) ResolveSession(cookieValue string) (*auth.Session
 }
 
 type fakeAdminRouteService struct {
-	loginCookie  string
-	logoutCookie string
-	sessionEmail string
-	sessionName  string
-	preferences  map[string]string
-	loginURL     string
-	mockEmail    string
-	mockName     string
-	mockCookie   string
-	callbackUser *admin.AdminIdentity
-	callbackRaw  string
-	callbackTo   string
-	callbackErr  error
-	plaintext    string
-	plaintextErr error
-	overview     *model.OverviewStats
+	loginCookie        string
+	logoutCookie       string
+	sessionEmail       string
+	sessionName        string
+	preferences        map[string]string
+	loginURL           string
+	mockEmail          string
+	mockName           string
+	mockCookie         string
+	callbackUser       *admin.AdminIdentity
+	callbackRaw        string
+	callbackTo         string
+	callbackErr        error
+	plaintext          string
+	plaintextErr       error
+	overview           *model.OverviewStats
+	fingerprintQuality *model.FingerprintQuality
 }
 
 func (f *fakeAdminRouteService) ResolveSession(cookieValue string) (string, error) {
@@ -108,6 +109,12 @@ func (f *fakeAdminRouteService) Overview(_ context.Context) (*model.OverviewStat
 		return f.overview, nil
 	}
 	return &model.OverviewStats{}, nil
+}
+func (f *fakeAdminRouteService) FingerprintQuality(_ context.Context) (*model.FingerprintQuality, error) {
+	if f.fingerprintQuality != nil {
+		return f.fingerprintQuality, nil
+	}
+	return &model.FingerprintQuality{}, nil
 }
 func (f *fakeAdminRouteService) OperationsFunnel(_ context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
 	return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil
@@ -239,6 +246,50 @@ func TestAdminOverviewRouteReturnsChartData(t *testing.T) {
 	require.EqualValues(t, 4, body.Data.ResultBreakdown[0].Value)
 	require.EqualValues(t, 2, body.Data.ModeBreakdown[0].Value)
 	require.EqualValues(t, 7, body.Data.APIKeyStatusBreakdown[0].Value)
+}
+
+func TestAdminFingerprintQualityRouteRequiresAdminAndReturnsEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{
+		fingerprintQuality: &model.FingerprintQuality{
+			Summary: []model.FingerprintQualityBucketSummary{{
+				Bucket:          "candidate_real_or_unknown",
+				Reason:          "no machine/test signals matched",
+				Fingerprints:    1,
+				Events:          2,
+				DefaultFiltered: false,
+			}},
+			Rows: []model.FingerprintQualityRow{{
+				Bucket:            "candidate_real_or_unknown",
+				Reason:            "no machine/test signals matched",
+				FingerprintHash:   strings.Repeat("a", 64),
+				FingerprintPrefix: strings.Repeat("a", 12),
+				Events:            2,
+			}},
+		},
+	}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/fingerprint-quality", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/admin/fingerprint-quality", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var body struct {
+		Data model.FingerprintQuality `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Data.Summary, 1)
+	require.Len(t, body.Data.Rows, 1)
+	require.Equal(t, "candidate_real_or_unknown", body.Data.Rows[0].Bucket)
 }
 
 func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T) {

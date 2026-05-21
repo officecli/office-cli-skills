@@ -2,6 +2,7 @@ package sqlstore
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
 	"github.com/officecli/officecli-internal/platform/internal/model"
@@ -20,6 +22,20 @@ import (
 func strPtr(value string) *string { return &value }
 
 func timePtr(value time.Time) *time.Time { return &value }
+
+type queryCaptureLogger struct {
+	logger.Interface
+	statements []string
+}
+
+func (l *queryCaptureLogger) LogMode(level logger.LogLevel) logger.Interface {
+	return l
+}
+
+func (l *queryCaptureLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	sql, _ := fc()
+	l.statements = append(l.statements, sql)
+}
 
 func TestPostgresMigrationVersionsAreUnique(t *testing.T) {
 	migrationPaths, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "postgres", "*.sql"))
@@ -119,6 +135,223 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	events, err = store.ListUsageEvents(context.Background(), UsageEventFilter{ClientIP: "192.0.2"})
 	require.NoError(t, err)
 	require.Empty(t, events)
+}
+
+func TestFingerprintQualityClassifiesAndAggregatesUsageEvents(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:fingerprint_quality?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	userID := uint64(42)
+	inspectionUA := "officecli-production-inspection/1.0"
+	dev := " dev "
+	current := "current-20260520"
+	hosted := " hosted "
+	docx := "docx"
+	xlsx := " xlsx "
+	pptx := "pptx"
+	normalVersion := "0.2.65"
+	localSmoke := "0.2.65-local-smoke"
+	candidateHash := strings.Repeat("a", 64)
+	matrixHash := strings.Repeat("b", 64)
+	currentHash := strings.Repeat("c", 64)
+	devHash := strings.Repeat("d", 64)
+	inspectionHash := strings.Repeat("e", 64)
+
+	require.NoError(t, db.Create(&[]model.UsageEvent{
+		{FingerprintHash: inspectionHash, Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, UserAgent: &inspectionUA, CreatedAt: now},
+		{FingerprintHash: "", Mode: model.UsageModeFree, Action: model.UsageActionStatus, Result: model.UsageResultBlocked, CreatedAt: now.Add(time.Minute)},
+		{FingerprintHash: "not-a-sha256", Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: now.Add(2 * time.Minute)},
+		{FingerprintHash: currentHash, Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CLIVersion: &current, CreatedAt: now.Add(3 * time.Minute)},
+		{FingerprintHash: matrixHash, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CLIVersion: &dev, RuntimeMode: &hosted, DocumentType: &xlsx, ClientIP: strPtr(" 10.0.0.2 "), UserID: &userID, CreatedAt: now.Add(4 * time.Minute)},
+		{FingerprintHash: matrixHash, Mode: model.UsageModeHosted, Action: model.UsageActionStatus, Result: model.UsageResultBlocked, CLIVersion: &dev, RuntimeMode: &hosted, DocumentType: &docx, ClientIP: strPtr("10.0.0.1"), UserID: &userID, CreatedAt: now.Add(5 * time.Minute)},
+		{FingerprintHash: matrixHash, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CLIVersion: &dev, RuntimeMode: &hosted, DocumentType: &pptx, ClientIP: strPtr("10.0.0.1"), CreatedAt: now.Add(6 * time.Minute)},
+		{FingerprintHash: devHash, Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CLIVersion: &localSmoke, CreatedAt: now.Add(7 * time.Minute)},
+		{FingerprintHash: candidateHash, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CLIVersion: &normalVersion, UserAgent: strPtr("Go-http-client/2.0"), CreatedAt: now.Add(8 * time.Minute)},
+	}).Error)
+
+	quality, err := store.FingerprintQuality(context.Background())
+	require.NoError(t, err)
+	require.Len(t, quality.Rows, 7)
+
+	byHash := map[string]model.FingerprintQualityRow{}
+	for _, row := range quality.Rows {
+		byHash[row.FingerprintHash] = row
+	}
+
+	require.Equal(t, "internal_inspection", byHash[inspectionHash].Bucket)
+	require.Equal(t, "test_fake_fingerprint", byHash[""].Bucket)
+	require.Equal(t, "test_fake_fingerprint", byHash["not-a-sha256"].Bucket)
+	require.Equal(t, "likely_docker_ci_current_build", byHash[currentHash].Bucket)
+	require.Equal(t, "likely_docker_dev_hosted_matrix", byHash[matrixHash].Bucket)
+	require.Equal(t, "likely_internal_test_dev_latest_local", byHash[devHash].Bucket)
+	require.Equal(t, "candidate_real_or_unknown", byHash[candidateHash].Bucket)
+
+	matrix := byHash[matrixHash]
+	require.EqualValues(t, 3, matrix.Events)
+	require.EqualValues(t, 2, matrix.GenerateEvents)
+	require.EqualValues(t, 1, matrix.StatusEvents)
+	require.EqualValues(t, 1, matrix.BlockedEvents)
+	require.EqualValues(t, 2, matrix.UserBoundEvents)
+	require.EqualValues(t, 2, matrix.IPCount)
+	require.Equal(t, []string{"10.0.0.1", "10.0.0.2"}, matrix.IPs)
+	require.Equal(t, []string{"dev"}, matrix.CLIVersions)
+	require.Equal(t, []string{"hosted"}, matrix.RuntimeModes)
+	require.Equal(t, []string{"docx", "pptx", "xlsx"}, matrix.DocumentTypes)
+	require.Equal(t, now.Add(4*time.Minute), matrix.FirstAt)
+	require.Equal(t, now.Add(6*time.Minute), matrix.LastAt)
+
+	summary := map[string]model.FingerprintQualityBucketSummary{}
+	for _, item := range quality.Summary {
+		summary[item.Bucket] = item
+	}
+	require.EqualValues(t, 1, summary["internal_inspection"].Fingerprints)
+	require.EqualValues(t, 1, summary["internal_inspection"].Events)
+	require.True(t, summary["internal_inspection"].DefaultFiltered)
+	require.EqualValues(t, 2, summary["test_fake_fingerprint"].Fingerprints)
+	require.EqualValues(t, 2, summary["test_fake_fingerprint"].Events)
+	require.EqualValues(t, 1, summary["candidate_real_or_unknown"].Fingerprints)
+	require.EqualValues(t, 1, summary["candidate_real_or_unknown"].Events)
+	require.False(t, summary["candidate_real_or_unknown"].DefaultFiltered)
+}
+
+func TestFingerprintQualityUsesFingerprintLevelAggregationAndCapsDistinctValues(t *testing.T) {
+	capture := &queryCaptureLogger{Interface: logger.Default.LogMode(logger.Info)}
+	db, err := gorm.Open(sqlite.Open("file:fingerprint_quality_grouped?mode=memory&cache=shared"), &gorm.Config{Logger: capture})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	fingerprint := strings.Repeat("a", 64)
+	otherFingerprint := strings.Repeat("b", 64)
+	events := make([]model.UsageEvent, 0, fingerprintQualityDistinctValueLimit+15)
+	for i := 0; i < fingerprintQualityDistinctValueLimit+15; i++ {
+		ip := fmt.Sprintf("10.0.0.%02d", i)
+		cliVersion := fmt.Sprintf("0.2.%02d", i)
+		runtimeMode := fmt.Sprintf("runtime-%02d", i)
+		documentType := fmt.Sprintf("doc-%02d", i)
+		userAgent := fmt.Sprintf("agent-%02d", i)
+		events = append(events, model.UsageEvent{
+			FingerprintHash: fingerprint,
+			Mode:            model.UsageModePaid,
+			Action:          model.UsageActionGenerate,
+			Result:          model.UsageResultAllowed,
+			ClientIP:        &ip,
+			CLIVersion:      &cliVersion,
+			RuntimeMode:     &runtimeMode,
+			DocumentType:    &documentType,
+			UserAgent:       &userAgent,
+			CreatedAt:       now.Add(time.Duration(i) * time.Minute),
+		})
+	}
+	events = append(events, model.UsageEvent{
+		FingerprintHash: otherFingerprint,
+		Mode:            model.UsageModeFree,
+		Action:          model.UsageActionStatus,
+		Result:          model.UsageResultBlocked,
+		CreatedAt:       now.Add(2 * time.Hour),
+	})
+	require.NoError(t, db.Create(&events).Error)
+
+	capture.statements = nil
+	quality, err := store.FingerprintQuality(context.Background())
+	require.NoError(t, err)
+	require.Len(t, quality.Rows, 2)
+	require.Len(t, quality.Summary, 6)
+
+	byHash := map[string]model.FingerprintQualityRow{}
+	for _, row := range quality.Rows {
+		byHash[row.FingerprintHash] = row
+	}
+	row := byHash[fingerprint]
+	require.EqualValues(t, fingerprintQualityDistinctValueLimit+15, row.Events)
+	require.EqualValues(t, fingerprintQualityDistinctValueLimit+15, row.IPCount)
+	require.Equal(t, now, row.FirstAt)
+	require.Equal(t, now.Add(time.Duration(fingerprintQualityDistinctValueLimit+14)*time.Minute), row.LastAt)
+	require.Len(t, row.IPs, fingerprintQualityDistinctValueLimit)
+	require.Len(t, row.CLIVersions, fingerprintQualityDistinctValueLimit)
+	require.Len(t, row.RuntimeModes, fingerprintQualityDistinctValueLimit)
+	require.Len(t, row.DocumentTypes, fingerprintQualityDistinctValueLimit)
+	require.Len(t, row.UserAgents, fingerprintQualityDistinctValueLimit)
+
+	sqlLog := strings.ToLower(strings.Join(capture.statements, "\n"))
+	require.Contains(t, sqlLog, "group by")
+	require.Contains(t, sqlLog, "fingerprint_hash")
+	require.NotContains(t, sqlLog, "select fingerprint_hash, created_at, action, result, user_id, client_ip, cli_version, runtime_mode, document_type, user_agent")
+}
+
+func TestClassifyFingerprintQualityPriorityAndVersionRules(t *testing.T) {
+	valid := strings.Repeat("f", 64)
+	cases := []struct {
+		name   string
+		row    model.FingerprintQualityRow
+		bucket string
+	}{
+		{
+			name: "inspection wins over invalid fingerprint",
+			row: model.FingerprintQualityRow{
+				FingerprintHash: "invalid",
+				UserAgents:      []string{" officecli-production-inspection/1.0 "},
+				CLIVersions:     []string{"current-20260520"},
+			},
+			bucket: "internal_inspection",
+		},
+		{
+			name: "current build wins over docker dev hosted matrix",
+			row: model.FingerprintQualityRow{
+				FingerprintHash: valid,
+				CLIVersions:     []string{"dev", "current-20260520"},
+				RuntimeModes:    []string{"hosted"},
+				DocumentTypes:   []string{"docx", "xlsx"},
+			},
+			bucket: "likely_docker_ci_current_build",
+		},
+		{
+			name:   "exact dev matches internal test bucket",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"dev"}},
+			bucket: "likely_internal_test_dev_latest_local",
+		},
+		{
+			name:   "latest prefix matches internal test bucket",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"latest-20260520"}},
+			bucket: "likely_internal_test_dev_latest_local",
+		},
+		{
+			name:   "local prefix matches internal test bucket",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"local-smoke"}},
+			bucket: "likely_internal_test_dev_latest_local",
+		},
+		{
+			name:   "local smoke suffix matches internal test bucket",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"0.2.65-local-smoke"}},
+			bucket: "likely_internal_test_dev_latest_local",
+		},
+		{
+			name:   "dev is exact and does not match preview-devops",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"preview-devops"}},
+			bucket: "candidate_real_or_unknown",
+		},
+		{
+			name:   "dev is exact and does not match nodev",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, CLIVersions: []string{"nodev"}},
+			bucket: "candidate_real_or_unknown",
+		},
+		{
+			name:   "go http client alone does not match test buckets",
+			row:    model.FingerprintQualityRow{FingerprintHash: valid, UserAgents: []string{"Go-http-client/2.0"}},
+			bucket: "candidate_real_or_unknown",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bucket, _ := classifyFingerprintQuality(tc.row)
+			require.Equal(t, tc.bucket, bucket)
+		})
+	}
 }
 
 func TestOperationsFunnelUsesWindowedOperationalAndFactTables(t *testing.T) {

@@ -257,13 +257,16 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		mode = strings.TrimSpace(cfg.Defaults.Mode)
 	}
 	if mode == "" {
-		mode = "fast"
+		mode = "best"
 	}
 	mode = strings.ToLower(mode)
 	switch mode {
 	case "fast", "best":
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported mode: %s", mode)
+	}
+	if mode == "best" && !req.Interactive && !modeSpecified {
+		mode = "fast"
 	}
 	if mode == "best" && !req.Interactive {
 		return GenerateJob{}, fmt.Errorf("--mode best is not supported when interactive=false")

@@ -660,6 +660,39 @@ type OverviewBreakdownItem struct {
 	Value int64  `json:"value"`
 }
 
+type FingerprintQuality struct {
+	Summary []FingerprintQualityBucketSummary `json:"summary"`
+	Rows    []FingerprintQualityRow           `json:"rows"`
+}
+
+type FingerprintQualityBucketSummary struct {
+	Bucket          string `json:"bucket"`
+	Reason          string `json:"reason"`
+	Fingerprints    int64  `json:"fingerprints"`
+	Events          int64  `json:"events"`
+	DefaultFiltered bool   `json:"default_filtered"`
+}
+
+type FingerprintQualityRow struct {
+	Bucket            string    `json:"bucket"`
+	Reason            string    `json:"reason"`
+	FingerprintHash   string    `json:"fingerprint_hash"`
+	FingerprintPrefix string    `json:"fingerprint_prefix"`
+	FirstAt           time.Time `json:"first_at"`
+	LastAt            time.Time `json:"last_at"`
+	Events            int64     `json:"events"`
+	GenerateEvents    int64     `json:"generate_events"`
+	StatusEvents      int64     `json:"status_events"`
+	BlockedEvents     int64     `json:"blocked_events"`
+	UserBoundEvents   int64     `json:"user_bound_events"`
+	IPCount           int64     `json:"ip_count"`
+	IPs               []string  `json:"ips"`
+	CLIVersions       []string  `json:"cli_versions"`
+	RuntimeModes      []string  `json:"runtime_modes"`
+	DocumentTypes     []string  `json:"document_types"`
+	UserAgents        []string  `json:"user_agents"`
+}
+
 type OperationsFunnel struct {
 	WindowStart              time.Time                `json:"window_start"`
 	WindowEnd                time.Time                `json:"window_end"`

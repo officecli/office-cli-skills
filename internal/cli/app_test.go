@@ -3159,7 +3159,7 @@ func TestAppRun_ConfigSetDefaultsWritesConfig(t *testing.T) {
 	t.Setenv("OFFICE_CLI_CONFIG", configPath)
 
 	var stdout bytes.Buffer
-	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("./dist\n2\nyes\n"))
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBufferString("./dist\n1\nyes\n"))
 
 	if err := app.Run(t.Context(), []string{"config", "set-defaults"}); err != nil {
 		t.Fatalf("Run: %v", err)

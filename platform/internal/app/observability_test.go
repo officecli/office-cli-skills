@@ -57,6 +57,9 @@ func (fakeAdminRouteFailureService) Logout(_ context.Context, rawCookie string) 
 func (fakeAdminRouteFailureService) Overview(_ context.Context) (*model.OverviewStats, error) {
 	return &model.OverviewStats{}, nil
 }
+func (fakeAdminRouteFailureService) FingerprintQuality(_ context.Context) (*model.FingerprintQuality, error) {
+	return &model.FingerprintQuality{}, nil
+}
 func (fakeAdminRouteFailureService) OperationsFunnel(_ context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error) {
 	return &model.OperationsFunnel{WindowStart: windowStart, WindowEnd: now}, nil
 }

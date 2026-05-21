@@ -92,6 +92,39 @@ export interface UsageEvent {
   document_type?: string
 }
 
+export interface FingerprintQuality {
+  summary: FingerprintQualityBucketSummary[]
+  rows: FingerprintQualityRow[]
+}
+
+export interface FingerprintQualityBucketSummary {
+  bucket: string
+  reason: string
+  fingerprints: number
+  events: number
+  default_filtered: boolean
+}
+
+export interface FingerprintQualityRow {
+  bucket: string
+  reason: string
+  fingerprint_hash: string
+  fingerprint_prefix: string
+  first_at: string
+  last_at: string
+  events: number
+  generate_events: number
+  status_events: number
+  blocked_events: number
+  user_bound_events: number
+  ip_count: number
+  ips: string[]
+  cli_versions: string[]
+  runtime_modes: string[]
+  document_types: string[]
+  user_agents: string[]
+}
+
 export interface User {
   id: number
   email: string

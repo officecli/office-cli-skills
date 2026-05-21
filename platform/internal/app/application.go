@@ -75,6 +75,7 @@ type adminRouteService interface {
 	CurrentIdentity(ctx context.Context, rawCookie string) (*admin.AdminIdentity, error)
 	Logout(ctx context.Context, rawCookie string) error
 	Overview(ctx context.Context) (*model.OverviewStats, error)
+	FingerprintQuality(ctx context.Context) (*model.FingerprintQuality, error)
 	OperationsFunnel(ctx context.Context, windowStart, now time.Time) (*model.OperationsFunnel, error)
 	ListAPIKeys(ctx context.Context, ownerUserID *uint64) ([]model.APIKey, error)
 	GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error)
@@ -945,6 +946,14 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	protected.Use(httpapi.RequireAdmin(adminSvc.ResolveSession, "cop_admin_session"))
 	protected.GET("/overview", func(c *gin.Context) {
 		data, err := adminSvc.Overview(c.Request.Context())
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/fingerprint-quality", func(c *gin.Context) {
+		data, err := adminSvc.FingerprintQuality(c.Request.Context())
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
