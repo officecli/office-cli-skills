@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.71 - 2026-05-21
+
+### Fixed
+
+- Fix preflight misidentifying session-logged-in users as anonymous, causing `officecli new img` and other generation commands to fail with a misleading "account login or API key required" error.
+- Handle whoami network failures gracefully by distinguishing network errors from genuinely invalid sessions, preventing transient connectivity issues from blocking authenticated users.
+- Make skill bundle refresh non-fatal when the officecli binary is already installed, so transient GitHub connectivity issues no longer block generation.
+- Add `OFFICECLI_SKIP_SKILL_PREFLIGHT=1` hint to network-related preflight error messages.
+
 ## 0.2.70 - 2026-05-21
 
 ### Changed
