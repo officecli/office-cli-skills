@@ -28,6 +28,9 @@ if officecli_path="$(resolve_officecli_path 2>/dev/null)"; then
   check_publish_ready "${status_output}" && publish_ready=true
   whoami_output="$(run_whoami "${officecli_path}")"
   auth_mode="$(parse_auth_mode "${whoami_output}")"
+  if should_require_license_api_key && [[ "${license_ready}" != true ]] && check_authenticated "${auth_mode}"; then
+    [[ "${status_output}" == *"Access checks enabled: true"* ]] && license_ready=true
+  fi
 else
   missing_items+=("officecli_binary")
 fi
