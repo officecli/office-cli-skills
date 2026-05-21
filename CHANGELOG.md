@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.70 - 2026-05-21
+
+### Changed
+
+- Anonymous users running image generation are now guided to `officecli login` instead of being prompted for a raw API key.
+- Environment check and fix scripts detect authentication mode via `officecli whoami` and surface login recommendations when anonymous.
+- Skill documentation adds an Authentication section covering login, whoami, doctor, and set-key commands.
+- Preflight error messages include actionable login guidance for the `account_login` missing item.
+
 ## 0.2.69 - 2026-05-20
 
 ### Fixed
