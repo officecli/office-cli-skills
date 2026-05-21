@@ -35,10 +35,14 @@ fail_fix() {
 }
 
 if ! refresh_codex_officecli_skill; then
-  if [[ -z "${OFFICECLI_REFRESH_SKILL_COMMAND:-}" ]] && ! command -v curl >/dev/null 2>&1; then
-    fixable=false
+  if resolve_officecli_path >/dev/null 2>&1; then
+    echo "warning: failed to refresh officecli skill bundle, continuing with existing install" >&2
+  else
+    if [[ -z "${OFFICECLI_REFRESH_SKILL_COMMAND:-}" ]] && ! command -v curl >/dev/null 2>&1; then
+      fixable=false
+    fi
+    fail_fix "failed to refresh officecli skill bundle"
   fi
-  fail_fix "failed to refresh officecli skill bundle"
 fi
 
 export PATH="${HOME}/.local/bin:${PATH}"

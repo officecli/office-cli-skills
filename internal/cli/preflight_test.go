@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -140,5 +141,49 @@ printf '%s\n' '{"status":"ready","missing_items":[]}'
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("expected ready preflight output to be suppressed, stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestPreflightStatusError_BlockedRefreshIncludesHint(t *testing.T) {
+	err := &preflightStatusError{
+		payload: preflightStatusPayload{
+			Status:        "blocked",
+			FailureReason: "failed to refresh officecli skill bundle",
+		},
+	}
+	msg := err.Error()
+	if expected := "officecli setup failed: failed to refresh officecli skill bundle"; !strings.Contains(msg, expected) {
+		t.Fatalf("expected %q in error, got: %s", expected, msg)
+	}
+	if !strings.Contains(msg, "OFFICECLI_SKIP_SKILL_PREFLIGHT=1") {
+		t.Fatalf("expected skip hint in error, got: %s", msg)
+	}
+}
+
+func TestPreflightStatusError_BlockedLoginNoHint(t *testing.T) {
+	err := &preflightStatusError{
+		payload: preflightStatusPayload{
+			Status:        "blocked",
+			FailureReason: "account login or API key required for image generation",
+			MissingItems:  []string{"account_login"},
+		},
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "OFFICECLI_SKIP_SKILL_PREFLIGHT=1") {
+		t.Fatalf("should not show skip hint for auth failure, got: %s", msg)
+	}
+}
+
+func TestPreflightStatusError_BlockedInstallIncludesHint(t *testing.T) {
+	err := &preflightStatusError{
+		payload: preflightStatusPayload{
+			Status:        "blocked",
+			FailureReason: "failed to install or refresh officecli binary",
+			MissingItems:  []string{"officecli_binary"},
+		},
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "OFFICECLI_SKIP_SKILL_PREFLIGHT=1") {
+		t.Fatalf("expected skip hint for install failure, got: %s", msg)
 	}
 }

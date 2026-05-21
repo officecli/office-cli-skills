@@ -118,6 +118,7 @@ run_whoami() {
 parse_auth_mode() {
   local whoami_output="$1"
   case "${whoami_output}" in
+    *"logged in"*) printf 'session' ;;
     *"account"*|*"Account"*) printf 'account' ;;
     *"api key"*|*"API key"*|*"api_key"*) printf 'api_key' ;;
     *) printf 'anonymous' ;;

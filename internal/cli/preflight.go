@@ -99,16 +99,20 @@ func (e *preflightStatusError) Error() string {
 		}
 		return "officecli setup is incomplete"
 	case "blocked":
+		var msg string
 		if reason != "" && missing != "" {
-			return fmt.Sprintf("officecli setup failed: %s (missing %s)", reason, missing)
+			msg = fmt.Sprintf("officecli setup failed: %s (missing %s)", reason, missing)
+		} else if reason != "" {
+			msg = fmt.Sprintf("officecli setup failed: %s", reason)
+		} else if missing != "" {
+			msg = fmt.Sprintf("officecli setup failed: missing %s", missing)
+		} else {
+			msg = "officecli setup failed"
 		}
-		if reason != "" {
-			return fmt.Sprintf("officecli setup failed: %s", reason)
+		if isNetworkRelatedPreflightFailure(reason) {
+			msg += "\nHint: set OFFICECLI_SKIP_SKILL_PREFLIGHT=1 to bypass this check if you believe your setup is correct"
 		}
-		if missing != "" {
-			return fmt.Sprintf("officecli setup failed: missing %s", missing)
-		}
-		return "officecli setup failed"
+		return msg
 	default:
 		if reason != "" {
 			return fmt.Sprintf("officecli preflight failed: %s", reason)
@@ -264,6 +268,11 @@ func preflightStatusErrorFromFilters(filters ...*preflightOutputFilter) *preflig
 		}
 	}
 	return nil
+}
+
+func isNetworkRelatedPreflightFailure(reason string) bool {
+	r := strings.ToLower(reason)
+	return strings.Contains(r, "refresh") || strings.Contains(r, "network") || strings.Contains(r, "install")
 }
 
 func formatPreflightMissingItems(items []string) string {

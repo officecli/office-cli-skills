@@ -1360,6 +1360,10 @@ func (a *App) runWhoami(ctx context.Context, cfg Config) error {
 			}
 			return err
 		}
+		if err != nil {
+			_, printErr := fmt.Fprintln(a.Stdout, "Mode: logged in (unverified, session validation failed)")
+			return printErr
+		}
 		_, err = fmt.Fprintln(a.Stdout, "Mode: logged out (saved CLI session is invalid or expired)")
 		return err
 	default:
