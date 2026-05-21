@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.73 - 2026-05-21
+
+### Fixed
+
+- Fix hosted-mode PPTX standard-quality images sending wrong model name (`hosted/text` instead of `hosted/image`) to the platform, causing image generation to fail and credits not being tracked.
+
+### Changed
+
+- Default generation mode changed from `fast` to `best` for all document types except `img`. Best mode asks clarifying questions before generating, producing higher-quality output. Use `--mode fast` to skip questions.
+- Admin dashboard: add fingerprint quality CSV export and enhanced store operations.
+
 ## 0.2.72 - 2026-05-21
 
 ### Fixed
