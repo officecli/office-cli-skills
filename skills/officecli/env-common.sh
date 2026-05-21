@@ -110,6 +110,25 @@ check_publish_ready() {
   [[ "$1" == *"Online preview publishing enabled: true"* ]]
 }
 
+run_whoami() {
+  local officecli_bin="$1"
+  run_officecli_no_preflight "${officecli_bin}" whoami 2>/dev/null || true
+}
+
+parse_auth_mode() {
+  local whoami_output="$1"
+  case "${whoami_output}" in
+    *"account"*|*"Account"*) printf 'account' ;;
+    *"api key"*|*"API key"*|*"api_key"*) printf 'api_key' ;;
+    *) printf 'anonymous' ;;
+  esac
+}
+
+check_authenticated() {
+  local auth_mode="$1"
+  [[ "${auth_mode}" != "anonymous" ]]
+}
+
 check_bridge_ready() {
   local officecli_bin="$1"
   shift || true
@@ -137,6 +156,8 @@ print_check_json() {
   local bridge_ready="$8"
   local fixable="$9"
   shift 9
+  local auth_mode="${1:-unknown}"
+  shift || true
   local missing_items=()
   local item
   for item in "$@"; do
@@ -154,6 +175,7 @@ print_check_json() {
   printf '"publish_ready":%s,' "$publish_ready"
   printf '"bridge_ready":%s,' "$bridge_ready"
   printf '"fixable":%s,' "$fixable"
+  printf '"auth_mode":"%s",' "$(json_escape "$auth_mode")"
   if [[ ${#missing_items[@]} -eq 0 ]]; then
     printf '"missing_items":[]'
   else
@@ -173,6 +195,8 @@ print_fix_failure_json() {
   local fixable="$8"
   local failure_reason="$9"
   shift 9
+  local auth_mode="${1:-unknown}"
+  shift || true
   local missing_items=()
   local item
   for item in "$@"; do
@@ -190,6 +214,7 @@ print_fix_failure_json() {
   printf '"publish_ready":%s,' "$publish_ready"
   printf '"bridge_ready":%s,' "$bridge_ready"
   printf '"fixable":%s,' "$fixable"
+  printf '"auth_mode":"%s",' "$(json_escape "$auth_mode")"
   printf '"failure_reason":"%s",' "$(json_escape "$failure_reason")"
   if [[ ${#missing_items[@]} -eq 0 ]]; then
     printf '"missing_items":[]'

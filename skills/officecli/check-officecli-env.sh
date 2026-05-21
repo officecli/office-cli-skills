@@ -17,6 +17,7 @@ cli_surface_ready=false
 bridge_ready=true
 fixable=true
 status="repairable"
+auth_mode="unknown"
 
 if officecli_path="$(resolve_officecli_path 2>/dev/null)"; then
   officecli_found=true
@@ -25,6 +26,8 @@ if officecli_path="$(resolve_officecli_path 2>/dev/null)"; then
   check_generation_ready "${status_output}" && generation_ready=true
   check_license_ready "${status_output}" && license_ready=true
   check_publish_ready "${status_output}" && publish_ready=true
+  whoami_output="$(run_whoami "${officecli_path}")"
+  auth_mode="$(parse_auth_mode "${whoami_output}")"
 else
   missing_items+=("officecli_binary")
 fi
@@ -40,6 +43,9 @@ else
   if should_configure_publish && [[ "${publish_ready}" != true ]]; then
     missing_items+=("publish_config")
   fi
+  if ! check_authenticated "${auth_mode}"; then
+    missing_items+=("account_login")
+  fi
   if [[ ${#missing_items[@]} -eq 0 ]]; then
     status="ready"
   else
@@ -52,7 +58,7 @@ if [[ "${officecli_found}" != true ]] && [[ -z "${OFFICECLI_INSTALL_COMMAND:-}" 
   status="blocked"
 fi
 
-print_check_json "${status}" "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${missing_items[@]-}"
+print_check_json "${status}" "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${auth_mode}" "${missing_items[@]-}"
 
 case "${status}" in
   ready) exit 0 ;;
