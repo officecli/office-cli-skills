@@ -43,6 +43,7 @@ Do not use this skill for pure Q&A, rough brainstorming with no file output, or 
 - persistent configuration is handled through `officecli config ...`, not through an `init` wizard
 - default runtime mode is visible through `officecli config runtime` and can be changed with `officecli config set-runtime external|hosted`
 - hosted runtime mode uses the OfficeCLI platform service and requires a platform OfficeCLI API key with hosted credits; users should not configure or handle aigateway keys directly
+- OfficeCLI should be installed through one channel at a time; if the user already has a Homebrew-installed `officecli`, do not suggest or run `npm install -g officecli` on top of it
 
 ## Capability Check
 
@@ -65,6 +66,7 @@ Run `fix-officecli-env.sh` on every task, not only when the environment looks br
 - the fix script should install `officecli` when it is missing, but must not refresh an existing binary unless the host explicitly opts in, for example with `OFFICECLI_REFRESH_BINARY=1`
 - when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
 - if `officecli` is missing, the fix script should auto-install it through the public dist installer
+- if the user previously installed with Homebrew and wants to switch to npm, tell them to run `brew uninstall officecli/homebrew-officecli/officecli` first; if their formula uses the short name, use `brew uninstall officecli`, then run `npm install -g officecli`
 - if generation or license config is missing, ask only for the missing values and let the fix script call the relevant `officecli config ...` commands
 - publish config is required by default so generated files return online preview URLs
 - if the user explicitly wants local-only output, set `OFFICECLI_SKIP_PUBLISH_SETUP=1` before running the fix script

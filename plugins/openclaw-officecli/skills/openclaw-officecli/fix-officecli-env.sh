@@ -124,7 +124,7 @@ mkdir -p "$(dirname "${config_file}")"
 default_mode="fast"
 default_output_format="json"
 default_lang="en-US"
-default_publish="false"
+default_publish="true"
 if [[ -f "${SCRIPT_DIR}/config.example.yaml" ]]; then
   default_mode="$(sed -n 's/^default_mode:[[:space:]]*"\(.*\)"/\1/p' "${SCRIPT_DIR}/config.example.yaml" | head -n1)"
   default_output_format="$(sed -n 's/^default_output_format:[[:space:]]*"\(.*\)"/\1/p' "${SCRIPT_DIR}/config.example.yaml" | head -n1)"

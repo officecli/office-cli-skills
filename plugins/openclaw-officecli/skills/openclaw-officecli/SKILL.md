@@ -92,6 +92,7 @@ Primary event types:
 - use `officecli config set-runtime hosted` when the host explicitly wants platform-managed hosted generation by default
 - use `officecli config set-runtime external` when the host wants local/external generation by default
 - hosted mode requires a platform OfficeCLI API key with hosted credits; do not ask users for aigateway keys because those are created and stored by the platform
+- OfficeCLI should be installed through one channel at a time; if the host already has a Homebrew-installed `officecli`, do not suggest or run `npm install -g officecli` on top of it
 
 ## PPT Image Rules
 
@@ -126,6 +127,7 @@ For standalone `img` requests:
 - refresh the OpenClaw skill bundle and repair any missing `officecli` setup on every task by running `fix-officecli-env.sh`
 - do not refresh an already installed `officecli` binary unless the host explicitly opts in, for example with `OFFICECLI_REFRESH_BINARY=1`
 - when the user explicitly asks to uninstall `officecli`, run `uninstall-officecli.sh`
+- if the host previously installed with Homebrew and wants to switch to npm, tell them to run `brew uninstall officecli/homebrew-officecli/officecli` first; if their formula uses the short name, use `brew uninstall officecli`, then run `npm install -g officecli`
 - use `check-officecli-env.sh` as the single readiness probe for binary, config, and bridge
 - use `fix-officecli-env.sh` as the single repair entrypoint
 - when config is missing, ask only for the missing generation/license values and let the fix script write local config
