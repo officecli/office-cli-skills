@@ -14,6 +14,7 @@ license_ready=false
 publish_ready=false
 bridge_ready=true
 fixable=true
+auth_mode="unknown"
 
 refresh_status_flags() {
   local status_output="$1"
@@ -29,7 +30,7 @@ refresh_status_flags() {
 fail_fix() {
   local reason="$1"
   shift
-  print_fix_failure_json "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${reason}" "$@"
+  print_fix_failure_json "${officecli_found}" "${officecli_path}" "${config_path}" "${generation_ready}" "${license_ready}" "${publish_ready}" "${bridge_ready}" "${fixable}" "${reason}" "${auth_mode}" "$@"
   exit 20
 }
 
@@ -51,6 +52,8 @@ officecli_found=true
 
 status_output="$(run_config_status "${officecli_path}")"
 refresh_status_flags "${status_output}"
+whoami_output="$(run_whoami "${officecli_path}")"
+auth_mode="$(parse_auth_mode "${whoami_output}")"
 
 if should_configure_generation && [[ "${generation_ready}" != true ]]; then
   gen_base_url="${OFFICECLI_SETUP_LLM_BASE_URL:-}"
@@ -75,8 +78,15 @@ fi
 if [[ "${license_ready}" != true ]]; then
   license_api_key="${OFFICECLI_SETUP_LICENSE_API_KEY:-}"
   if should_require_license_api_key && [[ -z "${license_api_key}" ]]; then
-    if ! license_api_key="$(prompt_value 'Enter the platform access API key' '' 0)"; then
-      fail_fix "missing required value for Enter the platform access API key" "license_config"
+    if check_authenticated "${auth_mode}"; then
+      license_api_key=""
+    else
+      echo "" >&2
+      echo "Image generation requires an account login or API key." >&2
+      echo "Run 'officecli login' to sign in with your account." >&2
+      echo "Alternatively, use 'officecli set-key <api-key>' for automation environments." >&2
+      echo "" >&2
+      fail_fix "account login or API key required for image generation" "account_login"
     fi
   elif [[ -z "${license_api_key}" && -t 0 ]]; then
     if ! license_api_key="$(prompt_value 'Enter the paid quota key (optional)' '' 1)"; then
@@ -88,6 +98,16 @@ if [[ "${license_ready}" != true ]]; then
   fi
   status_output="$(run_config_status "${officecli_path}")"
   refresh_status_flags "${status_output}"
+fi
+
+whoami_output="$(run_whoami "${officecli_path}")"
+auth_mode="$(parse_auth_mode "${whoami_output}")"
+if ! check_authenticated "${auth_mode}"; then
+  echo "" >&2
+  echo "NOTE: You are using officecli in anonymous trial mode." >&2
+  echo "Run 'officecli login' to sign in and use your account hosted credits." >&2
+  echo "Alternatively, use 'officecli set-key <api-key>' for automation environments." >&2
+  echo "" >&2
 fi
 
 if should_configure_publish && [[ "${publish_ready}" != true ]]; then

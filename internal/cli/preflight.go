@@ -285,6 +285,8 @@ func formatPreflightMissingItems(items []string) string {
 			labels = append(labels, "publish config")
 		case "agent_bridge":
 			labels = append(labels, "agent bridge")
+		case "account_login":
+			labels = append(labels, "account login (run 'officecli login' to sign in)")
 		default:
 			if trimmed := strings.TrimSpace(item); trimmed != "" {
 				labels = append(labels, strings.ReplaceAll(trimmed, "_", " "))
