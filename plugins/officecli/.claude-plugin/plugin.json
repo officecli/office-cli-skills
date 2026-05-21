@@ -6,6 +6,6 @@
     "name": "officecli"
   },
   "homepage": "https://officecli.io/claude-code-codex-office-skills",
-  "repository": "https://github.com/officecli/officecli-skills",
+  "repository": "https://github.com/officecli/officecli",
   "license": "MIT"
 }
