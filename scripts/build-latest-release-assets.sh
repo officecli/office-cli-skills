@@ -24,14 +24,18 @@ build_one() {
   local arch="$2"
   local workdir="$3"
   local out_name="${APP_NAME}_latest_${os}_${arch}.tar.gz"
+  local binary_name="officecli"
+  if [[ "${os}" == "windows" ]]; then
+    binary_name="officecli.exe"
+  fi
 
   GOOS="${os}" GOARCH="${arch}" CGO_ENABLED=0 go build \
     -buildvcs=false \
     -ldflags "-s -w -X github.com/officecli/officecli-internal/internal/cli.Version=${VERSION_LABEL} -X github.com/officecli/officecli-internal/internal/cli.Commit=${COMMIT} -X github.com/officecli/officecli-internal/internal/cli.BuildDate=${BUILD_DATE} -X github.com/officecli/officecli-internal/internal/license.EmbeddedLicenseProofPublicKey=${CLI_LICENSE_PROOF_PUBLIC_KEY} -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishBaseURL=${CLI_EMBEDDED_PUBLISH_BASE_URL} -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKeyID=${CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID} -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKey=${CLI_EMBEDDED_PUBLISH_AUTH_KEY}" \
-    -o "${workdir}/officecli" \
+    -o "${workdir}/${binary_name}" \
     ./cmd/officecli
 
-  tar -czf "${DIST_DIR}/${out_name}" -C "${workdir}" officecli
+  tar -czf "${DIST_DIR}/${out_name}" -C "${workdir}" "${binary_name}"
 }
 
 need_cmd go
@@ -44,7 +48,7 @@ mkdir -p "${DIST_DIR}"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
 
-for target in "darwin amd64" "darwin arm64" "linux amd64" "linux arm64"; do
+for target in "darwin amd64" "darwin arm64" "linux amd64" "linux arm64" "windows amd64" "windows arm64"; do
   os="${target% *}"
   arch="${target#* }"
   workdir="${tmpdir}/${os}-${arch}"

@@ -63,8 +63,8 @@ officecli config set-generation
 - macOS `arm64`
 - Linux `x64`
 - Linux `arm64`
-
-Windows is not supported yet because the current public binary release flow only publishes `darwin` and `linux` archives.
+- Windows `x64`
+- Windows `arm64`
 
 ## Environment Overrides
 

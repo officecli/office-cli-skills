@@ -10,7 +10,7 @@ CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID ?=
 CLI_EMBEDDED_PUBLISH_AUTH_KEY ?=
 LDFLAGS := -X github.com/officecli/officecli-internal/internal/cli.Version=$(VERSION) -X github.com/officecli/officecli-internal/internal/cli.Commit=$(COMMIT) -X github.com/officecli/officecli-internal/internal/cli.BuildDate=$(BUILD_DATE) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishBaseURL=$(CLI_EMBEDDED_PUBLISH_BASE_URL) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKeyID=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY_ID) -X github.com/officecli/officecli-internal/internal/providers/publish.EmbeddedPublishAuthKey=$(CLI_EMBEDDED_PUBLISH_AUTH_KEY)
 
-.PHONY: help build test test-fast test-full test-smoke test-local fmt install uninstall run-help demo release release-darwin-amd64 release-darwin-arm64 release-linux-amd64 release-linux-arm64 demo-ppt demo-docx demo-xlsx usage-limits-smoke
+.PHONY: help build test test-fast test-full test-smoke test-local fmt install uninstall run-help demo release release-darwin-amd64 release-darwin-arm64 release-linux-amd64 release-linux-arm64 release-windows-amd64 release-windows-arm64 demo-ppt demo-docx demo-xlsx usage-limits-smoke
 
 help:
 	@echo "Available targets:"
@@ -72,7 +72,7 @@ run-help: build
 demo: build
 	bash ./scripts/demo.sh ./$(APP)
 
-release: release-darwin-amd64 release-darwin-arm64 release-linux-amd64 release-linux-arm64
+release: release-darwin-amd64 release-darwin-arm64 release-linux-amd64 release-linux-arm64 release-windows-amd64 release-windows-arm64
 
 release-darwin-amd64:
 	mkdir -p $(DIST_DIR)
@@ -89,6 +89,14 @@ release-linux-amd64:
 release-linux-arm64:
 	mkdir -p $(DIST_DIR)
 	GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP)_$(VERSION)_linux_arm64 ./cmd/officecli
+
+release-windows-amd64:
+	mkdir -p $(DIST_DIR)
+	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP)_$(VERSION)_windows_amd64.exe ./cmd/officecli
+
+release-windows-arm64:
+	mkdir -p $(DIST_DIR)
+	GOOS=windows GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/$(APP)_$(VERSION)_windows_arm64.exe ./cmd/officecli
 
 demo-ppt: build
 	./$(APP) new pptx "Enterprise Collaboration Platform Overview" --prompt-file ./examples/prompt.txt

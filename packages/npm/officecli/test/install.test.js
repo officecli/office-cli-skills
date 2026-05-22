@@ -58,6 +58,14 @@ test("archiveName always resolves to a stable release asset name", () => {
     install.archiveName(expectedVersion, "linux", "arm64"),
     `officecli_${expectedVersion}_linux_arm64.tar.gz`
   );
+  assert.equal(
+    install.archiveName(expectedVersion, "windows", "amd64"),
+    `officecli_${expectedVersion}_windows_amd64.tar.gz`
+  );
+  assert.equal(
+    install.archiveName(expectedVersion, "windows", "arm64"),
+    `officecli_${expectedVersion}_windows_arm64.tar.gz`
+  );
 });
 
 test("install next steps show copy-paste hosted examples", () => {

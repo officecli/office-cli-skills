@@ -12,7 +12,7 @@ const pkg = require("../package.json");
 
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = path.join(PACKAGE_ROOT, "runtime");
-const BINARY_NAME = "officecli";
+const BINARY_NAME = process.platform === "win32" ? "officecli.exe" : "officecli";
 const BINARY_PATH = path.join(RUNTIME_DIR, BINARY_NAME);
 const METADATA_PATH = path.join(RUNTIME_DIR, "metadata.json");
 const DIST_REPO_ENV = "OFFICECLI_NPM_DIST_REPO";
@@ -140,7 +140,8 @@ function resolveDistRepo() {
 function resolvePlatform() {
   const platformMap = {
     darwin: "darwin",
-    linux: "linux"
+    linux: "linux",
+    win32: "windows"
   };
   const archMap = {
     x64: "amd64",
