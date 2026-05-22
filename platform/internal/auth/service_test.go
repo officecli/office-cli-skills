@@ -286,6 +286,30 @@ func TestHandleCallbackNormalizesLegacyAppRelativeReturnTo(t *testing.T) {
 	require.Equal(t, "/app/billing?status=success&session_id=cs_test_123", returnTo)
 }
 
+func TestHandleCallbackPreservesCLILoginVerifyReturnTo(t *testing.T) {
+	sessions := newFakeSessionStore()
+	state := "oauth-state"
+	require.NoError(t, sessions.SaveNamespacedSession(context.Background(), "oauth_state", state, map[string]string{
+		"return_to": "/api/cli/login/verify?user_code=568J-DJZ5",
+	}, time.Minute))
+
+	users := &fakeAuthUserStore{user: &model.User{ID: 42, InviteCode: "invite-042"}}
+	svc := NewService(
+		fakeOAuthProvider{user: &GoogleUser{Subject: "google-sub", Email: "demo@example.com", Name: "Demo"}},
+		users,
+		sessions,
+		"cop_app_session",
+		time.Hour,
+		fakeCookieCodec{},
+		nil,
+		[]string{"demo@example.com"},
+	)
+
+	_, _, returnTo, err := svc.HandleCallback(context.Background(), "code", state)
+	require.NoError(t, err)
+	require.Equal(t, "/api/cli/login/verify?user_code=568J-DJZ5", returnTo)
+}
+
 func TestHandleCallbackRejectsNonAllowlistedEmail(t *testing.T) {
 	sessions := newFakeSessionStore()
 	state := "oauth-state"

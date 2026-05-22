@@ -126,6 +126,9 @@ func normalizeReturnTo(returnTo string) string {
 	if requested == "/api/cli/login/complete" || strings.HasPrefix(requested, "/api/cli/login/complete?") {
 		return requested
 	}
+	if requested == "/api/cli/login/verify" || strings.HasPrefix(requested, "/api/cli/login/verify?") {
+		return requested
+	}
 	if requested == "/app" || strings.HasPrefix(requested, "/app/") || strings.HasPrefix(requested, "/app?") || strings.HasPrefix(requested, "/app#") {
 		return requested
 	}
