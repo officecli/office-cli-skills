@@ -1,14 +1,13 @@
-# OfficeCLI
-
-**面向 PPTX、DOCX、XLSX、报告和图片的 AI 文档生成 CLI。**
+# OfficeCLI 是面向 PPTX、DOCX、XLSX、报告和图片的 AI 文档生成 CLI
 
 [![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
 [![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
 [![License](https://img.shields.io/github/license/officecli/officecli)](./LICENSE)
 [![Website](https://img.shields.io/badge/website-officecli.io-0f766e)](https://officecli.io/officecli)
 [![Discord](https://img.shields.io/badge/community-Discord-5865F2)](https://discord.gg/ezAHMkdG)
+[![X](https://img.shields.io/badge/follow-%40officecli-000000?logo=x)](https://x.com/officecli)
 
-OfficeCLI 可以把自然语言 prompt 生成可编辑的 Office 文件和独立图片。你可以在终端、脚本、CI 或本地自动化流程中直接使用一个 `officecli` 二进制生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。首次运行默认可用 hosted trial；如果要接入自己的模型 endpoint，可以切换到 External Mode。
+OfficeCLI 是一款命令行工具，可以把自然语言 prompt 生成可编辑的 Office 文件和独立图片。你可以在终端、脚本、CI 或本地自动化流程中直接使用一个 `officecli` 二进制生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。首次运行默认可用 hosted trial；如果要接入自己的模型 endpoint，可以切换到 External Mode。
 
 - 官网：[officecli.io/officecli](https://officecli.io/officecli)
 - 英文 README：[README.md](./README.md)

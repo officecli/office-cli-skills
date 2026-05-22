@@ -1,17 +1,16 @@
-# OfficeCLI
-
-**AI document generation CLI for PPTX, DOCX, XLSX, reports, and images.**
+# OfficeCLI is an AI document generation CLI for PPTX, DOCX, XLSX, reports, and images
 
 [![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
 [![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
 [![License](https://img.shields.io/github/license/officecli/officecli)](./LICENSE)
 [![Website](https://img.shields.io/badge/website-officecli.io-0f766e)](https://officecli.io/officecli)
 [![Discord](https://img.shields.io/badge/community-Discord-5865F2)](https://discord.gg/ezAHMkdG)
+[![X](https://img.shields.io/badge/follow-%40officecli-000000?logo=x)](https://x.com/officecli)
 
-OfficeCLI turns natural-language prompts into editable Office files and standalone images from a terminal,
-script, CI job, or local automation flow. Use one `officecli` binary to generate `PPTX`, `DOCX`, `XLSX`,
-workbook-backed `Report`, and `img` outputs, with hosted trial access for first runs and External Mode
-when you want to bring your own LLM endpoint.
+OfficeCLI is a command-line tool that turns natural-language prompts into editable Office files and
+standalone images from a terminal, script, CI job, or local automation flow. Use one `officecli` binary
+to generate `PPTX`, `DOCX`, `XLSX`, workbook-backed `Report`, and `img` outputs, with hosted trial access
+for first runs and External Mode when you want to bring your own LLM endpoint.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
