@@ -153,7 +153,7 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    const notifyButton = screen.getByRole('button', { name: /Get notified/ })
+    const notifyButton = screen.getByRole('button', { name: /Coming soon/ })
     expect(notifyButton).toHaveAttribute('aria-disabled', 'true')
 
     const installLinks = screen.getAllByRole('link', { name: /^Install officecli$/i, hidden: true })

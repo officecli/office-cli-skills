@@ -36,7 +36,7 @@ export const surfaces: SurfaceData[] = [
       'One-click switch between External Mode (bring-your-own model) and Hosted Mode (managed credits)',
     ],
     ctas: [
-      { label: 'Get notified', href: officedexNotifyPath, variant: 'comingSoon' },
+      { label: 'Coming soon', href: officedexNotifyPath, variant: 'comingSoon' },
       { label: 'Read about officedex', href: officedexNotifyPath, variant: 'ghost' },
     ],
     preview: 'desktop',

@@ -247,8 +247,8 @@ function positiveBreakdown(items: OverviewBreakdownItem[]) {
   return items.filter((item) => item.value > 0)
 }
 
-function joinList(values: string[]) {
-  return values.length ? values.join('; ') : '--'
+function joinList(values: string[] | null | undefined) {
+  return values && values.length ? values.join('; ') : '--'
 }
 
 function formatTimestamp(value?: string) {
