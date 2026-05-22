@@ -275,7 +275,7 @@ func mockHostedPricingRules() []model.HostedPricingRule {
 	markup := 3000
 	return []model.HostedPricingRule{
 		{ID: 801, DocumentProfile: "text", Provider: "openai", Model: "gpt-4.1", TextModelKey: "text_default", PromptPer1KCostMicrousd: 2, OutputPer1KCostMicrousd: 8, ReasoningPer1KCostMicrousd: 8, ReservationCredits: 16, MinimumChargeCredits: 2, MarkupBPS: &markup, Enabled: true},
-		{ID: 802, DocumentProfile: "image", Provider: "openai", Model: "gpt-image-2", ImageModelKey: "image_default", ImagePerAssetCostMicrousd: 40000, ReservationCredits: 1, MinimumChargeCredits: 1, MarkupBPS: &markup, Enabled: true},
+		{ID: 802, DocumentProfile: "image", Provider: "openai", Model: "gpt-image-2", ImageModelKey: "image_default", ImagePerAssetCostMicrousd: 100000, ReservationCredits: 10, MinimumChargeCredits: 10, MarkupBPS: &markup, Enabled: true},
 	}
 }
 

@@ -31,7 +31,7 @@ func TestDefaultHostedPricingRulesUseTextAndImageProfiles(t *testing.T) {
 				t.Fatalf("unexpected text pricing rule: %#v", rule)
 			}
 		case "image":
-			if rule.ImageModelKey != "image_default" || rule.ImagePerAssetCredits != 1 || rule.ReservationCredits != 1 || rule.MinimumChargeCredits != 1 {
+			if rule.ImageModelKey != "image_default" || rule.ImagePerAssetCredits != 10 || rule.ReservationCredits != 10 || rule.MinimumChargeCredits != 10 {
 				t.Fatalf("unexpected image pricing rule: %#v", rule)
 			}
 		default:

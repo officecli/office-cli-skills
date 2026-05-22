@@ -883,6 +883,66 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
 }
 
+func TestGenerateImageDefaultPricingChargesTenCreditsPerImage(t *testing.T) {
+	// Regression guard: production pricing rule is 10 credits per AI image
+	// (see platform/internal/app/config.go defaultHostedPricingRules). If the
+	// numbers below ever drift from that default, update both in lockstep.
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/images/generations", r.URL.Path)
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-2",
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "image",
+			Provider:             "openai",
+			Model:                "gpt-image-2",
+			ImageModelKey:        "image_default",
+			ImagePerAssetCredits: 10,
+			ReservationCredits:   10,
+			MinimumChargeCredits: 10,
+		}},
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "A polished product launch hero image",
+		AspectRatio: 16.0 / 9.0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 90, resp.CreditBalance)
+	require.Equal(t, []int{10}, store.reservations)
+	require.Equal(t, []int{10}, store.settlements)
+	require.Empty(t, store.releases)
+	require.Len(t, store.events, 1)
+	require.Equal(t, 10, store.events[0].BilledUnits)
+	require.Equal(t, 1, store.events[0].ImageCount)
+}
+
 func TestGenerateImageFallsBackToResponsesWhenImageEndpointFails(t *testing.T) {
 	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
 	var sawImages bool

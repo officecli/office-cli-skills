@@ -74,6 +74,9 @@ export default function BillingPage() {
             <div className="mt-4 text-sm text-outline">
               Credits are added to your account balance. `officecli login` sessions and `officecli set-key` API key mode consume the same account hosted credits.
             </div>
+            <div className="mt-3 text-xs text-outline">
+              Usage rate: each AI image generation deducts 10 credits (~$0.10).
+            </div>
           </div>
           <div className="app-card-muted p-5">
             <div className="info-eyebrow text-tertiary">Billing flow</div>

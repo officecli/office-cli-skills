@@ -1025,7 +1025,10 @@ func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageS
 		}
 	}
 	if image {
-		charge := 24 + usage.ImageCount*8
+		charge := usage.ImageCount * 10
+		if charge < 10 {
+			charge = 10
+		}
 		return hostedPriceSnapshot{MarkupBPS: s.effectiveMarkupBPS(ctx, model.HostedPricingRule{}), ChargeCredits: charge, UncappedChargeCredits: charge, ProfitMicrousd: microusdFromCredits(charge, creditsPerUSD)}
 	}
 	totalTokens := usage.PromptTokens + usage.CompletionTokens + usage.ReasoningTokens

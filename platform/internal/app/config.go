@@ -420,9 +420,9 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			Provider:             "openai",
 			Model:                "gpt-image-2",
 			ImageModelKey:        "image_default",
-			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
+			ImagePerAssetCredits: 10,
+			ReservationCredits:   10,
+			MinimumChargeCredits: 10,
 		},
 	}
 }
