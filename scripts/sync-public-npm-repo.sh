@@ -41,24 +41,6 @@ cp -R "${PACKAGE_ROOT}/scripts/." ./scripts/
 cp "${TEMPLATE_ROOT}/.gitignore" ./.gitignore
 cp "${TEMPLATE_ROOT}/.github/workflows/npm-publish.yml" ./.github/workflows/npm-publish.yml
 
-PUBLIC_NPM_REPO="${PUBLIC_NPM_REPO}" python3 - <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path("package.json")
-data = json.loads(path.read_text(encoding="utf-8"))
-repo = os.environ["PUBLIC_NPM_REPO"].strip()
-data["repository"] = {
-    "type": "git",
-    "url": f"git+https://github.com/{repo}.git",
-}
-data["bugs"] = {
-    "url": f"https://github.com/{repo}/issues",
-}
-path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-PY
-
 if [[ -z "$(git status --short -- .)" ]]; then
   echo "public npm repository already up to date"
   exit 0

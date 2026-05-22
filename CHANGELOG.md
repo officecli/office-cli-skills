@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.75 - 2026-05-22
+
+### Changed
+
+- npm Repository link now points at the URL declared in `packages/npm/officecli/package.json` (currently `github.com/officecli/officecli`). The sync script no longer overwrites `repository`/`bugs` with the internal `officecli-npm` mirror.
+
 ## 0.2.74 - 2026-05-22
 
 ### Added
