@@ -1,6 +1,6 @@
 # officecli
 
-[Official website: https://officecli.io/](https://officecli.io/)
+[Website](https://officecli.io/) · [Discord](https://discord.gg/ezAHMkdG) · [X](https://x.com/officecli) · [GitHub](https://github.com/officecli/officecli)
 
 `officecli` is an npm wrapper package for the OfficeCLI binary.
 

@@ -33,6 +33,13 @@
     "arm64"
   ],
   "homepage": "https://officecli.io/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/officecli/officecli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/officecli/officecli/issues"
+  },
   "publishConfig": {
     "access": "public"
   },
