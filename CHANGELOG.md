@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.76 - 2026-05-22
+
+### Added
+
+- TUI interactive mode: `/mode [hosted|external]` command to display the current runtime mode or switch between hosted and external without restarting the session.
+
+### Changed
+
+- Hosted AI image generation now charges a flat 10 credits per image (~$0.10), replacing the previous tiered formula. Default hosted pricing rule (`gpt-image-2 / image_default`) and the runtime billing path are updated in lockstep; minimum charge stays at 10 credits.
+- Billing page surfaces the new per-image usage rate so customers can estimate cost before generation.
+- Marketing site: officedex hero CTA copy updated to "Coming soon" for consistency with other coming-soon surfaces.
+
+### Fixed
+
+- Admin dashboard `joinList` helper now handles `null`/`undefined` arrays without throwing, preventing dashboard render crashes when an upstream field is missing.
+
 ## 0.2.75 - 2026-05-22
 
 ### Changed

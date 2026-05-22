@@ -893,3 +893,82 @@ func runTUICommandsUntil(t *testing.T, model tuiModel, cmd tea.Cmd, done func(tu
 	t.Fatalf("condition was not met after processing TUI commands:\n%s", model.View())
 	return model
 }
+
+func TestTUIModelModeCommandSwitchesRuntimeMode(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	model = updated.(tuiModel)
+
+	view := model.View()
+	if !strings.Contains(view, "Mode: hosted") {
+		t.Fatalf("default footer should show hosted:\n%s", view)
+	}
+
+	model.input.SetValue("/mode external")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	view = model.View()
+	if !strings.Contains(view, "Mode: external") {
+		t.Fatalf("/mode external should switch footer to external:\n%s", view)
+	}
+	if model.cfg.Runtime.Mode != RuntimeModeExternal {
+		t.Fatalf("cfg.Runtime.Mode = %q, want external", model.cfg.Runtime.Mode)
+	}
+
+	model.input.SetValue("/mode hosted")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	view = model.View()
+	if !strings.Contains(view, "Mode: hosted") {
+		t.Fatalf("/mode hosted should switch footer back to hosted:\n%s", view)
+	}
+	if model.cfg.Runtime.Mode != RuntimeModeHosted {
+		t.Fatalf("cfg.Runtime.Mode = %q, want hosted", model.cfg.Runtime.Mode)
+	}
+}
+
+func TestTUIModelModeCommandWithoutArgsShowsCurrentMode(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	model = updated.(tuiModel)
+
+	model.input.SetValue("/mode")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	view := model.View()
+	if !strings.Contains(view, "Current mode: hosted") {
+		t.Fatalf("/mode without args should report current mode:\n%s", view)
+	}
+	if !strings.Contains(view, "/mode [hosted|external]") {
+		t.Fatalf("/mode without args should show usage hint:\n%s", view)
+	}
+	if model.cfg.Runtime.Mode != RuntimeModeHosted {
+		t.Fatalf("/mode without args should not change mode, got %q", model.cfg.Runtime.Mode)
+	}
+}
+
+func TestTUIModelModeCommandRejectsUnknownMode(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	model = updated.(tuiModel)
+
+	model.input.SetValue("/mode bogus")
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(tuiModel)
+	view := model.View()
+	if !strings.Contains(view, "Unknown mode: bogus") {
+		t.Fatalf("/mode bogus should report an unknown mode error:\n%s", view)
+	}
+	if model.cfg.Runtime.Mode != RuntimeModeHosted {
+		t.Fatalf("/mode bogus should not change mode, got %q", model.cfg.Runtime.Mode)
+	}
+	if !strings.Contains(view, "Mode: hosted") {
+		t.Fatalf("footer should still show hosted after rejected /mode:\n%s", view)
+	}
+}
+
+func TestTUIHelpTextListsModeCommand(t *testing.T) {
+	if !strings.Contains(tuiHelpText, "/mode [hosted|external]") {
+		t.Fatalf("tuiHelpText should advertise /mode command:\n%s", tuiHelpText)
+	}
+}

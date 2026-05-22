@@ -491,29 +491,66 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m tuiModel) handleCommandOrSubmit(value string) (tea.Model, tea.Cmd) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "/exit", "/quit":
+	trimmed := strings.TrimSpace(value)
+	lower := strings.ToLower(trimmed)
+	fields := strings.Fields(trimmed)
+	command := ""
+	if len(fields) > 0 {
+		command = strings.ToLower(fields[0])
+	}
+	switch {
+	case lower == "/exit" || lower == "/quit":
 		return m, tea.Quit
-	case "/login":
+	case lower == "/login":
 		return m.startLogin()
-	case "/help":
+	case lower == "/help":
 		m.append("assistant", tuiHelpText)
 		return m, nil
+	case command == "/mode":
+		return m.handleModeCommand(fields[1:])
 	default:
-		if strings.HasPrefix(strings.TrimSpace(value), "/") {
-			m.append("error", fmt.Sprintf("Unknown command: %s. Type /help for available commands.", strings.Fields(strings.TrimSpace(value))[0]))
+		if strings.HasPrefix(trimmed, "/") {
+			m.append("error", fmt.Sprintf("Unknown command: %s. Type /help for available commands.", fields[0]))
 			return m, nil
 		}
 		return m.enterTypeSelection(value)
 	}
 }
 
+func (m tuiModel) handleModeCommand(args []string) (tea.Model, tea.Cmd) {
+	if len(args) == 0 {
+		current := runtimeModeLabel(m.cfg.RuntimeModeOrDefault())
+		m.append("assistant", fmt.Sprintf("Current mode: %s. Usage: /mode [hosted|external]", current))
+		return m, nil
+	}
+	if len(args) > 1 {
+		m.append("error", "Usage: /mode [hosted|external]")
+		return m, nil
+	}
+	switch strings.ToLower(args[0]) {
+	case "hosted":
+		m.cfg.Runtime.Mode = RuntimeModeHosted
+		m.quota = tuiQuotaStatus{RuntimeMode: string(RuntimeModeHosted)}
+		m.append("status", "Mode switched to hosted")
+		return m, m.checkAccessStatus()
+	case "external":
+		m.cfg.Runtime.Mode = RuntimeModeExternal
+		m.quota = tuiQuotaStatus{RuntimeMode: string(RuntimeModeExternal)}
+		m.append("status", "Mode switched to external")
+		return m, m.checkAccessStatus()
+	default:
+		m.append("error", fmt.Sprintf("Unknown mode: %s. Choose hosted or external.", args[0]))
+		return m, nil
+	}
+}
+
 const tuiHelpText = `Describe the document you want to generate in natural language.
 
 Commands:
-  /help   Show this help
-  /login  Log in to use account hosted credits
-  /exit   Exit the TUI
+  /help               Show this help
+  /login              Log in to use account hosted credits
+  /mode [hosted|external]  Show or switch the runtime mode (default: hosted)
+  /exit               Exit the TUI
 
 Community:
   Discord: ` + discordInviteURL + `
@@ -877,7 +914,7 @@ func (m tuiModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(tuiStatusStyle.Render(wrapTUIText(m.quotaText(), m.entryWrapWidth())))
 	b.WriteString("\n")
-	b.WriteString(tuiStatusStyle.Render(wrapTUIText("Enter send  Ctrl+C clear/cancel  Ctrl+C twice exit  /help  /login  /exit", m.entryWrapWidth())))
+	b.WriteString(tuiStatusStyle.Render(wrapTUIText("Enter send  Ctrl+C clear/cancel  Ctrl+C twice exit  /help  /login  /mode  /exit", m.entryWrapWidth())))
 	return b.String()
 }
 
