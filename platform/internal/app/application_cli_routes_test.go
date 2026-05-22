@@ -61,7 +61,7 @@ func TestCLILoginVerifyCompletesDeviceChallengeAndPollsCompleted(t *testing.T) {
 	cliSvc, store := newTestCLISessionService(t)
 	authSvc := &fakeAuthRouteService{meUser: &model.User{ID: 42, Email: "dev@example.com"}}
 	registerCLIRoutes(api, Config{}, authSvc, cliSvc)
-	require.NoError(t, store.DB().Create(&model.User{ID: 42, GoogleSub: "sub", Email: "dev@example.com", Name: "Dev", InviteCode: "invite-42", Status: model.UserStatusActive}).Error)
+	require.NoError(t, store.DB().Create(&model.User{ID: 42, GoogleSub: model.StringPtr("sub"), Email: "dev@example.com", Name: "Dev", InviteCode: "invite-42", Status: model.UserStatusActive}).Error)
 
 	start, err := cliSvc.Start(context.Background(), clisession.StartRequest{
 		CodeChallenge:       clisessionTestS256("verifier"),

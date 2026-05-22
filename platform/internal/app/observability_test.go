@@ -28,6 +28,13 @@ func (fakeAuthRouteFailureService) LoginURL(_ context.Context, returnTo, inviteC
 func (fakeAuthRouteFailureService) HandleCallback(_ context.Context, code, state string) (*model.User, string, string, error) {
 	return nil, "", "", errors.New("oauth failed")
 }
+func (fakeAuthRouteFailureService) GitHubEnabled() bool { return false }
+func (fakeAuthRouteFailureService) GitHubLoginURL(_ context.Context, returnTo, inviteCode string) (string, error) {
+	return "", nil
+}
+func (fakeAuthRouteFailureService) HandleGitHubCallback(_ context.Context, code, state string) (*model.User, string, string, error) {
+	return nil, "", "", errors.New("oauth failed")
+}
 func (fakeAuthRouteFailureService) Me(_ context.Context, raw string) (*model.User, error) {
 	return nil, errors.New("not implemented")
 }

@@ -157,7 +157,19 @@ func (s routeAuthUserStore) SaveGoogleUser(_ context.Context, googleSub, email, 
 		return nil, nil
 	}
 	copied := *s.user
-	copied.GoogleSub = googleSub
+	copied.GoogleSub = model.StringPtr(googleSub)
+	copied.Email = email
+	copied.Name = name
+	copied.AvatarURL = avatarURL
+	return &copied, nil
+}
+
+func (s routeAuthUserStore) SaveGitHubUser(_ context.Context, githubSub, email, name string, avatarURL *string) (*model.User, error) {
+	if s.user == nil {
+		return nil, nil
+	}
+	copied := *s.user
+	copied.GitHubSub = model.StringPtr(githubSub)
 	copied.Email = email
 	copied.Name = name
 	copied.AvatarURL = avatarURL

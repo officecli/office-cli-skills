@@ -99,7 +99,17 @@ export function ensureVisitorID(currentSearch = window.location.search) {
 }
 
 export function buildOAuth2LoginURL(returnTo = '/app', currentSearch = window.location.search) {
-  const url = new URL('/api/auth/oauth2/login', window.location.origin)
+  return buildProviderLoginURL('oauth2', returnTo, currentSearch)
+}
+
+export function buildGitHubLoginURL(returnTo = '/app', currentSearch = window.location.search) {
+  return buildProviderLoginURL('github', returnTo, currentSearch)
+}
+
+export const buildGoogleLoginURL = buildOAuth2LoginURL
+
+function buildProviderLoginURL(provider: 'oauth2' | 'google' | 'github', returnTo: string, currentSearch: string) {
+  const url = new URL(`/api/auth/${provider}/login`, window.location.origin)
   url.searchParams.set('return_to', normalizeAppReturnTo(returnTo))
 
 	const attrs = attributionWithVisitorID(currentSearch)
@@ -111,8 +121,6 @@ export function buildOAuth2LoginURL(returnTo = '/app', currentSearch = window.lo
 
   return `${url.pathname}${url.search}`
 }
-
-export const buildGoogleLoginURL = buildOAuth2LoginURL
 
 export function trackEvent(name: string, params: EventParams = {}) {
   const payload = buildTrackPayload(name, params)

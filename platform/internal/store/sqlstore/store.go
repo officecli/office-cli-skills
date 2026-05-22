@@ -1972,6 +1972,9 @@ func (s *Store) UpdateDailyFreeQuota(ctx context.Context, id uint64, dailyLimit 
 }
 
 func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name string, avatarURL *string) (*model.User, error) {
+	if strings.TrimSpace(googleSub) == "" {
+		return nil, fmt.Errorf("google subject is required")
+	}
 	var user model.User
 	err := s.db.WithContext(ctx).Where("google_sub = ?", googleSub).First(&user).Error
 	switch {
@@ -1990,14 +1993,32 @@ func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name strin
 		return nil, err
 	}
 
+	if existing, err := s.findUserByEmailLowered(ctx, email); err != nil {
+		return nil, err
+	} else if existing != nil {
+		sub := googleSub
+		existing.GoogleSub = &sub
+		existing.Email = email
+		existing.Name = name
+		existing.AvatarURL = avatarURL
+		if existing.InviteCode == "" {
+			existing.InviteCode = buildInviteCode(existing.ID)
+		}
+		if err := s.db.WithContext(ctx).Save(existing).Error; err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
 	defer rollbackOnPanic(tx)
 
+	sub := googleSub
 	user = model.User{
-		GoogleSub: googleSub,
+		GoogleSub: &sub,
 		Email:     email,
 		Name:      name,
 		AvatarURL: avatarURL,
@@ -2019,6 +2040,91 @@ func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name strin
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (s *Store) SaveGitHubUser(ctx context.Context, githubSub, email, name string, avatarURL *string) (*model.User, error) {
+	if strings.TrimSpace(githubSub) == "" {
+		return nil, fmt.Errorf("github subject is required")
+	}
+	var user model.User
+	err := s.db.WithContext(ctx).Where("github_sub = ?", githubSub).First(&user).Error
+	switch {
+	case err == nil:
+		user.Email = email
+		user.Name = name
+		user.AvatarURL = avatarURL
+		if user.InviteCode == "" {
+			user.InviteCode = buildInviteCode(user.ID)
+		}
+		if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+			return nil, err
+		}
+		return &user, nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return nil, err
+	}
+
+	if existing, err := s.findUserByEmailLowered(ctx, email); err != nil {
+		return nil, err
+	} else if existing != nil {
+		sub := githubSub
+		existing.GitHubSub = &sub
+		existing.Email = email
+		existing.Name = name
+		existing.AvatarURL = avatarURL
+		if existing.InviteCode == "" {
+			existing.InviteCode = buildInviteCode(existing.ID)
+		}
+		if err := s.db.WithContext(ctx).Save(existing).Error; err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+
+	tx := s.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer rollbackOnPanic(tx)
+
+	sub := githubSub
+	user = model.User{
+		GitHubSub: &sub,
+		Email:     email,
+		Name:      name,
+		AvatarURL: avatarURL,
+		InviteCode: buildPendingInviteCode("github:" + githubSub),
+		Status:     model.UserStatusActive,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	user.InviteCode = buildInviteCode(user.ID)
+	if err := tx.Model(&model.User{}).Where("id = ?", user.ID).Update("invite_code", user.InviteCode).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (s *Store) findUserByEmailLowered(ctx context.Context, email string) (*model.User, error) {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
+		return nil, nil
+	}
+	var user model.User
+	err := s.db.WithContext(ctx).Where("LOWER(email) = ?", normalized).First(&user).Error
+	if err == nil {
+		return &user, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return nil, err
 }
 
 func buildInviteCode(userID uint64) string {

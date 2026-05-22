@@ -151,7 +151,7 @@ func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {
 	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
 	require.NoError(t, err)
 	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
-	user := &model.User{GoogleSub: "hosted-owner", Email: "owner@example.com", Name: "Owner", InviteCode: "invite-owner", Status: model.UserStatusActive}
+	user := &model.User{GoogleSub: model.StringPtr("hosted-owner"), Email: "owner@example.com", Name: "Owner", InviteCode: "invite-owner", Status: model.UserStatusActive}
 	require.NoError(t, db.Create(user).Error)
 
 	allowedModes := "hosted_only"
@@ -398,7 +398,7 @@ func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {
 	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
 
 	user := &model.User{
-		GoogleSub:  "user-sub",
+		GoogleSub:  model.StringPtr("user-sub"),
 		Email:      "demo@example.com",
 		Name:       "Demo",
 		InviteCode: "invite-000001",
@@ -444,7 +444,7 @@ func TestUpdateUserReEnableDoesNotRestoreDisabledAPIKeys(t *testing.T) {
 	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
 
 	user := &model.User{
-		GoogleSub:  "user-sub",
+		GoogleSub:  model.StringPtr("user-sub"),
 		Email:      "demo@example.com",
 		Name:       "Demo",
 		InviteCode: "invite-000001",

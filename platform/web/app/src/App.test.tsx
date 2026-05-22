@@ -31,7 +31,7 @@ describe('platform app shell', () => {
 
 	    expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
 	    await waitFor(() => expect(document.title).toBe('OfficeCLI App | Sign In'))
-	    expect(screen.getByRole('button', { name: /Continue with company OAuth2/i })).toBeInTheDocument()
+	    expect(screen.getByRole('button', { name: /Continue with Google/i })).toBeInTheDocument()
 	    expect(screen.queryByText(/Production document control for every workflow/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Issue production keys/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Buy quota for an API key/i)).not.toBeInTheDocument()
@@ -48,7 +48,7 @@ describe('platform app shell', () => {
     renderApp('/billing?status=success')
 
     expect(await screen.findByRole('heading', { name: /Continue to OfficeCLI/i })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Continue with company OAuth2/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue with Google/i }))
 
     expect(loginSpy).toHaveBeenCalledWith('/billing?status=success')
   })

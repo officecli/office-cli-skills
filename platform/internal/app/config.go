@@ -42,6 +42,10 @@ type Config struct {
 	GoogleClientID               string
 	GoogleClientSecret           string
 	GoogleRedirectURL            string
+	GitHubClientID               string
+	GitHubClientSecret           string
+	GitHubRedirectURL            string
+	AppGitHubAllowlist           []string
 	OAuth2ClientID               string
 	OAuth2ClientSecret           string
 	OAuth2AuthURL                string
@@ -139,6 +143,10 @@ func LoadConfig() (Config, error) {
 		GoogleClientID:               os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:           os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:            mustEnvDefault("GOOGLE_REDIRECT_URL", "https://platform.officecli.io/api/auth/google/callback"),
+		GitHubClientID:               os.Getenv("GITHUB_CLIENT_ID"),
+		GitHubClientSecret:           os.Getenv("GITHUB_CLIENT_SECRET"),
+		GitHubRedirectURL:            mustEnvDefault("GITHUB_REDIRECT_URL", "https://platform.officecli.io/api/auth/github/callback"),
+		AppGitHubAllowlist:           parseCSVList(os.Getenv("APP_GITHUB_ALLOWLIST")),
 		OAuth2ClientID:               os.Getenv("OAUTH2_CLIENT_ID"),
 		OAuth2ClientSecret:           os.Getenv("OAUTH2_CLIENT_SECRET"),
 		OAuth2AuthURL:                os.Getenv("OAUTH2_AUTH_URL"),

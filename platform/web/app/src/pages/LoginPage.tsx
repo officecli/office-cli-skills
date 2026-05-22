@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Button } from 'antd'
-import { ArrowLeft, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Github, ShieldCheck } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
@@ -27,20 +27,26 @@ export default function LoginPage() {
               subtitle="sign in required"
             />
 
-            <span className="chip mt-8">Company OAuth2 sign-in required</span>
+            <span className="chip mt-8">Choose how to sign in</span>
             <h1 className="mt-6 text-5xl font-bold leading-[0.92] text-white md:text-6xl">Continue to OfficeCLI</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Sign in with your company account to continue to the workspace. Access may still be limited by the current app policy.</p>
+            <p className="mt-6 max-w-2xl text-base leading-7 text-outline">Sign in with Google or GitHub to continue to the workspace. Access may still be limited by the current app policy.</p>
 
             <div className="app-card-muted mt-8 p-6">
-              <div className="text-sm text-outline">You will be redirected to company OAuth2 authentication and then returned to your requested workspace page if the account is permitted and still active.</div>
+              <div className="text-sm text-outline">You will be redirected to the provider you choose and then returned to your requested workspace page if the account is permitted and still active.</div>
             </div>
 
             <div className="mt-10 flex flex-wrap gap-3">
               <Button type="primary" icon={<ShieldCheck size={16} />} onClick={() => {
-                trackEvent(APP_ANALYTICS_EVENTS.loginStart, { surface: 'app', placement: 'login-page' })
+                trackEvent(APP_ANALYTICS_EVENTS.loginStart, { surface: 'app', placement: 'login-page', provider: 'google' })
                 api.login(returnTo)
               }}>
-                Continue with company OAuth2
+                Continue with Google
+              </Button>
+              <Button icon={<Github size={16} />} onClick={() => {
+                trackEvent(APP_ANALYTICS_EVENTS.loginStart, { surface: 'app', placement: 'login-page', provider: 'github' })
+                api.loginWithGitHub(returnTo)
+              }}>
+                Continue with GitHub
               </Button>
               <Button href="https://officecli.io/" icon={<ArrowLeft size={16} />}>
                 Back to site

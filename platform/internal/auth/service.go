@@ -28,6 +28,7 @@ type OAuthProvider interface {
 
 type UserStore interface {
 	SaveGoogleUser(ctx context.Context, googleSub, email, name string, avatarURL *string) (*model.User, error)
+	SaveGitHubUser(ctx context.Context, githubSub, email, name string, avatarURL *string) (*model.User, error)
 	GetUserByID(ctx context.Context, id uint64) (*model.User, error)
 }
 
@@ -56,32 +57,22 @@ type SessionPayload struct {
 }
 
 type Service struct {
-	provider   OAuthProvider
-	users      UserStore
-	sessions   SessionStore
-	referrals  ReferralRegistrar
-	cookieName string
-	sessionTTL time.Duration
-	codec      CookieCodec
-	allowlist  map[string]struct{}
-	allowAll   bool
+	provider         OAuthProvider
+	users            UserStore
+	sessions         SessionStore
+	referrals        ReferralRegistrar
+	cookieName       string
+	sessionTTL       time.Duration
+	codec            CookieCodec
+	allowlist        map[string]struct{}
+	allowAll         bool
+	githubProvider   OAuthProvider
+	githubAllowlist  map[string]struct{}
+	githubAllowAll   bool
 }
 
 func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, cookieName string, sessionTTL time.Duration, codec CookieCodec, referrals ReferralRegistrar, allowlist []string) *Service {
-	normalizedAllowlist := make(map[string]struct{}, len(allowlist))
-	allowAll := false
-	for _, email := range allowlist {
-		normalized := strings.ToLower(strings.TrimSpace(email))
-		if normalized == "" {
-			continue
-		}
-		if normalized == "*" {
-			allowAll = true
-			normalizedAllowlist = map[string]struct{}{}
-			break
-		}
-		normalizedAllowlist[normalized] = struct{}{}
-	}
+	normalizedAllowlist, allowAll := normalizeAllowlist(allowlist)
 	return &Service{
 		provider:   provider,
 		users:      users,
@@ -93,6 +84,31 @@ func NewService(provider OAuthProvider, users UserStore, sessions SessionStore, 
 		allowlist:  normalizedAllowlist,
 		allowAll:   allowAll,
 	}
+}
+
+func (s *Service) WithGitHubProvider(provider OAuthProvider, allowlist []string) *Service {
+	s.githubProvider = provider
+	s.githubAllowlist, s.githubAllowAll = normalizeAllowlist(allowlist)
+	return s
+}
+
+func (s *Service) GitHubEnabled() bool {
+	return s != nil && s.githubProvider != nil
+}
+
+func normalizeAllowlist(allowlist []string) (map[string]struct{}, bool) {
+	normalized := make(map[string]struct{}, len(allowlist))
+	for _, email := range allowlist {
+		entry := strings.ToLower(strings.TrimSpace(email))
+		if entry == "" {
+			continue
+		}
+		if entry == "*" {
+			return map[string]struct{}{}, true
+		}
+		normalized[entry] = struct{}{}
+	}
+	return normalized, false
 }
 
 func normalizeReturnTo(returnTo string) string {
@@ -165,6 +181,84 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (*mode
 		s.writeAuditLog(ctx, "app.google_login_denied", normalizedEmail, map[string]any{
 			"email":   normalizedEmail,
 			"name":    googleUser.Name,
+			"user_id": user.ID,
+			"reason":  "user_disabled",
+		})
+		return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "user_disabled"}
+	}
+	if inviteCode := strings.TrimSpace(payload["invite_code"]); inviteCode != "" && s.referrals != nil {
+		if _, err := s.referrals.RegisterReferral(ctx, inviteCode, user.ID); err != nil && !errors.Is(err, growthsvc.ErrInviteLimitReached) {
+			return nil, "", "", err
+		}
+	}
+
+	sessionID := uuid.NewString()
+	session := SessionPayload{SessionID: sessionID, UserID: user.ID, CreatedAt: time.Now().UTC()}
+	if err := s.sessions.SaveNamespacedSession(ctx, "app", sessionID, session, s.sessionTTL); err != nil {
+		return nil, "", "", err
+	}
+	if err := s.sessions.AddUserNamespacedSession(ctx, "app", user.ID, sessionID, s.sessionTTL); err != nil {
+		_ = s.sessions.DeleteNamespacedSession(ctx, "app", sessionID)
+		return nil, "", "", err
+	}
+	rawCookie, err := s.codec.Encode(sessionID)
+	if err != nil {
+		_ = s.removeAppSession(ctx, session)
+		return nil, "", "", err
+	}
+	returnTo := normalizeReturnTo(payload["return_to"])
+	return user, rawCookie, returnTo, nil
+}
+
+func (s *Service) GitHubLoginURL(ctx context.Context, returnTo, inviteCode string) (string, error) {
+	if !s.GitHubEnabled() {
+		return "", fmt.Errorf("github login is not configured")
+	}
+	state := uuid.NewString()
+	payload := map[string]string{"return_to": normalizeReturnTo(returnTo)}
+	if normalizedInviteCode := strings.TrimSpace(inviteCode); normalizedInviteCode != "" {
+		payload["invite_code"] = normalizedInviteCode
+	}
+	if err := s.sessions.SaveNamespacedSession(ctx, "oauth_state", state, payload, 10*time.Minute); err != nil {
+		return "", err
+	}
+	return s.githubProvider.AuthCodeURL(state), nil
+}
+
+func (s *Service) HandleGitHubCallback(ctx context.Context, code, state string) (*model.User, string, string, error) {
+	if !s.GitHubEnabled() {
+		return nil, "", "", fmt.Errorf("github login is not configured")
+	}
+	var payload map[string]string
+	ok, err := s.sessions.LoadNamespacedSession(ctx, "oauth_state", state, &payload)
+	if err != nil || !ok {
+		return nil, "", "", fmt.Errorf("invalid oauth state")
+	}
+	_ = s.sessions.DeleteNamespacedSession(ctx, "oauth_state", state)
+
+	ghUser, err := s.githubProvider.Exchange(ctx, code)
+	if err != nil {
+		return nil, "", "", err
+	}
+	normalizedEmail := strings.ToLower(strings.TrimSpace(ghUser.Email))
+	if !s.githubAllowAll {
+		if _, allowed := s.githubAllowlist[normalizedEmail]; !allowed {
+			s.writeAuditLogWithTarget(ctx, "app.github_login_denied", "github_account", normalizedEmail, map[string]any{
+				"email":  normalizedEmail,
+				"name":   ghUser.Name,
+				"reason": "email_not_allowlisted",
+			})
+			return nil, "", "", &AccessDeniedError{Email: normalizedEmail, Reason: "email_not_allowlisted"}
+		}
+	}
+	user, err := s.users.SaveGitHubUser(ctx, ghUser.Subject, normalizedEmail, ghUser.Name, ghUser.AvatarURL)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if user.Status == model.UserStatusDisabled {
+		s.writeAuditLogWithTarget(ctx, "app.github_login_denied", "github_account", normalizedEmail, map[string]any{
+			"email":   normalizedEmail,
+			"name":    ghUser.Name,
 			"user_id": user.ID,
 			"reason":  "user_disabled",
 		})
@@ -323,11 +417,15 @@ type auditLogger interface {
 }
 
 func (s *Service) writeAuditLog(ctx context.Context, action, targetID string, payload map[string]any) {
+	s.writeAuditLogWithTarget(ctx, action, "google_account", targetID, payload)
+}
+
+func (s *Service) writeAuditLogWithTarget(ctx context.Context, action, targetType, targetID string, payload map[string]any) {
 	logger, ok := s.users.(auditLogger)
 	if !ok {
 		return
 	}
-	_ = logger.CreateAuditLog(ctx, action, "google_account", targetID, MarshalAudit(payload))
+	_ = logger.CreateAuditLog(ctx, action, targetType, targetID, MarshalAudit(payload))
 }
 
 func (s *Service) removeAppSession(ctx context.Context, payload SessionPayload) error {

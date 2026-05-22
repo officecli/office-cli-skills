@@ -62,6 +62,9 @@ type discordOAuthRouteService interface {
 type authRouteService interface {
 	LoginURL(ctx context.Context, returnTo, inviteCode string) (string, error)
 	HandleCallback(ctx context.Context, code, state string) (*model.User, string, string, error)
+	GitHubEnabled() bool
+	GitHubLoginURL(ctx context.Context, returnTo, inviteCode string) (string, error)
+	HandleGitHubCallback(ctx context.Context, code, state string) (*model.User, string, string, error)
 	Me(ctx context.Context, raw string) (*model.User, error)
 	Logout(ctx context.Context, raw string) error
 }
@@ -198,6 +201,12 @@ func New() (*Application, error) {
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
 	adminSvc.UseMockData(cfg.AdminMockDataEnabled && cfg.AppEnv == "development")
 	authSvc := auth.NewService(newAppOAuthProvider(cfg), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
+	if strings.TrimSpace(cfg.GitHubClientID) != "" && strings.TrimSpace(cfg.GitHubClientSecret) != "" {
+		authSvc.WithGitHubProvider(
+			auth.NewGitHubOAuthProvider(cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL),
+			cfg.AppGitHubAllowlist,
+		)
+	}
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, apiKeyCipher, growthService)
 	appSvc.UseMockData(cfg.AppMockDataEnabled && cfg.AppEnv == "development")
@@ -715,6 +724,44 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 	api.GET("/auth/oauth2/callback", callback)
 	api.GET("/auth/google/login", login)
 	api.GET("/auth/google/callback", callback)
+	if authSvc.GitHubEnabled() {
+		githubLogin := func(c *gin.Context) {
+			returnTo := c.Query("return_to")
+			inviteCode := c.Query("invite")
+			u, err := authSvc.GitHubLoginURL(c.Request.Context(), returnTo, inviteCode)
+			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			c.Redirect(http.StatusFound, u)
+		}
+		githubCallback := func(c *gin.Context) {
+			user, rawCookie, returnTo, err := authSvc.HandleGitHubCallback(c.Request.Context(), c.Query("code"), c.Query("state"))
+			if err != nil {
+				var denied *auth.AccessDeniedError
+				if errors.As(err, &denied) {
+					deniedURL := "/app/access-denied"
+					if denied.Email != "" {
+						deniedURL += "?email=" + url.QueryEscape(denied.Email)
+					}
+					c.Redirect(http.StatusFound, deniedURL)
+					return
+				}
+				httpapi.LogWarnRequest(c, "auth_callback_failed",
+					"path", c.Request.URL.Path,
+					"client_ip", c.ClientIP(),
+					"error", err.Error(),
+				)
+				httpapi.Error(c, http.StatusUnauthorized, err.Error())
+				return
+			}
+			setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
+			_ = user
+			c.Redirect(http.StatusFound, returnTo)
+		}
+		api.GET("/auth/github/login", githubLogin)
+		api.GET("/auth/github/callback", githubCallback)
+	}
 	api.GET("/auth/me", func(c *gin.Context) {
 		raw, err := c.Cookie("cop_app_session")
 		if err != nil {

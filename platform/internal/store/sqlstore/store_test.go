@@ -385,10 +385,10 @@ func TestOperationsFunnelUsesWindowedOperationalAndFactTables(t *testing.T) {
 		{EventName: "pricing_view", Surface: "site", VisitorID: strPtr("visitor-old"), MetadataJSON: `{}`, CreatedAt: outside},
 	}).Error)
 	require.NoError(t, db.Create(&[]model.User{
-		{ID: 1, GoogleSub: "sub-1", Email: "u1@example.com", Name: "U1", InviteCode: "invite-1", Status: model.UserStatusActive, CreatedAt: recent},
-		{ID: 2, GoogleSub: "sub-2", Email: "u2@example.com", Name: "U2", InviteCode: "invite-2", Status: model.UserStatusActive, CreatedAt: recent},
-		{ID: 3, GoogleSub: "sub-3", Email: "u3@example.com", Name: "U3", InviteCode: "invite-3", Status: model.UserStatusActive, CreatedAt: outside},
-		{ID: 4, GoogleSub: "sub-4", Email: "u4@example.com", Name: "U4", InviteCode: "invite-4", Status: model.UserStatusActive, CreatedAt: outside},
+		{ID: 1, GoogleSub: model.StringPtr("sub-1"), Email: "u1@example.com", Name: "U1", InviteCode: "invite-1", Status: model.UserStatusActive, CreatedAt: recent},
+		{ID: 2, GoogleSub: model.StringPtr("sub-2"), Email: "u2@example.com", Name: "U2", InviteCode: "invite-2", Status: model.UserStatusActive, CreatedAt: recent},
+		{ID: 3, GoogleSub: model.StringPtr("sub-3"), Email: "u3@example.com", Name: "U3", InviteCode: "invite-3", Status: model.UserStatusActive, CreatedAt: outside},
+		{ID: 4, GoogleSub: model.StringPtr("sub-4"), Email: "u4@example.com", Name: "U4", InviteCode: "invite-4", Status: model.UserStatusActive, CreatedAt: outside},
 	}).Error)
 	require.NoError(t, db.Create(&[]model.CLILoginChallenge{
 		{ChallengeID: "challenge-1", Flow: model.CLILoginChallengeFlowCallback, CodeChallenge: "cc", CodeChallengeMethod: "plain", RedirectURI: "http://localhost", State: "s1", Status: model.CLILoginChallengeStatusCompleted, ExpiresAt: now, CompletedAt: timePtr(recent), CreatedAt: recent},
@@ -460,7 +460,7 @@ func TestOperationsFunnelRatesAreZeroWithoutRegisteredUsers(t *testing.T) {
 	outside := windowStart.Add(-time.Hour)
 	recent := now.Add(-time.Hour)
 	oldUserID := uint64(10)
-	require.NoError(t, db.Create(&model.User{ID: oldUserID, GoogleSub: "old-sub", Email: "old@example.com", Name: "Old", InviteCode: "invite-old", Status: model.UserStatusActive, CreatedAt: outside}).Error)
+	require.NoError(t, db.Create(&model.User{ID: oldUserID, GoogleSub: model.StringPtr("old-sub"), Email: "old@example.com", Name: "Old", InviteCode: "invite-old", Status: model.UserStatusActive, CreatedAt: outside}).Error)
 	require.NoError(t, db.Create(&model.UsageEvent{FingerprintHash: "old-machine", UserID: &oldUserID, Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: recent}).Error)
 	require.NoError(t, db.Create(&model.Order{UserID: oldUserID, Status: model.OrderStatusPaid, Currency: "usd", AmountTotal: 1000, PackCode: "old", PackName: "Old", QuotaAmount: 100, CreatedAt: outside, UpdatedAt: recent}).Error)
 
@@ -622,7 +622,7 @@ func TestSaveGoogleUserBackfillsMissingInviteCode(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}))
 
 	legacy := &model.User{
-		GoogleSub:  "legacy-sub",
+		GoogleSub:  model.StringPtr("legacy-sub"),
 		Email:      "legacy@example.com",
 		Name:       "Legacy User",
 		InviteCode: "",
@@ -642,7 +642,7 @@ func TestSaveGoogleUserKeepsDisabledStatusForExistingUser(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}))
 
 	legacy := &model.User{
-		GoogleSub:  "legacy-sub",
+		GoogleSub:  model.StringPtr("legacy-sub"),
 		Email:      "legacy@example.com",
 		Name:       "Legacy User",
 		InviteCode: "invite-000001",
@@ -667,9 +667,9 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}))
 
 	users := []model.User{
-		{GoogleSub: "sub-1", Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
-		{GoogleSub: "sub-2", Email: "beta@example.com", Name: "Beta", InviteCode: "invite-beta", Status: model.UserStatusActive},
-		{GoogleSub: "sub-3", Email: "ops@example.org", Name: "Ops", InviteCode: "invite-ops", Status: model.UserStatusActive},
+		{GoogleSub: model.StringPtr("sub-1"), Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
+		{GoogleSub: model.StringPtr("sub-2"), Email: "beta@example.com", Name: "Beta", InviteCode: "invite-beta", Status: model.UserStatusActive},
+		{GoogleSub: model.StringPtr("sub-3"), Email: "ops@example.org", Name: "Ops", InviteCode: "invite-ops", Status: model.UserStatusActive},
 	}
 	for i := range users {
 		require.NoError(t, db.Create(&users[i]).Error)
@@ -714,7 +714,7 @@ func TestRegisterReferralWithinLimitHonorsCapAndIdempotency(t *testing.T) {
 
 	store := NewWithDB(db)
 	inviter := &model.User{
-		GoogleSub:  "google-sub-1",
+		GoogleSub:  model.StringPtr("google-sub-1"),
 		Email:      "demo@example.com",
 		Name:       "Demo User",
 		InviteCode: "invite-000001",
@@ -807,7 +807,7 @@ func TestGrantHostedCreditsToAPIKeyIsIdempotent(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.HostedCreditGrant{}))
 
 	store := NewWithDB(db)
-	user := &model.User{GoogleSub: "sub-hosted", Email: "hosted@example.com", Name: "Hosted", InviteCode: "invite-hosted", Status: model.UserStatusActive}
+	user := &model.User{GoogleSub: model.StringPtr("sub-hosted"), Email: "hosted@example.com", Name: "Hosted", InviteCode: "invite-hosted", Status: model.UserStatusActive}
 	require.NoError(t, db.Create(user).Error)
 	defaultRuntimeMode := "external"
 	key := &model.APIKey{
@@ -912,7 +912,7 @@ func TestAPIKeyHostedReservationUsesOwnerAccountCredits(t *testing.T) {
 
 	store := NewWithDB(db)
 	userID := uint64(42)
-	require.NoError(t, db.Create(&model.User{ID: userID, GoogleSub: "sub-account-key", Email: "account-key@example.com", Name: "Account Key", InviteCode: "invite-account-key", Status: model.UserStatusActive}).Error)
+	require.NoError(t, db.Create(&model.User{ID: userID, GoogleSub: model.StringPtr("sub-account-key"), Email: "account-key@example.com", Name: "Account Key", InviteCode: "invite-account-key", Status: model.UserStatusActive}).Error)
 	defaultRuntimeMode := "hosted"
 	key := &model.APIKey{
 		OwnerUserID:        &userID,
@@ -957,7 +957,7 @@ func TestFindAPIKeyByHashUsesOwnerAccountCredits(t *testing.T) {
 
 	store := NewWithDB(db)
 	userID := uint64(51)
-	require.NoError(t, db.Create(&model.User{ID: userID, GoogleSub: "sub-license-key", Email: "license-key@example.com", Name: "License Key", InviteCode: "invite-license-key", Status: model.UserStatusActive}).Error)
+	require.NoError(t, db.Create(&model.User{ID: userID, GoogleSub: model.StringPtr("sub-license-key"), Email: "license-key@example.com", Name: "License Key", InviteCode: "invite-license-key", Status: model.UserStatusActive}).Error)
 	defaultRuntimeMode := "hosted"
 	key := &model.APIKey{
 		OwnerUserID:        &userID,
@@ -992,7 +992,7 @@ func TestFindAPIKeyByHashTreatsDisabledOwnerAsDisabledKey(t *testing.T) {
 
 	store := NewWithDB(db)
 	user := &model.User{
-		GoogleSub:  "google-sub-1",
+		GoogleSub:  model.StringPtr("google-sub-1"),
 		Email:      "demo@example.com",
 		Name:       "Demo User",
 		InviteCode: "invite-000001",
@@ -1024,7 +1024,7 @@ func TestConsumePaidQuotaByHashRejectsDisabledOwner(t *testing.T) {
 
 	store := NewWithDB(db)
 	user := &model.User{
-		GoogleSub:  "google-sub-1",
+		GoogleSub:  model.StringPtr("google-sub-1"),
 		Email:      "demo@example.com",
 		Name:       "Demo User",
 		InviteCode: "invite-000001",
@@ -1059,7 +1059,7 @@ func TestReserveCreditsByHashRejectsDisabledOwner(t *testing.T) {
 
 	store := NewWithDB(db)
 	user := &model.User{
-		GoogleSub:  "google-sub-1",
+		GoogleSub:  model.StringPtr("google-sub-1"),
 		Email:      "demo@example.com",
 		Name:       "Demo User",
 		InviteCode: "invite-000001",

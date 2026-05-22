@@ -38,6 +38,18 @@ func (f *fakeAuthRouteService) HandleCallback(_ context.Context, code, state str
 	return f.handleUser, f.handleCookie, f.handleReturnTo, f.handleErr
 }
 
+func (f *fakeAuthRouteService) GitHubEnabled() bool {
+	return false
+}
+
+func (f *fakeAuthRouteService) GitHubLoginURL(_ context.Context, returnTo, inviteCode string) (string, error) {
+	return "", nil
+}
+
+func (f *fakeAuthRouteService) HandleGitHubCallback(_ context.Context, code, state string) (*model.User, string, string, error) {
+	return f.handleUser, f.handleCookie, f.handleReturnTo, f.handleErr
+}
+
 func (f *fakeAuthRouteService) Me(_ context.Context, raw string) (*model.User, error) {
 	if f.meUser != nil || f.meErr != nil {
 		return f.meUser, f.meErr

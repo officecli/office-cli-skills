@@ -87,7 +87,8 @@ const (
 
 type User struct {
 	ID         uint64     `gorm:"primaryKey" json:"id"`
-	GoogleSub  string     `gorm:"column:google_sub;size:191;uniqueIndex;not null" json:"google_sub"`
+	GoogleSub  *string    `gorm:"column:google_sub;size:191;uniqueIndex" json:"google_sub,omitempty"`
+	GitHubSub  *string    `gorm:"column:github_sub;size:191;uniqueIndex" json:"github_sub,omitempty"`
 	Email      string     `gorm:"column:email;size:191;uniqueIndex;not null" json:"email"`
 	Name       string     `gorm:"column:name;size:191;not null" json:"name"`
 	InviteCode string     `gorm:"column:invite_code;size:64;uniqueIndex;not null" json:"invite_code"`
@@ -751,4 +752,18 @@ func Rate(numerator, denominator int64) float64 {
 		return 0
 	}
 	return float64(numerator) / float64(denominator)
+}
+
+func StringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func StringValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

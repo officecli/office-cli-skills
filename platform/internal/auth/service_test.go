@@ -39,7 +39,19 @@ func (f *fakeAuthUserStore) SaveGoogleUser(_ context.Context, googleSub, email, 
 		return nil, f.err
 	}
 	copied := *f.user
-	copied.GoogleSub = googleSub
+	copied.GoogleSub = model.StringPtr(googleSub)
+	copied.Email = email
+	copied.Name = name
+	copied.AvatarURL = avatarURL
+	return &copied, nil
+}
+
+func (f *fakeAuthUserStore) SaveGitHubUser(_ context.Context, githubSub, email, name string, avatarURL *string) (*model.User, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	copied := *f.user
+	copied.GitHubSub = model.StringPtr(githubSub)
 	copied.Email = email
 	copied.Name = name
 	copied.AvatarURL = avatarURL
