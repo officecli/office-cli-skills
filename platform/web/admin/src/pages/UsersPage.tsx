@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 export default function UsersPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedUserID, setSelectedUserID] = useState<number | null>(null)
   const { data: users = [] } = useQuery({ queryKey: ['admin-users'], queryFn: () => api.users() })
@@ -33,14 +35,28 @@ export default function UsersPage() {
             columns="minmax(0,0.5fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr)"
             rows={users.map((user) => [
               <code key={`uid-${user.id}`} className="font-mono text-xs text-white">{user.id}</code>,
-              <div key={`user-${user.id}`}>
+              <button
+                key={`user-${user.id}`}
+                type="button"
+                onClick={() => navigate(`/usage-events?user_id=${user.id}`)}
+                className="block w-full cursor-pointer rounded-md text-left transition-colors hover:bg-white/5 focus:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                title="View this user's usage events"
+                aria-label={`View usage events for ${user.name || user.email}`}
+              >
                 <div className="font-semibold text-white">{user.name || user.email}</div>
                 <div className="mt-1 break-all text-xs text-outline">{user.email}</div>
-              </div>,
+              </button>,
               <code key={`invite-${user.id}`} className="font-mono text-xs text-white">{user.invite_code || '—'}</code>,
               <StatusPill key={`status-${user.id}`} value={user.status} />,
               <span key={`created-${user.id}`}>{formatDate(user.created_at)}</span>,
               <div key={`action-${user.id}`} className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="admin-secondary-button"
+                  onClick={() => navigate(`/usage-events?user_id=${user.id}`)}
+                >
+                  View events
+                </button>
                 <button
                   type="button"
                   className="admin-secondary-button"

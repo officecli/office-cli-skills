@@ -3,6 +3,7 @@ import { DndContext, PointerSensor, closestCenter, type DragEndEvent, useSensor,
 import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { Button, Dropdown, Space, Table, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -84,11 +85,18 @@ const defaultPreferences: ColumnPreference[] = usageColumns.map((column) => ({
 const columnByKey = new Map(usageColumns.map((column) => [column.key, column]))
 
 export default function UsageEventsPage() {
-  const [draft, setDraft] = useState<FilterState>(defaultFilters)
-  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+  const [searchParams] = useSearchParams()
+  const [draft, setDraft] = useState<FilterState>(() => filtersFromSearchParams(searchParams))
+  const [filters, setFilters] = useState<FilterState>(() => filtersFromSearchParams(searchParams))
   const [columnPreferences, setColumnPreferences] = useState<ColumnPreference[]>(defaultPreferences)
   const [columnMenuOpen, setColumnMenuOpen] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+
+  useEffect(() => {
+    const next = (searchParams.get('user_id') ?? '').trim()
+    setDraft((current) => (current.user_id === next ? current : { ...current, user_id: next }))
+    setFilters((current) => (current.user_id === next ? current : { ...current, user_id: next }))
+  }, [searchParams])
 
   const { data: savedPreferences } = useQuery({
     queryKey: ['admin-preference', preferenceKey],
@@ -390,6 +398,11 @@ function toPreferencePayload(columns: ColumnPreference[]): AdminPreference {
       width: column.width,
     })),
   }
+}
+
+function filtersFromSearchParams(searchParams: URLSearchParams): FilterState {
+  const userID = (searchParams.get('user_id') ?? '').trim()
+  return userID ? { ...defaultFilters, user_id: userID } : defaultFilters
 }
 
 function normalizeWidth(width?: number, fallback = 160) {

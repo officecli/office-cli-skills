@@ -1,14 +1,25 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import UsersPage from './UsersPage'
 
 const fetchMock = vi.fn()
 
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}{location.search}</div>
+}
+
 function renderPage() {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <UsersPage />
+      <MemoryRouter initialEntries={['/users']}>
+        <Routes>
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/usage-events" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -98,5 +109,57 @@ describe('admin users page', () => {
     expect(screen.getByText('Used 3')).toBeInTheDocument()
     expect(screen.getByText('Hosted credits account-level')).toBeInTheDocument()
     expect(screen.getByText('Key reserved legacy 5')).toBeInTheDocument()
+  })
+
+  it('navigates to usage-events filtered by user when clicking the action button', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/users') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', created_at: '2026-04-01T00:00:00Z' },
+            ],
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    const viewEventsButton = await screen.findByRole('button', { name: /^view events$/i })
+    fireEvent.click(viewEventsButton)
+
+    expect(await screen.findByTestId('location')).toHaveTextContent('/usage-events?user_id=42')
+  })
+
+  it('navigates to usage-events filtered by user when clicking the user cell', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/users') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { id: 7, email: 'ops@example.com', name: 'Ops Operator', invite_code: 'invite-7', status: 'active', created_at: '2026-04-01T00:00:00Z' },
+            ],
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    const userCellButton = await screen.findByRole('button', { name: /view usage events for ops operator/i })
+    fireEvent.click(userCellButton)
+
+    expect(await screen.findByTestId('location')).toHaveTextContent('/usage-events?user_id=7')
   })
 })
