@@ -40,7 +40,8 @@ export interface FAQEntry {
   a: string
 }
 
-export const githubRepoURL = 'https://github.com/officecli/officecli'
+export { githubRepoURL } from './siteData'
+import { githubRepoURL } from './siteData'
 export const agentSkillsHubPath = '/officecli'
 export const legacyAgentSkillsPath = '/claude-code-codex-office-skills'
 export const productDocsPath = '/docs'

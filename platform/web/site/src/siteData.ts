@@ -11,6 +11,9 @@ export const platformBaseURL = viteEnv?.VITE_PLATFORM_BASE_URL ?? 'https://platf
 export const platformAppURL = `${platformBaseURL}/app`
 export const platformBillingURL = `${platformBaseURL}/app/billing`
 export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
+export const githubRepoURL = 'https://github.com/officecli/officecli'
+export const installOfficeCliPath = '/download'
+export const officedexNotifyPath = '/officedex-notify'
 
 export const navItems: NavItem[] = [
   { to: '/#', label: 'Home' },

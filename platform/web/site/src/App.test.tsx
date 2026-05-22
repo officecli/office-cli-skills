@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -31,12 +31,10 @@ describe('marketing site shell', () => {
 
     expect(screen.getAllByText('OfficeCLI').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('heading', { name: /AI Document Generation in External or Hosted Mode/i, level: 1 }),
+      screen.getByRole('heading', { name: /^officecli$/i, level: 1 }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/External: free unlimited with your own model endpoint/i)).toBeInTheDocument()
-    expect(screen.getByText(/Hosted: OfficeCLI-managed runtime with hosted credits/i)).toBeInTheDocument()
-    expect(screen.getAllByText('External Mode').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Hosted Mode').length).toBeGreaterThan(0)
+    expect(screen.getByText(/AI document generation, on every surface/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/One binary · Three surfaces · Plus a desktop app/i).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: /^ROADMAP$/i, level: 2 })).toBeInTheDocument()
     expect(
       screen.getByText(/OfficeCLI is moving from document generation into a broader document operations workflow/i),
@@ -86,6 +84,19 @@ describe('marketing site shell', () => {
     expect(xLink).toHaveAttribute('rel', 'noreferrer')
   })
 
+  it('links the contact GitHub entry to the open-source repo', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const githubLink = screen.getAllByRole('link', { name: /^GitHub$/i }).at(-1)!
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/officecli/officecli')
+    expect(githubLink).toHaveAttribute('target', '_blank')
+    expect(githubLink).toHaveAttribute('rel', 'noreferrer')
+  })
+
   it('links Discord and X from the home hero', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -95,6 +106,74 @@ describe('marketing site shell', () => {
 
     expect(screen.getByRole('link', { name: /Join Discord/i })).toHaveAttribute('href', 'https://discord.gg/ezAHMkdG')
     expect(screen.getByRole('link', { name: /Follow on X/i })).toHaveAttribute('href', 'https://x.com/officecli')
+    expect(screen.getByRole('link', { name: /Star on GitHub/i })).toHaveAttribute('href', 'https://github.com/officecli/officecli')
+  })
+
+  it('renders three surface tabs with officedex selected by default', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(3)
+    const dexTab = screen.getByRole('tab', { name: /officedex/i })
+    const tuiTab = screen.getByRole('tab', { name: /officecli-tui/i })
+    const cliTab = screen.getByRole('tab', { name: /Scriptable CLI/i })
+    expect(dexTab).toHaveAttribute('aria-selected', 'true')
+    expect(tuiTab).toHaveAttribute('aria-selected', 'false')
+    expect(cliTab).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('switches surface panels when a different tab is clicked', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const tuiTab = screen.getByRole('tab', { name: /officecli-tui/i })
+    fireEvent.click(tuiTab)
+    expect(tuiTab).toHaveAttribute('aria-selected', 'true')
+
+    const panels = screen.getAllByRole('tabpanel', { hidden: true })
+    const tuiPanel = panels.find((panel) => panel.id.endsWith('-panel-officecli-tui'))
+    const dexPanel = panels.find((panel) => panel.id.endsWith('-panel-officedex'))
+    expect(tuiPanel).toBeDefined()
+    expect(dexPanel).toBeDefined()
+    expect(tuiPanel).toHaveAttribute('aria-hidden', 'false')
+    expect(dexPanel).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('marks the officedex CTA as coming soon and shares the install link across tui and cli', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const notifyButton = screen.getByRole('button', { name: /Get notified/ })
+    expect(notifyButton).toHaveAttribute('aria-disabled', 'true')
+
+    const installLinks = screen.getAllByRole('link', { name: /^Install officecli$/i, hidden: true })
+    expect(installLinks.length).toBeGreaterThanOrEqual(2)
+    const hrefs = installLinks.map((link) => link.getAttribute('href'))
+    expect(new Set(hrefs).size).toBe(1)
+    expect(hrefs[0]).toBe('/download')
+  })
+
+  it('shows the five output formats in the independent band', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const band = screen.getByRole('region', { name: /Supported output formats/i })
+    for (const ext of ['PPTX', 'DOCX', 'XLSX', 'REPORT', 'IMG']) {
+      expect(within(band).getAllByText(new RegExp(`^${ext}$`)).length).toBeGreaterThan(0)
+    }
   })
 
   it('shows a non-price placeholder when the pricing api fails', async () => {
@@ -339,8 +418,8 @@ describe('site metadata and assets', () => {
 
     expect(heroSource).not.toContain('min-h-[90vh]')
     expect(heroSource).not.toContain('md:text-8xl')
-    expect(heroSource).toContain('max-h-[min(34rem,calc(100vh-12rem))]')
-    expect(heroSource).toContain('overflow-y-auto')
+    expect(heroSource).toContain('<HeroProductTabs />')
+    expect(heroSource).toContain('<HeroOutputFormats />')
   })
 
   it('defines crawl assets for the marketing site', () => {
@@ -371,8 +450,9 @@ describe('site metadata and assets', () => {
     const html = renderRouteApp('/')
 
     expect(html).toContain('<main')
-    expect(html).toContain('External + Hosted modes')
-    expect(html).toContain('External: free unlimited with your own model endpoint')
+    expect(html).toContain('One binary · Three surfaces · Plus a desktop app')
+    expect(html).toContain('AI document generation, on every surface')
+    expect(html).toContain('Five outputs, supported by every surface')
     expect(html).toContain('id="faq"')
   })
 

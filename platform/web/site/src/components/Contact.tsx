@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CheckCheck, Copy, Mail, MessageSquare, Megaphone } from 'lucide-react'
+import { CheckCheck, Copy, Mail } from 'lucide-react'
+import { githubRepoURL } from '../siteData'
+import { DiscordMark, GithubMark, XMark } from './branding'
 
 const supportEmail = 'support@officecli.io'
 const discordInviteURL = 'https://discord.gg/ezAHMkdG'
@@ -7,15 +9,21 @@ const xProfileURL = 'https://x.com/officecli'
 
 const socialPlaceholders = [
   {
+    label: 'GitHub',
+    description: 'Open-source repository and issue tracker.',
+    icon: GithubMark,
+    href: githubRepoURL,
+  },
+  {
     label: 'Discord',
     description: 'Community room and product discussion.',
-    icon: MessageSquare,
+    icon: DiscordMark,
     href: discordInviteURL,
   },
   {
     label: 'X',
     description: 'Product updates and release highlights.',
-    icon: Megaphone,
+    icon: XMark,
     href: xProfileURL,
   },
 ]
@@ -88,7 +96,7 @@ export default function Contact() {
                 <>
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <div className="inline-flex items-center gap-3 text-white">
-                      <Icon size={18} className="text-tertiary" />
+                      <Icon className="h-[18px] w-[18px] text-tertiary" />
                       <span className="font-semibold">{item.label}</span>
                     </div>
                     <span className="rounded-full border border-outline-variant/15 px-3 py-1 text-[10px] font-headline uppercase tracking-widest text-outline-variant">
