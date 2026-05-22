@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.74 - 2026-05-22
+
+### Added
+
+- Windows (amd64/arm64) binary release targets. The npm wrapper now installs the matching `officecli.exe` on `win32` x64/arm64 hosts.
+
+### Changed
+
+- npm package metadata: add `repository` and `bugs` fields and expand social links in the README.
+- README "Supported Platforms" section now lists Windows x64 and arm64.
+
 ## 0.2.73 - 2026-05-21
 
 ### Fixed
