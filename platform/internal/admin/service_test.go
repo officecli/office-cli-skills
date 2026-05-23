@@ -95,7 +95,6 @@ func TestServiceMockDataProvidesAdminListSamples(t *testing.T) {
 
 	sources, err := svc.QuotaSources(context.Background(), QuotaSourcesFilter{})
 	require.NoError(t, err)
-	require.NotEmpty(t, sources.FreeTrialDevices)
 	require.NotEmpty(t, sources.RewardGrants)
 	require.NotEmpty(t, sources.PaidExternalKeys)
 	require.NotEmpty(t, sources.HostedKeys)
@@ -104,7 +103,7 @@ func TestServiceMockDataProvidesAdminListSamples(t *testing.T) {
 func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.DailyFreeQuota{}, &model.UsageEvent{}, &model.AdminAuditLog{}))
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.UsageEvent{}, &model.AdminAuditLog{}))
 	store := sqlstore.NewWithDB(db)
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"})
 	_ = client
@@ -133,14 +132,6 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	plaintext, err := svc.GetAPIKeyPlaintext(context.Background(), key.ID, "admin@example.com")
 	require.NoError(t, err)
 	require.Equal(t, result.PlaintextKey, plaintext)
-
-	quota := &model.DailyFreeQuota{FingerprintHash: "fp-admin", UsageDate: "2026-04-16", DailyLimit: 2, DailyUsed: 1}
-	require.NoError(t, db.Create(quota).Error)
-	require.NoError(t, svc.UpdateFreeQuota(context.Background(), quota.ID, 5))
-
-	var updated model.DailyFreeQuota
-	require.NoError(t, db.First(&updated, quota.ID).Error)
-	require.Equal(t, 5, updated.DailyLimit)
 }
 
 func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {

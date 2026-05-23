@@ -127,6 +127,16 @@ func (s *overviewRouteStore) GrantHostedCreditsToUser(_ context.Context, userID 
 	return &copied, &account, true, nil
 }
 
+func (s *overviewRouteStore) GrantHostedCreditsToFingerprint(_ context.Context, fingerprint string, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.FingerprintCreditLedger, *model.FingerprintCreditAccount, bool, error) {
+	ledger := &model.FingerprintCreditLedger{FingerprintHash: fingerprint, SourceType: source, IdempotencyKey: idempotencyKey, CreditDelta: creditAmount, Reason: reason, MetadataJSON: metadataJSON}
+	account := &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: creditAmount, BonusGranted: true}
+	return ledger, account, true, nil
+}
+
+func (s *overviewRouteStore) TransferAnonymousCreditsToUser(_ context.Context, _ string, _ uint64) (int, error) {
+	return 0, nil
+}
+
 func (s *overviewRouteStore) UpdateAPIKey(_ context.Context, _ uint64, _ map[string]any) error {
 	return nil
 }

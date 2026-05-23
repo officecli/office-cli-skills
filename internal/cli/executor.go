@@ -88,7 +88,6 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	if strings.TrimSpace(artifact.AccessMode) != "" {
 		result.AccessMode = artifact.AccessMode
 		result.Remaining = artifact.Remaining
-		result.FreeRemaining = artifact.FreeRemaining
 		result.RewardRemaining = artifact.RewardRemaining
 		result.PaidQuotaRemaining = artifact.PaidQuotaRemaining
 	}
@@ -108,7 +107,6 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 				result.AccessMode = string(consumeResult.AccessMode)
 			}
 			result.Remaining = consumeResult.Remaining
-			result.FreeRemaining = consumeResult.FreeRemaining
 			result.RewardRemaining = consumeResult.RewardRemaining
 			result.PaidQuotaRemaining = consumeResult.PaidQuotaRemaining
 			result.CreditBalance = consumeResult.CreditBalance
@@ -118,17 +116,12 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 			case LicenseAccessModeReward:
 				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: reward. %d document generations remaining.", consumeResult.Remaining))
 			default:
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Current mode: free. %d document generations remaining.", consumeResult.Remaining))
+				result.Warnings = append(result.Warnings, "Current mode: external (using your locally-configured LLM key).")
 			}
 			if snapshot := job.LicenseCheck.QuotaSnapshot; snapshot != nil {
-				freeRemaining := snapshot.FreeTrial.Remaining
-				if freeRemaining == 0 {
-					freeRemaining = snapshot.FreeTrialDaily.Remaining
+				if snapshot.CreditAccount.OwnerKind != "" || snapshot.CreditAccount.Balance > 0 || snapshot.CreditAccount.Reserved > 0 {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("Credit balance: %d available (%d reserved).", snapshot.CreditAccount.Available, snapshot.CreditAccount.Reserved))
 				}
-				if job.LicenseCheck.AccessMode == LicenseAccessModeFree {
-					freeRemaining = consumeResult.Remaining
-				}
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Free trial quota on this machine: %d remaining.", freeRemaining))
 
 				rewardRemaining := snapshot.RewardQuota.Remaining
 				if job.LicenseCheck.AccessMode == LicenseAccessModeReward {

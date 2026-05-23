@@ -388,8 +388,8 @@ func HelpText() string {
 	return `officecli
 
 Generate PPTX, DOCX, XLSX, reports, and images from natural language.
-Hosted trial access is the default, so you can install and generate without
-setting up a local model endpoint first.
+Hosted credits are the default — every new device starts with 100 free credits,
+so you can install and generate without setting up a local model endpoint first.
 
 Install, then start the persistent TUI:
   officecli --version
@@ -477,7 +477,7 @@ Copy-paste examples:
   officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
 
 Description:
-  - Hosted trial access is the default when no local generation config exists.
+  - Hosted credits are the default when no local generation config exists; every new device starts with 100 free credits.
   - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
   - report requires --file <xlsx-path> and creates an HTML report from workbook data.
   - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.
@@ -1329,8 +1329,9 @@ func (a *App) runLogin(ctx context.Context, cfg Config) error {
 exchange:
 	exchangeResp := cliLoginExchangeResponse{}
 	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/login/exchange", map[string]any{
-		"challenge_id":  startResp.ChallengeID,
-		"code_verifier": verifier,
+		"challenge_id":     startResp.ChallengeID,
+		"code_verifier":    verifier,
+		"fingerprint_hash": licenseprovider.ComputeFingerprintHash(),
 	}, "", &exchangeResp); err != nil {
 		return err
 	}
@@ -1370,7 +1371,7 @@ func (a *App) runLogout(ctx context.Context, cfg Config) error {
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintln(a.Stdout, "Logged out. This CLI is back to anonymous hosted trial mode.")
+		_, err := fmt.Fprintln(a.Stdout, "Logged out. This CLI is back to anonymous credit mode.")
 	return err
 }
 
@@ -1400,7 +1401,7 @@ func (a *App) runWhoami(ctx context.Context, cfg Config) error {
 		_, err = fmt.Fprintln(a.Stdout, "Mode: logged out (saved CLI session is invalid or expired)")
 		return err
 	default:
-		_, err := fmt.Fprintln(a.Stdout, "Mode: anonymous hosted trial")
+		_, err := fmt.Fprintln(a.Stdout, "Mode: anonymous credit")
 		return err
 	}
 }
@@ -1429,9 +1430,11 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 			return err
 		}
 	}
-	freeTrial, rewardQuota, paidQuota := quotaSnapshotSections(result)
-	if _, err := fmt.Fprintf(a.Stdout, "Free trial quota (this machine, lifetime): %d total / %d used / %d remaining\n", freeTrial.Limit, freeTrial.Used, freeTrial.Remaining); err != nil {
-		return err
+	creditAccount, rewardQuota, paidQuota := quotaSnapshotSections(result)
+	if creditAccount.OwnerKind == "fingerprint" || creditAccount.Balance > 0 || creditAccount.Reserved > 0 {
+		if _, err := fmt.Fprintf(a.Stdout, "Anonymous credit balance (this device): %d available / %d reserved / %d total\n", creditAccount.Available, creditAccount.Reserved, creditAccount.Balance); err != nil {
+			return err
+		}
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Reward quota remaining: %d\n", rewardQuota.Remaining); err != nil {
 		return err
@@ -1462,12 +1465,8 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 	return nil
 }
 
-func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.FreeTrialDailySnapshot, licenseprovider.RewardQuotaSnapshot, licenseprovider.PaidExternalQuotaSnapshot) {
-	freeTrial := licenseprovider.FreeTrialDailySnapshot{
-		Limit:     result.FreeLimit,
-		Used:      result.FreeUsed,
-		Remaining: result.FreeRemaining,
-	}
+func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.CreditAccountSnapshot, licenseprovider.RewardQuotaSnapshot, licenseprovider.PaidExternalQuotaSnapshot) {
+	creditAccount := licenseprovider.CreditAccountSnapshot{}
 	rewardQuota := licenseprovider.RewardQuotaSnapshot{Remaining: result.RewardRemaining}
 	paidQuota := licenseprovider.PaidExternalQuotaSnapshot{
 		CurrentKeyTotal:     result.PaidQuotaTotal,
@@ -1475,13 +1474,10 @@ func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.FreeTria
 		CurrentKeyRemaining: result.PaidQuotaRemaining,
 	}
 	if result.QuotaSnapshot == nil {
-		return freeTrial, rewardQuota, paidQuota
+		return creditAccount, rewardQuota, paidQuota
 	}
-	if snapshot := result.QuotaSnapshot.FreeTrial; snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0 {
-		freeTrial = licenseprovider.FreeTrialDailySnapshot{Limit: snapshot.Limit, Used: snapshot.Used, Remaining: snapshot.Remaining, BinaryOnly: snapshot.BinaryOnly}
-	}
-	if snapshot := result.QuotaSnapshot.FreeTrialDaily; freeTrial.Limit == 0 && freeTrial.Used == 0 && freeTrial.Remaining == 0 && (snapshot.Limit > 0 || snapshot.Used > 0 || snapshot.Remaining > 0) {
-		freeTrial = snapshot
+	if snapshot := result.QuotaSnapshot.CreditAccount; snapshot.OwnerKind != "" || snapshot.Balance > 0 || snapshot.Reserved > 0 {
+		creditAccount = snapshot
 	}
 	if snapshot := result.QuotaSnapshot.RewardQuota; snapshot.Remaining > 0 || result.RewardRemaining == 0 {
 		rewardQuota = snapshot
@@ -1489,7 +1485,7 @@ func quotaSnapshotSections(result *LicenseCheckResult) (licenseprovider.FreeTria
 	if snapshot := result.QuotaSnapshot.PaidExternalQuota; snapshot.CurrentKeyPrefix != "" || snapshot.CurrentKeyTotal > 0 || snapshot.CurrentKeyUsed > 0 || snapshot.CurrentKeyRemaining > 0 {
 		paidQuota = snapshot
 	}
-	return freeTrial, rewardQuota, paidQuota
+	return creditAccount, rewardQuota, paidQuota
 }
 
 func (a *App) runAuthSetKey(ctx context.Context, cfg Config, key string) error {
@@ -1661,7 +1657,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		}
 	}
 	if !result.Allowed {
-		fallback := "Free trial quota is used up. Run `officecli login`, then buy hosted credits for your account."
+		fallback := "Credit balance exhausted. Run `officecli login`, then buy hosted credits for your account."
 		if result.ReasonCode == "hosted_credit_exhausted" {
 			fallback = "Hosted credits are exhausted. Run `officecli login`, then buy hosted credits for your account."
 		}
@@ -1671,7 +1667,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		return nil, fmt.Errorf("%s", fallbackMessage(result.Message, fallback))
 	}
 	if result.AccessMode == LicenseAccessModeFree && strings.TrimSpace(result.Message) == "" {
-		result.Message = fmt.Sprintf("Current mode: free. %d document generations remaining.", result.FreeRemaining)
+		result.Message = "Current mode: external (using your locally-configured LLM key)."
 	}
 	if result.AccessMode == LicenseAccessModeReward && strings.TrimSpace(result.Message) == "" {
 		result.Message = fmt.Sprintf("Current mode: reward. %d document generations remaining.", result.RewardRemaining)

@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, DailyFreeQuota, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -43,8 +43,6 @@ export const api = {
   getApiKeyPlaintext: (id: number) => request<{ plaintext_key: string }>(`/api/admin/api-keys/${id}/plaintext`),
   createApiKey: (payload: Record<string, unknown>) => request<{ plaintext_key: string; key_prefix: string }>('/api/admin/api-keys', { method: 'POST', body: JSON.stringify(payload) }),
   updateApiKey: (id: number, payload: Record<string, unknown>) => request(`/api/admin/api-keys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  freeQuotas: (fingerprint = '', usageDate = '') => request<DailyFreeQuota[]>(`/api/admin/free-quotas?fingerprint=${encodeURIComponent(fingerprint)}&usage_date=${encodeURIComponent(usageDate)}`),
-  updateFreeQuota: (id: number, free_limit: number) => request(`/api/admin/free-quotas/${id}`, { method: 'PATCH', body: JSON.stringify({ free_limit }) }),
   quotaSources: (params: URLSearchParams) => request<QuotaSources>(`/api/admin/quota-sources?${params.toString()}`),
   usageEvents: (params: URLSearchParams) => request<UsageEvent[]>(`/api/admin/usage-events?${params.toString()}`),
   adminPreference: (pageKey: string) => request<AdminPreference>(`/api/admin/preferences/${encodeURIComponent(pageKey)}`),

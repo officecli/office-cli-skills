@@ -98,7 +98,7 @@ func (f *fakeLicenseManager) Consume(_ context.Context, token UsageCommitToken) 
 	if f.consumeResp != nil {
 		return f.consumeResp, nil
 	}
-	return &UsageConsumeResult{AccessMode: LicenseAccessModePaid, Remaining: 2, FreeRemaining: 2}, nil
+	return &UsageConsumeResult{AccessMode: LicenseAccessModePaid, Remaining: 2}, nil
 }
 
 func TestExecutorGenerateAndPublish(t *testing.T) {
@@ -287,9 +287,8 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 	tmpDir := t.TempDir()
 	manager := &fakeLicenseManager{
 		consumeResp: &UsageConsumeResult{
-			AccessMode:    LicenseAccessModeFree,
-			Remaining:     3,
-			FreeRemaining: 3,
+			AccessMode: LicenseAccessModeFree,
+			Remaining:  3,
 		},
 	}
 	executor := NewExecutor(fakeGenerator{}, fakePublisher{}, manager)
@@ -304,8 +303,8 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 			Allowed:    true,
 			AccessMode: LicenseAccessModeFree,
 			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 3},
-				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 0},
+				CreditAccount: licenseprovider.CreditAccountSnapshot{OwnerKind: "fingerprint", Balance: 30, Reserved: 0, Available: 30},
+				RewardQuota:   licenseprovider.RewardQuotaSnapshot{Remaining: 0},
 			},
 			CommitToken: UsageCommitToken{
 				FingerprintHash: "fp",
@@ -318,10 +317,10 @@ func TestExecutorAddsFreeModeRemainingWarningAfterConsume(t *testing.T) {
 	}
 
 	warnings := strings.Join(result.Warnings, "\n")
-	if !strings.Contains(warnings, "Current mode: free. 3 document generations remaining.") {
+	if !strings.Contains(warnings, "Current mode: external") {
 		t.Fatalf("warnings = %s", warnings)
 	}
-	if !strings.Contains(warnings, "Free trial quota on this machine: 3 remaining.") {
+	if !strings.Contains(warnings, "Credit balance: 30 available") {
 		t.Fatalf("warnings = %s", warnings)
 	}
 	if result.AccessMode != string(LicenseAccessModeFree) {
@@ -350,8 +349,8 @@ func TestExecutorAddsPaidModeRemainingWarningAfterConsume(t *testing.T) {
 			Allowed:    true,
 			AccessMode: LicenseAccessModePaid,
 			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 9},
-				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 2},
+				CreditAccount: licenseprovider.CreditAccountSnapshot{},
+				RewardQuota:   licenseprovider.RewardQuotaSnapshot{Remaining: 2},
 				PaidExternalQuota: licenseprovider.PaidExternalQuotaSnapshot{
 					CurrentKeyPrefix:    "cop_live_demo",
 					CurrentKeyRemaining: 7,
@@ -400,8 +399,8 @@ func TestExecutorAddsRewardModeRemainingWarningAfterConsume(t *testing.T) {
 			Allowed:    true,
 			AccessMode: LicenseAccessModeReward,
 			QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-				FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Remaining: 10},
-				RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 4},
+				CreditAccount: licenseprovider.CreditAccountSnapshot{},
+				RewardQuota:   licenseprovider.RewardQuotaSnapshot{Remaining: 4},
 			},
 			CommitToken: UsageCommitToken{
 				FingerprintHash: "fp",

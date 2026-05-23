@@ -41,7 +41,7 @@ func TestCLILoginVerifyRedirectsAnonymousUserToOAuth2(t *testing.T) {
 	api := router.Group("/api")
 	cliSvc, _ := newTestCLISessionService(t)
 	authSvc := &fakeAuthRouteService{}
-	registerCLIRoutes(api, Config{}, authSvc, cliSvc)
+	registerCLIRoutes(api, Config{}, authSvc, nil, cliSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/cli/login/verify?user_code=ABCD-EFGH", nil)
 	rec := httptest.NewRecorder()
@@ -60,7 +60,7 @@ func TestCLILoginVerifyCompletesDeviceChallengeAndPollsCompleted(t *testing.T) {
 	api := router.Group("/api")
 	cliSvc, store := newTestCLISessionService(t)
 	authSvc := &fakeAuthRouteService{meUser: &model.User{ID: 42, Email: "dev@example.com"}}
-	registerCLIRoutes(api, Config{}, authSvc, cliSvc)
+	registerCLIRoutes(api, Config{}, authSvc, nil, cliSvc)
 	require.NoError(t, store.DB().Create(&model.User{ID: 42, GoogleSub: model.StringPtr("sub"), Email: "dev@example.com", Name: "Dev", InviteCode: "invite-42", Status: model.UserStatusActive}).Error)
 
 	start, err := cliSvc.Start(context.Background(), clisession.StartRequest{

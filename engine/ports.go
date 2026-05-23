@@ -71,7 +71,6 @@ type ImageGenerationResult struct {
 	CreditBalance      *int
 	AccessMode         string
 	Remaining          int
-	FreeRemaining      int
 	RewardRemaining    int
 	PaidQuotaRemaining int
 }

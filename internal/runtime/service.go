@@ -46,7 +46,6 @@ type GeneratedArtifact struct {
 	HostedCreditBalance *int
 	AccessMode          string
 	Remaining           int
-	FreeRemaining       int
 	RewardRemaining     int
 	PaidQuotaRemaining  int
 }
@@ -234,7 +233,6 @@ func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target 
 		HostedCreditBalance: image.CreditBalance,
 		AccessMode:          image.AccessMode,
 		Remaining:           image.Remaining,
-		FreeRemaining:       image.FreeRemaining,
 		RewardRemaining:     image.RewardRemaining,
 		PaidQuotaRemaining:  image.PaidQuotaRemaining,
 	}, nil

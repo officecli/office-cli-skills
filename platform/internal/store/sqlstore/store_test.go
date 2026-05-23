@@ -478,7 +478,7 @@ func TestOperationsFunnelRatesAreZeroWithoutRegisteredUsers(t *testing.T) {
 func TestOverviewIncludesChartData(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:overview_chart_data?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.OperationalEvent{}, &model.UsageEvent{}, &model.FreeQuota{}, &model.DailyFreeQuota{}, &model.User{}, &model.Order{}, &model.CLILoginChallenge{}, &model.CLISession{}))
+	require.NoError(t, db.AutoMigrate(&model.APIKey{}, &model.OperationalEvent{}, &model.UsageEvent{}, &model.FingerprintCreditAccount{}, &model.FingerprintCreditLedger{}, &model.User{}, &model.Order{}, &model.CLILoginChallenge{}, &model.CLISession{}))
 	store := NewWithDB(db)
 
 	now := time.Now().UTC()
@@ -504,14 +504,9 @@ func TestOverviewIncludesChartData(t *testing.T) {
 		{FingerprintHash: "fp-old", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, Charged: true, CreatedAt: outsideWindow},
 	}
 	require.NoError(t, db.Create(&events).Error)
-	require.NoError(t, db.Create(&[]model.FreeQuota{
-		{FingerprintHash: "fp-free-lifetime-1", FreeLimit: 3, FreeUsed: 1},
-		{FingerprintHash: "fp-free-lifetime-2", FreeLimit: 3, FreeUsed: 0},
-	}).Error)
-	require.NoError(t, db.Create(&[]model.DailyFreeQuota{
-		{FingerprintHash: "fp-daily-legacy-1", UsageDate: today.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1},
-		{FingerprintHash: "fp-daily-legacy-2", UsageDate: today.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 0},
-		{FingerprintHash: "fp-daily-legacy-3", UsageDate: yesterday.Format("2006-01-02"), DailyLimit: 1, DailyUsed: 1},
+	require.NoError(t, db.Create(&[]model.FingerprintCreditAccount{
+		{FingerprintHash: "fp-credit-1", CreditBalance: 90, BonusGranted: true},
+		{FingerprintHash: "fp-credit-2", CreditBalance: 50, BonusGranted: true},
 	}).Error)
 
 	overview, err := store.Overview(context.Background())

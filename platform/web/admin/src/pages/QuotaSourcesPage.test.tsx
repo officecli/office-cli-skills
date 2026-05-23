@@ -19,7 +19,7 @@ describe('admin quota sources page', () => {
     vi.unstubAllGlobals()
   })
 
-  it('explains daily free quota rows as a legacy audit and compatibility view', async () => {
+  it('renders reward grants surfaced from quota sources', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/admin/quota-sources?') {
@@ -28,17 +28,17 @@ describe('admin quota sources page', () => {
           status: 200,
           json: async () => ({
             data: {
-              free_trial_devices: [{
-                id: 3,
-                fingerprint_hash: 'fp-daily-legacy',
-                usage_date: '2026-05-20',
-                daily_limit: 5,
-                daily_used: 2,
-                remaining: 3,
+              reward_grants: [{
+                id: 11,
+                user_id: 42,
+                source_type: 'invite_activation_reward',
+                amount_total: 10,
+                amount_used: 4,
+                reason: 'invite activation reward',
+                metadata_json: '{}',
                 created_at: '2026-05-20T00:00:00Z',
                 updated_at: '2026-05-20T03:00:00Z',
               }],
-              reward_grants: [],
               paid_external_keys: [],
               hosted_keys: [],
             },
@@ -51,8 +51,7 @@ describe('admin quota sources page', () => {
 
     renderPage()
 
-    expect(await screen.findByText(/fp-daily-legacy/i)).toBeInTheDocument()
-    expect(screen.getByText(/daily_free_quotas rows are a legacy daily audit and compatibility view/i)).toBeInTheDocument()
-    expect(screen.getByText(/current anonymous license state is tracked in free_quotas/i)).toBeInTheDocument()
+    expect(await screen.findByText(/invite activation reward/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Reward grants/i })).toBeInTheDocument()
   })
 })

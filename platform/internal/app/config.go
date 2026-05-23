@@ -22,7 +22,6 @@ type Config struct {
 	AdminLoginRateLimitPerMinute int
 	LicenseRateLimitPerMinute    int
 	RateLimitVisitorTTL          time.Duration
-	DefaultFreeLimit             int
 	AdminPassword                string
 	SessionSecret                string
 	APIKeyHashSalt               string
@@ -123,7 +122,6 @@ func LoadConfig() (Config, error) {
 		AdminLoginRateLimitPerMinute: defaultAdminLoginRateLimit(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
 		LicenseRateLimitPerMinute:    defaultLicenseRateLimit(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
 		RateLimitVisitorTTL:          defaultRateLimitVisitorTTL(normalizeAppEnv(mustEnvDefault("APP_ENV", "development"))),
-		DefaultFreeLimit:             mustEnvInt("DEFAULT_FREE_LIMIT", 5),
 		AdminPassword:                mustEnvDefault("ADMIN_PASSWORD", "admin123"),
 		SessionSecret:                mustEnvDefault("SESSION_SECRET", "change-me-change-me-change-me-123456"),
 		APIKeyHashSalt:               mustEnvDefault("API_KEY_HASH_SALT", "change-me-salt"),

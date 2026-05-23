@@ -104,6 +104,28 @@ func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(ctx context.Context, userID 
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - settled}, nil
 }
 
+func (f *fakeAPIKeyStore) GetHostedCreditAccountByFingerprint(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100}, nil
+}
+
+func (f *fakeAPIKeyStore) ReserveHostedCreditsByFingerprint(_ context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error) {
+	f.reservations = append(f.reservations, credits)
+	f.hostedRequests = append(f.hostedRequests, requestID)
+	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100, CreditReserved: credits}, nil
+}
+
+func (f *fakeAPIKeyStore) ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error) {
+	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
+	f.releases = append(f.releases, reserved)
+	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100}, nil
+}
+
+func (f *fakeAPIKeyStore) SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error) {
+	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
+	f.settlements = append(f.settlements, settled)
+	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100 - settled}, nil
+}
+
 func (f *fakeAPIKeyStore) FindCLISessionByTokenHash(_ context.Context, tokenHash string) (*model.CLISession, error) {
 	if f.sessionsByHash != nil {
 		if session, ok := f.sessionsByHash[tokenHash]; ok && session != nil {
@@ -319,7 +341,7 @@ func TestCompleteWithCLISessionGeneratesMissingRequestID(t *testing.T) {
 		TimeoutSec:         5,
 	})
 
-	resp, err := svc.Complete(context.Background(), "Bearer "+sessionToken, CompletionRequest{
+	resp, err := svc.Complete(context.Background(), "Bearer "+sessionToken, "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -371,7 +393,7 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 	})
 
 	for i := 0; i < 2; i++ {
-		resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		resp, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 			Model:    "hosted/text",
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		})
@@ -443,7 +465,7 @@ func TestCompleteRotatesStoredUserAIGatewayAPIKeyAfterUpstreamAuthFailure(t *tes
 		TimeoutSec: 5,
 	})
 
-	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -476,7 +498,7 @@ func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
 		TimeoutSec: 5,
 	}, quota)
 
-	resp, err := svc.Complete(context.Background(), "", CompletionRequest{
+	resp, err := svc.Complete(context.Background(), "", "", CompletionRequest{
 		Model:           "hosted/text",
 		Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
 		FingerprintHash: "fp-anon",
@@ -604,7 +626,7 @@ func TestCompleteWithInvalidCommitTokenRejectsBeforeUpstream(t *testing.T) {
 		TimeoutSec: 5,
 	}, quota)
 
-	_, err := svc.Complete(context.Background(), "", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "", "", CompletionRequest{
 		Model:           "hosted/text",
 		Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
 		FingerprintHash: "fp-anon",
@@ -677,7 +699,7 @@ func TestCompleteUsesDifferentAIGatewayAPIKeysForDifferentUsers(t *testing.T) {
 	})
 
 	for _, bearer := range []string{"Bearer office-key-42", "Bearer office-key-43"} {
-		_, err := svc.Complete(context.Background(), bearer, CompletionRequest{
+		_, err := svc.Complete(context.Background(), bearer, "", CompletionRequest{
 			Model:    "hosted/text",
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		})
@@ -704,7 +726,7 @@ func TestCompleteRejectsHostedOfficeKeyWithoutOwner(t *testing.T) {
 	}
 	svc := NewService(store, Config{BaseURL: "https://example.com", HashSalt: "salt", TextModel: "gpt-test", TimeoutSec: 5})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -738,7 +760,7 @@ func TestCompleteRejectsRemovedHostedPricingProfile(t *testing.T) {
 		TimeoutSec:           5,
 	})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/" + "docx-" + "xlsx",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -774,7 +796,7 @@ func TestCompleteDoesNotReserveCreditsWhenAIGatewayKeyCreationFails(t *testing.T
 		TimeoutSec:           5,
 	})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -806,7 +828,7 @@ func TestAuthorizeRejectsDisabledKey(t *testing.T) {
 		TimeoutSec: 5,
 	})
 
-	subject, err := svc.authorizeSubject(context.Background(), "Bearer demo")
+	subject, err := svc.authorizeSubject(context.Background(), "Bearer demo", "")
 	require.Error(t, err)
 	require.Nil(t, subject)
 	require.Contains(t, err.Error(), "disabled")
@@ -862,7 +884,7 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 16.0 / 9.0,
@@ -928,7 +950,7 @@ func TestGenerateImageDefaultPricingChargesTenCreditsPerImage(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 16.0 / 9.0,
@@ -991,7 +1013,7 @@ func TestGenerateImageFallsBackToResponsesWhenImageEndpointFails(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 1,
@@ -1054,7 +1076,7 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -1112,7 +1134,7 @@ func TestCompletePersistsAuditContextOnUsageEvent(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		AuditContext: model.UsageAuditContext{
@@ -1182,7 +1204,7 @@ func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -1243,7 +1265,7 @@ func TestCompleteUsesConfiguredCreditsPerUSDForHostedCharges(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -1309,7 +1331,7 @@ func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
 	})
 
 	for _, requested := range []string{"", "text", "hosted/text"} {
-		_, err := svc.Complete(context.Background(), "Bearer hosted-key", CompletionRequest{
+		_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
 			Model:    requested,
 			Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 		})
@@ -1380,7 +1402,7 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "image",
 		Prompt:      "A product image",
 		AspectRatio: 1,
@@ -1447,7 +1469,7 @@ func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T)
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "image",
 		Prompt:      "A breakfast map of Wuhan",
 		AspectRatio: 1,
@@ -1522,7 +1544,7 @@ func TestGenerateImageResponsesFallbackParsesInputOutputTokens(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "image",
 		Prompt:      "A product image",
 		AspectRatio: 1,
@@ -1595,7 +1617,7 @@ func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "Use the uploaded reference image as visual context",
 		AspectRatio: 1,
@@ -1638,7 +1660,7 @@ func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *
 		TimeoutSec: 5,
 	}, quota)
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", "", ImageRequest{
 		RequestID:       "req-img",
 		Model:           "hosted/image",
 		Prompt:          "A polished product launch hero image",
@@ -1687,7 +1709,7 @@ func TestGenerateImageWithCommitTokenAndReferenceConsumesQuotaAfterEdit(t *testi
 		TimeoutSec: 5,
 	}, quota)
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer paid-key", "", ImageRequest{
 		RequestID:       "req-img",
 		Model:           "hosted/image",
 		Prompt:          "Use the uploaded reference image as visual context",
@@ -1750,7 +1772,7 @@ func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
 	})
 
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 1,
@@ -1806,7 +1828,7 @@ func TestCompleteFailureReleasesReservationWithCanceledRequestContext(t *testing
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	resp, err := svc.Complete(ctx, "Bearer hosted-key", CompletionRequest{
+	resp, err := svc.Complete(ctx, "Bearer hosted-key", "", CompletionRequest{
 		Model:    "hosted/text",
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
 	})
@@ -1861,7 +1883,7 @@ func TestGenerateImageFailureReleasesReservationWithCanceledRequestContext(t *te
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	resp, err := svc.GenerateImage(ctx, "Bearer hosted-key", ImageRequest{
+	resp, err := svc.GenerateImage(ctx, "Bearer hosted-key", "", ImageRequest{
 		Model:       "hosted/image",
 		Prompt:      "A polished product launch hero image",
 		AspectRatio: 1,

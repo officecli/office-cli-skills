@@ -24,10 +24,12 @@ type HostedCreditAccountStore interface {
 	GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error)
 }
 
-type FreeQuotaStore interface {
-	GetOrCreateByFingerprint(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error)
-	GetByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error)
-	Consume(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error)
+type FingerprintCreditStore interface {
+	GetHostedCreditAccountByFingerprint(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error)
+}
+
+type AnonymousCreditGranter interface {
+	EnsureAnonymousSignupCredits(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error)
 }
 
 type UsageEventStore interface {
@@ -52,20 +54,20 @@ type ReferralActivator interface {
 }
 
 type Service struct {
-	apiKeys          APIKeyStore
-	freeQuotas       FreeQuotaStore
-	usage            UsageEventStore
-	idem             IdempotencyStore
-	rewards          RewardManager
-	referrals        ReferralActivator
-	salt             string
-	defaultFreeLimit int
-	idemTTL          time.Duration
-	clock            func() time.Time
-	proof            *proofSigner
+	apiKeys            APIKeyStore
+	fingerprintCredits FingerprintCreditStore
+	anonymousGranter   AnonymousCreditGranter
+	usage              UsageEventStore
+	idem               IdempotencyStore
+	rewards            RewardManager
+	referrals          ReferralActivator
+	salt               string
+	idemTTL            time.Duration
+	clock              func() time.Time
+	proof              *proofSigner
 }
 
-func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, defaultFreeLimit int, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
+func NewService(apiKeys APIKeyStore, fingerprintCredits FingerprintCreditStore, anonymousGranter AnonymousCreditGranter, usage UsageEventStore, idem IdempotencyStore, rewards RewardManager, referrals ReferralActivator, salt string, idemTTL time.Duration, proofConfigs ...ProofConfig) *Service {
 	proofCfg := ProofConfig{}
 	if len(proofConfigs) > 0 {
 		proofCfg = proofConfigs[0]
@@ -75,17 +77,17 @@ func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEvent
 		panic(err)
 	}
 	service := &Service{
-		apiKeys:          apiKeys,
-		freeQuotas:       freeQuotas,
-		usage:            usage,
-		idem:             idem,
-		rewards:          rewards,
-		referrals:        referrals,
-		salt:             salt,
-		defaultFreeLimit: defaultFreeLimit,
-		idemTTL:          idemTTL,
-		clock:            time.Now,
-		proof:            signer,
+		apiKeys:            apiKeys,
+		fingerprintCredits: fingerprintCredits,
+		anonymousGranter:   anonymousGranter,
+		usage:              usage,
+		idem:               idem,
+		rewards:            rewards,
+		referrals:          referrals,
+		salt:               salt,
+		idemTTL:            idemTTL,
+		clock:              time.Now,
+		proof:              signer,
 	}
 	service.proof.clock = func() time.Time {
 		if service.clock != nil {
@@ -94,6 +96,13 @@ func NewService(apiKeys APIKeyStore, freeQuotas FreeQuotaStore, usage UsageEvent
 		return time.Now()
 	}
 	return service
+}
+
+// SetAnonymousGranter wires the granter used to seed per-fingerprint starter
+// credits. The license service can be constructed before its appuser dependency
+// is available; call this once that's ready.
+func (s *Service) SetAnonymousGranter(g AnonymousCreditGranter) {
+	s.anonymousGranter = g
 }
 
 func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
@@ -120,7 +129,7 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 	} else if handled {
 		return rewardResp, nil
 	}
-	return s.checkFree(ctx, req)
+	return s.checkAnonymousHosted(ctx, req)
 }
 
 func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
@@ -268,35 +277,42 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 	return response, true, nil
 }
 
-func (s *Service) checkFree(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
-	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
-	quota, _, err := s.freeQuotas.GetOrCreateByFingerprint(ctx, req.FingerprintHash, freeLimit)
+func (s *Service) checkAnonymousHosted(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
+	if s.anonymousGranter == nil || s.fingerprintCredits == nil {
+		return nil, fmt.Errorf("anonymous credit accounts are unavailable")
+	}
+	if _, err := s.anonymousGranter.EnsureAnonymousSignupCredits(ctx, req.FingerprintHash); err != nil {
+		return nil, err
+	}
+	account, err := s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash)
 	if err != nil {
 		return nil, err
 	}
-
-	response := &CheckResponse{FreeLimit: quota.FreeLimit, FreeUsed: quota.FreeUsed, FreeRemaining: quota.FreeRemaining()}
-	response.AllowedModes = []string{"external"}
-	response.SelectedRuntimeMode = selectedFreeRuntimeMode(req)
-	if quota.FreeUsed < quota.FreeLimit {
+	response := &CheckResponse{
+		AllowedModes:        []string{"hosted"},
+		DefaultRuntimeMode:  string(model.AccessModeHosted),
+		SelectedRuntimeMode: string(model.AccessModeHosted),
+		HostedEnabled:       true,
+		CreditBalance:       account.AvailableCredits(),
+	}
+	if account.AvailableCredits() <= 0 {
+		response.Allowed = false
+		response.AccessMode = model.AccessModeBlocked
+		response.ReasonCode = "hosted_credit_exhausted"
+		response.Message = "Anonymous credits are exhausted. Run `officecli login`, then buy hosted credits for your account."
+	} else {
 		response.Allowed = true
-		response.AccessMode = model.AccessModeFree
-		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeFree, "")
+		response.AccessMode = model.AccessModeHosted
+		response.Message = fmt.Sprintf("Anonymous hosted mode is active with %d credits remaining.", account.AvailableCredits())
+		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeHosted, "")
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		response.Allowed = false
-		response.AccessMode = model.AccessModeBlocked
-		response.ReasonCode = "free_quota_exhausted"
-		response.Message = "Free trial quota is used up. Continue at https://officecli.io/pricing, then run officecli auth set-key <api-key>."
 	}
-
-	event := buildUsageEvent(req, model.UsageModeFree, response, nil)
-	if err := s.usage.Create(ctx, event); err != nil {
+	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeHosted, response, nil)); err != nil {
 		return nil, err
 	}
-	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, quota, response.RewardRemaining)
+	response.QuotaSnapshot, err = s.buildQuotaSnapshot(ctx, req, nil, account, response.RewardRemaining)
 	if err != nil {
 		return nil, err
 	}
@@ -435,18 +451,12 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 			}
 			return resp, nil
 		}
-		quota, err := s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash)
-		if err != nil {
-			return nil, err
-		}
-		if quota == nil {
-			quota = &model.FreeQuota{FingerprintHash: req.FingerprintHash, FreeLimit: s.defaultFreeLimit}
-		}
-		resp := &ConsumeResponse{
-			AccessMode:    model.AccessModeFree,
-			FreeUsed:      quota.FreeUsed,
-			FreeRemaining: quota.FreeRemaining(),
-			Remaining:     quota.FreeRemaining(),
+		resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
+		if s.fingerprintCredits != nil {
+			if account, err := s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash); err == nil && account != nil {
+				resp.CreditBalance = account.AvailableCredits()
+				resp.Remaining = account.AvailableCredits()
+			}
 		}
 		if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
 			return nil, err
@@ -487,11 +497,10 @@ func (s *Service) consumeExternalFree(ctx context.Context, req ConsumeRequest) (
 }
 
 func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
+	// Anonymous hosted credit consumption is settled inside hostedllm via
+	// reserve/settle on the fingerprint account. License Consume here just
+	// records the usage event for telemetry and activates referrals if any.
 	documentType := consumeDocumentType(req)
-	quota, err := s.freeQuotas.Consume(ctx, req.FingerprintHash, s.freeLimitForDocumentType(documentType))
-	if err != nil {
-		return nil, err
-	}
 	requestID := req.RequestID
 	event := &model.UsageEvent{
 		RequestID:       &requestID,
@@ -499,8 +508,8 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 		Mode:            model.UsageModeFree,
 		Action:          model.UsageActionGenerate,
 		Result:          model.UsageResultAllowed,
-		Charged:         true,
-		BilledUnits:     1,
+		Charged:         false,
+		BilledUnits:     0,
 		UnitType:        unitTypeForDocumentType(documentType),
 		DocumentType:    optionalString(documentType),
 		UserID:          optionalUserID(req.UserID),
@@ -512,11 +521,12 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 	if err := s.activateReferralOnSuccess(ctx, req.UserID); err != nil {
 		return nil, err
 	}
-	resp := &ConsumeResponse{
-		AccessMode:    model.AccessModeFree,
-		FreeUsed:      quota.FreeUsed,
-		FreeRemaining: quota.FreeRemaining(),
-		Remaining:     quota.FreeRemaining(),
+	resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
+	if s.fingerprintCredits != nil {
+		if account, err := s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash); err == nil && account != nil {
+			resp.CreditBalance = account.AvailableCredits()
+			resp.Remaining = account.AvailableCredits()
+		}
 	}
 	if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
 		return nil, err
@@ -636,48 +646,27 @@ func (s *Service) rewardBalanceResponse(ctx context.Context, userID uint64) (*Co
 	return resp, nil
 }
 
-func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, freeQuota *model.FreeQuota, rewardRemaining int) (*QuotaSnapshot, error) {
-	freeLimit := s.freeLimitForDocumentType(req.DocumentType)
-	freeTrial := FreeTrialSnapshot{
-		Scope:      "lifetime",
-		Limit:      freeLimit,
-		Used:       0,
-		Remaining:  freeLimit,
-		BinaryOnly: true,
-	}
+func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, fingerprintAccount *model.FingerprintCreditAccount, rewardRemaining int) (*QuotaSnapshot, error) {
 	snapshot := &QuotaSnapshot{
-		FreeTrial: freeTrial,
-		FreeTrialDaily: FreeTrialDailySnapshot{
-			UsageDate:               s.currentUsageDate(),
-			Limit:                   freeLimit,
-			Used:                    0,
-			Remaining:               freeLimit,
-			BinaryOnly:              true,
-			IncludedInAccountTotals: false,
-		},
 		RewardQuota: RewardQuotaSnapshot{
 			Remaining: rewardRemaining,
 		},
 	}
 
-	if freeQuota == nil && s.freeQuotas != nil {
+	if fingerprintAccount == nil && s.fingerprintCredits != nil && req.UserID == 0 {
 		var err error
-		freeQuota, err = s.freeQuotas.GetByFingerprint(ctx, req.FingerprintHash)
+		fingerprintAccount, err = s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if freeQuota != nil {
-		snapshot.FreeTrial = FreeTrialSnapshot{
-			Scope:      "lifetime",
-			Limit:      freeQuota.FreeLimit,
-			Used:       freeQuota.FreeUsed,
-			Remaining:  freeQuota.FreeRemaining(),
-			BinaryOnly: true,
+	if fingerprintAccount != nil {
+		snapshot.CreditAccount = CreditAccountSnapshot{
+			OwnerKind: "fingerprint",
+			Balance:   fingerprintAccount.CreditBalance,
+			Reserved:  fingerprintAccount.CreditReserved,
+			Available: fingerprintAccount.AvailableCredits(),
 		}
-		snapshot.FreeTrialDaily.Limit = freeQuota.FreeLimit
-		snapshot.FreeTrialDaily.Used = freeQuota.FreeUsed
-		snapshot.FreeTrialDaily.Remaining = freeQuota.FreeRemaining()
 	}
 
 	if snapshot.RewardQuota.Remaining == 0 && s.rewards != nil && req.UserID != 0 {
@@ -786,10 +775,6 @@ func requestedRuntimeMode(req CheckRequest, key *model.APIKey) string {
 
 func selectedRuntimeMode(req CheckRequest, key *model.APIKey) string {
 	return requestedRuntimeMode(req, key)
-}
-
-func (s *Service) freeLimitForDocumentType(documentType string) int {
-	return s.defaultFreeLimit
 }
 
 func selectedFreeRuntimeMode(req CheckRequest) string {

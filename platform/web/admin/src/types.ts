@@ -36,19 +36,7 @@ export interface ApiKey {
   credit_reserved?: number
 }
 
-export interface DailyFreeQuota {
-  id: number
-  fingerprint_hash: string
-  usage_date: string
-  daily_limit: number
-  daily_used: number
-  remaining: number
-  created_at: string
-  updated_at: string
-}
-
 export interface QuotaSources {
-  free_trial_devices: DailyFreeQuota[]
   reward_grants: RewardGrant[]
   paid_external_keys: ApiKey[]
   hosted_keys: ApiKey[]

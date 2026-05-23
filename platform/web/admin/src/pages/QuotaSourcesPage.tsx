@@ -33,7 +33,6 @@ export default function QuotaSourcesPage() {
     },
   })
 
-  const freeTrialDevices = data?.free_trial_devices ?? []
   const rewardGrants = data?.reward_grants ?? []
   const paidExternalKeys = data?.paid_external_keys ?? []
   const hostedKeys = data?.hosted_keys ?? []
@@ -70,27 +69,6 @@ export default function QuotaSourcesPage() {
             }}>Reset</button>
           </div>
         </form>
-      </Panel>
-
-      <Panel>
-        <SectionHeading eyebrow="Anonymous trial" title="CLI free trial devices" body="These daily_free_quotas rows are a legacy daily audit and compatibility view. Current anonymous license state is tracked in free_quotas." />
-        {freeTrialDevices.length ? (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {freeTrialDevices.map((quota) => (
-              <div key={quota.id} className="admin-card-muted p-5">
-                <div className="text-xs text-outline">{quota.usage_date}</div>
-                <code className="mt-2 block break-all text-sm text-white">{quota.fingerprint_hash}</code>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Limit</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.daily_limit)}</div></div>
-                  <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.daily_used)}</div></div>
-                  <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(quota.remaining)}</div></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="No free trial devices matched" body="Adjust the filters or wait for legacy daily audit rows to be recorded." />
-        )}
       </Panel>
 
       <Panel>

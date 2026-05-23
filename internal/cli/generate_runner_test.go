@@ -42,14 +42,14 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 				actions = append(actions, req.Action)
 				return &LicenseCheckResult{
 					Allowed:       true,
-					AccessMode:    LicenseAccessModeFree,
-					FreeRemaining: 10,
-					CommitToken:   signTestCommitToken(req, LicenseAccessModeFree, UsageCommitToken{}),
+					AccessMode:    LicenseAccessModeHosted,
+					CreditBalance: 100,
+					CommitToken:   signTestCommitToken(req, LicenseAccessModeHosted, UsageCommitToken{}),
 				}, nil
 			},
 			consume: func(token UsageCommitToken) (*UsageConsumeResult, error) {
 				consumes++
-				return &UsageConsumeResult{AccessMode: LicenseAccessModeFree, Remaining: 9, FreeRemaining: 9}, nil
+				return &UsageConsumeResult{AccessMode: LicenseAccessModeHosted, Remaining: 90, CreditBalance: 90}, nil
 			},
 		}, nil
 	}
@@ -71,17 +71,23 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 	if err != nil {
 		t.Fatalf("executeGenerateJob: %v", err)
 	}
-	if result.AccessMode != "free" || result.FreeRemaining != 9 {
+	if result.AccessMode != "hosted" || result.CreditBalance != 100 {
 		t.Fatalf("result = %+v", result)
 	}
 	if !reflect.DeepEqual(actions, []string{"generate"}) {
 		t.Fatalf("license actions = %#v", actions)
 	}
-	if consumes != 1 {
+	// Hosted mode is settled by the hostedllm service path, so license.Consume
+	// should not run here.
+	if consumes != 0 {
 		t.Fatalf("license consumes = %d", consumes)
 	}
-	if gotPayload["commit_token"] == nil || gotPayload["access_mode"] != "free" || gotPayload["fingerprint_hash"] == "" {
-		t.Fatalf("anonymous access payload = %#v", gotPayload)
+	// Anonymous hosted requests authenticate via the X-Fingerprint-Hash header
+	// (added by the LLM client) and the fingerprint_hash payload field; commit
+	// tokens are no longer carried in the LLM payload because hostedllm settles
+	// against the fingerprint credit account directly.
+	if gotPayload["fingerprint_hash"] == "" {
+		t.Fatalf("anonymous access payload missing fingerprint_hash: %#v", gotPayload)
 	}
 }
 

@@ -639,7 +639,6 @@ describe('platform admin shell', () => {
           status: 200,
           json: async () => ({
             data: {
-              free_trial_devices: [{ id: 1, fingerprint_hash: 'fp-demo-01', usage_date: '2026-04-16', daily_limit: 10, daily_used: 2, remaining: 8, created_at: '2026-04-16T00:00:00Z', updated_at: '2026-04-16T01:00:00Z' }],
               reward_grants: [],
               paid_external_keys: [],
               hosted_keys: [],
@@ -660,7 +659,6 @@ describe('platform admin shell', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Quota sources/i })).toBeInTheDocument()
-    expect(await screen.findByText(/fp-demo-01/i)).toBeInTheDocument()
   })
 })
 

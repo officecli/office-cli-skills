@@ -706,6 +706,16 @@ type internalClient struct {
 	client                       *http.Client
 }
 
+func (c *internalClient) hostedFingerprintHash() string {
+	if c == nil {
+		return ""
+	}
+	if c.imageAccess != nil && strings.TrimSpace(c.imageAccess.FingerprintHash) != "" {
+		return strings.TrimSpace(c.imageAccess.FingerprintHash)
+	}
+	return strings.TrimSpace(c.accountHostedFingerprintHash)
+}
+
 func (c *internalClient) CompleteText(ctx context.Context, messages []engine.LLMMessage) (string, error) {
 	return c.complete(ctx, "text", messages, nil)
 }
@@ -760,7 +770,6 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		CreditBalance      *int   `json:"credit_balance,omitempty"`
 		AccessMode         string `json:"access_mode,omitempty"`
 		Remaining          int    `json:"remaining,omitempty"`
-		FreeRemaining      int    `json:"free_remaining,omitempty"`
 		RewardRemaining    int    `json:"reward_remaining,omitempty"`
 		PaidQuotaRemaining int    `json:"paid_quota_remaining,omitempty"`
 	}
@@ -780,7 +789,6 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		CreditBalance:      resp.CreditBalance,
 		AccessMode:         resp.AccessMode,
 		Remaining:          resp.Remaining,
-		FreeRemaining:      resp.FreeRemaining,
 		RewardRemaining:    resp.RewardRemaining,
 		PaidQuotaRemaining: resp.PaidQuotaRemaining,
 	}, nil
@@ -893,6 +901,9 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 		req.Header.Set("Content-Type", "application/json")
 		if c.apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		}
+		if fp := c.hostedFingerprintHash(); fp != "" {
+			req.Header.Set("X-Fingerprint-Hash", fp)
 		}
 		resp, err := c.client.Do(req)
 		if err != nil {

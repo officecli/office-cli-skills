@@ -47,7 +47,7 @@ func TestRegisterLicenseRoutesRateLimitsCheck(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 100, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	body, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", RequestNonce: "nonce-fp-1-generate", Action: "generate"})
@@ -75,9 +75,9 @@ func TestRegisterLicenseRoutesRateLimitsConsume(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
-	quotas := newTestFreeQuotaStore()
-	quotas.quotas["fp-1"] = &model.FreeQuota{FingerprintHash: "fp-1", FreeLimit: 100, FreeUsed: 0}
-	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 100, time.Hour)
+	quotas := newTestFingerprintCreditStore()
+	quotas.accounts["fp-1"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-1", CreditBalance: 100, BonusGranted: true}
+	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestAnonymousGranter(quotas), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	for i := 0; i < 30; i++ {

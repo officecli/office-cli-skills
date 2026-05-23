@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.79 - 2026-05-23
+
+### Changed
+
+- Anonymous trial replaced by per-device hosted credits. The legacy lifetime `free_quotas` and daily `daily_free_quotas` tables are dropped; each new device fingerprint now lands a `fingerprint_credit_accounts` row seeded with 100 starter credits the first time it calls license `check`. Anonymous and registered users share the same hosted billing path (10 credits per image, token-priced text, etc.) — the only difference is that registered users can top up.
+- `officecli login` exchange now carries `fingerprint_hash`. On successful login the server merges the available (non-reserved) anonymous balance into the user's hosted credit account via a single idempotent transfer (`anonymous_transfer_in`/`anonymous_transfer_out` ledger entries, keyed by `anonymous-transfer:{fp}:{user}`); reserved credits remain on the fingerprint account so in-flight settlements can finish.
+- `license check` now returns `quota_snapshot.credit_account` (`owner_kind` / `balance` / `reserved` / `available`) instead of `free_trial` / `free_trial_daily`. `CheckResponse.FreeLimit/FreeUsed/FreeRemaining` and `ConsumeResponse.FreeUsed/FreeRemaining` are gone.
+- CLI status, whoami, and TUI footers print the credit-account view: `Anonymous credit balance (this device): X available / Y reserved / Z total` instead of "Free trial quota (this machine, lifetime)". Logout copy is now "back to anonymous credit mode."
+- Admin web removes the "Free Trial Devices" page and the `/free-quotas` route; QuotaSources surfaces only reward / paid / hosted credentials. Admin backend removes `ListFreeQuotas` / `UpdateFreeQuota`. Dashboard "Total Machines" stat now counts distinct rows in `fingerprint_credit_accounts`.
+
+### Migration
+
+- Postgres migrations `023_fingerprint_credit_accounts.sql` (create) and `024_drop_free_quotas.sql` (drop legacy `daily_free_quotas` / `free_quotas`). Historical anonymous trial counts are not backfilled — they are deprecated.
+
 ## 0.2.78 - 2026-05-23
 
 ### Changed

@@ -34,6 +34,10 @@ type APIKeyStore interface {
 	ReserveHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error)
 	ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error)
 	SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error)
+	GetHostedCreditAccountByFingerprint(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error)
+	ReserveHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error)
+	ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error)
+	SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error)
 	FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error)
 	TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
@@ -134,17 +138,17 @@ type ImageResponse struct {
 	CreditBalance      int
 	AccessMode         model.AccessMode
 	Remaining          int
-	FreeRemaining      int
 	RewardRemaining    int
 	PaidQuotaRemaining int
 }
 
 type hostedSubject struct {
-	UserID     uint64
-	APIKeyID   *uint64
-	APIKeyHash string
-	Key        *model.APIKey
-	Session    *model.CLISession
+	UserID          uint64
+	FingerprintHash string
+	APIKeyID        *uint64
+	APIKeyHash      string
+	Key             *model.APIKey
+	Session         *model.CLISession
 }
 
 func NewService(store APIKeyStore, cfg Config, quotaManagers ...GenerationQuotaManager) *Service {
@@ -169,7 +173,7 @@ func (s *Service) HostedPricingRules() []model.HostedPricingRule {
 	return out
 }
 
-func (s *Service) Complete(ctx context.Context, bearer string, req CompletionRequest) (*CompletionResponse, error) {
+func (s *Service) Complete(ctx context.Context, bearer string, fingerprint string, req CompletionRequest) (*CompletionResponse, error) {
 	if err := validateHostedProfile(req.Model, false); err != nil {
 		return nil, err
 	}
@@ -177,7 +181,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, req CompletionReq
 	if req.CommitToken != nil {
 		return s.completeQuotaText(ctx, req)
 	}
-	subject, err := s.authorizeSubject(ctx, bearer)
+	subject, err := s.authorizeSubject(ctx, bearer, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +326,7 @@ func (s *Service) completeQuotaText(ctx context.Context, req CompletionRequest) 
 	return &CompletionResponse{Content: resp.Choices[0].Message.Content, CreditBalance: consumeResp.CreditBalance}, nil
 }
 
-func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
+func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint string, req ImageRequest) (*ImageResponse, error) {
 	if err := validateHostedProfile(req.Model, true); err != nil {
 		return nil, err
 	}
@@ -330,7 +334,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, req ImageReq
 	if req.CommitToken != nil {
 		return s.generateQuotaImage(ctx, bearer, req)
 	}
-	subject, err := s.authorizeSubject(ctx, bearer)
+	subject, err := s.authorizeSubject(ctx, bearer, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +458,6 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 		MIME:               "image/png",
 		AccessMode:         consumeResp.AccessMode,
 		Remaining:          consumeResp.Remaining,
-		FreeRemaining:      consumeResp.FreeRemaining,
 		RewardRemaining:    consumeResp.RewardRemaining,
 		PaidQuotaRemaining: consumeResp.PaidQuotaRemaining,
 		CreditBalance:      consumeResp.CreditBalance,
@@ -668,10 +671,14 @@ func createImageEditPart(writer *multipart.Writer, filename string, mime string)
 	return writer.CreatePart(header)
 }
 
-func (s *Service) authorizeSubject(ctx context.Context, bearer string) (*hostedSubject, error) {
+func (s *Service) authorizeSubject(ctx context.Context, bearer string, fingerprint string) (*hostedSubject, error) {
 	keyValue := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(bearer), "Bearer "))
+	fingerprint = strings.TrimSpace(fingerprint)
 	if keyValue == "" {
-		return nil, fmt.Errorf("missing api key or cli session")
+		if fingerprint == "" {
+			return nil, fmt.Errorf("missing api key, cli session, or anonymous fingerprint")
+		}
+		return &hostedSubject{FingerprintHash: fingerprint}, nil
 	}
 	if strings.HasPrefix(keyValue, "ocli_sess_") {
 		session, err := s.store.FindCLISessionByTokenHash(ctx, clisession.HashToken(keyValue))
@@ -709,7 +716,17 @@ func (s *Service) authorizeSubject(ctx context.Context, bearer string) (*hostedS
 }
 
 func (s *Service) upstreamAPIKeyForSubject(ctx context.Context, subject *hostedSubject) (string, error) {
-	if subject == nil || subject.UserID == 0 {
+	if subject == nil {
+		return "", fmt.Errorf("hosted subject is required")
+	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		key := strings.TrimSpace(s.cfg.APIKey)
+		if key == "" {
+			return "", fmt.Errorf("anonymous hosted mode requires a system upstream api key")
+		}
+		return key, nil
+	}
+	if subject.UserID == 0 {
 		return "", fmt.Errorf("hosted mode requires an owner user for the officecli api key")
 	}
 	return s.upstreamAPIKeyForUser(ctx, subject.UserID)
@@ -815,6 +832,10 @@ func (s *Service) reserveSubjectCredits(ctx context.Context, subject *hostedSubj
 		key, err := s.store.ReserveCreditsByHash(ctx, subject.APIKeyHash, credits)
 		return creditBalance(key), err
 	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		account, err := s.store.ReserveHostedCreditsByFingerprint(ctx, subject.FingerprintHash, requestID, credits)
+		return fingerprintAccountCreditBalance(account), err
+	}
 	account, err := s.store.ReserveHostedCreditsByUser(ctx, subject.UserID, requestID, credits)
 	return accountCreditBalance(account), err
 }
@@ -828,6 +849,10 @@ func (s *Service) releaseSubjectCredits(ctx context.Context, subject *hostedSubj
 	if subject.Key != nil && subject.APIKeyID != nil {
 		key, err := s.store.ReleaseReservedCredits(opCtx, *subject.APIKeyID, reserved)
 		return creditBalance(key), err
+	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		account, err := s.store.ReleaseHostedCreditsByFingerprint(opCtx, subject.FingerprintHash, requestID, reserved)
+		return fingerprintAccountCreditBalance(account), err
 	}
 	account, err := s.store.ReleaseHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved)
 	return accountCreditBalance(account), err
@@ -843,8 +868,19 @@ func (s *Service) settleSubjectCredits(ctx context.Context, subject *hostedSubje
 		key, err := s.store.SettleReservedCredits(opCtx, *subject.APIKeyID, reserved, settled)
 		return creditBalance(key), err
 	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		account, err := s.store.SettleHostedCreditsByFingerprint(opCtx, subject.FingerprintHash, requestID, reserved, settled)
+		return fingerprintAccountCreditBalance(account), err
+	}
 	account, err := s.store.SettleHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved, settled)
 	return accountCreditBalance(account), err
+}
+
+func fingerprintAccountCreditBalance(account *model.FingerprintCreditAccount) int {
+	if account == nil {
+		return 0
+	}
+	return account.AvailableCredits()
 }
 
 func settlementContext(ctx context.Context) (context.Context, context.CancelFunc) {

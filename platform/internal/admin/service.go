@@ -54,22 +54,10 @@ func (s *Service) UseMockData(enabled bool) {
 	s.mockData = enabled
 }
 
-type DailyFreeQuotaView struct {
-	ID              uint64    `json:"id"`
-	FingerprintHash string    `json:"fingerprint_hash"`
-	UsageDate       string    `json:"usage_date"`
-	DailyLimit      int       `json:"daily_limit"`
-	DailyUsed       int       `json:"daily_used"`
-	Remaining       int       `json:"remaining"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-}
-
 type QuotaSources struct {
-	FreeTrialDevices []DailyFreeQuotaView `json:"free_trial_devices"`
-	RewardGrants     []model.RewardGrant  `json:"reward_grants"`
-	PaidExternalKeys []model.APIKey       `json:"paid_external_keys"`
-	HostedKeys       []model.APIKey       `json:"hosted_keys"`
+	RewardGrants     []model.RewardGrant `json:"reward_grants"`
+	PaidExternalKeys []model.APIKey      `json:"paid_external_keys"`
+	HostedKeys       []model.APIKey      `json:"hosted_keys"`
 }
 
 type HostedPricingManager interface {
@@ -439,29 +427,6 @@ func (s *Service) UpdateAPIKey(ctx context.Context, id uint64, req UpdateAPIKeyR
 	return s.store.CreateAuditLog(ctx, "api_key.update", "api_key", fmt.Sprintf("%d", id), string(payload))
 }
 
-func (s *Service) ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]DailyFreeQuotaView, error) {
-	if s.mockData {
-		return mockFreeQuotas(fingerprint, usageDate), nil
-	}
-	quotas, err := s.store.ListDailyFreeQuotas(ctx, fingerprint, usageDate)
-	if err != nil {
-		return nil, err
-	}
-	views := make([]DailyFreeQuotaView, 0, len(quotas))
-	for _, quota := range quotas {
-		views = append(views, newDailyFreeQuotaView(quota))
-	}
-	return views, nil
-}
-
-func (s *Service) UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error {
-	if err := s.store.UpdateDailyFreeQuota(ctx, id, freeLimit); err != nil {
-		return err
-	}
-	payload, _ := json.Marshal(map[string]any{"free_limit": freeLimit})
-	return s.store.CreateAuditLog(ctx, "free_quota.update", "daily_free_quota", fmt.Sprintf("%d", id), string(payload))
-}
-
 func (s *Service) ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	if s.mockData {
 		return mockUsageEvents(filter), nil
@@ -586,10 +551,6 @@ func (s *Service) QuotaSources(ctx context.Context, filter QuotaSourcesFilter) (
 	if s.mockData {
 		return mockQuotaSources(filter), nil
 	}
-	freeQuotas, err := s.store.ListDailyFreeQuotas(ctx, filter.Fingerprint, filter.UsageDate)
-	if err != nil {
-		return nil, err
-	}
 	rewardGrants, err := s.store.ListRewardGrants(ctx)
 	if err != nil {
 		return nil, err
@@ -600,15 +561,11 @@ func (s *Service) QuotaSources(ctx context.Context, filter QuotaSourcesFilter) (
 	}
 
 	result := &QuotaSources{
-		FreeTrialDevices: make([]DailyFreeQuotaView, 0, len(freeQuotas)),
 		RewardGrants:     make([]model.RewardGrant, 0, len(rewardGrants)),
 		PaidExternalKeys: make([]model.APIKey, 0, len(apiKeys)),
 		HostedKeys:       make([]model.APIKey, 0, len(apiKeys)),
 	}
 
-	for _, quota := range freeQuotas {
-		result.FreeTrialDevices = append(result.FreeTrialDevices, newDailyFreeQuotaView(quota))
-	}
 	for _, grant := range rewardGrants {
 		if filter.UserID != 0 && grant.UserID != filter.UserID {
 			continue
@@ -633,19 +590,6 @@ func (s *Service) QuotaSources(ctx context.Context, filter QuotaSourcesFilter) (
 	}
 
 	return result, nil
-}
-
-func newDailyFreeQuotaView(quota model.DailyFreeQuota) DailyFreeQuotaView {
-	return DailyFreeQuotaView{
-		ID:              quota.ID,
-		FingerprintHash: quota.FingerprintHash,
-		UsageDate:       quota.UsageDate,
-		DailyLimit:      quota.DailyLimit,
-		DailyUsed:       quota.DailyUsed,
-		Remaining:       quota.Remaining(),
-		CreatedAt:       quota.CreatedAt,
-		UpdatedAt:       quota.UpdatedAt,
-	}
 }
 
 func (s *Service) HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error) {

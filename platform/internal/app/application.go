@@ -84,8 +84,6 @@ type adminRouteService interface {
 	GetAPIKeyPlaintext(ctx context.Context, id uint64, actor string) (string, error)
 	CreateAPIKey(ctx context.Context, req admin.CreateAPIKeyRequest) (*admin.CreateAPIKeyResponse, *model.APIKey, error)
 	UpdateAPIKey(ctx context.Context, id uint64, req admin.UpdateAPIKeyRequest) error
-	ListFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error)
-	UpdateFreeQuota(ctx context.Context, id uint64, freeLimit int) error
 	ListUsageEvents(ctx context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error)
 	GetPreference(ctx context.Context, adminEmail, pageKey string) (*model.AdminUserPreference, error)
 	SavePreference(ctx context.Context, adminEmail, pageKey, preferencesJSON string) (*model.AdminUserPreference, error)
@@ -168,13 +166,13 @@ func New() (*Application, error) {
 	}
 	lic := licensesvc.NewService(
 		apiKeyRepo{store: dbStore},
-		freeQuotaRepo{store: dbStore},
+		dbStore,
+		nil,
 		usageEventRepo{store: dbStore},
 		redisLicenseAdapter{store: redisRepo},
 		rewardService,
 		growthService,
 		cfg.APIKeyHashSalt,
-		cfg.DefaultFreeLimit,
 		cfg.UsageIdempotencyTTL,
 		licensesvc.ProofConfig{
 			Seed: cfg.LicenseProofSeed,
@@ -210,6 +208,7 @@ func New() (*Application, error) {
 	billingSvc := billing.NewService(dbStore, billing.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeSuccessURL, cfg.StripeCancelURL), cfg.PricingPacks)
 	appSvc := appuser.NewService(dbStore, billingSvc, cfg.APIKeyHashSalt, apiKeyCipher, growthService)
 	appSvc.UseMockData(cfg.AppMockDataEnabled && cfg.AppEnv == "development")
+	lic.SetAnonymousGranter(appSvc)
 	fileStore := officesdk.NewFileStore(redisRepo)
 	previewShares := previewshare.NewService(dbStore.DB(), cfg.AppSessionSecret, cfg.AppSessionCookieDomain, fileStore, previewObjects)
 	sdkProvider := officesdk.NewFileProvider(fileStore, previewObjects, previewShares)
@@ -284,7 +283,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerPublishRoutes(api, cfg, publishService)
 	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
 	registerAuthRoutes(api, cfg, authSvc)
-	registerCLIRoutes(api, cfg, authSvc, cliSessionSvc)
+	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
 	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc, cliSessionSvc)
@@ -499,7 +498,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.Kind = "text"
 		req.AuditContext = usageAuditContext(c)
-		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
+		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
@@ -516,7 +515,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		req.Kind = "json"
 		req.JSONMode = true
 		req.AuditContext = usageAuditContext(c)
-		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
+		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
@@ -532,7 +531,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.Kind = "structured"
 		req.AuditContext = usageAuditContext(c)
-		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), req)
+		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
@@ -547,7 +546,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 		}
 		req.RequestID = c.GetHeader("X-Request-Id")
 		req.AuditContext = usageAuditContext(c)
-		resp, err := hostedSvc.GenerateImage(c.Request.Context(), c.GetHeader("Authorization"), req)
+		resp, err := hostedSvc.GenerateImage(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
@@ -558,7 +557,6 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			"credit_balance":       resp.CreditBalance,
 			"access_mode":          resp.AccessMode,
 			"remaining":            resp.Remaining,
-			"free_remaining":       resp.FreeRemaining,
 			"reward_remaining":     resp.RewardRemaining,
 			"paid_quota_remaining": resp.PaidQuotaRemaining,
 		})
@@ -785,7 +783,7 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 	})
 }
 
-func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, cliSvc *clisession.Service) {
+func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, appSvc *appuser.Service, cliSvc *clisession.Service) {
 	if cliSvc == nil || authSvc == nil {
 		return
 	}
@@ -867,6 +865,11 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
+		}
+		if resp != nil && resp.UserID != 0 && strings.TrimSpace(req.FingerprintHash) != "" && appSvc != nil {
+			// Best-effort: merge anonymous credits from this fingerprint into the
+			// user account. Failure is non-fatal — login itself already succeeded.
+			_, _ = appSvc.MergeAnonymousCreditsIntoUser(c.Request.Context(), req.FingerprintHash, resp.UserID)
 		}
 		httpapi.JSON(c, http.StatusOK, resp)
 	})
@@ -1084,27 +1087,6 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 			return
 		}
 		if err := adminSvc.UpdateAPIKey(c.Request.Context(), id, req); err != nil {
-			httpapi.Error(c, http.StatusInternalServerError, err.Error())
-			return
-		}
-		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
-	})
-	protected.GET("/free-quotas", func(c *gin.Context) {
-		data, err := adminSvc.ListFreeQuotas(c.Request.Context(), c.Query("fingerprint"), c.Query("usage_date"))
-		if err != nil {
-			httpapi.Error(c, http.StatusInternalServerError, err.Error())
-			return
-		}
-		httpapi.JSON(c, http.StatusOK, data)
-	})
-	protected.PATCH("/free-quotas/:id", func(c *gin.Context) {
-		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-		var req admin.UpdateFreeQuotaRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			httpapi.Error(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		if err := adminSvc.UpdateFreeQuota(c.Request.Context(), id, req.FreeLimit); err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -2199,25 +2181,6 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 }
 func (r apiKeyRepo) GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
 	return r.store.GetHostedCreditAccountByUser(ctx, userID)
-}
-
-type freeQuotaRepo struct{ store *sqlstore.Store }
-
-func (r freeQuotaRepo) GetOrCreateByFingerprint(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
-	return r.store.GetOrCreateFreeQuota(ctx, fingerprint, defaultLimit)
-}
-func (r freeQuotaRepo) GetByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error) {
-	return r.store.GetFreeQuotaByFingerprint(ctx, fingerprint)
-}
-func (r freeQuotaRepo) Consume(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error) {
-	if _, _, err := r.store.GetOrCreateFreeQuota(ctx, fingerprint, defaultLimit); err != nil {
-		return nil, err
-	}
-	quota, err := r.store.ConsumeFreeQuota(ctx, fingerprint)
-	if err != nil && strings.Contains(err.Error(), "quota exhausted") {
-		return nil, licensesvc.ErrQuotaExhausted
-	}
-	return quota, err
 }
 
 type usageEventRepo struct{ store *sqlstore.Store }

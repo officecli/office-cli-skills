@@ -1815,7 +1815,7 @@ func TestExecuteGenerateJob_IMGHostedRuntimeUsesHostedCreditBilling(t *testing.T
 	if result.AccessMode != string(LicenseAccessModeHosted) || !result.HostedEnabled || result.CreditBalance != 17 {
 		t.Fatalf("hosted result = %+v", result)
 	}
-	if result.Remaining != 0 || result.PaidQuotaRemaining != 0 || result.FreeRemaining != 0 {
+	if result.Remaining != 0 || result.PaidQuotaRemaining != 0 {
 		t.Fatalf("hosted result should not surface external quota fields: %+v", result)
 	}
 }
@@ -1900,7 +1900,7 @@ func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		time.Sleep(1100 * time.Millisecond)
-		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"free","remaining":2,"free_remaining":2}`, base64.StdEncoding.EncodeToString(imageBytes))
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","access_mode":"hosted","remaining":2}`, base64.StdEncoding.EncodeToString(imageBytes))
 	}))
 	defer server.Close()
 
@@ -1908,8 +1908,8 @@ func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
 		return stubLicenseManager{checkResult: &LicenseCheckResult{
 			Allowed:       true,
-			AccessMode:    LicenseAccessModeFree,
-			FreeRemaining: 3,
+			AccessMode:    LicenseAccessModeHosted,
+			CreditBalance: 30,
 		}}, nil
 	}
 
@@ -1929,7 +1929,7 @@ func TestExecuteGenerateJob_IMGUsesExtendedServerImageTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeGenerateJob: %v", err)
 	}
-	if result.FreeRemaining != 2 || result.Remaining != 2 {
+	if result.Remaining != 2 {
 		t.Fatalf("quota result = %+v", result)
 	}
 }
@@ -2222,12 +2222,10 @@ func TestRenderResult_HumanSummarizesQuotaInSingleLine(t *testing.T) {
 		DocumentName:       "test.html",
 		AccessMode:         "paid",
 		Remaining:          109,
-		FreeRemaining:      10,
 		RewardRemaining:    0,
 		PaidQuotaRemaining: 109,
 		Warnings: []string{
 			"Current mode: paid. 109 document generations remaining.",
-			"Free trial quota on this machine: 10 remaining.",
 			"Reward quota: 0 remaining.",
 			"Paid quota on current key: 109 remaining.",
 			"Publishing is not configured, so online preview publishing was skipped.",
@@ -2239,12 +2237,11 @@ func TestRenderResult_HumanSummarizesQuotaInSingleLine(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Access: paid mode; 109 generations remaining; trial 10") {
+	if !strings.Contains(output, "Access: paid mode; 109 generations remaining") {
 		t.Fatalf("missing access summary: %s", output)
 	}
 	for _, needle := range []string{
 		"Warning: Current mode: paid.",
-		"Warning: Free trial quota on this machine:",
 		"Warning: Reward quota:",
 		"Warning: Paid quota on current key:",
 	} {
@@ -2310,7 +2307,7 @@ func TestAppRun_HelpOutput(t *testing.T) {
 	for _, needle := range []string{
 		"officecli",
 		"Install, then start the persistent TUI:",
-		"Hosted trial access is the default",
+		"Hosted credits are the default",
 		"officecli \"Create a Q3 business review deck\"",
 		"Scripted usage:",
 		"officecli new pptx \"Q3 Business Review\" --prompt \"Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions.\"",
@@ -3304,10 +3301,9 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
 		return stubLicenseManager{
 			checkResult: &LicenseCheckResult{
-				Allowed:       false,
-				AccessMode:    LicenseAccessModeBlocked,
-				FreeRemaining: 0,
-				Message:       "Free trial quota is used up. Run `officecli login`, then buy hosted credits for your account.",
+				Allowed:    false,
+				AccessMode: LicenseAccessModeBlocked,
+				Message:    "Credit balance exhausted. Run `officecli login`, then buy hosted credits for your account.",
 			},
 		}, nil
 	}
@@ -3320,7 +3316,7 @@ func TestAppRun_NewStopsBeforeLLMWhenFreeQuotaExhausted(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, needle := range []string{"Free trial quota is used up", "officecli login", "hosted credits"} {
+	for _, needle := range []string{"Credit balance exhausted", "officecli login", "hosted credits"} {
 		if !strings.Contains(err.Error(), needle) {
 			t.Fatalf("unexpected error: %v, want %q", err, needle)
 		}
@@ -3605,7 +3601,7 @@ func TestAppRun_WhoamiShowsAnonymousMode(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "Mode: anonymous hosted trial") {
+	if !strings.Contains(stdout.String(), "Mode: anonymous credit") {
 		t.Fatalf("stdout = %s", stdout.String())
 	}
 }
@@ -3757,16 +3753,13 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 				Allowed:            true,
 				AccessMode:         LicenseAccessModePaid,
 				PlanName:           "pro",
-				FreeLimit:          10,
-				FreeUsed:           2,
-				FreeRemaining:      8,
 				RewardRemaining:    3,
 				PaidQuotaRemaining: 8,
 				PaidQuotaTotal:     12,
 				PaidQuotaUsed:      4,
 				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 10, Used: 2, Remaining: 8},
-					RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 3},
+					CreditAccount: licenseprovider.CreditAccountSnapshot{OwnerKind: "fingerprint", Balance: 100, Reserved: 0, Available: 100},
+					RewardQuota:   licenseprovider.RewardQuotaSnapshot{Remaining: 3},
 					PaidExternalQuota: licenseprovider.PaidExternalQuotaSnapshot{
 						CurrentKeyPrefix:    "cop_live_demo",
 						CurrentKeyTotal:     12,
@@ -3783,7 +3776,7 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Free trial quota (this machine, lifetime): 10 total / 2 used / 8 remaining") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
+	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -3818,8 +3811,8 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 				AccessMode:      LicenseAccessModeReward,
 				RewardRemaining: 5,
 				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 10, Used: 0, Remaining: 10},
-					RewardQuota:    licenseprovider.RewardQuotaSnapshot{Remaining: 5},
+					CreditAccount: licenseprovider.CreditAccountSnapshot{OwnerKind: "fingerprint", Balance: 100, Reserved: 0, Available: 100},
+					RewardQuota:   licenseprovider.RewardQuotaSnapshot{Remaining: 5},
 				},
 			},
 		}, nil
@@ -3830,7 +3823,7 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") || !strings.Contains(output, "Free trial quota (this machine, lifetime): 10 total / 0 used / 10 remaining") {
+	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
@@ -3869,7 +3862,7 @@ func TestCheckLicenseFreeQuotaExhaustedGuidesToWebsite(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, needle := range []string{"Free trial quota is used up", "officecli login", "hosted credits"} {
+	for _, needle := range []string{"Credit balance exhausted", "officecli login", "hosted credits"} {
 		if !strings.Contains(err.Error(), needle) {
 			t.Fatalf("err = %v, want %q", err, needle)
 		}
@@ -4251,14 +4244,11 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
 		return stubLicenseManager{
 			checkResult: &LicenseCheckResult{
-				Allowed:       true,
-				AccessMode:    LicenseAccessModeFree,
-				FreeLimit:     5,
-				FreeUsed:      2,
-				FreeRemaining: 3,
-				Message:       "Current mode: free.",
+				Allowed:    true,
+				AccessMode: LicenseAccessModeFree,
+				Message:    "Current mode: external.",
 				QuotaSnapshot: &licenseprovider.QuotaSnapshot{
-					FreeTrialDaily: licenseprovider.FreeTrialDailySnapshot{Limit: 5, Used: 2, Remaining: 3},
+					CreditAccount: licenseprovider.CreditAccountSnapshot{OwnerKind: "fingerprint", Balance: 30, Reserved: 0, Available: 30},
 				},
 			},
 		}, nil
@@ -4272,7 +4262,7 @@ func TestAppRun_AuthStatusShowsRemainingFreeQuota(t *testing.T) {
 	if !strings.Contains(output, "Current access mode: free") {
 		t.Fatalf("stdout = %s", output)
 	}
-	if !strings.Contains(output, "Free trial quota (this machine, lifetime): 5 total / 2 used / 3 remaining") {
+	if !strings.Contains(output, "Anonymous credit balance (this device): 30 available / 0 reserved / 30 total") {
 		t.Fatalf("stdout = %s", output)
 	}
 	if !strings.Contains(output, "Access checks enabled: true") {

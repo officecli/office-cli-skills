@@ -55,54 +55,58 @@ func (f *fakeAPIKeyStore) ConsumePaidByHash(_ context.Context, _ string) (*model
 	return &copied, nil
 }
 
-type fakeFreeQuotaStore struct {
-	mu     sync.Mutex
-	quotas map[string]*model.FreeQuota
+type fakeFingerprintCreditStore struct {
+	mu       sync.Mutex
+	accounts map[string]*model.FingerprintCreditAccount
 }
 
-func newFakeFreeQuotaStore() *fakeFreeQuotaStore {
-	return &fakeFreeQuotaStore{quotas: map[string]*model.FreeQuota{}}
+func newFakeFingerprintCreditStore() *fakeFingerprintCreditStore {
+	return &fakeFingerprintCreditStore{accounts: map[string]*model.FingerprintCreditAccount{}}
 }
 
-func (f *fakeFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
+func (f *fakeFingerprintCreditStore) GetHostedCreditAccountByFingerprint(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota, ok := f.quotas[fingerprint]
-	if ok {
-		copied := *quota
-		return &copied, false, nil
+	account, ok := f.accounts[fingerprint]
+	if !ok {
+		return &model.FingerprintCreditAccount{FingerprintHash: fingerprint}, nil
 	}
-	quota = &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit, FreeUsed: 0}
-	f.quotas[fingerprint] = quota
-	copied := *quota
-	return &copied, true, nil
-}
-
-func (f *fakeFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string) (*model.FreeQuota, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint]
-	if quota == nil {
-		return nil, nil
-	}
-	copied := *quota
+	copied := *account
 	return &copied, nil
 }
 
-func (f *fakeFreeQuotaStore) Consume(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error) {
+func (f *fakeFingerprintCreditStore) ensureSignupCredits(fingerprint string, amount int) *model.FingerprintCreditAccount {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint]
-	if quota == nil {
-		quota = &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit, FreeUsed: 0}
-		f.quotas[fingerprint] = quota
+	if account, ok := f.accounts[fingerprint]; ok {
+		copied := *account
+		return &copied
 	}
-	if quota.FreeUsed >= quota.FreeLimit {
-		return nil, ErrQuotaExhausted
-	}
-	quota.FreeUsed++
-	copied := *quota
-	return &copied, nil
+	account := &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: amount, BonusGranted: true}
+	f.accounts[fingerprint] = account
+	copied := *account
+	return &copied
+}
+
+type fakeAnonymousGranter struct {
+	store  *fakeFingerprintCreditStore
+	amount int
+}
+
+func newFakeAnonymousGranter(store *fakeFingerprintCreditStore, amount int) *fakeAnonymousGranter {
+	return &fakeAnonymousGranter{store: store, amount: amount}
+}
+
+func (g *fakeAnonymousGranter) EnsureAnonymousSignupCredits(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	return g.store.ensureSignupCredits(fingerprint, g.amount), nil
+}
+
+func dummyFingerprintCreditStore() *fakeFingerprintCreditStore {
+	return newFakeFingerprintCreditStore()
+}
+
+func dummyAnonymousGranter() *fakeAnonymousGranter {
+	return newFakeAnonymousGranter(newFakeFingerprintCreditStore(), 100)
 }
 
 type fakeUsageStore struct {
@@ -244,163 +248,59 @@ func resignTestCommitToken(t *testing.T, svc *Service, token *CommitToken) {
 	token.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(svc.proof.privateKey, []byte(commitTokenPayload(*token))))
 }
 
-func TestCheckCreatesQuotaForNewMachine(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
+// TestAnonymousFingerprintGetsStarterCredits verifies that an anonymous Check
+// auto-grants the per-device starter balance and returns hosted access.
+func TestAnonymousFingerprintGetsStarterCredits(t *testing.T) {
+	quotas := newFakeFingerprintCreditStore()
 	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), usage, newFakeIdemStore(), nil, nil, "salt", time.Hour)
 
 	resp, err := svc.Check(context.Background(), testCheckRequest("fp-1", "generate"))
 	require.NoError(t, err)
 	require.True(t, resp.Allowed)
-	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, 5, resp.FreeLimit)
-	require.Equal(t, 5, resp.FreeRemaining)
+	require.Equal(t, model.AccessModeHosted, resp.AccessMode)
+	require.Equal(t, 100, resp.CreditBalance)
 	require.NotNil(t, resp.QuotaSnapshot)
-	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
-	require.True(t, resp.QuotaSnapshot.FreeTrialDaily.BinaryOnly)
+	require.Equal(t, "fingerprint", resp.QuotaSnapshot.CreditAccount.OwnerKind)
+	require.Equal(t, 100, resp.QuotaSnapshot.CreditAccount.Available)
 	require.NotNil(t, resp.CommitToken)
-	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
+	require.Equal(t, model.AccessModeHosted, resp.CommitToken.AccessMode)
 }
 
-func TestHostedAnonymousCheckUsesLifetimeFreeQuota(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
+// TestAnonymousZeroBalanceBlocks verifies that an exhausted fingerprint account
+// returns blocked access with a credit-exhausted reason code.
+func TestAnonymousZeroBalanceBlocks(t *testing.T) {
+	quotas := newFakeFingerprintCreditStore()
+	quotas.accounts["fp-empty"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-empty", CreditBalance: 0, BonusGranted: true}
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
 
-	req := testCheckRequest("fp-hosted-anon", "generate")
-	req.RuntimeMode = "hosted"
-	resp, err := svc.Check(context.Background(), req)
-	require.NoError(t, err)
-	require.True(t, resp.Allowed)
-	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, "hosted", resp.SelectedRuntimeMode)
-	require.NotNil(t, resp.CommitToken)
-	require.Equal(t, "hosted", resp.CommitToken.RuntimeMode)
-	require.NotNil(t, resp.QuotaSnapshot)
-	require.Equal(t, "lifetime", resp.QuotaSnapshot.FreeTrial.Scope)
-	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrial.Limit)
-	require.Equal(t, 0, resp.QuotaSnapshot.FreeTrial.Used)
-	require.Equal(t, 5, resp.QuotaSnapshot.FreeTrial.Remaining)
-}
-
-func TestIMGFreeQuotaUsesSameLifetimeLimit(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 5, time.Hour)
-
-	docReq := testCheckRequest("fp-1", "generate")
-	docReq.DocumentType = "pptx"
-	docResp, err := svc.Check(context.Background(), docReq)
-	require.NoError(t, err)
-	require.Equal(t, 5, docResp.FreeLimit)
-	require.Equal(t, 5, docResp.FreeRemaining)
-
-	imgReq := testCheckRequest("fp-1", "generate")
-	imgReq.DocumentType = "img"
-	imgResp, err := svc.Check(context.Background(), imgReq)
-	require.NoError(t, err)
-	require.True(t, imgResp.Allowed)
-	require.Equal(t, model.AccessModeFree, imgResp.AccessMode)
-	require.Equal(t, 5, imgResp.FreeLimit)
-	require.Equal(t, 5, imgResp.FreeRemaining)
-
-	consumeResp, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: imgResp.CommitToken.FingerprintHash,
-		RequestID:       imgResp.CommitToken.RequestID,
-		UsageType:       string(model.UsageActionGenerate),
-		AccessMode:      model.AccessModeFree,
-		CommitToken:     imgResp.CommitToken,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 4, consumeResp.FreeRemaining)
-
-	docResp, err = svc.Check(context.Background(), docReq)
-	require.NoError(t, err)
-	require.Equal(t, 4, docResp.FreeRemaining)
-}
-
-func TestCheckBlocksWhenFreeQuotaExhausted(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-2"] = &model.FreeQuota{FingerprintHash: "fp-2", FreeLimit: 1, FreeUsed: 1}
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-
-	resp, err := svc.Check(context.Background(), testCheckRequest("fp-2", "generate"))
+	resp, err := svc.Check(context.Background(), testCheckRequest("fp-empty", "generate"))
 	require.NoError(t, err)
 	require.False(t, resp.Allowed)
 	require.Equal(t, model.AccessModeBlocked, resp.AccessMode)
-	require.Equal(t, "free_quota_exhausted", resp.ReasonCode)
+	require.Equal(t, "hosted_credit_exhausted", resp.ReasonCode)
 }
 
-func TestExternalCheckAllowsUnlimitedWhenFreeQuotaExhausted(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-external"] = &model.FreeQuota{
-		FingerprintHash: "fp-external",
-		FreeLimit:       1,
-		FreeUsed:        1,
-	}
-	usage := newFakeUsageStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+// TestCheckRespectsExternalRuntimeMode keeps the long-standing behavior that an
+// explicit external runtime mode does not consume credits.
+func TestCheckRespectsExternalRuntimeMode(t *testing.T) {
+	quotas := newFakeFingerprintCreditStore()
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
 
 	req := testCheckRequest("fp-external", "generate")
 	req.RuntimeMode = "external"
 	resp, err := svc.Check(context.Background(), req)
-
 	require.NoError(t, err)
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, "External mode is free with unlimited generations.", resp.Message)
 	require.NotNil(t, resp.CommitToken)
-	require.Equal(t, model.AccessModeFree, resp.CommitToken.AccessMode)
 }
 
-func TestExternalConsumeDoesNotDecrementFreeOrPaidQuota(t *testing.T) {
-	quotaTotal := 1
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-external-consume"] = &model.FreeQuota{
-		FingerprintHash: "fp-external-consume",
-		FreeLimit:       1,
-		FreeUsed:        1,
-	}
-	keys := &fakeAPIKeyStore{key: &model.APIKey{
-		ID:           7,
-		Status:       model.APIKeyStatusActive,
-		AllowedModes: "external_only",
-		QuotaTotal:   &quotaTotal,
-		QuotaUsed:    1,
-	}}
-	usage := newFakeUsageStore()
-	svc := NewService(keys, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-external-consume", "generate")
-	checkReq.APIKey = "paid-key"
-	checkReq.RuntimeMode = "external"
-	resp, err := svc.Check(context.Background(), checkReq)
-	require.NoError(t, err)
-	require.True(t, resp.Allowed)
-	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-
-	consume, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: resp.CommitToken.FingerprintHash,
-		RequestID:       resp.CommitToken.RequestID,
-		UsageType:       string(model.UsageActionGenerate),
-		AccessMode:      resp.CommitToken.AccessMode,
-		APIKey:          "paid-key",
-		CommitToken:     resp.CommitToken,
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, model.AccessModeFree, consume.AccessMode)
-	require.Equal(t, 0, consume.Remaining)
-	require.Equal(t, 1, quotas.quotas["fp-external-consume"].FreeUsed)
-	require.Equal(t, 1, keys.key.QuotaUsed)
-	require.Len(t, usage.events, 2)
-	require.True(t, usage.events[1].Charged)
-	require.Equal(t, 0, usage.events[1].BilledUnits)
-}
-
-func TestCheckPaidKeyStatuses(t *testing.T) {
-	now := time.Now().UTC()
+func TestCheckPaidAPIKey(t *testing.T) {
 	quota10 := 10
-	quota0 := 1
+	quota0 := 0
+	now := time.Now().UTC().Add(time.Hour)
+
 	cases := []struct {
 		name    string
 		key     *model.APIKey
@@ -417,7 +317,7 @@ func TestCheckPaidKeyStatuses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &fakeAPIKeyStore{key: tc.key}
-			svc := NewService(store, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
+			svc := NewService(store, dummyFingerprintCreditStore(), dummyAnonymousGranter(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
 			if tc.key != nil && tc.name == "expired" {
 				past := now.Add(-time.Hour)
 				tc.key.ExpiresAt = &past
@@ -443,11 +343,11 @@ func TestCheckPaidKeyStatuses(t *testing.T) {
 	}
 }
 
-func TestCheckPrefersRewardBeforeFree(t *testing.T) {
+func TestCheckPrefersRewardForLoggedInUser(t *testing.T) {
 	rewards := newFakeRewardManager()
 	rewards.balances[88] = 4
-	quotas := newFakeFreeQuotaStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), rewards, nil, "salt", 10, time.Hour)
+	quotas := newFakeFingerprintCreditStore()
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), newFakeUsageStore(), newFakeIdemStore(), rewards, nil, "salt", time.Hour)
 
 	req := testCheckRequest("fp-reward", "generate")
 	req.UserID = 88
@@ -458,18 +358,16 @@ func TestCheckPrefersRewardBeforeFree(t *testing.T) {
 	require.Equal(t, 4, resp.RewardRemaining)
 	require.NotNil(t, resp.QuotaSnapshot)
 	require.Equal(t, 4, resp.QuotaSnapshot.RewardQuota.Remaining)
-	require.Equal(t, 10, resp.QuotaSnapshot.FreeTrialDaily.Remaining)
 	require.NotNil(t, resp.CommitToken)
 	require.Equal(t, uint64(88), resp.CommitToken.UserID)
 	require.Equal(t, model.AccessModeReward, resp.CommitToken.AccessMode)
-	require.Empty(t, quotas.quotas)
 }
 
 func TestConsumeRewardIsIdempotent(t *testing.T) {
 	rewards := newFakeRewardManager()
 	rewards.balances[77] = 2
 	referrals := &fakeReferralActivator{}
-	svc := NewService(&fakeAPIKeyStore{}, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), rewards, referrals, "salt", 10, time.Hour)
+	svc := NewService(&fakeAPIKeyStore{}, dummyFingerprintCreditStore(), dummyAnonymousGranter(), newFakeUsageStore(), newFakeIdemStore(), rewards, referrals, "salt", time.Hour)
 	checkReq := testCheckRequest("fp-reward", "generate")
 	checkReq.UserID = 77
 	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeReward, "")
@@ -503,272 +401,31 @@ func TestConsumeRewardIsIdempotent(t *testing.T) {
 	require.Equal(t, []uint64{77}, referrals.activated)
 }
 
-func TestConsumeFreeIsIdempotentAndConcurrentSafe(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-3"] = &model.FreeQuota{FingerprintHash: "fp-3", FreeLimit: 1, FreeUsed: 0}
+// TestConsumeAnonymousRecordsUsage verifies that anonymous consume records a
+// usage event (for telemetry / referral activation) without touching the
+// fingerprint credit balance — settlement happens via the hostedllm path.
+func TestConsumeAnonymousRecordsUsage(t *testing.T) {
+	quotas := newFakeFingerprintCreditStore()
+	quotas.accounts["fp-anon"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-anon", CreditBalance: 100, BonusGranted: true}
 	usage := newFakeUsageStore()
-	idem := newFakeIdemStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, idem, nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-3", "generate")
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), usage, newFakeIdemStore(), nil, nil, "salt", time.Hour)
+
+	checkReq := testCheckRequest("fp-anon", "generate")
 	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
-	token.RequestID = "req-1"
-	resignTestCommitToken(t, svc, token)
-
-	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
-	require.NoError(t, err)
-	require.Equal(t, 1, first.FreeUsed)
-	require.Equal(t, 0, first.FreeRemaining)
-	require.Equal(t, 0, first.Remaining)
-
-	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-3", RequestID: "req-1", UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
-	require.NoError(t, err)
-	require.Equal(t, first, second)
-
-	quotas.quotas["fp-4"] = &model.FreeQuota{FingerprintHash: "fp-4", FreeLimit: 1, FreeUsed: 0}
-	svc2 := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	var wg sync.WaitGroup
-	var successCount int
-	var mu sync.Mutex
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			concurrentReq := testCheckRequest("fp-4", "generate")
-			concurrentReq.RequestNonce = "nonce-fp-4-" + string(rune('a'+i))
-			token := issueTestCommitToken(t, svc2, concurrentReq, model.AccessModeFree, "")
-			token.RequestID = string(rune('a' + i))
-			resignTestCommitToken(t, svc2, token)
-			_, err := svc2.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-4", RequestID: string(rune('a' + i)), UsageType: "generate", AccessMode: model.AccessModeFree, CommitToken: token})
-			if err == nil {
-				mu.Lock()
-				successCount++
-				mu.Unlock()
-			}
-		}(i)
-	}
-	wg.Wait()
-	require.Equal(t, 1, successCount)
-	require.Equal(t, 1, quotas.quotas["fp-4"].FreeUsed)
-}
-
-func TestConsumePaidIsIdempotent(t *testing.T) {
-	quotaTotal := 3
-	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
-	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-paid", "generate")
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
-	token.RequestID = "req-paid"
-	resignTestCommitToken(t, svc, token)
-
-	first, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo", CommitToken: token})
-	require.NoError(t, err)
-	require.Equal(t, model.AccessModePaid, first.AccessMode)
-	require.Equal(t, 3, first.PaidQuotaTotal)
-	require.Equal(t, 2, first.PaidQuotaUsed)
-	require.Equal(t, 1, first.PaidQuotaRemaining)
-	require.Equal(t, 1, first.Remaining)
-
-	second, err := svc.Consume(context.Background(), ConsumeRequest{FingerprintHash: "fp-paid", RequestID: "req-paid", UsageType: "generate", AccessMode: model.AccessModePaid, APIKey: "demo", CommitToken: token})
-	require.NoError(t, err)
-	require.Equal(t, first, second)
-	require.Equal(t, 2, apiStore.key.QuotaUsed)
-}
-
-func TestConsumeFreeActivatesReferralWhenUserIDPresent(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-ref"] = &model.FreeQuota{FingerprintHash: "fp-ref", FreeLimit: 2, FreeUsed: 0}
-	referrals := &fakeReferralActivator{}
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-ref", "generate")
-	checkReq.UserID = 123
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
-	token.RequestID = "req-ref"
+	token.RequestID = "req-anon"
 	resignTestCommitToken(t, svc, token)
 
 	resp, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-ref",
-		UserID:          123,
-		RequestID:       "req-ref",
+		FingerprintHash: "fp-anon",
+		RequestID:       "req-anon",
 		UsageType:       "generate",
 		AccessMode:      model.AccessModeFree,
 		CommitToken:     token,
 	})
 	require.NoError(t, err)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, []uint64{123}, referrals.activated)
-	require.Equal(t, []int{growthsvc.InviteActivationRewardAmount}, referrals.amounts)
-}
-
-func TestConsumeIgnoresMissingReferral(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-no-ref"] = &model.FreeQuota{FingerprintHash: "fp-no-ref", FreeLimit: 2, FreeUsed: 0}
-	referrals := &fakeReferralActivator{err: growthsvc.ErrReferralNotFound}
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, referrals, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-no-ref", "generate")
-	checkReq.UserID = 456
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
-	token.RequestID = "req-no-ref"
-	resignTestCommitToken(t, svc, token)
-
-	resp, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-no-ref",
-		UserID:          456,
-		RequestID:       "req-no-ref",
-		UsageType:       "generate",
-		AccessMode:      model.AccessModeFree,
-		CommitToken:     token,
-	})
-	require.NoError(t, err)
-	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-}
-
-func TestAdjustQuotaAffectsCheckRemaining(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-5"] = &model.FreeQuota{FingerprintHash: "fp-5", FreeLimit: 2, FreeUsed: 1}
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-
-	resp, err := svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
-	require.NoError(t, err)
-	require.Equal(t, 1, resp.FreeRemaining)
-
-	quotas.mu.Lock()
-	quotas.quotas["fp-5"].FreeLimit = 5
-	quotas.mu.Unlock()
-
-	resp, err = svc.Check(context.Background(), testCheckRequest("fp-5", "generate"))
-	require.NoError(t, err)
-	require.Equal(t, 4, resp.FreeRemaining)
-}
-
-func TestConsumePaidRequiresAPIKey(t *testing.T) {
-	quotaTotal := 3
-	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
-	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-paid", "generate")
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
-	token.RequestID = "req-missing-key"
-	resignTestCommitToken(t, svc, token)
-
-	_, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-paid",
-		RequestID:       "req-missing-key",
-		UsageType:       "generate",
-		AccessMode:      model.AccessModePaid,
-		CommitToken:     token,
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "api_key is required")
-	require.Equal(t, 1, apiStore.key.QuotaUsed)
-}
-
-func TestConsumePaidRejectsKeyDisabledAfterCheck(t *testing.T) {
-	quotaTotal := 3
-	apiStore := &fakeAPIKeyStore{key: &model.APIKey{ID: 9, Status: model.APIKeyStatusActive, PlanName: "pro", KeyPrefix: "cop_live_abcd", QuotaTotal: &quotaTotal, QuotaUsed: 1}}
-	svc := NewService(apiStore, newFakeFreeQuotaStore(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-paid", "generate")
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "cop_live_abcd")
-	token.RequestID = "req-disabled-after-check"
-	resignTestCommitToken(t, svc, token)
-
-	apiStore.mu.Lock()
-	apiStore.key.Status = model.APIKeyStatusDisabled
-	apiStore.mu.Unlock()
-
-	_, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-paid",
-		RequestID:       "req-disabled-after-check",
-		UsageType:       "generate",
-		AccessMode:      model.AccessModePaid,
-		APIKey:          "demo",
-		CommitToken:     token,
-	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "disabled")
-	require.Equal(t, 1, apiStore.key.QuotaUsed)
-}
-
-func TestConsumeRestoreExistingPaidUsageWithoutAPIKey(t *testing.T) {
-	usage := newFakeUsageStore()
-	requestID := "req-existing-paid"
-	usage.byRequest[requestID] = &model.UsageEvent{
-		RequestID: &requestID,
-		Mode:      model.UsageModePaid,
-	}
-	svc := NewService(&fakeAPIKeyStore{}, newFakeFreeQuotaStore(), usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-paid", "generate")
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModePaid, "")
-	token.RequestID = requestID
-	resignTestCommitToken(t, svc, token)
-
-	resp, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-paid",
-		RequestID:       requestID,
-		UsageType:       "generate",
-		AccessMode:      model.AccessModePaid,
-		CommitToken:     token,
-	})
-	require.NoError(t, err)
-	require.Equal(t, model.AccessModePaid, resp.AccessMode)
-	require.Zero(t, resp.Remaining)
-}
-
-func TestConsumeRestoreExistingFreeUsageReturnsCurrentQuota(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	quotas.quotas["fp-restore"] = &model.FreeQuota{FingerprintHash: "fp-restore", FreeLimit: 5, FreeUsed: 2}
-	usage := newFakeUsageStore()
-	requestID := "req-existing-free"
-	usage.byRequest[requestID] = &model.UsageEvent{
-		RequestID:       &requestID,
-		FingerprintHash: "fp-restore",
-		Mode:            model.UsageModeFree,
-		CreatedAt:       time.Now().UTC(),
-	}
-	svc := NewService(&fakeAPIKeyStore{}, quotas, usage, newFakeIdemStore(), nil, nil, "salt", 10, time.Hour)
-	checkReq := testCheckRequest("fp-restore", "generate")
-	token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
-	token.RequestID = requestID
-	resignTestCommitToken(t, svc, token)
-
-	resp, err := svc.Consume(context.Background(), ConsumeRequest{
-		FingerprintHash: "fp-restore",
-		RequestID:       requestID,
-		UsageType:       "generate",
-		AccessMode:      model.AccessModeFree,
-		CommitToken:     token,
-	})
-	require.NoError(t, err)
-	require.Equal(t, model.AccessModeFree, resp.AccessMode)
-	require.Equal(t, 2, resp.FreeUsed)
-	require.Equal(t, 3, resp.FreeRemaining)
-	require.Equal(t, 3, resp.Remaining)
-}
-
-func TestFreeQuotaDoesNotResetAcrossDays(t *testing.T) {
-	quotas := newFakeFreeQuotaStore()
-	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", 2, time.Hour)
-	dayOne := time.Date(2026, 4, 2, 9, 0, 0, 0, time.UTC)
-	svc.clock = func() time.Time { return dayOne }
-
-	for i := 0; i < 2; i++ {
-		checkReq := testCheckRequest("fp-lifetime", "generate")
-		checkReq.RequestNonce = "nonce-lifetime-" + string(rune('a'+i))
-		token := issueTestCommitToken(t, svc, checkReq, model.AccessModeFree, "")
-		token.RequestID = "req-lifetime-" + string(rune('a'+i))
-		resignTestCommitToken(t, svc, token)
-		_, err := svc.Consume(context.Background(), ConsumeRequest{
-			FingerprintHash: "fp-lifetime",
-			RequestID:       token.RequestID,
-			UsageType:       "generate",
-			AccessMode:      model.AccessModeFree,
-			CommitToken:     token,
-		})
-		require.NoError(t, err)
-	}
-
-	svc.clock = func() time.Time { return dayOne.Add(24 * time.Hour) }
-	nextDay, err := svc.Check(context.Background(), testCheckRequest("fp-lifetime", "generate"))
-	require.NoError(t, err)
-	require.False(t, nextDay.Allowed)
-	require.Equal(t, "free_quota_exhausted", nextDay.ReasonCode)
-	require.Equal(t, 0, nextDay.QuotaSnapshot.FreeTrial.Remaining)
+	require.Len(t, usage.events, 1)
+	require.Equal(t, model.UsageModeFree, usage.events[0].Mode)
+	// Balance unchanged — hostedllm settles via its own reserve/settle path.
+	require.Equal(t, 100, quotas.accounts["fp-anon"].CreditBalance)
 }

@@ -366,149 +366,6 @@ func (s *Store) MarkUserAIGatewayAPIKeyCreationError(ctx context.Context, userID
 	return s.FindUserAIGatewayAPIKeyByUserID(ctx, userID)
 }
 
-func (s *Store) GetOrCreateFreeQuota(ctx context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
-	var quota model.FreeQuota
-	err := s.db.WithContext(ctx).Where("fingerprint_hash = ?", fingerprint).First(&quota).Error
-	if err == nil {
-		return &quota, false, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, false, err
-	}
-
-	quota = model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit}
-	if err := s.db.WithContext(ctx).Create(&quota).Error; err != nil {
-		if IsDuplicateError(err) {
-			return s.GetOrCreateFreeQuota(ctx, fingerprint, defaultLimit)
-		}
-		return nil, false, err
-	}
-	return &quota, true, nil
-}
-
-func (s *Store) GetOrCreateDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, bool, error) {
-	var quota model.DailyFreeQuota
-	err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).First(&quota).Error
-	if err == nil {
-		return &quota, false, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, false, err
-	}
-
-	quota = model.DailyFreeQuota{
-		FingerprintHash: fingerprint,
-		UsageDate:       usageDate,
-		DocumentType:    documentType,
-		DailyLimit:      defaultLimit,
-		DailyUsed:       0,
-	}
-	if err := s.db.WithContext(ctx).Create(&quota).Error; err != nil {
-		if IsDuplicateError(err) {
-			return s.GetOrCreateDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
-		}
-		return nil, false, err
-	}
-	return &quota, true, nil
-}
-
-func (s *Store) GetFreeQuotaByFingerprint(ctx context.Context, fingerprint string) (*model.FreeQuota, error) {
-	var quota model.FreeQuota
-	if err := s.db.WithContext(ctx).Where("fingerprint_hash = ?", fingerprint).First(&quota).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &quota, nil
-}
-
-func (s *Store) GetDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string) (*model.DailyFreeQuota, error) {
-	var quota model.DailyFreeQuota
-	if err := s.db.WithContext(ctx).Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).First(&quota).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &quota, nil
-}
-
-func (s *Store) ConsumeFreeQuota(ctx context.Context, fingerprint string) (*model.FreeQuota, error) {
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, tx.Error
-	}
-	defer rollbackOnPanic(tx)
-
-	var quota model.FreeQuota
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("fingerprint_hash = ?", fingerprint).First(&quota).Error; err != nil {
-		tx.Rollback()
-		return nil, err
-	}
-	if quota.FreeUsed >= quota.FreeLimit {
-		tx.Rollback()
-		return nil, fmt.Errorf("free quota exhausted")
-	}
-	quota.FreeUsed++
-	if err := tx.Save(&quota).Error; err != nil {
-		tx.Rollback()
-		return nil, err
-	}
-	if err := tx.Commit().Error; err != nil {
-		return nil, err
-	}
-	return &quota, nil
-}
-
-func (s *Store) ConsumeDailyFreeQuota(ctx context.Context, fingerprint string, usageDate string, documentType string, defaultLimit int) (*model.DailyFreeQuota, error) {
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, tx.Error
-	}
-	defer rollbackOnPanic(tx)
-
-	var quota model.DailyFreeQuota
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("fingerprint_hash = ? AND usage_date = ? AND document_type = ?", fingerprint, usageDate, documentType).
-		First(&quota).Error
-	switch {
-	case err == nil:
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		quota = model.DailyFreeQuota{
-			FingerprintHash: fingerprint,
-			UsageDate:       usageDate,
-			DocumentType:    documentType,
-			DailyLimit:      defaultLimit,
-			DailyUsed:       0,
-		}
-		if err := tx.Create(&quota).Error; err != nil {
-			tx.Rollback()
-			if IsDuplicateError(err) {
-				return s.ConsumeDailyFreeQuota(ctx, fingerprint, usageDate, documentType, defaultLimit)
-			}
-			return nil, err
-		}
-	default:
-		tx.Rollback()
-		return nil, err
-	}
-
-	if quota.DailyUsed >= quota.DailyLimit {
-		tx.Rollback()
-		return nil, fmt.Errorf("free quota exhausted")
-	}
-	quota.DailyUsed++
-	if err := tx.Save(&quota).Error; err != nil {
-		tx.Rollback()
-		return nil, err
-	}
-	if err := tx.Commit().Error; err != nil {
-		return nil, err
-	}
-	return &quota, nil
-}
-
 func (s *Store) ConsumePaidQuotaByHash(ctx context.Context, hash string) (*model.APIKey, error) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
@@ -867,6 +724,270 @@ func lockedHostedCreditAccountTx(tx *gorm.DB, userID uint64) (*model.UserHostedC
 		return nil, err
 	}
 	return &account, nil
+}
+
+func (s *Store) GetHostedCreditAccountByFingerprint(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return nil, fmt.Errorf("fingerprint is required")
+	}
+	var account model.FingerprintCreditAccount
+	if err := s.db.WithContext(ctx).First(&account, "fingerprint_hash = ?", fingerprint).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &model.FingerprintCreditAccount{FingerprintHash: fingerprint}, nil
+		}
+		return nil, err
+	}
+	return &account, nil
+}
+
+func (s *Store) GrantHostedCreditsToFingerprint(ctx context.Context, fingerprint string, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.FingerprintCreditLedger, *model.FingerprintCreditAccount, bool, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return nil, nil, false, fmt.Errorf("fingerprint is required")
+	}
+	if creditAmount <= 0 {
+		return nil, nil, false, fmt.Errorf("credit amount must be positive")
+	}
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return nil, nil, false, fmt.Errorf("idempotency_key is required")
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		metadataJSON = "{}"
+	}
+	var ledger *model.FingerprintCreditLedger
+	var account *model.FingerprintCreditAccount
+	created := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		entry, loaded, didCreate, err := grantHostedCreditsToFingerprintTx(tx, fingerprint, source, idempotencyKey, creditAmount, reason, metadataJSON)
+		ledger = entry
+		account = loaded
+		created = didCreate
+		return err
+	})
+	return ledger, account, created, err
+}
+
+func grantHostedCreditsToFingerprintTx(tx *gorm.DB, fingerprint string, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.FingerprintCreditLedger, *model.FingerprintCreditAccount, bool, error) {
+	var existing model.FingerprintCreditLedger
+	if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+		account, loadErr := lockedFingerprintCreditAccountTx(tx, fingerprint)
+		if loadErr != nil {
+			return nil, nil, false, loadErr
+		}
+		return &existing, account, false, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, false, err
+	}
+	account, err := lockedFingerprintCreditAccountTx(tx, fingerprint)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	account.CreditBalance += creditAmount
+	if source == model.HostedCreditLedgerSourceAnonymousSignupBonus {
+		account.BonusGranted = true
+	}
+	if err := tx.Save(account).Error; err != nil {
+		return nil, nil, false, err
+	}
+	entry := &model.FingerprintCreditLedger{
+		FingerprintHash: fingerprint,
+		SourceType:      source,
+		IdempotencyKey:  idempotencyKey,
+		CreditDelta:     creditAmount,
+		Reason:          strings.TrimSpace(reason),
+		MetadataJSON:    metadataJSON,
+	}
+	if entry.Reason == "" {
+		entry.Reason = string(source)
+	}
+	if strings.TrimSpace(entry.MetadataJSON) == "" {
+		entry.MetadataJSON = "{}"
+	}
+	if err := tx.Create(entry).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			var duplicated model.FingerprintCreditLedger
+			if loadErr := tx.Where("idempotency_key = ?", idempotencyKey).First(&duplicated).Error; loadErr == nil {
+				return &duplicated, account, false, nil
+			}
+		}
+		return nil, nil, false, err
+	}
+	return entry, account, true, nil
+}
+
+func (s *Store) ReserveHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error) {
+	return s.applyFingerprintCreditReservation(ctx, fingerprint, "reserve:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceReserve, 0, credits, credits)
+}
+
+func (s *Store) ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error) {
+	return s.applyFingerprintCreditReservation(ctx, fingerprint, "release:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceRelease, 0, -reserved, 0)
+}
+
+func (s *Store) SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error) {
+	return s.applyFingerprintCreditReservation(ctx, fingerprint, "settle:"+strings.TrimSpace(requestID), model.HostedCreditLedgerSourceSettle, -settled, -reserved, 0)
+}
+
+func (s *Store) applyFingerprintCreditReservation(ctx context.Context, fingerprint string, idempotencyKey string, source model.HostedCreditLedgerSource, creditDelta, reservedDelta, requiredAvailable int) (*model.FingerprintCreditAccount, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return nil, fmt.Errorf("fingerprint is required")
+	}
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" || strings.HasSuffix(idempotencyKey, ":") {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	var account *model.FingerprintCreditAccount
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.FingerprintCreditLedger
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			loaded, loadErr := lockedFingerprintCreditAccountTx(tx, fingerprint)
+			if loadErr != nil {
+				return loadErr
+			}
+			account = loaded
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		loaded, err := lockedFingerprintCreditAccountTx(tx, fingerprint)
+		if err != nil {
+			return err
+		}
+		if requiredAvailable > 0 && loaded.AvailableCredits() < requiredAvailable {
+			return fmt.Errorf("hosted credits exhausted")
+		}
+		loaded.CreditBalance += creditDelta
+		if loaded.CreditBalance < 0 {
+			loaded.CreditBalance = 0
+		}
+		loaded.CreditReserved += reservedDelta
+		if loaded.CreditReserved < 0 {
+			loaded.CreditReserved = 0
+		}
+		if err := tx.Save(loaded).Error; err != nil {
+			return err
+		}
+		entry := &model.FingerprintCreditLedger{
+			FingerprintHash: fingerprint,
+			SourceType:      source,
+			IdempotencyKey:  idempotencyKey,
+			CreditDelta:     creditDelta,
+			ReservedDelta:   reservedDelta,
+			Reason:          string(source),
+			MetadataJSON:    "{}",
+		}
+		if err := tx.Create(entry).Error; err != nil {
+			return err
+		}
+		account = loaded
+		return nil
+	})
+	return account, err
+}
+
+func lockedFingerprintCreditAccountTx(tx *gorm.DB, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	var account model.FingerprintCreditAccount
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("fingerprint_hash = ?", fingerprint).First(&account).Error
+	switch {
+	case err == nil:
+		return &account, nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
+		return nil, err
+	}
+	account = model.FingerprintCreditAccount{FingerprintHash: fingerprint}
+	if err := tx.Create(&account).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("fingerprint_hash = ?", fingerprint).First(&account).Error; err != nil {
+				return nil, err
+			}
+			return &account, nil
+		}
+		return nil, err
+	}
+	return &account, nil
+}
+
+// TransferAnonymousCreditsToUser moves the available (non-reserved) balance of
+// a fingerprint credit account into the supplied user hosted credit account.
+// The transfer is idempotent: invoking it twice with the same fingerprint and
+// user combination yields zero additional movement. Reserved credits remain on
+// the fingerprint account so in-flight settle/release calls can still complete
+// against it; the account itself is preserved (balance may drop to zero) with
+// migrated_to_user_id set for audit.
+func (s *Store) TransferAnonymousCreditsToUser(ctx context.Context, fingerprint string, userID uint64) (int, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return 0, fmt.Errorf("fingerprint is required")
+	}
+	if userID == 0 {
+		return 0, fmt.Errorf("user_id is required")
+	}
+	idemKey := fmt.Sprintf("anonymous-transfer:%s:%d", fingerprint, userID)
+	transferred := 0
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Idempotency: if an outbound ledger entry already exists, treat as no-op.
+		var existing model.FingerprintCreditLedger
+		if err := tx.Where("idempotency_key = ?", idemKey).First(&existing).Error; err == nil {
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		fpAccount, err := lockedFingerprintCreditAccountTx(tx, fingerprint)
+		if err != nil {
+			return err
+		}
+		amount := fpAccount.CreditBalance - fpAccount.CreditReserved
+		if amount < 0 {
+			amount = 0
+		}
+		userAccount, err := lockedHostedCreditAccountTx(tx, userID)
+		if err != nil {
+			return err
+		}
+
+		uid := userID
+		fpAccount.MigratedToUserID = &uid
+
+		if amount > 0 {
+			fpAccount.CreditBalance -= amount
+			userAccount.CreditBalance += amount
+
+			outEntry := &model.FingerprintCreditLedger{
+				FingerprintHash: fingerprint,
+				SourceType:      model.HostedCreditLedgerSourceAnonymousTransferOut,
+				IdempotencyKey:  idemKey,
+				CreditDelta:     -amount,
+				Reason:          "anonymous credits transferred to user account",
+				MetadataJSON:    fmt.Sprintf(`{"user_id":%d}`, userID),
+			}
+			if err := tx.Create(outEntry).Error; err != nil {
+				return err
+			}
+			inEntry := &model.UserHostedCreditLedger{
+				UserID:         userID,
+				SourceType:     model.HostedCreditLedgerSourceAnonymousTransferIn,
+				IdempotencyKey: idemKey,
+				CreditDelta:    amount,
+				Reason:         "anonymous credits merged from device",
+				MetadataJSON:   fmt.Sprintf(`{"fingerprint_hash":%q}`, fingerprint),
+			}
+			if err := tx.Create(inEntry).Error; err != nil {
+				return err
+			}
+			if err := tx.Save(userAccount).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Save(fpAccount).Error; err != nil {
+			return err
+		}
+		transferred = amount
+		return nil
+	})
+	return transferred, err
 }
 
 func (s *Store) ReserveCreditsByHash(ctx context.Context, hash string, credits int) (*model.APIKey, error) {
@@ -1952,25 +2073,6 @@ func (s *Store) UpdateAPIKey(ctx context.Context, id uint64, values map[string]a
 	return s.db.WithContext(ctx).Model(&model.APIKey{}).Where("id = ?", id).Updates(values).Error
 }
 
-func (s *Store) ListDailyFreeQuotas(ctx context.Context, fingerprint string, usageDate string) ([]model.DailyFreeQuota, error) {
-	query := s.db.WithContext(ctx).Model(&model.DailyFreeQuota{})
-	if fingerprint != "" {
-		query = query.Where("fingerprint_hash LIKE ?", "%"+fingerprint+"%")
-	}
-	if usageDate != "" {
-		query = query.Where("usage_date = ?", usageDate)
-	}
-	var quotas []model.DailyFreeQuota
-	if err := query.Order("updated_at desc").Find(&quotas).Error; err != nil {
-		return nil, err
-	}
-	return quotas, nil
-}
-
-func (s *Store) UpdateDailyFreeQuota(ctx context.Context, id uint64, dailyLimit int) error {
-	return s.db.WithContext(ctx).Model(&model.DailyFreeQuota{}).Where("id = ?", id).Update("daily_limit", dailyLimit).Error
-}
-
 func (s *Store) SaveGoogleUser(ctx context.Context, googleSub, email, name string, avatarURL *string) (*model.User, error) {
 	if strings.TrimSpace(googleSub) == "" {
 		return nil, fmt.Errorf("google subject is required")
@@ -2571,7 +2673,7 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 	if err := s.db.WithContext(ctx).Model(&model.APIKey{}).Where("expires_at IS NOT NULL AND expires_at < ?", now).Count(&stats.ExpiredAPIKeys).Error; err != nil {
 		return nil, err
 	}
-	if err := s.db.WithContext(ctx).Model(&model.FreeQuota{}).Distinct("fingerprint_hash").Count(&stats.FreeMachines).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&model.FingerprintCreditAccount{}).Distinct("fingerprint_hash").Count(&stats.FreeMachines).Error; err != nil {
 		return nil, err
 	}
 	if err := s.db.WithContext(ctx).Model(&model.UsageEvent{}).Where("created_at >= ? AND charged = ?", dayAgo, true).Count(&stats.ConsumesLast24h).Error; err != nil {
@@ -2735,8 +2837,16 @@ func (s *Store) SeedDemoData(ctx context.Context, defaultFreeLimit int) error {
 	}
 	_ = s.db.WithContext(ctx).FirstOrCreate(&active, model.APIKey{KeyHash: active.KeyHash}).Error
 
-	quota := model.FreeQuota{FingerprintHash: "demo-fingerprint", FreeLimit: defaultFreeLimit, FreeUsed: 2}
-	_ = s.db.WithContext(ctx).FirstOrCreate(&quota, model.FreeQuota{FingerprintHash: quota.FingerprintHash}).Error
+	demoCredits := defaultFreeLimit
+	if demoCredits <= 0 {
+		demoCredits = 100
+	}
+	demoAccount := model.FingerprintCreditAccount{
+		FingerprintHash: "demo-fingerprint",
+		CreditBalance:   demoCredits,
+		BonusGranted:    true,
+	}
+	_ = s.db.WithContext(ctx).FirstOrCreate(&demoAccount, model.FingerprintCreditAccount{FingerprintHash: demoAccount.FingerprintHash}).Error
 	return nil
 }
 

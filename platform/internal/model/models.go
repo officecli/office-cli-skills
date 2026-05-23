@@ -65,14 +65,17 @@ const (
 	HostedCreditGrantSourceSignup           HostedCreditGrantSource = "signup_bonus"
 	HostedCreditGrantSourceInviteActivation HostedCreditGrantSource = "invite_activation_bonus"
 
-	HostedCreditLedgerSourcePurchase              HostedCreditLedgerSource = "purchase"
-	HostedCreditLedgerSourceSignupBonus           HostedCreditLedgerSource = "signup_bonus"
-	HostedCreditLedgerSourceInviteActivationBonus HostedCreditLedgerSource = "invite_activation_bonus"
-	HostedCreditLedgerSourceDiscordJoinBonus      HostedCreditLedgerSource = "discord_join_bonus"
-	HostedCreditLedgerSourceReserve               HostedCreditLedgerSource = "reserve"
-	HostedCreditLedgerSourceSettle                HostedCreditLedgerSource = "settle"
-	HostedCreditLedgerSourceRelease               HostedCreditLedgerSource = "release"
-	HostedCreditLedgerSourceMigration             HostedCreditLedgerSource = "migration"
+	HostedCreditLedgerSourcePurchase                HostedCreditLedgerSource = "purchase"
+	HostedCreditLedgerSourceSignupBonus             HostedCreditLedgerSource = "signup_bonus"
+	HostedCreditLedgerSourceInviteActivationBonus   HostedCreditLedgerSource = "invite_activation_bonus"
+	HostedCreditLedgerSourceDiscordJoinBonus        HostedCreditLedgerSource = "discord_join_bonus"
+	HostedCreditLedgerSourceReserve                 HostedCreditLedgerSource = "reserve"
+	HostedCreditLedgerSourceSettle                  HostedCreditLedgerSource = "settle"
+	HostedCreditLedgerSourceRelease                 HostedCreditLedgerSource = "release"
+	HostedCreditLedgerSourceMigration               HostedCreditLedgerSource = "migration"
+	HostedCreditLedgerSourceAnonymousSignupBonus    HostedCreditLedgerSource = "anonymous_signup_bonus"
+	HostedCreditLedgerSourceAnonymousTransferOut    HostedCreditLedgerSource = "anonymous_transfer_out"
+	HostedCreditLedgerSourceAnonymousTransferIn     HostedCreditLedgerSource = "anonymous_transfer_in"
 
 	PackKindExternalGeneration PackKind = "external_generation"
 	PackKindHostedCredits      PackKind = "hosted_credits"
@@ -234,45 +237,41 @@ type CLISession struct {
 
 func (CLISession) TableName() string { return "cli_sessions" }
 
-type FreeQuota struct {
-	ID              uint64    `gorm:"primaryKey" json:"id"`
-	FingerprintHash string    `gorm:"column:fingerprint_hash;size:128;uniqueIndex;not null" json:"fingerprint_hash"`
-	FreeLimit       int       `gorm:"column:free_limit;not null" json:"free_limit"`
-	FreeUsed        int       `gorm:"column:free_used;not null" json:"free_used"`
-	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+type FingerprintCreditAccount struct {
+	FingerprintHash  string    `gorm:"column:fingerprint_hash;size:128;primaryKey" json:"fingerprint_hash"`
+	CreditBalance    int       `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
+	CreditReserved   int       `gorm:"column:credit_reserved;not null;default:0" json:"credit_reserved"`
+	BonusGranted     bool      `gorm:"column:bonus_granted;not null;default:false" json:"bonus_granted"`
+	MigratedToUserID *uint64   `gorm:"column:migrated_to_user_id;index" json:"migrated_to_user_id,omitempty"`
+	CreatedAt        time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
 
-func (FreeQuota) TableName() string { return "free_quotas" }
+func (FingerprintCreditAccount) TableName() string { return "fingerprint_credit_accounts" }
 
-func (f FreeQuota) FreeRemaining() int {
-	remaining := f.FreeLimit - f.FreeUsed
+func (a FingerprintCreditAccount) AvailableCredits() int {
+	remaining := a.CreditBalance - a.CreditReserved
 	if remaining < 0 {
 		return 0
 	}
 	return remaining
 }
 
-type DailyFreeQuota struct {
-	ID              uint64    `gorm:"primaryKey" json:"id"`
-	FingerprintHash string    `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
-	UsageDate       string    `gorm:"column:usage_date;size:10;not null" json:"usage_date"`
-	DocumentType    string    `gorm:"column:document_type;size:32;not null;default:document;index" json:"document_type"`
-	DailyLimit      int       `gorm:"column:daily_limit;not null" json:"daily_limit"`
-	DailyUsed       int       `gorm:"column:daily_used;not null" json:"daily_used"`
-	CreatedAt       time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+type FingerprintCreditLedger struct {
+	ID              uint64                   `gorm:"primaryKey" json:"id"`
+	FingerprintHash string                   `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
+	SourceType      HostedCreditLedgerSource `gorm:"column:source_type;size:64;index;not null" json:"source_type"`
+	IdempotencyKey  string                   `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
+	CreditDelta     int                      `gorm:"column:credit_delta;not null;default:0" json:"credit_delta"`
+	ReservedDelta   int                      `gorm:"column:reserved_delta;not null;default:0" json:"reserved_delta"`
+	UsageEventID    *uint64                  `gorm:"column:usage_event_id;index" json:"usage_event_id,omitempty"`
+	OrderID         *uint64                  `gorm:"column:order_id;index" json:"order_id,omitempty"`
+	Reason          string                   `gorm:"column:reason;size:191;not null" json:"reason"`
+	MetadataJSON    string                   `gorm:"column:metadata_json;type:json;not null" json:"metadata_json"`
+	CreatedAt       time.Time                `gorm:"column:created_at;autoCreateTime" json:"created_at"`
 }
 
-func (DailyFreeQuota) TableName() string { return "daily_free_quotas" }
-
-func (d DailyFreeQuota) Remaining() int {
-	remaining := d.DailyLimit - d.DailyUsed
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
+func (FingerprintCreditLedger) TableName() string { return "fingerprint_credit_ledger" }
 
 type UsageEvent struct {
 	ID                    uint64      `gorm:"primaryKey" json:"id"`

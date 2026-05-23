@@ -188,7 +188,6 @@ type tuiQuotaStatus struct {
 	RuntimeMode        string
 	AccessMode         string
 	CreditBalance      int
-	FreeRemaining      int
 	RewardRemaining    int
 	PaidQuotaRemaining int
 	Remaining          int
@@ -940,10 +939,7 @@ func (m tuiModel) quotaText() string {
 	case string(LicenseAccessModeHosted):
 		return fmt.Sprintf("%s · Credits: %d", prefix, m.quota.CreditBalance)
 	case string(LicenseAccessModeFree):
-		if mode == string(RuntimeModeExternal) && (m.quota.FreeRemaining <= 0 || strings.TrimSpace(m.cfg.License.SessionToken) != "") {
-			return prefix
-		}
-		return fmt.Sprintf("%s · Trial: %d generations", prefix, m.quota.FreeRemaining)
+		return prefix + " · External mode"
 	case string(LicenseAccessModeReward):
 		return fmt.Sprintf("%s · Generations: %d", prefix, firstPositive(m.quota.RewardRemaining, m.quota.Remaining))
 	case string(LicenseAccessModePaid):
@@ -954,7 +950,7 @@ func (m tuiModel) quotaText() string {
 		if mode == string(RuntimeModeHosted) {
 			return fmt.Sprintf("%s · Credits: %d", prefix, m.quota.CreditBalance)
 		}
-		return fmt.Sprintf("%s · Generations: %d", prefix, firstPositive(m.quota.PaidQuotaRemaining, m.quota.RewardRemaining, m.quota.FreeRemaining, m.quota.Remaining))
+		return fmt.Sprintf("%s · Generations: %d", prefix, firstPositive(m.quota.PaidQuotaRemaining, m.quota.RewardRemaining, m.quota.Remaining))
 	}
 }
 
@@ -984,7 +980,6 @@ func (m *tuiModel) applyAccessStatus(result *LicenseCheckResult, err error) {
 	m.quota.RuntimeMode = runtimeMode
 	m.quota.AccessMode = string(result.AccessMode)
 	m.quota.CreditBalance = result.CreditBalance
-	m.quota.FreeRemaining = result.FreeRemaining
 	m.quota.RewardRemaining = result.RewardRemaining
 	m.quota.PaidQuotaRemaining = result.PaidQuotaRemaining
 }
@@ -999,7 +994,6 @@ func (m *tuiModel) applyGenerationQuota(result GenerateResult) {
 		m.quota.AccessMode = strings.TrimSpace(result.AccessMode)
 	}
 	m.quota.CreditBalance = result.CreditBalance
-	m.quota.FreeRemaining = result.FreeRemaining
 	m.quota.RewardRemaining = result.RewardRemaining
 	m.quota.PaidQuotaRemaining = result.PaidQuotaRemaining
 	m.quota.Remaining = result.Remaining

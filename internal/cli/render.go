@@ -112,9 +112,6 @@ func formatAccessSummary(result GenerateResult) string {
 			fmt.Sprintf("%s mode", mode),
 			fmt.Sprintf("%d generations remaining", result.Remaining),
 		}
-		if result.FreeRemaining > 0 && mode != "free" {
-			parts = append(parts, fmt.Sprintf("trial %d", result.FreeRemaining))
-		}
 		if result.RewardRemaining > 0 && mode != "reward" {
 			parts = append(parts, fmt.Sprintf("reward %d", result.RewardRemaining))
 		}
@@ -168,7 +165,7 @@ func isQuotaWarning(warning string) bool {
 	}
 	for _, prefix := range []string{
 		"Current mode: ",
-		"Free trial quota on this machine: ",
+		"Credit balance: ",
 		"Reward quota: ",
 		"Paid quota on current key: ",
 	} {

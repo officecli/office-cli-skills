@@ -58,10 +58,6 @@ type UpdateAPIKeyRequest struct {
 	CreditReserved     *int       `json:"credit_reserved,omitempty"`
 }
 
-type UpdateFreeQuotaRequest struct {
-	FreeLimit int `json:"free_limit"`
-}
-
 type AdminPreferenceResponse struct {
 	Preferences json.RawMessage `json:"preferences"`
 }

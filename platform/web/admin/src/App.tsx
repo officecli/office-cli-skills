@@ -8,7 +8,6 @@ import AccessDeniedPage from './pages/AccessDeniedPage'
 import ApiKeysPage from './pages/ApiKeysPage'
 import BillingEventsPage from './pages/BillingEventsPage'
 import DashboardPage from './pages/DashboardPage'
-import FreeQuotasPage from './pages/FreeQuotasPage'
 import GrowthPage from './pages/GrowthPage'
 import HostedPricingRulesPage from './pages/HostedPricingRulesPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -59,7 +58,6 @@ function ProtectedShell() {
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/billing-events" element={<BillingEventsPage />} />
               <Route path="/quota-sources" element={<QuotaSourcesPage />} />
-              <Route path="/free-quotas" element={<FreeQuotasPage />} />
               <Route path="/usage-events" element={<UsageEventsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

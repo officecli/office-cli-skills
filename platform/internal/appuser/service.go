@@ -29,6 +29,8 @@ type Store interface {
 	AppCreateAPIKey(ctx context.Context, userID uint64, planName, hash, prefix, ciphertext string) (*model.APIKey, error)
 	GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error)
 	GrantHostedCreditsToUser(ctx context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error)
+	GrantHostedCreditsToFingerprint(ctx context.Context, fingerprint string, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.FingerprintCreditLedger, *model.FingerprintCreditAccount, bool, error)
+	TransferAnonymousCreditsToUser(ctx context.Context, fingerprint string, userID uint64) (int, error)
 	UpdateAPIKey(ctx context.Context, id uint64, values map[string]any) error
 	IsAPIKeyOwnedByUser(ctx context.Context, apiKeyID, userID uint64) (bool, error)
 }
@@ -45,6 +47,7 @@ type GrowthManager interface {
 
 const DiscordGuildVerificationBlockedReason = "discord guild verification is not configured in this build yet"
 const SignupHostedCreditBonus = 100
+const AnonymousSignupCreditBonus = 100
 
 type Overview struct {
 	APIKeyCount            int64               `json:"api_key_count"`
@@ -384,6 +387,66 @@ func (s *Service) grantSignupHostedCreditsToUser(ctx context.Context, userID uin
 
 func signupHostedCreditsIdempotencyKey(userID uint64) string {
 	return fmt.Sprintf("signup-hosted-credits:%d", userID)
+}
+
+func anonymousSignupCreditsIdempotencyKey(fingerprint string) string {
+	return fmt.Sprintf("anonymous-signup-credits:%s", fingerprint)
+}
+
+// EnsureAnonymousSignupCredits grants the per-device starter credit balance to
+// a fingerprint account on first access. Subsequent calls are no-ops thanks to
+// the ledger idempotency key.
+func (s *Service) EnsureAnonymousSignupCredits(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return nil, fmt.Errorf("fingerprint is required")
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"fingerprint_hash": fingerprint,
+		"bonus":            "anonymous_signup",
+	})
+	if err != nil {
+		return nil, err
+	}
+	_, account, created, err := s.store.GrantHostedCreditsToFingerprint(
+		ctx,
+		fingerprint,
+		model.HostedCreditLedgerSourceAnonymousSignupBonus,
+		anonymousSignupCreditsIdempotencyKey(fingerprint),
+		AnonymousSignupCreditBonus,
+		"anonymous device starter credits",
+		string(metadata),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if created {
+		_ = s.store.CreateAuditLog(ctx, "app.anonymous_signup_credits.grant", "fingerprint", fingerprint, string(metadata))
+	}
+	return account, nil
+}
+
+// MergeAnonymousCreditsIntoUser transfers the remaining anonymous credit
+// balance attached to a fingerprint into the user account that just completed
+// login. Operation is idempotent.
+func (s *Service) MergeAnonymousCreditsIntoUser(ctx context.Context, fingerprint string, userID uint64) (int, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" || userID == 0 {
+		return 0, nil
+	}
+	transferred, err := s.store.TransferAnonymousCreditsToUser(ctx, fingerprint, userID)
+	if err != nil {
+		return 0, err
+	}
+	if transferred > 0 {
+		payload := sqlstore.JSONString(map[string]any{
+			"fingerprint_hash": fingerprint,
+			"user_id":          userID,
+			"credits":          transferred,
+		})
+		_ = s.store.CreateAuditLog(ctx, "app.anonymous_credits.merge", "user", fmt.Sprintf("%d", userID), payload)
+	}
+	return transferred, nil
 }
 
 func (s *Service) GetAPIKeyPlaintext(ctx context.Context, userID, apiKeyID uint64) (string, error) {

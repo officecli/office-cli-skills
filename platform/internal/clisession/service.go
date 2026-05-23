@@ -68,9 +68,10 @@ type StartResponse struct {
 }
 
 type ExchangeRequest struct {
-	ChallengeID  string `json:"challenge_id"`
-	Code         string `json:"code"`
-	CodeVerifier string `json:"code_verifier"`
+	ChallengeID     string `json:"challenge_id"`
+	Code            string `json:"code"`
+	CodeVerifier    string `json:"code_verifier"`
+	FingerprintHash string `json:"fingerprint_hash,omitempty"`
 }
 
 type ExchangeResponse struct {

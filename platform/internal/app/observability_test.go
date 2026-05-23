@@ -82,12 +82,6 @@ func (fakeAdminRouteFailureService) CreateAPIKey(_ context.Context, req admin.Cr
 func (fakeAdminRouteFailureService) UpdateAPIKey(_ context.Context, id uint64, req admin.UpdateAPIKeyRequest) error {
 	return nil
 }
-func (fakeAdminRouteFailureService) ListFreeQuotas(_ context.Context, fingerprint string, usageDate string) ([]admin.DailyFreeQuotaView, error) {
-	return nil, nil
-}
-func (fakeAdminRouteFailureService) UpdateFreeQuota(_ context.Context, id uint64, freeLimit int) error {
-	return nil
-}
 func (fakeAdminRouteFailureService) ListUsageEvents(_ context.Context, filter sqlstore.UsageEventFilter) ([]model.UsageEvent, error) {
 	return nil, nil
 }

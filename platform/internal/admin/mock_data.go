@@ -116,27 +116,6 @@ func mockAPIKeys(ownerUserID *uint64) []model.APIKey {
 	return filtered
 }
 
-func mockFreeQuotas(fingerprint, usageDate string) []DailyFreeQuotaView {
-	rows := []DailyFreeQuotaView{
-		{ID: 301, FingerprintHash: "fp_mock_7d2e3a9b82a8f1e5c6b41b450a-long-hash", UsageDate: "2026-05-17", DailyLimit: 5, DailyUsed: 4, Remaining: 1, CreatedAt: mockBaseTime.Add(-8 * time.Hour), UpdatedAt: mockBaseTime.Add(-20 * time.Minute)},
-		{ID: 302, FingerprintHash: "fp_mock_blocked_review_needed_001", UsageDate: "2026-05-17", DailyLimit: 3, DailyUsed: 3, Remaining: 0, CreatedAt: mockBaseTime.Add(-6 * time.Hour), UpdatedAt: mockBaseTime.Add(-45 * time.Minute)},
-		{ID: 303, FingerprintHash: "fp_mock_new_onboarding_device", UsageDate: "2026-05-16", DailyLimit: 8, DailyUsed: 2, Remaining: 6, CreatedAt: mockBaseTime.Add(-28 * time.Hour), UpdatedAt: mockBaseTime.Add(-26 * time.Hour)},
-	}
-	fingerprint = strings.ToLower(strings.TrimSpace(fingerprint))
-	usageDate = strings.TrimSpace(usageDate)
-	filtered := make([]DailyFreeQuotaView, 0, len(rows))
-	for _, row := range rows {
-		if fingerprint != "" && !strings.Contains(strings.ToLower(row.FingerprintHash), fingerprint) {
-			continue
-		}
-		if usageDate != "" && row.UsageDate != usageDate {
-			continue
-		}
-		filtered = append(filtered, row)
-	}
-	return filtered
-}
-
 func mockUsageEvents(filter sqlstore.UsageEventFilter) []model.UsageEvent {
 	requestID1 := "req_mock_20260517_allowed_hosted"
 	requestID2 := "req_mock_20260517_blocked_free"
@@ -242,7 +221,6 @@ func mockGrowth() *GrowthSnapshot {
 }
 
 func mockQuotaSources(filter QuotaSourcesFilter) *QuotaSources {
-	free := mockFreeQuotas(filter.Fingerprint, filter.UsageDate)
 	growth := mockGrowth()
 	var rewards []model.RewardGrant
 	for _, grant := range growth.RewardGrants {
@@ -268,7 +246,7 @@ func mockQuotaSources(filter QuotaSourcesFilter) *QuotaSources {
 			hosted = append(hosted, key)
 		}
 	}
-	return &QuotaSources{FreeTrialDevices: free, RewardGrants: rewards, PaidExternalKeys: paid, HostedKeys: hosted}
+	return &QuotaSources{RewardGrants: rewards, PaidExternalKeys: paid, HostedKeys: hosted}
 }
 
 func mockHostedPricingRules() []model.HostedPricingRule {

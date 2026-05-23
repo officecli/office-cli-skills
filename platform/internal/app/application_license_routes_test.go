@@ -36,53 +36,48 @@ func (testAPIKeyStore) ConsumePaidByHash(_ context.Context, _ string) (*model.AP
 	return nil, licensesvc.ErrPaidQuotaExhausted
 }
 
-type testFreeQuotaStore struct {
-	mu     sync.Mutex
-	quotas map[string]*model.FreeQuota
+type testFingerprintCreditStore struct {
+	mu       sync.Mutex
+	accounts map[string]*model.FingerprintCreditAccount
 }
 
-func newTestFreeQuotaStore() *testFreeQuotaStore {
-	return &testFreeQuotaStore{quotas: map[string]*model.FreeQuota{}}
+func newTestFingerprintCreditStore() *testFingerprintCreditStore {
+	return &testFingerprintCreditStore{accounts: map[string]*model.FingerprintCreditAccount{}}
 }
 
-func (f *testFreeQuotaStore) GetOrCreateByFingerprint(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, bool, error) {
+func (f *testFingerprintCreditStore) GetHostedCreditAccountByFingerprint(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if quota, ok := f.quotas[fingerprint]; ok {
-		copied := *quota
-		return &copied, false, nil
+	if account, ok := f.accounts[fingerprint]; ok {
+		copied := *account
+		return &copied, nil
 	}
-	quota := &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit}
-	f.quotas[fingerprint] = quota
-	copied := *quota
-	return &copied, true, nil
+	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint}, nil
 }
 
-func (f *testFreeQuotaStore) GetByFingerprint(_ context.Context, fingerprint string) (*model.FreeQuota, error) {
+func (f *testFingerprintCreditStore) ensureSignupCredits(fingerprint string, amount int) *model.FingerprintCreditAccount {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint]
-	if quota == nil {
-		return nil, nil
+	if account, ok := f.accounts[fingerprint]; ok {
+		copied := *account
+		return &copied
 	}
-	copied := *quota
-	return &copied, nil
+	account := &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: amount, BonusGranted: true}
+	f.accounts[fingerprint] = account
+	copied := *account
+	return &copied
 }
 
-func (f *testFreeQuotaStore) Consume(_ context.Context, fingerprint string, defaultLimit int) (*model.FreeQuota, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	quota := f.quotas[fingerprint]
-	if quota == nil {
-		quota = &model.FreeQuota{FingerprintHash: fingerprint, FreeLimit: defaultLimit}
-		f.quotas[fingerprint] = quota
-	}
-	if quota.FreeUsed >= quota.FreeLimit {
-		return nil, licensesvc.ErrQuotaExhausted
-	}
-	quota.FreeUsed++
-	copied := *quota
-	return &copied, nil
+type testAnonymousGranter struct {
+	store *testFingerprintCreditStore
+}
+
+func newTestAnonymousGranter(store *testFingerprintCreditStore) *testAnonymousGranter {
+	return &testAnonymousGranter{store: store}
+}
+
+func (g *testAnonymousGranter) EnsureAnonymousSignupCredits(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
+	return g.store.ensureSignupCredits(fingerprint, 100), nil
 }
 
 type testUsageStore struct {
@@ -216,7 +211,7 @@ func TestRegisterLicenseRoutesCheckReturnsBadRequestOnInvalidBody(t *testing.T) 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewBufferString("{invalid"))
@@ -230,13 +225,16 @@ func TestRegisterLicenseRoutesCheckReturnsBadRequestOnInvalidBody(t *testing.T) 
 	}
 }
 
-func TestRegisterLicenseRoutesConsumeReturnsConflictOnFreeQuotaExhausted(t *testing.T) {
+// TestRegisterLicenseRoutesConsumeAnonymousRecordsUsage verifies the new
+// anonymous consume path: balance enforcement lives in hostedllm, so license
+// Consume simply records the usage event and returns 200.
+func TestRegisterLicenseRoutesConsumeAnonymousRecordsUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
-	quotas := newTestFreeQuotaStore()
-	quotas.quotas["fp-1"] = &model.FreeQuota{FingerprintHash: "fp-1", FreeLimit: 1, FreeUsed: 1}
-	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	quotas := newTestFingerprintCreditStore()
+	quotas.accounts["fp-1"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-1", CreditBalance: 0, BonusGranted: true}
+	lic := licensesvc.NewService(testAPIKeyStore{}, quotas, newTestAnonymousGranter(quotas), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 	token := issueRouteCommitToken(t, lic, "fp-1", model.AccessModeFree, nil)
 
@@ -253,7 +251,7 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnFreeQuotaExhausted(t *test
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusConflict {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }
@@ -262,7 +260,7 @@ func TestRegisterLicenseRoutesConsumeReturnsBadRequestOnPaidConsumeWithoutAPIKey
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	api := router.Group("/api")
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 	token := issueRouteCommitToken(t, lic, "fp-paid", model.AccessModePaid, nil)
 
@@ -289,7 +287,7 @@ func TestRegisterLicenseRoutesCheckErrorIncludesRequestID(t *testing.T) {
 	router := gin.New()
 	router.Use(httpapi.RequestIDMiddleware())
 	api := router.Group("/api")
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewBufferString("{invalid"))
@@ -320,7 +318,7 @@ func TestRegisterLicenseRoutesCheckSuccessIncludesRequestID(t *testing.T) {
 	router := gin.New()
 	router.Use(httpapi.RequestIDMiddleware())
 	api := router.Group("/api")
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	bodyBytes, _ := json.Marshal(licensesvc.CheckRequest{FingerprintHash: "fp-1", RequestNonce: "nonce-fp-1-generate", Action: "generate"})
@@ -350,7 +348,7 @@ func TestRegisterLicenseRoutesCheckReturnsRewardResponse(t *testing.T) {
 	api := router.Group("/api")
 	rewards := newTestRewardManager()
 	rewards.balances[42] = 3
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, rewards, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, rewards, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	body, _ := json.Marshal(licensesvc.CheckRequest{
@@ -388,7 +386,7 @@ func TestRegisterLicenseRoutesConsumeReturnsConflictOnRewardQuotaExhausted(t *te
 	router := gin.New()
 	api := router.Group("/api")
 	rewards := newTestRewardManager()
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), newTestUsageStore(), testIdemStore{}, rewards, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), newTestUsageStore(), testIdemStore{}, rewards, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 	token := issueRouteCommitToken(t, lic, "fp-reward-consume", model.AccessModeReward, func(req *licensesvc.CheckRequest) {
 		req.UserID = 42
@@ -418,7 +416,7 @@ func TestRegisterLicenseRoutesAddsAuditContextToUsageEvents(t *testing.T) {
 	router := gin.New()
 	api := router.Group("/api")
 	usage := newTestUsageStore()
-	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFreeQuotaStore(), usage, testIdemStore{}, nil, nil, "salt", 10, time.Hour)
+	lic := licensesvc.NewService(testAPIKeyStore{}, newTestFingerprintCreditStore(), newTestAnonymousGranter(newTestFingerprintCreditStore()), usage, testIdemStore{}, nil, nil, "salt", time.Hour)
 	registerLicenseRoutes(api, lic)
 
 	body, _ := json.Marshal(licensesvc.CheckRequest{
