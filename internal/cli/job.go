@@ -146,6 +146,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 	sourceFile = strings.TrimSpace(sourceFile)
 
+	if strings.TrimSpace(prompt) != "" && strings.TrimSpace(promptFile) != "" {
+		return GenerateJob{}, errors.New("use only one of --prompt and --prompt-file")
+	}
 	finalPrompt := strings.TrimSpace(prompt)
 	if finalPrompt == "" && strings.TrimSpace(promptFile) != "" {
 		data, err := os.ReadFile(promptFile)

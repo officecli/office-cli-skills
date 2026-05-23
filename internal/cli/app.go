@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/officecli/officecli-internal/engine"
@@ -38,6 +39,7 @@ type App struct {
 	restartCommand      func(ctx context.Context, info UpdateInfo, args []string) error
 	runTUI              func(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error
 	openBrowser         func(rawURL string) error
+	devLicenseWarnOnce  *sync.Once
 }
 
 var Version = "dev"
@@ -46,9 +48,10 @@ var BuildDate = "unknown"
 
 func NewApp(stdout, stderr io.Writer, stdin io.Reader) *App {
 	app := &App{
-		Stdout: stdout,
-		Stderr: stderr,
-		Stdin:  stdin,
+		Stdout:             stdout,
+		Stderr:             stderr,
+		Stdin:              stdin,
+		devLicenseWarnOnce: &sync.Once{},
 		newLLMClient: func(cfg LLMConfig) (GeneratorLLMClient, error) {
 			return llmprovider.NewClient(llmprovider.Config{
 				Provider:     cfg.Provider,
@@ -499,10 +502,15 @@ Description:
 
 func UpgradeHelpText() string {
 	return `Usage:
-  officecli upgrade
+  officecli upgrade [--apply]
 
 Description:
-  Check for a newer OfficeCLI version and apply the upgrade using the current installation channel when automatic upgrades are supported.
+  Check for a newer OfficeCLI version. By default the upgrade is NOT applied
+  automatically:
+    - In an interactive shell you will be asked to confirm.
+    - In a non-interactive context (CI, piped stdin) the suggested command is
+      printed and the process exits without modifying anything.
+  Pass --apply (or -y) to perform the upgrade without an interactive prompt.
 `
 }
 
@@ -637,8 +645,18 @@ func (a *App) doctorHTTPCheck(ctx context.Context, baseURL, method, path string,
 }
 
 func (a *App) runUpgrade(ctx context.Context, args []string) error {
-	if len(args) > 0 {
-		return fmt.Errorf("unsupported upgrade command: %s", args[0])
+	apply := false
+	remaining := make([]string, 0, len(args))
+	for _, arg := range args {
+		switch strings.TrimSpace(arg) {
+		case "--apply", "--yes", "-y":
+			apply = true
+		default:
+			remaining = append(remaining, arg)
+		}
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("unsupported upgrade command: %s", remaining[0])
 	}
 	info, err := a.checkForUpdatesNow(ctx)
 	if err != nil {
@@ -662,6 +680,21 @@ func (a *App) runUpgrade(ctx context.Context, args []string) error {
 			return err
 		}
 		return nil
+	}
+	if !apply {
+		if isTerminalReader(a.Stdin) && isTerminalWriter(a.Stdout) {
+			reader := bufio.NewReader(a.Stdin)
+			confirm, err := a.promptUpdateChoice(reader)
+			if err != nil {
+				return err
+			}
+			if !confirm {
+				return nil
+			}
+		} else {
+			_, err := fmt.Fprintln(a.Stdout, "Re-run with --apply (or -y) to perform the upgrade.")
+			return err
+		}
 	}
 	if err := a.performUpdate(ctx, info); err != nil {
 		return err
@@ -1615,7 +1648,14 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 	})
 	if err := licenseprovider.ValidateCheckResult(result, checkReq); err != nil {
 		if allowLocalDevLicenseProofSignatureMismatch(err) {
-			_, _ = fmt.Fprintln(a.Stderr, "Warning: local dev build skipped license proof signature validation. Release builds still require a matching embedded license proof public key.")
+			warn := func() {
+				_, _ = fmt.Fprintln(a.Stderr, "Warning: local dev build skipped license proof signature validation. Release builds still require a matching embedded license proof public key.")
+			}
+			if a.devLicenseWarnOnce != nil {
+				a.devLicenseWarnOnce.Do(warn)
+			} else {
+				warn()
+			}
 		} else {
 			return nil, fmt.Errorf("license proof validation failed: %w", err)
 		}

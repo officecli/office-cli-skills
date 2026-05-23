@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.77 - 2026-05-23
+
+### Fixed
+
+- `officecli upgrade` no longer auto-runs `npm install -g officecli` without consent. In an interactive shell it asks before applying; in a non-interactive context it prints the suggested command and exits. Pass `--apply` (or `-y`) to keep the previous one-shot behavior.
+- Generation commands no longer fail with "missing account login" when the binary has a valid CLI session but the locally installed `~/.codex/skills/officecli/env-common.sh` is an older copy that doesn't recognize the binary's `Mode: logged in` output. The preflight now double-checks the binary's own config and overrides the stale shell verdict when an active session or API key is present.
+- `officecli new ...` rejects the combination of `--prompt` and `--prompt-file` with a clear error instead of silently ignoring the file.
+- The local dev-build license-proof skip warning is now emitted at most once per process instead of repeating on every access check.
+
 ## 0.2.76 - 2026-05-22
 
 ### Added

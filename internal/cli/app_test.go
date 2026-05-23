@@ -1179,7 +1179,7 @@ func TestBuildGenerateJob_PromptPrecedence(t *testing.T) {
 	}
 
 	cfg := Config{}
-	job, err := BuildGenerateJob([]string{
+	if _, err := BuildGenerateJob([]string{
 		"pptx",
 		"Positional Title",
 		"Positional Description",
@@ -1189,13 +1189,25 @@ func TestBuildGenerateJob_PromptPrecedence(t *testing.T) {
 		Stdin: "from stdin",
 		IsTTY: true,
 		CWD:   tmpDir,
+	}); err == nil || !strings.Contains(err.Error(), "use only one of --prompt and --prompt-file") {
+		t.Fatalf("BuildGenerateJob: expected --prompt/--prompt-file conflict error, got %v", err)
+	}
+
+	job, err := BuildGenerateJob([]string{
+		"pptx",
+		"Positional Title",
+		"Positional Description",
+		"--prompt-file", promptFile,
+	}, cfg, InputSources{
+		Stdin: "from stdin",
+		IsTTY: true,
+		CWD:   tmpDir,
 	})
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
 	}
-
-	if job.Prompt != "from flag" {
-		t.Fatalf("prompt = %q, want flag value", job.Prompt)
+	if job.Prompt != "from file" {
+		t.Fatalf("prompt = %q, want %q", job.Prompt, "from file")
 	}
 	if job.Topic != "Positional Title" {
 		t.Fatalf("topic = %q", job.Topic)
@@ -2342,7 +2354,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"config", "--help"}, needles: []string{"Usage:", "officecli config status", "officecli config runtime", "officecli config set-runtime <external|hosted>", "officecli config set-generation", "officecli config set-license"}},
 		{args: []string{"auth", "--help"}, needles: []string{"officecli login", "officecli set-key <api-key>", "Log in with your OfficeCLI account"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
-		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "apply the upgrade using the current installation channel"}},
+		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "--apply", "By default the upgrade is NOT applied"}},
 		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--no-images", "PPTX adds suitable images by default", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
@@ -2439,7 +2451,7 @@ func TestAppRun_UpgradeCommandUpdatesImmediately(t *testing.T) {
 		return nil
 	}
 
-	if err := app.Run(t.Context(), []string{"upgrade"}); err != nil {
+	if err := app.Run(t.Context(), []string{"upgrade", "--apply"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !updated {
@@ -2454,6 +2466,41 @@ func TestAppRun_UpgradeCommandUpdatesImmediately(t *testing.T) {
 	}
 	if !strings.Contains(output, "officecli was updated.") {
 		t.Fatalf("stdout = %q", output)
+	}
+}
+
+func TestAppRun_UpgradeCommandWithoutApplyDoesNotInstall(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.checkForUpdates = func(ctx context.Context) (UpdateInfo, error) {
+		return UpdateInfo{
+			Available:           true,
+			CurrentVersion:      "0.2.5",
+			LatestVersionLabel:  "0.2.6",
+			InstallMethod:       InstallMethodNPM,
+			PackageManager:      "npm",
+			Channel:             UpdateChannelNPM,
+			AutoUpdateSupported: true,
+			UpdateCommand:       "npm install -g officecli",
+		}, nil
+	}
+	app.performUpdate = func(ctx context.Context, info UpdateInfo) error {
+		t.Fatal("performUpdate should not be called without --apply on a non-tty input")
+		return nil
+	}
+
+	if err := app.Run(t.Context(), []string{"upgrade"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Suggested update command: npm install -g officecli") {
+		t.Fatalf("stdout = %q", output)
+	}
+	if !strings.Contains(output, "--apply") {
+		t.Fatalf("expected non-tty fallback to mention --apply, got %q", output)
+	}
+	if strings.Contains(output, "officecli was updated.") {
+		t.Fatalf("upgrade should not have been applied: %q", output)
 	}
 }
 

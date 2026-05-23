@@ -68,11 +68,56 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 		}
 		var statusErr *preflightStatusError
 		if errors.As(err, &statusErr) {
+			if shouldOverrideAccountLoginPreflight(statusErr) {
+				continue
+			}
 			return statusErr
 		}
 		return fmt.Errorf("skill preflight failed for %s: %w", script, err)
 	}
 	return nil
+}
+
+// shouldOverrideAccountLoginPreflight suppresses a stale shell-script
+// preflight verdict when its ONLY complaint is the user being "anonymous" but
+// the binary's own config shows a valid CLI session or an API key. This guards
+// against an older ~/.codex/skills/officecli/env-common.sh whose parse_auth_mode
+// does not yet understand the binary's "Mode: logged in" whoami output.
+func shouldOverrideAccountLoginPreflight(statusErr *preflightStatusError) bool {
+	if statusErr == nil {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(statusErr.payload.Status), "repairable") {
+		return false
+	}
+	hasAccountLogin := false
+	for _, item := range statusErr.payload.MissingItems {
+		switch strings.TrimSpace(item) {
+		case "account_login":
+			hasAccountLogin = true
+		case "":
+			// ignore
+		default:
+			return false
+		}
+	}
+	if !hasAccountLogin {
+		return false
+	}
+	cfg, err := LoadConfig("")
+	if err != nil {
+		return false
+	}
+	if strings.TrimSpace(cfg.License.APIKey) != "" {
+		return true
+	}
+	if strings.TrimSpace(cfg.License.SessionToken) == "" {
+		return false
+	}
+	if cfg.License.SessionExpiresAt == nil {
+		return true
+	}
+	return time.Now().Before(*cfg.License.SessionExpiresAt)
 }
 
 type preflightStatusPayload struct {
