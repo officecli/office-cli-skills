@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.81 - 2026-05-23
+
+### Added
+
+- New `hosted-100` SKU on the hosted pricing tier: 100 credits for $1.00 USD. Lands as the entry-level pack alongside the existing `hosted-300` ($29) and `hosted-1200` ($99) packs and surfaces on `/pricing` as a third card (entry / popular / bulk) when 3+ hosted packs are returned.
+
+### Changed
+
+- Site `Pricing` component now renders a responsive 1/2/3-column grid driven by the number of hosted packs returned by `/api/pricing`. The 2-pack fallback path is preserved for compatibility.
+
 ## 0.2.80 - 2026-05-23
 
 ### Added

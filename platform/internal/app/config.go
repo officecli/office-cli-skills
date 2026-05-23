@@ -300,6 +300,7 @@ func defaultPricingPacks(unitPriceCents int64, external500PriceRatio string) ([]
 
 func hostedPricingPacks() []model.PricingPack {
 	return []model.PricingPack{
+		{Code: "hosted-100", Name: "Hosted 100", Description: "100 hosted credits to try the platform-managed LLM runtime for one dollar.", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)},
 		{Code: "hosted-300", Name: "Hosted 300", Description: "300 hosted credits for low-volume runs on the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
 		{Code: "hosted-1200", Name: "Hosted 1200", Description: "1200 hosted credits for teams that want the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 9900, CreditAmount: 1200, PackKind: string(model.PackKindHostedCredits)},
 	}
