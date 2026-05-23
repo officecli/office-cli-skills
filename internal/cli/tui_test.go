@@ -170,6 +170,35 @@ func TestTUIModelFooterShowsRuntimeModeAndQuota(t *testing.T) {
 	}
 }
 
+func TestTUIModelFooterSuppressesExternalTrialWhenZeroOrLoggedIn(t *testing.T) {
+	model := newTUIModel(&App{}, Config{Runtime: RuntimeConfig{Mode: RuntimeModeExternal}}, TUIOptions{}, "", io.Discard)
+	updated, _ := model.Update(tuiAccessStatusMsg{Result: &LicenseCheckResult{
+		AccessMode:    LicenseAccessModeFree,
+		FreeRemaining: 0,
+	}})
+	model = updated.(tuiModel)
+	view := model.View()
+	if !strings.Contains(view, "Mode: external") {
+		t.Fatalf("external footer should still show mode:\n%s", view)
+	}
+	if strings.Contains(view, "Trial:") {
+		t.Fatalf("external footer should NOT show 'Trial:' when FreeRemaining is 0:\n%s", view)
+	}
+
+	cfg := Config{Runtime: RuntimeConfig{Mode: RuntimeModeExternal}}
+	cfg.License.SessionToken = "ocli_sess_test"
+	model = newTUIModel(&App{}, cfg, TUIOptions{}, "", io.Discard)
+	updated, _ = model.Update(tuiAccessStatusMsg{Result: &LicenseCheckResult{
+		AccessMode:    LicenseAccessModeFree,
+		FreeRemaining: 5,
+	}})
+	model = updated.(tuiModel)
+	view = model.View()
+	if strings.Contains(view, "Trial:") {
+		t.Fatalf("external footer should NOT show 'Trial:' for logged-in user:\n%s", view)
+	}
+}
+
 func TestTUIModelFooterRefreshesQuotaAfterGeneration(t *testing.T) {
 	model := newTUIModel(&App{}, Config{Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, TUIOptions{}, "", io.Discard)
 	updated, _ := model.Update(tuiGenerationFinishedMsg{GenerationID: 0, Result: GenerateResult{

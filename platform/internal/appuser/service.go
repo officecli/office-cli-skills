@@ -44,7 +44,7 @@ type GrowthManager interface {
 }
 
 const DiscordGuildVerificationBlockedReason = "discord guild verification is not configured in this build yet"
-const SignupHostedCreditBonus = 30
+const SignupHostedCreditBonus = 100
 
 type Overview struct {
 	APIKeyCount            int64               `json:"api_key_count"`

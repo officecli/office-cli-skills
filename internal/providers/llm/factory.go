@@ -236,9 +236,10 @@ func (c *openAIClient) generateOpenAIImageEdit(ctx context.Context, baseURL, api
 		return nil, fmt.Errorf("at least one reference image is required")
 	}
 	body, err := c.postMultipartImageEdit(ctx, strings.TrimRight(baseURL, "/")+"/images/edits", apiKey, map[string]string{
-		"model":  model,
-		"prompt": req.Prompt,
-		"size":   resolveImageSize(req),
+		"model":           model,
+		"prompt":          req.Prompt,
+		"size":            resolveImageSize(req),
+		"response_format": "b64_json",
 	}, req.ReferenceImages)
 	if err != nil {
 		return nil, err
@@ -246,13 +247,20 @@ func (c *openAIClient) generateOpenAIImageEdit(ctx context.Context, baseURL, api
 	var resp struct {
 		Data []struct {
 			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("decode image edit response: %w", err)
+		return nil, fmt.Errorf("decode image edit response: %w body=%s", err, truncateForError(body))
 	}
-	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
-		return nil, fmt.Errorf("image edit response is empty")
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("image edit response is empty: body=%s", truncateForError(body))
+	}
+	if url := strings.TrimSpace(resp.Data[0].URL); url != "" {
+		return c.fetchImageURL(ctx, url)
+	}
+	if strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+		return nil, fmt.Errorf("image edit response is empty: body=%s", truncateForError(body))
 	}
 	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
 	if err != nil {
@@ -296,6 +304,15 @@ func (c *openAIClient) generateOpenAIResponsesImage(ctx context.Context, imageBa
 		return &engine.ImageGenerationResult{Data: data, MIME: "image/png"}, nil
 	}
 	return nil, fmt.Errorf("responses image response is empty")
+}
+
+func truncateForError(body []byte) string {
+	const maxLen = 512
+	trimmed := strings.TrimSpace(string(body))
+	if len(trimmed) <= maxLen {
+		return trimmed
+	}
+	return trimmed[:maxLen] + "…(truncated)"
 }
 
 func (c *openAIClient) fetchImageURL(ctx context.Context, rawURL string) (*engine.ImageGenerationResult, error) {

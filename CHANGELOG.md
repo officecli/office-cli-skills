@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.78 - 2026-05-23
+
+### Changed
+
+- New-user signup hosted credit bonus increased from 30 to 100 credits. Existing users are unaffected (the grant is idempotent per `signup-hosted-credits:<userID>`); the overview UI and web fallback both reflect the new amount.
+- TUI footer no longer shows the anonymous "Trial: N generations" counter while running in External Mode once the device's free quota is exhausted or the user is signed in — Trial state only makes sense for fresh hosted-trial sessions.
+- Image edit (`new img --reference-image`) now accepts OpenAI responses that return a `url` field in addition to `b64_json`, and surfaces the response body in error messages when decoding fails.
+
 ## 0.2.77 - 2026-05-23
 
 ### Fixed

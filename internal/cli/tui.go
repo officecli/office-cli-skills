@@ -549,7 +549,7 @@ const tuiHelpText = `Describe the document you want to generate in natural langu
 Commands:
   /help               Show this help
   /login              Log in to use account hosted credits
-  /mode [hosted|external]  Show or switch the runtime mode (default: hosted)
+  /mode [hosted|external]  Show or switch the runtime mode (no arg shows current)
   /exit               Exit the TUI
 
 Community:
@@ -940,6 +940,9 @@ func (m tuiModel) quotaText() string {
 	case string(LicenseAccessModeHosted):
 		return fmt.Sprintf("%s · Credits: %d", prefix, m.quota.CreditBalance)
 	case string(LicenseAccessModeFree):
+		if mode == string(RuntimeModeExternal) && (m.quota.FreeRemaining <= 0 || strings.TrimSpace(m.cfg.License.SessionToken) != "") {
+			return prefix
+		}
 		return fmt.Sprintf("%s · Trial: %d generations", prefix, m.quota.FreeRemaining)
 	case string(LicenseAccessModeReward):
 		return fmt.Sprintf("%s · Generations: %d", prefix, firstPositive(m.quota.RewardRemaining, m.quota.Remaining))

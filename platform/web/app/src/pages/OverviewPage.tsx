@@ -26,7 +26,7 @@ export default function OverviewPage() {
   const inviteRemaining = overview?.invite_remaining ?? growth?.invite_remaining ?? Math.max(inviteLimit - referrals.length, 0)
   const rewardPerInvite = overview?.reward_per_invite ?? growth?.reward_per_invite ?? 100
   const hostedCredits = overview?.hosted_credit_balance ?? 0
-  const signupBonus = overview?.signup_credit_bonus ?? 30
+  const signupBonus = overview?.signup_credit_bonus ?? 100
   const discordParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const discordResult = discordParams.get('discord')
   const discordMessage = discordParams.get('discord_message')

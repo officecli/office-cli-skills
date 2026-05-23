@@ -70,7 +70,7 @@ describe('platform app shell', () => {
         return { ok: true, status: 200, json: async () => ({ data: { id: 1, email: 'user@example.com', name: 'Demo User', status: 'active' } }) }
       }
       if (url === '/api/app/overview') {
-        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, hosted_credit_balance: 30, signup_credit_bonus: 30, reward_remaining: 100, invite_code: 'invite-abc', invite_limit: 5, invite_remaining: 2, reward_per_invite: 100, referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
+        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 2, total_remaining: 50, hosted_credit_balance: 30, signup_credit_bonus: 100, reward_remaining: 100, invite_code: 'invite-abc', invite_limit: 5, invite_remaining: 2, reward_per_invite: 100, referral_count: 3, activated_referral_count: 1, discord_connected: true, discord_guild_member: false, recent_usage_count: 4, recent_orders_count: 1, pricing: [] } }) }
       }
       if (url === '/api/app/growth') {
         return {
