@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.80 - 2026-05-23
+
+### Added
+
+- Redemption code system: admins can mint, edit, enable/disable codes from the admin web (`/redemption-codes`) and audit every claim from `/redemption-records`. Each code carries `credit_amount`, optional `max_redemptions`, optional `expires_at`, and a `per_user_limit` (default 1). A partial UNIQUE index on `(redemption_code_id, user_id) WHERE per_user_limit_at_claim = 1` enforces single-claim codes even if the application-layer `FOR UPDATE` serialization is bypassed.
+- Users can redeem codes from three entry points sharing one platform service:
+  - CLI: `officecli redeem <code>` (with `--code`, `--json`, `--source`).
+  - TUI: new `/redeem <code>` slash command — runs the same code path as the CLI and refreshes credit status inline.
+  - Web app: new `/redeem` page (sidebar entry "Redeem") with claim form and personal redemption history.
+- New backend endpoints: `POST /api/app/redemption-codes/redeem` (cookie session), `GET /api/app/redemption-codes/my`, `POST /api/cli/redemption-codes/redeem` (Bearer auth), and admin CRUD under `/api/admin/redemption-codes` plus `/api/admin/redemption-codes/redemptions`.
+- Hosted credit ledger gains a `redemption_code` source; each successful redeem writes a single ledger entry with an idempotency key tied to the redemption row so retries are safe.
+- Stable machine-readable error codes returned to clients (`code_not_found`, `code_disabled`, `code_expired`, `code_exhausted`, `code_already_claimed`, `code_required`) mapped to 404/403/410/410/409/400 respectively.
+
+### Migration
+
+- Postgres `025_grant_existing_users_100_credit_bonus.sql` retroactively grants 100 hosted credits to every existing user (idempotent via `signup-bonus-bump-100:<userID>`), completing the 30→100 signup-bonus bump from 0.2.78.
+- Postgres `026_redemption_codes.sql` creates `redemption_codes` and `redemption_code_redemptions`.
+- Postgres `027_redemption_code_singleton_unique.sql` adds `per_user_limit_at_claim` snapshot column and the partial UNIQUE index that enforces single-claim codes.
+
 ## 0.2.79 - 2026-05-23
 
 ### Changed

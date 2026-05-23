@@ -319,6 +319,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.cfg = cfg
 		return m, m.checkAccessStatus()
+	case tuiRedeemFinishedMsg:
+		if msg.GenerationID != m.generationID {
+			return m, nil
+		}
+		m.cancel = nil
+		m.events = nil
+		m.exitArmed = false
+		m.state = tuiStateIdle
+		if msg.Err != nil {
+			// runRedeem already wrote a friendly line to stderr via the writer.
+			return m, nil
+		}
+		return m, m.checkAccessStatus()
 	case tuiProgressMsg:
 		if msg.GenerationID != m.generationID {
 			return m, m.waitForEvent()
@@ -502,6 +515,8 @@ func (m tuiModel) handleCommandOrSubmit(value string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case lower == "/login":
 		return m.startLogin()
+	case command == "/redeem":
+		return m.startRedeem(fields[1:])
 	case lower == "/help":
 		m.append("assistant", tuiHelpText)
 		return m, nil
@@ -548,6 +563,7 @@ const tuiHelpText = `Describe the document you want to generate in natural langu
 Commands:
   /help               Show this help
   /login              Log in to use account hosted credits
+  /redeem <code>      Redeem a code to add hosted credits
   /mode [hosted|external]  Show or switch the runtime mode (no arg shows current)
   /exit               Exit the TUI
 
@@ -589,6 +605,70 @@ func (m tuiModel) startLoginCmd(ctx context.Context, generationID int, events ch
 		go func() {
 			err := app.runLogin(ctx, cfg)
 			events <- tuiLoginFinishedMsg{GenerationID: generationID, Err: err}
+			close(events)
+		}()
+		msg, ok := <-events
+		if !ok {
+			return tuiNoopMsg{}
+		}
+		return msg
+	}
+}
+
+type tuiRedeemFinishedMsg struct {
+	GenerationID int
+	Err          error
+}
+
+// startRedeem implements the TUI `/redeem <code> [--source tui]` command.
+// It runs the same code path as `officecli redeem ...` and surfaces output
+// through the existing tuiLoginWriter so success/failure lines appear inline.
+func (m tuiModel) startRedeem(args []string) (tea.Model, tea.Cmd) {
+	if m.app == nil {
+		m.append("error", "redeem is unavailable")
+		return m, nil
+	}
+	if len(args) == 0 {
+		m.append("error", "Usage: /redeem <code>")
+		return m, nil
+	}
+	m.generationID++
+	generationID := m.generationID
+	rootCtx := m.rootCtx
+	if rootCtx == nil {
+		rootCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(rootCtx)
+	events := make(chan tea.Msg, 64)
+	m.events = events
+	m.cancel = cancel
+	m.cancelled = false
+	m.exitArmed = false
+	m.append("status", "Redeeming code")
+	return m, m.startRedeemCmd(ctx, generationID, events, args)
+}
+
+func (m tuiModel) startRedeemCmd(ctx context.Context, generationID int, events chan tea.Msg, args []string) tea.Cmd {
+	app := *m.app
+	cfg := m.cfg
+	app.Stdout = tuiLoginWriter{events: events, generationID: generationID, role: "assistant"}
+	app.Stderr = tuiLoginWriter{events: events, generationID: generationID, role: "error"}
+	// Ensure TUI calls default to source=tui unless the user passed one.
+	withSource := append([]string{}, args...)
+	hasSource := false
+	for _, a := range withSource {
+		if a == "--source" || strings.HasPrefix(a, "--source=") {
+			hasSource = true
+			break
+		}
+	}
+	if !hasSource {
+		withSource = append(withSource, "--source", "tui")
+	}
+	return func() tea.Msg {
+		go func() {
+			err := app.runRedeem(ctx, cfg, withSource)
+			events <- tuiRedeemFinishedMsg{GenerationID: generationID, Err: err}
 			close(events)
 		}()
 		msg, ok := <-events

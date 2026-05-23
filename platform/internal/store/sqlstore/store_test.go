@@ -568,6 +568,29 @@ func TestAdminUserPreferenceUpsertGetAndIsolation(t *testing.T) {
 	require.Nil(t, other)
 }
 
+func TestGrantExistingUsers100CreditBonusMigrationShape(t *testing.T) {
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "postgres", "025_grant_existing_users_100_credit_bonus.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	lower := strings.ToLower(string(sqlBytes))
+
+	requiredSubstrings := []string{
+		"signup-bonus-bump-100:",
+		"'migration'",
+		"on conflict (idempotency_key) do nothing",
+		"user_hosted_credit_accounts",
+		"user_hosted_credit_ledger",
+		"from users",
+		"left join user_hosted_credit_ledger",
+		"is null",
+		"credit_delta",
+		"signup_bonus_bump_100",
+	}
+	for _, needle := range requiredSubstrings {
+		require.Containsf(t, lower, needle, "025 migration must contain %q", needle)
+	}
+}
+
 func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
 	requiredColumns := []string{"flow", "user_code_hash"}
 	migrationPaths := []string{

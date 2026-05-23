@@ -139,3 +139,48 @@ type CreateAPIKeyResponse struct {
 type APIKeyPlaintextResponse struct {
 	PlaintextKey string `json:"plaintext_key"`
 }
+
+type CreateRedemptionCodeRequest struct {
+	Code           string     `json:"code,omitempty"`
+	CreditAmount   int        `json:"credit_amount"`
+	MaxRedemptions *int       `json:"max_redemptions,omitempty"`
+	PerUserLimit   *int       `json:"per_user_limit,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	Notes          string     `json:"notes,omitempty"`
+}
+
+type UpdateRedemptionCodeRequest struct {
+	CreditAmount   *int       `json:"credit_amount,omitempty"`
+	MaxRedemptions *int       `json:"max_redemptions,omitempty"`
+	ClearMaxLimit  bool       `json:"clear_max_limit,omitempty"`
+	PerUserLimit   *int       `json:"per_user_limit,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	ClearExpiresAt bool       `json:"clear_expires_at,omitempty"`
+	Notes          *string    `json:"notes,omitempty"`
+}
+
+type ListRedemptionCodesRequest struct {
+	Status       string `form:"status" json:"status,omitempty"`
+	CodeContains string `form:"q" json:"q,omitempty"`
+	Limit        int    `form:"limit" json:"limit,omitempty"`
+	Offset       int    `form:"offset" json:"offset,omitempty"`
+}
+
+type ListRedemptionCodesResponse struct {
+	Items []model.RedemptionCode `json:"items"`
+	Total int64                  `json:"total"`
+}
+
+type ListRedemptionRecordsRequest struct {
+	RedemptionCodeID uint64 `form:"redemption_code_id" json:"redemption_code_id,omitempty"`
+	Code             string `form:"code" json:"code,omitempty"`
+	UserID           uint64 `form:"user_id" json:"user_id,omitempty"`
+	Source           string `form:"source" json:"source,omitempty"`
+	Limit            int    `form:"limit" json:"limit,omitempty"`
+	Offset           int    `form:"offset" json:"offset,omitempty"`
+}
+
+type ListRedemptionRecordsResponse struct {
+	Items []model.RedemptionCodeRedemption `json:"items"`
+	Total int64                            `json:"total"`
+}

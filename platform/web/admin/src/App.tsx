@@ -14,6 +14,8 @@ import NotFoundPage from './pages/NotFoundPage'
 import OperationsFunnelPage from './pages/OperationsFunnelPage'
 import OrdersPage from './pages/OrdersPage'
 import QuotaSourcesPage from './pages/QuotaSourcesPage'
+import RedemptionCodesPage from './pages/RedemptionCodesPage'
+import RedemptionRecordsPage from './pages/RedemptionRecordsPage'
 import UsersPage from './pages/UsersPage'
 import UsageEventsPage from './pages/UsageEventsPage'
 import { applyDocumentSEO, getRouteSEO } from './seo'
@@ -58,6 +60,8 @@ function ProtectedShell() {
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/billing-events" element={<BillingEventsPage />} />
               <Route path="/quota-sources" element={<QuotaSourcesPage />} />
+              <Route path="/redemption-codes" element={<RedemptionCodesPage />} />
+              <Route path="/redemption-records" element={<RedemptionRecordsPage />} />
               <Route path="/usage-events" element={<UsageEventsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

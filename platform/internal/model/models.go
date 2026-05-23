@@ -76,6 +76,7 @@ const (
 	HostedCreditLedgerSourceAnonymousSignupBonus    HostedCreditLedgerSource = "anonymous_signup_bonus"
 	HostedCreditLedgerSourceAnonymousTransferOut    HostedCreditLedgerSource = "anonymous_transfer_out"
 	HostedCreditLedgerSourceAnonymousTransferIn     HostedCreditLedgerSource = "anonymous_transfer_in"
+	HostedCreditLedgerSourceRedemptionCode          HostedCreditLedgerSource = "redemption_code"
 
 	PackKindExternalGeneration PackKind = "external_generation"
 	PackKindHostedCredits      PackKind = "hosted_credits"
@@ -453,6 +454,85 @@ type UserHostedCreditLedger struct {
 }
 
 func (UserHostedCreditLedger) TableName() string { return "user_hosted_credit_ledger" }
+
+type RedemptionCodeStatus string
+
+const (
+	RedemptionCodeStatusEnabled  RedemptionCodeStatus = "enabled"
+	RedemptionCodeStatusDisabled RedemptionCodeStatus = "disabled"
+)
+
+type RedemptionSource string
+
+const (
+	RedemptionSourceApp     RedemptionSource = "app"
+	RedemptionSourceCLI     RedemptionSource = "cli"
+	RedemptionSourceTUI     RedemptionSource = "tui"
+	RedemptionSourceDesktop RedemptionSource = "desktop"
+)
+
+func (s RedemptionSource) Valid() bool {
+	switch s {
+	case RedemptionSourceApp, RedemptionSourceCLI, RedemptionSourceTUI, RedemptionSourceDesktop:
+		return true
+	}
+	return false
+}
+
+type RedemptionCode struct {
+	ID              uint64               `gorm:"primaryKey" json:"id"`
+	Code            string               `gorm:"column:code;size:64;uniqueIndex;not null" json:"code"`
+	CreditAmount    int                  `gorm:"column:credit_amount;not null" json:"credit_amount"`
+	MaxRedemptions  *int                 `gorm:"column:max_redemptions" json:"max_redemptions,omitempty"`
+	RedemptionsUsed int                  `gorm:"column:redemptions_used;not null;default:0" json:"redemptions_used"`
+	PerUserLimit    int                  `gorm:"column:per_user_limit;not null;default:1" json:"per_user_limit"`
+	Status          RedemptionCodeStatus `gorm:"column:status;size:16;index;not null;default:disabled" json:"status"`
+	ExpiresAt       *time.Time           `gorm:"column:expires_at;index" json:"expires_at,omitempty"`
+	Notes           string               `gorm:"column:notes" json:"notes"`
+	CreatedBy       string               `gorm:"column:created_by;size:191;not null;default:''" json:"created_by"`
+	CreatedAt       time.Time            `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time            `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+}
+
+func (RedemptionCode) TableName() string { return "redemption_codes" }
+
+func (c RedemptionCode) IsEnabled() bool { return c.Status == RedemptionCodeStatusEnabled }
+
+func (c RedemptionCode) IsExpired(now time.Time) bool {
+	return c.ExpiresAt != nil && !c.ExpiresAt.IsZero() && !now.Before(*c.ExpiresAt)
+}
+
+func (c RedemptionCode) IsExhausted() bool {
+	return c.MaxRedemptions != nil && c.RedemptionsUsed >= *c.MaxRedemptions
+}
+
+func (c RedemptionCode) RemainingRedemptions() *int {
+	if c.MaxRedemptions == nil {
+		return nil
+	}
+	remaining := *c.MaxRedemptions - c.RedemptionsUsed
+	if remaining < 0 {
+		remaining = 0
+	}
+	return &remaining
+}
+
+type RedemptionCodeRedemption struct {
+	ID                   uint64           `gorm:"primaryKey" json:"id"`
+	RedemptionCodeID     uint64           `gorm:"column:redemption_code_id;index;not null" json:"redemption_code_id"`
+	Code                 string           `gorm:"column:code;size:64;index;not null" json:"code"`
+	UserID               uint64           `gorm:"column:user_id;index;not null" json:"user_id"`
+	CreditAmount         int              `gorm:"column:credit_amount;not null" json:"credit_amount"`
+	LedgerEntryID        uint64           `gorm:"column:ledger_entry_id;not null" json:"ledger_entry_id"`
+	Source               RedemptionSource `gorm:"column:source;size:16;index;not null" json:"source"`
+	ClientIP             string           `gorm:"column:client_ip;size:64;not null;default:''" json:"client_ip"`
+	UserAgent            string           `gorm:"column:user_agent;size:512;not null;default:''" json:"user_agent"`
+	IdempotencyKey       string           `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
+	PerUserLimitAtClaim  int              `gorm:"column:per_user_limit_at_claim;not null;default:1" json:"per_user_limit_at_claim"`
+	RedeemedAt           time.Time        `gorm:"column:redeemed_at;index;autoCreateTime" json:"redeemed_at"`
+}
+
+func (RedemptionCodeRedemption) TableName() string { return "redemption_code_redemptions" }
 
 type DiscordConnection struct {
 	ID              uint64     `gorm:"primaryKey" json:"id"`

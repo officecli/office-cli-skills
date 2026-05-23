@@ -176,6 +176,8 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 			help = UpgradeHelpText()
 		case "agent-bridge":
 			help = AgentBridgeHelpText()
+		case "redeem":
+			help = RedeemHelpText()
 		default:
 			help = HelpText()
 		}
@@ -282,6 +284,12 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 			return err
 		}
 		return a.runAgentBridge(ctx, cfg, args[1:])
+	case "redeem":
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runRedeem(ctx, cfg, args[1:])
 	default:
 		return fmt.Errorf("unsupported command: %s", args[0])
 	}
@@ -289,7 +297,7 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 
 func isKnownCommand(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge", "doctor":
+	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge", "doctor", "redeem":
 		return true
 	default:
 		return false

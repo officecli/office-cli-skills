@@ -16,6 +16,7 @@ const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage'))
 const BillingPage = lazy(() => import('./pages/BillingPage'))
 const UsagePage = lazy(() => import('./pages/UsagePage'))
 const DownloadsPage = lazy(() => import('./pages/DownloadsPage'))
+const RedeemPage = lazy(() => import('./pages/RedeemPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function LoadingScreen() {
@@ -53,6 +54,7 @@ function ProtectedShell() {
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="/usage" element={<UsagePage />} />
                   <Route path="/downloads" element={<DownloadsPage />} />
+                  <Route path="/redeem" element={<RedeemPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </Layout.Content>

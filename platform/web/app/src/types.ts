@@ -63,3 +63,23 @@ export interface RewardGrant { source_type: string; amount_total: number; amount
 export interface Referral { invite_code: string; registered_at: string; activated_at?: string; reward_granted_at?: string }
 export interface DiscordConnection { username: string; guild_member: boolean; connected_at: string; reward_granted_at?: string; verification_status: string; verification_blocked_reason?: string }
 export interface Envelope<T> { data?: T; error?: string; request_id?: string }
+
+export interface RedeemResponse {
+  code: string
+  credit_amount: number
+  new_balance: number
+  redeemed_at: string
+  expires_at?: string | null
+}
+
+export interface RedemptionHistoryItem {
+  id: number
+  redemption_code_id: number
+  code: string
+  user_id: number
+  credit_amount: number
+  source: 'app' | 'cli' | 'tui' | 'desktop'
+  client_ip: string
+  user_agent: string
+  redeemed_at: string
+}

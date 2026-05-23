@@ -1,4 +1,4 @@
-import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Menu as MenuIcon, Wallet, Workflow } from 'lucide-react'
+import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Menu as MenuIcon, Ticket, Wallet, Workflow } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Dropdown, Layout, Space, Tag, Typography } from 'antd'
@@ -31,6 +31,9 @@ const navItems = [
     queryClient.prefetchQuery({ queryKey: ['app-usage'], queryFn: api.usage })
   }},
   { to: '/downloads', label: 'Downloads', icon: Download },
+  { to: '/redeem', label: 'Redeem', icon: Ticket, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-redemption-history'], queryFn: api.myRedemptions })
+  }},
 ]
 
 export function AppSidebar({ user }: { user: User }) {

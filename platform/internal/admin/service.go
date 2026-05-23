@@ -16,6 +16,7 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/apikey"
 	"github.com/officecli/officecli-internal/platform/internal/auth"
 	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli-internal/platform/internal/redemption"
 	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
 	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
 )
@@ -40,6 +41,7 @@ type Service struct {
 	oauthProvider      auth.OAuthProvider
 	adminAllowlist     map[string]struct{}
 	hostedPricing      HostedPricingManager
+	redemption         *redemption.Service
 	mockData           bool
 }
 

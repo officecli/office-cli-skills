@@ -44,6 +44,7 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/previewshare"
 	publishsvc "github.com/officecli/officecli-internal/platform/internal/publish"
 	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
+	redemptionsvc "github.com/officecli/officecli-internal/platform/internal/redemption"
 	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
 	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
 )
@@ -103,6 +104,13 @@ type adminRouteService interface {
 	UpdateHostedPricingRule(ctx context.Context, id uint64, req admin.UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error)
 	CreateHostedCreditPack(ctx context.Context, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error)
 	UpdateHostedCreditPack(ctx context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error)
+	CreateRedemptionCode(ctx context.Context, actorEmail string, req admin.CreateRedemptionCodeRequest) (*model.RedemptionCode, error)
+	ListRedemptionCodes(ctx context.Context, req admin.ListRedemptionCodesRequest) (*admin.ListRedemptionCodesResponse, error)
+	GetRedemptionCode(ctx context.Context, id uint64) (*model.RedemptionCode, error)
+	UpdateRedemptionCode(ctx context.Context, actorEmail string, id uint64, req admin.UpdateRedemptionCodeRequest) (*model.RedemptionCode, error)
+	EnableRedemptionCode(ctx context.Context, actorEmail string, id uint64) (*model.RedemptionCode, error)
+	DisableRedemptionCode(ctx context.Context, actorEmail string, id uint64) (*model.RedemptionCode, error)
+	ListRedemptionRecords(ctx context.Context, req admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error)
 }
 
 type stripeRouteService interface {
@@ -198,6 +206,8 @@ func New() (*Application, error) {
 	adminProvider := newAdminOAuthProvider(cfg)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
 	adminSvc.UseMockData(cfg.AdminMockDataEnabled && cfg.AppEnv == "development")
+	redemptionSvc := redemptionsvc.NewService(dbStore)
+	adminSvc.SetRedemptionService(redemptionSvc)
 	authSvc := auth.NewService(newAppOAuthProvider(cfg), dbStore, redisRepo, "cop_app_session", cfg.AppSessionTTL, auth.NewSecureCookieCodec(cfg.AppSessionSecret), growthService, cfg.AppGoogleAllowlist)
 	if strings.TrimSpace(cfg.GitHubClientID) != "" && strings.TrimSpace(cfg.GitHubClientSecret) != "" {
 		authSvc.WithGitHubProvider(
@@ -231,7 +241,7 @@ func New() (*Application, error) {
 		return nil, err
 	}
 	server := egin.DefaultContainer().Build(egin.WithHost(hostPart(cfg.HTTPAddr)), egin.WithPort(port))
-	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider, operationsSvc)
+	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider, operationsSvc, redemptionSvc)
 
 	application := ego.New()
 	application.Serve(server)
@@ -268,10 +278,10 @@ func newOAuthProvider(cfg Config, oauth2ClientID, oauth2ClientSecret, oauth2Redi
 func (a *Application) Run() error { return a.ego.Run() }
 
 func registerRoutes(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
-	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil, nil)
+	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil, nil, nil)
 }
 
-func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider, operationsSvc *operations.Service) {
+func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider, operationsSvc *operations.Service, redemptionSvc *redemptionsvc.Service) {
 	r.Use(httpapi.RequestIDMiddleware())
 	r.Use(httpapi.AccessLogMiddleware(time.Second))
 	r.Use(gin.Recovery())
@@ -285,6 +295,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerAuthRoutes(api, cfg, authSvc)
 	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
+	registerRedemptionUserRoutes(api, redemptionSvc, authSvc, cliSessionSvc)
 	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc, cliSessionSvc)
 	registerStripeRoutes(api, billingSvc)
@@ -1355,6 +1366,91 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+
+	protected.GET("/redemption-codes", func(c *gin.Context) {
+		var req admin.ListRedemptionCodesRequest
+		if err := c.ShouldBindQuery(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.ListRedemptionCodes(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/redemption-codes", func(c *gin.Context) {
+		var req admin.CreateRedemptionCodeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		actor, _ := currentAdminEmail(c, adminSvc)
+		data, err := adminSvc.CreateRedemptionCode(c.Request.Context(), actor, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/redemption-codes/redemptions", func(c *gin.Context) {
+		var req admin.ListRedemptionRecordsRequest
+		if err := c.ShouldBindQuery(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.ListRedemptionRecords(c.Request.Context(), req)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/redemption-codes/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		data, err := adminSvc.GetRedemptionCode(c.Request.Context(), id)
+		if err != nil {
+			httpapi.Error(c, http.StatusNotFound, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/redemption-codes/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		var req admin.UpdateRedemptionCodeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		actor, _ := currentAdminEmail(c, adminSvc)
+		data, err := adminSvc.UpdateRedemptionCode(c.Request.Context(), actor, id, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/redemption-codes/:id/enable", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		actor, _ := currentAdminEmail(c, adminSvc)
+		data, err := adminSvc.EnableRedemptionCode(c.Request.Context(), actor, id)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/redemption-codes/:id/disable", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		actor, _ := currentAdminEmail(c, adminSvc)
+		data, err := adminSvc.DisableRedemptionCode(c.Request.Context(), actor, id)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
 }
 
 func currentAdminEmail(c *gin.Context, adminSvc adminRouteService) (string, bool) {
@@ -1690,6 +1786,127 @@ func shouldUseSecureCookies(cfg Config) bool {
 
 func bearerToken(header string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(header), "Bearer "))
+}
+
+// redemptionErrorStatus maps redemption package errors to HTTP status codes
+// and stable machine-readable error codes returned to the client.
+func redemptionErrorStatus(err error) (int, string) {
+	switch {
+	case errors.Is(err, redemptionsvc.ErrCodeNotFound):
+		return http.StatusNotFound, "code_not_found"
+	case errors.Is(err, redemptionsvc.ErrCodeDisabled):
+		return http.StatusForbidden, "code_disabled"
+	case errors.Is(err, redemptionsvc.ErrCodeExpired):
+		return http.StatusGone, "code_expired"
+	case errors.Is(err, redemptionsvc.ErrCodeExhausted):
+		return http.StatusGone, "code_exhausted"
+	case errors.Is(err, redemptionsvc.ErrCodeAlreadyClaimed):
+		return http.StatusConflict, "code_already_claimed"
+	case errors.Is(err, redemptionsvc.ErrCodeRequired):
+		return http.StatusBadRequest, "code_required"
+	}
+	return http.StatusInternalServerError, "internal_error"
+}
+
+// registerRedemptionUserRoutes mounts both /api/app/redemption-codes/redeem
+// (cookie-session auth) and /api/cli/redemption-codes/redeem (Bearer auth)
+// so the same business service powers all three downstream entry points
+// (web app, CLI binary, desktop app, TUI).
+func registerRedemptionUserRoutes(api *gin.RouterGroup, redemptionSvc *redemptionsvc.Service, authSvc *auth.Service, cliSvc *clisession.Service) {
+	if redemptionSvc == nil {
+		return
+	}
+	type redeemBody struct {
+		Code   string `json:"code"`
+		Source string `json:"source,omitempty"`
+	}
+	respond := func(c *gin.Context, resp *redemptionsvc.RedeemResponse, err error) {
+		if err != nil {
+			status, code := redemptionErrorStatus(err)
+			httpapi.JSON(c, status, gin.H{"error": gin.H{"code": code, "message": err.Error()}})
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, resp)
+	}
+
+	if authSvc != nil {
+		appGroup := api.Group("/app")
+		resolver := func(cookieValue string) (uint64, string, error) {
+			payload, err := authSvc.ResolveSession(cookieValue)
+			if err != nil || payload == nil {
+				return 0, "", err
+			}
+			return payload.UserID, payload.SessionID, nil
+		}
+		appGroup.Use(httpapi.RequireAppUser(resolver, "cop_app_session"))
+		appGroup.POST("/redemption-codes/redeem", func(c *gin.Context) {
+			var body redeemBody
+			if err := c.ShouldBindJSON(&body); err != nil {
+				httpapi.Error(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			source := strings.TrimSpace(body.Source)
+			if source == "" {
+				source = string(model.RedemptionSourceApp)
+			}
+			resp, err := redemptionSvc.Redeem(c.Request.Context(), redemptionsvc.RedeemRequest{
+				UserID:    currentUserID(c),
+				Code:      body.Code,
+				Source:    source,
+				ClientIP:  c.ClientIP(),
+				UserAgent: c.Request.UserAgent(),
+			})
+			respond(c, resp, err)
+		})
+		appGroup.GET("/redemption-codes/my", func(c *gin.Context) {
+			items, total, err := redemptionSvc.ListRedemptions(c.Request.Context(), redemptionsvc.ListRecordsRequest{
+				UserID: currentUserID(c),
+				Limit:  100,
+			})
+			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if items == nil {
+				items = []model.RedemptionCodeRedemption{}
+			}
+			httpapi.JSON(c, http.StatusOK, gin.H{"items": items, "total": total})
+		})
+	}
+
+	if cliSvc != nil {
+		api.POST("/cli/redemption-codes/redeem", func(c *gin.Context) {
+			session, err := cliSvc.Resolve(c.Request.Context(), bearerToken(c.GetHeader("Authorization")))
+			if err != nil || session == nil || session.UserID == 0 {
+				httpapi.AbortUnauthorized(c)
+				return
+			}
+			var body redeemBody
+			if err := c.ShouldBindJSON(&body); err != nil {
+				httpapi.Error(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			source := strings.TrimSpace(body.Source)
+			if source == "" {
+				source = c.GetHeader("X-Officecli-Client")
+			}
+			if source == "" {
+				source = string(model.RedemptionSourceCLI)
+			}
+			normalized := model.RedemptionSource(strings.ToLower(strings.TrimSpace(source)))
+			if !normalized.Valid() {
+				normalized = model.RedemptionSourceCLI
+			}
+			resp, err := redemptionSvc.Redeem(c.Request.Context(), redemptionsvc.RedeemRequest{
+				UserID:    session.UserID,
+				Code:      body.Code,
+				Source:    string(normalized),
+				ClientIP:  c.ClientIP(),
+				UserAgent: c.Request.UserAgent(),
+			})
+			respond(c, resp, err)
+		})
+	}
 }
 
 func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService, cliSvc *clisession.Service) {

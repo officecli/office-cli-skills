@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -61,4 +61,11 @@ export const api = {
   updateHostedPricingRule: (id: number, payload: HostedPricingRule) => request<HostedPricingRule>(`/api/admin/hosted-pricing-rules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   createHostedCreditPack: (payload: HostedCreditPack) => request<HostedCreditPack>('/api/admin/hosted-credit-packs', { method: 'POST', body: JSON.stringify(payload) }),
   updateHostedCreditPack: (id: number, payload: HostedCreditPack) => request<HostedCreditPack>(`/api/admin/hosted-credit-packs/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  listRedemptionCodes: (params: URLSearchParams) => request<RedemptionCodeListResponse>(`/api/admin/redemption-codes?${params.toString()}`),
+  getRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}`),
+  createRedemptionCode: (payload: CreateRedemptionCodeRequest) => request<RedemptionCode>('/api/admin/redemption-codes', { method: 'POST', body: JSON.stringify(payload) }),
+  updateRedemptionCode: (id: number, payload: UpdateRedemptionCodeRequest) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  enableRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}/enable`, { method: 'POST' }),
+  disableRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}/disable`, { method: 'POST' }),
+  listRedemptionRecords: (params: URLSearchParams) => request<RedemptionRecordListResponse>(`/api/admin/redemption-codes/redemptions?${params.toString()}`),
 }

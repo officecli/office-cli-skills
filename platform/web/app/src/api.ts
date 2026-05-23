@@ -1,4 +1,4 @@
-import type { ApiKey, AppGrowth, AppOverview, AppQuotaSummary, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, UsageEvent, User } from './types'
+import type { ApiKey, AppGrowth, AppOverview, AppQuotaSummary, ConnectDiscordResponse, DiscordStatus, Envelope, Order, PricingPack, RedeemResponse, RedemptionHistoryItem, UsageEvent, User } from './types'
 import { buildGitHubLoginURL, buildOAuth2LoginURL } from './analytics'
 
 export class ApiError extends Error {
@@ -54,4 +54,6 @@ export const api = {
   usage: () => request<UsageEvent[]>('/api/app/usage-events'),
   pricing: () => request<PricingPack[]>('/api/pricing'),
   checkout: (payload: { pack_code: string }) => request<{ order: Order; checkout_url: string }>('/api/app/checkout', { method: 'POST', body: JSON.stringify(payload) }),
+  redeemCode: (code: string) => request<RedeemResponse>('/api/app/redemption-codes/redeem', { method: 'POST', body: JSON.stringify({ code, source: 'app' }) }),
+  myRedemptions: () => request<{ items: RedemptionHistoryItem[]; total: number }>('/api/app/redemption-codes/my'),
 }

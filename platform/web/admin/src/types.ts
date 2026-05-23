@@ -353,3 +353,60 @@ export interface OperationsRevenueQuality {
   paid_conversion_rate: number
   checkout_to_paid_rate: number
 }
+
+export interface RedemptionCode {
+  id: number
+  code: string
+  credit_amount: number
+  max_redemptions: number | null
+  redemptions_used: number
+  per_user_limit: number
+  status: 'enabled' | 'disabled'
+  expires_at: string | null
+  notes: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RedemptionCodeListResponse {
+  items: RedemptionCode[]
+  total: number
+}
+
+export interface RedemptionCodeRedemption {
+  id: number
+  redemption_code_id: number
+  code: string
+  user_id: number
+  credit_amount: number
+  ledger_entry_id: number
+  source: 'app' | 'cli' | 'tui' | 'desktop'
+  client_ip: string
+  user_agent: string
+  redeemed_at: string
+}
+
+export interface RedemptionRecordListResponse {
+  items: RedemptionCodeRedemption[]
+  total: number
+}
+
+export interface CreateRedemptionCodeRequest {
+  code?: string
+  credit_amount: number
+  max_redemptions?: number | null
+  per_user_limit?: number
+  expires_at?: string | null
+  notes?: string
+}
+
+export interface UpdateRedemptionCodeRequest {
+  credit_amount?: number
+  max_redemptions?: number | null
+  clear_max_limit?: boolean
+  per_user_limit?: number
+  expires_at?: string | null
+  clear_expires_at?: boolean
+  notes?: string
+}

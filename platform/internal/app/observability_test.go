@@ -139,6 +139,27 @@ func (fakeAdminRouteFailureService) CreateHostedCreditPack(_ context.Context, re
 func (fakeAdminRouteFailureService) UpdateHostedCreditPack(_ context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
 	return &model.HostedCreditPack{}, nil
 }
+func (fakeAdminRouteFailureService) CreateRedemptionCode(_ context.Context, _ string, _ admin.CreateRedemptionCodeRequest) (*model.RedemptionCode, error) {
+	return nil, errors.New("not configured")
+}
+func (fakeAdminRouteFailureService) ListRedemptionCodes(_ context.Context, _ admin.ListRedemptionCodesRequest) (*admin.ListRedemptionCodesResponse, error) {
+	return &admin.ListRedemptionCodesResponse{Items: []model.RedemptionCode{}}, nil
+}
+func (fakeAdminRouteFailureService) GetRedemptionCode(_ context.Context, _ uint64) (*model.RedemptionCode, error) {
+	return nil, errors.New("not configured")
+}
+func (fakeAdminRouteFailureService) UpdateRedemptionCode(_ context.Context, _ string, _ uint64, _ admin.UpdateRedemptionCodeRequest) (*model.RedemptionCode, error) {
+	return nil, errors.New("not configured")
+}
+func (fakeAdminRouteFailureService) EnableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
+	return nil, errors.New("not configured")
+}
+func (fakeAdminRouteFailureService) DisableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
+	return nil, errors.New("not configured")
+}
+func (fakeAdminRouteFailureService) ListRedemptionRecords(_ context.Context, _ admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error) {
+	return &admin.ListRedemptionRecordsResponse{Items: []model.RedemptionCodeRedemption{}}, nil
+}
 
 func TestRateLimitMiddlewareLogsBlockedRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)

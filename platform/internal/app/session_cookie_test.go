@@ -208,6 +208,27 @@ func (f *fakeAdminRouteService) CreateHostedCreditPack(_ context.Context, req ad
 func (f *fakeAdminRouteService) UpdateHostedCreditPack(_ context.Context, id uint64, req admin.UpsertHostedCreditPackRequest) (*model.HostedCreditPack, error) {
 	return &model.HostedCreditPack{}, nil
 }
+func (f *fakeAdminRouteService) CreateRedemptionCode(_ context.Context, _ string, _ admin.CreateRedemptionCodeRequest) (*model.RedemptionCode, error) {
+	return &model.RedemptionCode{}, nil
+}
+func (f *fakeAdminRouteService) ListRedemptionCodes(_ context.Context, _ admin.ListRedemptionCodesRequest) (*admin.ListRedemptionCodesResponse, error) {
+	return &admin.ListRedemptionCodesResponse{Items: []model.RedemptionCode{}}, nil
+}
+func (f *fakeAdminRouteService) GetRedemptionCode(_ context.Context, _ uint64) (*model.RedemptionCode, error) {
+	return &model.RedemptionCode{}, nil
+}
+func (f *fakeAdminRouteService) UpdateRedemptionCode(_ context.Context, _ string, _ uint64, _ admin.UpdateRedemptionCodeRequest) (*model.RedemptionCode, error) {
+	return &model.RedemptionCode{}, nil
+}
+func (f *fakeAdminRouteService) EnableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
+	return &model.RedemptionCode{}, nil
+}
+func (f *fakeAdminRouteService) DisableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
+	return &model.RedemptionCode{}, nil
+}
+func (f *fakeAdminRouteService) ListRedemptionRecords(_ context.Context, _ admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error) {
+	return &admin.ListRedemptionRecordsResponse{Items: []model.RedemptionCodeRedemption{}}, nil
+}
 
 func TestAdminOverviewRouteReturnsChartData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
