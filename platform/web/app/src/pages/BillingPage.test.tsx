@@ -64,6 +64,9 @@ describe('billing page', () => {
           }),
         }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -72,8 +75,8 @@ describe('billing page', () => {
 
     expect((await screen.findAllByText('Hosted 300')).length).toBeGreaterThan(0)
     expect(screen.getByText(/300 hosted credits for OfficeCLI-managed generation\./i)).toBeInTheDocument()
-    expect(screen.getByText(/300 credits/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Continue to Stripe Checkout/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/300 credits/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /Buy 300 credits/i })).toBeInTheDocument()
     expect(screen.queryByText(/external-100/i)).not.toBeInTheDocument()
     expect(screen.getByText('pi_test_123')).toBeInTheDocument()
     expect(screen.getByText(/Legacy order target API key #7/i)).toBeInTheDocument()
@@ -117,6 +120,9 @@ describe('billing page', () => {
           }),
         }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -124,7 +130,7 @@ describe('billing page', () => {
     renderPage()
 
     expect(await screen.findByText('Hosted 300')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Buy 300 credits/i }))
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/app/checkout', expect.objectContaining({
@@ -148,6 +154,9 @@ describe('billing page', () => {
         expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300' }))
         return { ok: true, status: 200, json: async () => ({ data: { order: { id: 32, status: 'pending' }, checkout_url: 'https://checkout.stripe.com/pay/hosted' } }) }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -158,7 +167,7 @@ describe('billing page', () => {
     expect(screen.getAllByText(/300 hosted credits/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/300 credits/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/≈ \$3\.00 USD/i).length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: /Continue to Stripe Checkout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Buy 300 credits/i }))
 
     await waitFor(() => expect(redirectSpy).toHaveBeenCalledWith('https://checkout.stripe.com/pay/hosted'))
   })
@@ -196,6 +205,9 @@ describe('billing page', () => {
           }),
         }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -203,7 +215,7 @@ describe('billing page', () => {
     renderPage()
 
     await screen.findByText('Hosted 300')
-    const checkoutButton = await screen.findByRole('button', { name: /continue to stripe checkout/i })
+    const checkoutButton = await screen.findByRole('button', { name: /buy 300 credits/i })
     fireEvent.click(checkoutButton)
 
     expect(await screen.findByText(/Checkout failed: target api key is disabled \(request_id: req_checkout_123\)/i)).toBeInTheDocument()
@@ -266,6 +278,9 @@ describe('billing page', () => {
             },
           }),
         }
+      }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
       }
       throw new Error(`unexpected request: ${url}`)
     })
@@ -333,6 +348,9 @@ describe('billing page', () => {
           }),
         }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -356,6 +374,9 @@ describe('billing page', () => {
         expect(init?.method).toBe('POST')
         expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300' }))
         return { ok: true, status: 200, json: async () => ({ data: { order: { id: 41, status: 'pending' }, checkout_url: 'https://stripe.test/abc' } }) }
+      }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
       }
       throw new Error(`unexpected request: ${url}`)
     })
@@ -383,6 +404,9 @@ describe('billing page', () => {
       }
       if (url === '/api/app/checkout') {
         return { ok: true, status: 200, json: async () => ({ data: { order: { id: 42, status: 'pending' }, checkout_url: 'https://stripe.test/def' } }) }
+      }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
       }
       throw new Error(`unexpected request: ${url}`)
     })
@@ -414,6 +438,9 @@ describe('billing page', () => {
       }
       if (url === '/api/app/orders') {
         return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
       }
       throw new Error(`unexpected request: ${url}`)
     })
@@ -464,6 +491,9 @@ describe('billing page', () => {
           }),
         }
       }
+      if (url === '/api/app/redemption-codes/my') {
+        return { ok: true, status: 200, json: async () => ({ data: { items: [], total: 0 } }) }
+      }
       throw new Error(`unexpected request: ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -473,5 +503,68 @@ describe('billing page', () => {
     expect(await screen.findByText('1,100,244')).toBeInTheDocument()
     expect(await screen.findByText(/Payment received — order #19 paid/)).toBeInTheDocument()
     expect(await screen.findByText(/100 hosted credits have been added/)).toBeInTheDocument()
+  })
+
+  it('renders redemption code activity alongside Stripe orders in the recent billing activity list', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/orders') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 55,
+              status: 'paid',
+              currency: 'usd',
+              amount_total: 500,
+              pack_code: 'hosted-500',
+              pack_name: 'Hosted 500',
+              pack_kind: 'hosted_credits',
+              quota_amount: 0,
+              credit_amount: 500,
+              stripe_payment_intent_id: 'pi_order_55',
+              created_at: '2026-05-20T10:00:00Z',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/redemption-codes/my') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              items: [{
+                id: 901,
+                redemption_code_id: 7,
+                code: 'WELCOME2026',
+                user_id: 1,
+                credit_amount: 250,
+                source: 'app',
+                client_ip: '1.2.3.4',
+                user_agent: 'jsdom',
+                redeemed_at: '2026-05-22T08:30:00Z',
+              }],
+              total: 1,
+            },
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByText('WELCOME2026')).toBeInTheDocument()
+    expect(screen.getByText('Redemption code')).toBeInTheDocument()
+    expect(screen.getByText(/\+250 credits/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Redeemed/i).length).toBeGreaterThan(0)
+    expect(screen.getByText('Hosted 500')).toBeInTheDocument()
+    expect(screen.getByText('pi_order_55')).toBeInTheDocument()
   })
 })

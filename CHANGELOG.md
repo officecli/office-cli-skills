@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.91 - 2026-05-24
+
+### Added
+
+- App `/app/billing` 的 "Recent billing activity" 列表合并展示 Stripe 订单与兑换码兑换记录：BillingPage 新增对 `/api/app/redemption-codes/my` 的 query（queryKey `app-redemption-history`，与 `/app/redeem` 共享缓存），把订单与 redemption 合并为按时间倒序排列的统一活动流。Redemption 行展示兑换码、`Redemption code` 标签、来源（app/cli/tui/desktop）、`+N credits` 与绿色的 `Redeemed` 状态徽标；订单行布局保持不变。空状态文案同步更新，只有订单和兑换记录都为空时才显示。
+
+### Fixed
+
+- BillingPage 测试用例中残留的旧 "Continue to Stripe Checkout" 按钮匹配（实际按钮文案早已改为 "Buy {N} credits"）以及 `getByText(/300 credits/i)` 在 pack 卡和按钮上同时命中导致的多元素错误一并修复，全部 BillingPage 测试现在通过。
+
 ## 0.2.90 - 2026-05-24
 
 ### Changed

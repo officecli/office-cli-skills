@@ -8,7 +8,11 @@ import { trackEvent } from '../analytics'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 import { redirectTo } from '../lib/navigation'
-import type { Order } from '../types'
+import type { Order, RedemptionHistoryItem } from '../types'
+
+type BillingActivity =
+  | { kind: 'order'; key: string; timestamp: string; order: Order }
+  | { kind: 'redemption'; key: string; timestamp: string; redemption: RedemptionHistoryItem }
 
 export default function BillingPage() {
   const location = useLocation()
@@ -20,6 +24,26 @@ export default function BillingPage() {
     queryFn: api.orders,
     refetchInterval: (query) => query.state.data?.some((item) => item.status === 'pending') ? pendingPollInterval : false,
   })
+  const { data: redemptionHistory } = useQuery({ queryKey: ['app-redemption-history'], queryFn: api.myRedemptions })
+  const redemptions = useMemo(() => redemptionHistory?.items ?? [], [redemptionHistory])
+  const activities = useMemo<BillingActivity[]>(() => {
+    const merged: BillingActivity[] = [
+      ...orders.map<BillingActivity>((order) => ({
+        kind: 'order',
+        key: `order-${order.id}`,
+        timestamp: order.created_at,
+        order,
+      })),
+      ...redemptions.map<BillingActivity>((redemption) => ({
+        kind: 'redemption',
+        key: `redemption-${redemption.id}`,
+        timestamp: redemption.redeemed_at,
+        redemption,
+      })),
+    ]
+    merged.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+    return merged
+  }, [orders, redemptions])
   const { data: overview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
   const hostedCreditBalance = overview?.hosted_credit_balance ?? 0
   const pricing = useMemo(() => pricingRaw.filter((pack) => pack.pack_kind === 'hosted_credits'), [pricingRaw])
@@ -148,7 +172,7 @@ export default function BillingPage() {
       </Panel>
 
       <Panel>
-        <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase remains visible here for reconciliation." />
+        <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase — plus redemption code activity — remains visible here for reconciliation." />
         {reconcile.isPending ? (
           <Alert className="mb-4" type="info" showIcon title="Syncing payment status" description="Payment returned from Stripe. Syncing the latest checkout status into this workspace now." />
         ) : null}
@@ -175,35 +199,55 @@ export default function BillingPage() {
         {reconcileError ? (
           <Alert className="mb-4" type="warning" showIcon title={`Stripe payment sync failed: ${reconcileError}`} />
         ) : null}
-        {orders.length ? (
+        {orders.length || redemptions.length ? (
           <div className="space-y-3">
-            {orders.map((order) => (
-              <div key={order.id} className="app-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
-                <div>
-                  <div className="text-lg font-semibold text-white">{order.pack_name}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-outline">
-                    <span>Stripe order</span>
-                    <span className="rounded-md border border-outline-variant/20 bg-surface-container-high/50 px-2 py-1 font-mono text-xs text-white">
-                      {stripeOrderReference(order) || 'pending assignment'}
-                    </span>
-                    {stripeOrderReference(order) ? (
-                      <Button size="small" icon={<Copy size={14} />} onClick={() => copyReference(stripeOrderReference(order)!)}>
-                        {copiedReference === stripeOrderReference(order) ? 'Copied' : 'Copy'}
-                      </Button>
-                    ) : null}
+            {activities.map((activity) => (
+              activity.kind === 'order' ? (
+                <div key={activity.key} className="app-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
+                  <div>
+                    <div className="text-lg font-semibold text-white">{activity.order.pack_name}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-outline">
+                      <span>Stripe order</span>
+                      <span className="rounded-md border border-outline-variant/20 bg-surface-container-high/50 px-2 py-1 font-mono text-xs text-white">
+                        {stripeOrderReference(activity.order) || 'pending assignment'}
+                      </span>
+                      {stripeOrderReference(activity.order) ? (
+                        <Button size="small" icon={<Copy size={14} />} onClick={() => copyReference(stripeOrderReference(activity.order)!)}>
+                          {copiedReference === stripeOrderReference(activity.order) ? 'Copied' : 'Copy'}
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 text-sm text-outline">{targetAccountLabel(activity.order)}</div>
+                    <div className="mt-1 text-xs text-outline">Internal order #{activity.order.id} / created {formatDate(activity.order.created_at)}</div>
                   </div>
-                  <div className="mt-2 text-sm text-outline">{targetAccountLabel(order)}</div>
-                  <div className="mt-1 text-xs text-outline">Internal order #{order.id} / created {formatDate(order.created_at)}</div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-outline">{orderPrimaryLabel(activity.order)} <ArrowRight size={14} className="inline" /> {orderSecondaryLabel(activity.order)}</div>
+                    <StatusPill value={activity.order.status} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-outline">{orderPrimaryLabel(order)} <ArrowRight size={14} className="inline" /> {orderSecondaryLabel(order)}</div>
-                  <StatusPill value={order.status} />
+              ) : (
+                <div key={activity.key} className="app-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
+                  <div>
+                    <div className="text-lg font-semibold text-white">{activity.redemption.code}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-outline">
+                      <span>Redemption code</span>
+                      <span className="rounded-md border border-outline-variant/20 bg-surface-container-high/50 px-2 py-1 text-xs uppercase tracking-wide text-white">
+                        {activity.redemption.source}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-sm text-outline">Credits added directly to your account balance.</div>
+                    <div className="mt-1 text-xs text-outline">Redeemed {formatDate(activity.redemption.redeemed_at)}</div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-outline">+{activity.redemption.credit_amount.toLocaleString('en-US')} credits</div>
+                    <StatusPill value="Redeemed" />
+                  </div>
                 </div>
-              </div>
+              )
             ))}
           </div>
         ) : (
-          <EmptyState title="No billing events yet" body="Checkout history will appear here as soon as the first pack is purchased." />
+          <EmptyState title="No billing events yet" body="Checkout history and redemption activity will appear here as soon as the first pack is purchased or code is redeemed." />
         )}
       </Panel>
     </div>
