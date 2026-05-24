@@ -207,7 +207,6 @@ func New() (*Application, error) {
 		AIGatewayAPIKeyGroup:   cfg.AIGatewayAPIKeyGroup,
 		AIGatewayCreateKeyPath: cfg.AIGatewayCreateAPIKeyPath,
 		AIGatewayKeyCipher:     apiKeyCipher,
-		ChargeOnlyMode:         hostedllm.ChargeOnlyMode(cfg.HostedChargeOnlyMode),
 		ReconcileEnabled:       cfg.HostedReconcileEnabled,
 	}, lic)
 	adminProvider := newAdminOAuthProvider(cfg)

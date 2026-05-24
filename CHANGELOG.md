@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.95 - 2026-05-24
+
+### Removed
+
+- Phase 5: 删除遗留 Reserve/Settle/Release 三阶段 credit 代码，charge-only 成为唯一扣费路径。`HOSTED_CHARGE_ONLY_MODE` env / `HostedChargeOnlyMode` 配置 / `ChargeOnlyMode` enum 及分流逻辑全部移除；store 层 `ReserveHostedCreditsByUser/Fingerprint` / `SettleHostedCreditsByUser/Fingerprint` / `ReleaseHostedCreditsByUser/Fingerprint`、API key 三件套 `ReserveCreditsByHash` / `ReleaseReservedCredits` / `SettleReservedCredits`、私有 helper `applyHostedCreditReservation` / `applyFingerprintCreditReservation` 全部删除；service 层 `reserveSubjectCredits` / `releaseSubjectCredits` / `settleSubjectCredits` / `reserveCreditsForModel` / `completeReserveLegacy` / `generateImageReserveLegacy` 及相关 reserve-path 测试一并删除。`model.HostedPricingRule.ReservationCredits` 字段保留并标记 deprecated（Phase 6 drop column 时一并删除）；`HostedCreditLedgerSourceReserve/Settle/Release` 字符串常量保留供历史 ledger 反序列化。生产已在 0.2.93+0.2.94 灰度至 `ChargeOnlyMode=all` ≥24h 并执行 cutover，零行为变更基线。
+
 ## 0.2.94 - 2026-05-24
 
 ### Fixed

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,10 +25,6 @@ import (
 // APIKeyStore surface.
 var _ APIKeyStore = (*fakeAPIKeyStore)(nil)
 
-// silenceAtomicImport keeps the sync/atomic import in use for AC-2.5
-// concurrency tests below.
-var silenceAtomicImport = atomic.Int64{}
-
 type fakeAPIKeyStore struct {
 	key            *model.APIKey
 	keysByHash     map[string]*model.APIKey
@@ -38,38 +33,32 @@ type fakeAPIKeyStore struct {
 	settings       *model.HostedPricingSetting
 	rules          []model.HostedPricingRule
 	modelConfigs   []model.HostedModelPricingConfig
-	reservations   []int
-	hostedRequests []string
-	releases       []int
-	settlements    []int
 	events         []*model.UsageEvent
-	releaseCtxErrs []error
-	settleCtxErrs  []error
 	eventCtxErrs   []error
 
-	mu                       sync.Mutex
-	charges                  []chargeRecord
-	chargeFailed             []chargeFailedRecord
-	chargeIdempotency        map[string]bool
-	chargeFailIdempotency    map[string]bool
-	chargeBalances           map[string]int
-	chargeReturnErr          map[string]error
-	chargeErrOnce            map[string]error
-	precheckErr              error
-	precheckBalance          int
-	usageEventNextID         uint64
-	eventIDByRequest         map[string]uint64
+	mu                        sync.Mutex
+	charges                   []chargeRecord
+	chargeFailed              []chargeFailedRecord
+	chargeIdempotency         map[string]bool
+	chargeFailIdempotency     map[string]bool
+	chargeBalances            map[string]int
+	chargeReturnErr           map[string]error
+	chargeErrOnce             map[string]error
+	precheckErr               error
+	precheckBalance           int
+	usageEventNextID          uint64
+	eventIDByRequest          map[string]uint64
 	chargeUsageEventByRequest map[string]*uint64
 }
 
 type chargeRecord struct {
-	SubjectType   string
-	SubjectID     uint64
-	Fingerprint   string
-	APIKeyID      uint64
-	RequestID     string
-	Credits       int
-	UsageEventID  *uint64
+	SubjectType  string
+	SubjectID    uint64
+	Fingerprint  string
+	APIKeyID     uint64
+	RequestID    string
+	Credits      int
+	UsageEventID *uint64
 }
 
 type chargeFailedRecord struct {
@@ -97,95 +86,8 @@ func (f *fakeAPIKeyStore) FindAPIKeyByHash(_ context.Context, hash string) (*mod
 	return &cloned, nil
 }
 
-func (f *fakeAPIKeyStore) ReserveCreditsByHash(_ context.Context, hash string, credits int) (*model.APIKey, error) {
-	f.mu.Lock()
-	f.reservations = append(f.reservations, credits)
-	f.mu.Unlock()
-	return f.FindAPIKeyByHash(context.Background(), hash)
-}
-
-func (f *fakeAPIKeyStore) ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error) {
-	f.mu.Lock()
-	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
-	f.releases = append(f.releases, reserved)
-	f.mu.Unlock()
-	return f.FindAPIKeyByHash(context.Background(), "")
-}
-
-func (f *fakeAPIKeyStore) SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error) {
-	f.mu.Lock()
-	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
-	f.settlements = append(f.settlements, settled)
-	f.mu.Unlock()
-	key, err := f.FindAPIKeyByHash(context.Background(), "")
-	if key == nil && f.keysByHash != nil {
-		for _, candidate := range f.keysByHash {
-			if candidate != nil && candidate.ID == apiKeyID {
-				cloned := *candidate
-				key = &cloned
-				break
-			}
-		}
-	}
-	if key != nil {
-		key.CreditBalance -= settled
-	}
-	return key, err
-}
-
-func (f *fakeAPIKeyStore) ReserveHostedCreditsByUser(_ context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error) {
-	if requestID == "" {
-		return nil, fmt.Errorf("request_id is required")
-	}
-	f.mu.Lock()
-	f.hostedRequests = append(f.hostedRequests, requestID)
-	f.reservations = append(f.reservations, credits)
-	f.mu.Unlock()
-	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100, CreditReserved: credits}, nil
-}
-
-func (f *fakeAPIKeyStore) ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
-	f.mu.Lock()
-	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
-	f.releases = append(f.releases, reserved)
-	f.mu.Unlock()
-	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100}, nil
-}
-
-func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
-	f.mu.Lock()
-	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
-	f.settlements = append(f.settlements, settled)
-	f.mu.Unlock()
-	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - settled}, nil
-}
-
 func (f *fakeAPIKeyStore) GetHostedCreditAccountByFingerprint(_ context.Context, fingerprint string) (*model.FingerprintCreditAccount, error) {
 	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100}, nil
-}
-
-func (f *fakeAPIKeyStore) ReserveHostedCreditsByFingerprint(_ context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error) {
-	f.mu.Lock()
-	f.reservations = append(f.reservations, credits)
-	f.hostedRequests = append(f.hostedRequests, requestID)
-	f.mu.Unlock()
-	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100, CreditReserved: credits}, nil
-}
-
-func (f *fakeAPIKeyStore) ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error) {
-	f.mu.Lock()
-	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
-	f.releases = append(f.releases, reserved)
-	f.mu.Unlock()
-	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100}, nil
-}
-
-func (f *fakeAPIKeyStore) SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error) {
-	f.mu.Lock()
-	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
-	f.settlements = append(f.settlements, settled)
-	f.mu.Unlock()
-	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100 - settled}, nil
 }
 
 func (f *fakeAPIKeyStore) FindCLISessionByTokenHash(_ context.Context, tokenHash string) (*model.CLISession, error) {
@@ -545,10 +447,7 @@ func TestCompleteWithCLISessionGeneratesMissingRequestID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.Content)
-	require.Len(t, store.hostedRequests, 1)
-	require.NotEmpty(t, store.hostedRequests[0])
 	require.NotNil(t, store.events[0].RequestID)
-	require.Equal(t, store.hostedRequests[0], *store.events[0].RequestID)
 }
 
 func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
@@ -673,8 +572,6 @@ func TestCompleteRotatesStoredUserAIGatewayAPIKeyAfterUpstreamAuthFailure(t *tes
 	require.Equal(t, []string{"Bearer stale-key", "Bearer fresh-key"}, upstreamAuth)
 	require.Equal(t, model.UserAIGatewayAPIKeyStatusActive, store.userKeys[userID].Status)
 	require.Equal(t, "fresh-key", store.userKeys[userID].KeyPrefix)
-	require.Equal(t, []int{1}, store.releases)
-	require.Equal(t, []int{1}, store.settlements)
 }
 
 func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
@@ -717,8 +614,6 @@ func TestCompleteWithCommitTokenUsesAnonymousQuotaAccess(t *testing.T) {
 	require.Len(t, quota.validations, 1)
 	require.Len(t, quota.consumes, 1)
 	require.Equal(t, "req-anon", quota.consumes[0].RequestID)
-	require.Empty(t, store.reservations)
-	require.Empty(t, store.settlements)
 }
 
 func TestRecordUsageFingerprintSource(t *testing.T) {
@@ -755,7 +650,7 @@ func TestRecordUsageFingerprintSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeAPIKeyStore{}
 			svc := NewService(store, Config{})
-			svc.recordUsage(context.Background(), nil, tt.req, "gpt-text-test", usageSummary{}, 1, 1, 0, hostedPriceSnapshot{})
+			svc.persistUsageEvent(context.Background(), svc.buildChatUsageEvent(nil, tt.req, "gpt-text-test", usageSummary{}, hostedPriceSnapshot{}, 1))
 
 			require.Len(t, store.events, 1)
 			require.Equal(t, tt.want, store.events[0].FingerprintHash)
@@ -797,7 +692,7 @@ func TestRecordImageUsageFingerprintSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &fakeAPIKeyStore{}
 			svc := NewService(store, Config{})
-			svc.recordImageUsage(context.Background(), nil, tt.req, "gpt-image-test", usageSummary{ImageCount: 1}, 1, 1, 0, hostedPriceSnapshot{})
+			svc.persistUsageEvent(context.Background(), svc.buildImageUsageEvent(nil, tt.req, "gpt-image-test", usageSummary{ImageCount: 1}, hostedPriceSnapshot{}, 1))
 
 			require.Len(t, store.events, 1)
 			require.Equal(t, tt.want, store.events[0].FingerprintHash)
@@ -930,7 +825,6 @@ func TestCompleteRejectsHostedOfficeKeyWithoutOwner(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "hosted mode requires an owner user")
-	require.Empty(t, store.reservations)
 }
 
 func TestCompleteRejectsRemovedHostedPricingProfile(t *testing.T) {
@@ -965,7 +859,6 @@ func TestCompleteRejectsRemovedHostedPricingProfile(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported hosted pricing profile")
-	require.Empty(t, store.reservations)
 	require.Empty(t, store.userKeys)
 }
 
@@ -1000,7 +893,6 @@ func TestCompleteDoesNotReserveCreditsWhenAIGatewayKeyCreationFails(t *testing.T
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "gateway unavailable")
-	require.Empty(t, store.reservations)
 	require.Equal(t, model.UserAIGatewayAPIKeyStatusError, store.userKeys[userID].Status)
 	require.Contains(t, store.userKeys[userID].LastError, "gateway unavailable")
 }
@@ -1036,236 +928,6 @@ func TestNewServiceConfiguresHTTPTimeout(t *testing.T) {
 	svc := NewService(&fakeAPIKeyStore{}, Config{TimeoutSec: 7})
 	require.NotNil(t, svc.client)
 	require.Equal(t, 7*time.Second, svc.client.Timeout)
-}
-
-func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
-	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
-	var upstreamPayload map[string]any
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/images/generations", r.URL.Path)
-		require.Equal(t, "Bearer upstream-key", r.Header.Get("Authorization"))
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&upstreamPayload))
-		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "upstream-key",
-		HashSalt:   "salt",
-		ImageModel: "gpt-image-test",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			Provider:             "openai",
-			Model:                "gpt-image-test",
-			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
-		}},
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "A polished product launch hero image",
-		AspectRatio: 16.0 / 9.0,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []byte("png-bytes"), resp.Data)
-	require.Equal(t, "image/png", resp.MIME)
-	require.Equal(t, 99, resp.CreditBalance)
-	require.Equal(t, 1, resp.CreditsCharged)
-	require.Equal(t, []int{1}, store.reservations)
-	require.Equal(t, []int{1}, store.settlements)
-	require.Empty(t, store.releases)
-	require.Len(t, store.events, 1)
-	require.NotNil(t, store.events[0].DocumentType)
-	require.Equal(t, "img", *store.events[0].DocumentType)
-	require.Equal(t, 1, store.events[0].BilledUnits)
-	require.Equal(t, 1, store.events[0].ImageCount)
-	require.Equal(t, "gpt-image-test", upstreamPayload["model"])
-	require.Equal(t, "1536x1024", upstreamPayload["size"])
-}
-
-func TestGenerateImageReleasesWithoutSettlingOnUpstreamFailure(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = fmt.Fprint(w, `{"error":"boom"}`)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "upstream-key",
-		HashSalt:   "salt",
-		ImageModel: "gpt-image-test",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			Provider:             "openai",
-			Model:                "gpt-image-test",
-			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
-		}},
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "A polished product launch hero image",
-		AspectRatio: 16.0 / 9.0,
-	})
-	require.Error(t, err)
-	require.Nil(t, resp)
-	require.NotEmpty(t, store.reservations)
-	require.NotEmpty(t, store.releases)
-	require.Empty(t, store.settlements)
-}
-
-func TestGenerateImageReturnsCreditsChargedMatchingSettledValue(t *testing.T) {
-	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      500,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "upstream-key",
-		HashSalt:   "salt",
-		ImageModel: "gpt-image-test",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			Provider:             "openai",
-			Model:                "gpt-image-test",
-			ImagePerAssetCredits: 7,
-			ReservationCredits:   7,
-			MinimumChargeCredits: 7,
-		}},
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "Hero",
-		AspectRatio: 1,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 7, resp.CreditsCharged)
-	require.Equal(t, store.settlements[0], resp.CreditsCharged)
-	require.Equal(t, 493, resp.CreditBalance)
-}
-
-func TestGenerateImageDefaultPricingChargesTenCreditsPerImage(t *testing.T) {
-	// Regression guard: production pricing rule is 10 credits per AI image
-	// (see platform/internal/app/config.go defaultHostedPricingRules). If the
-	// numbers below ever drift from that default, update both in lockstep.
-	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/images/generations", r.URL.Path)
-		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "upstream-key",
-		HashSalt:   "salt",
-		ImageModel: "gpt-image-2",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			Provider:             "openai",
-			Model:                "gpt-image-2",
-			ImageModelKey:        "image_default",
-			ImagePerAssetCredits: 10,
-			ReservationCredits:   10,
-			MinimumChargeCredits: 10,
-		}},
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "A polished product launch hero image",
-		AspectRatio: 16.0 / 9.0,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 90, resp.CreditBalance)
-	require.Equal(t, 10, resp.CreditsCharged)
-	require.Equal(t, []int{10}, store.reservations)
-	require.Equal(t, []int{10}, store.settlements)
-	require.Empty(t, store.releases)
-	require.Len(t, store.events, 1)
-	require.Equal(t, 10, store.events[0].BilledUnits)
-	require.Equal(t, 1, store.events[0].ImageCount)
 }
 
 func TestGenerateImageFallsBackToResponsesWhenImageEndpointFails(t *testing.T) {
@@ -1387,8 +1049,6 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 	require.NoError(t, err)
 	require.Equal(t, "ok", resp.Content)
 	require.Equal(t, "gpt-test", upstreamPayload["model"])
-	require.Equal(t, []int{20}, store.reservations)
-	require.Equal(t, []int{5}, store.settlements)
 	require.Len(t, store.events, 1)
 	event := store.events[0]
 	require.Equal(t, ruleID, event.HostedPricingRuleID)
@@ -1464,61 +1124,6 @@ func TestCompletePersistsAuditContextOnUsageEvent(t *testing.T) {
 	require.Equal(t, "/api/llm/v1/text", *event.RequestPath)
 	require.NotNil(t, event.RequestMethod)
 	require.Equal(t, http.MethodPost, *event.RequestMethod)
-}
-
-func TestCompleteRecordsCapAppliedWhenChargeExceedsReservation(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10000}}`)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		settings: &model.HostedPricingSetting{ID: 1, MarkupBPS: 0, Currency: "usd", CreditsPerUSD: 100},
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      1000,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "upstream-key",
-		HashSalt:   "salt",
-		TextModel:  "gpt-test",
-		MarkupBPS:  0,
-		TimeoutSec: 5,
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:         "text",
-			Model:                   "gpt-test",
-			PromptPer1KCostMicrousd: 100000,
-			ReservationCredits:      5,
-			MinimumChargeCredits:    1,
-			Enabled:                 true,
-		}},
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
-		Model:    "hosted/text",
-		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, []int{5}, store.reservations)
-	require.Equal(t, []int{5}, store.settlements)
-	require.Len(t, store.events, 1)
-	require.Equal(t, 100, store.events[0].UncappedChargeCredits)
-	require.Equal(t, 5, store.events[0].SettledCredits)
-	require.True(t, store.events[0].CapApplied)
 }
 
 func TestCompleteUsesConfiguredCreditsPerUSDForHostedCharges(t *testing.T) {
@@ -1788,7 +1393,7 @@ func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T)
 	require.Equal(t, 1, event.ImageCount)
 	require.Equal(t, int64(63446), event.UpstreamCostMicrousd)
 	require.Equal(t, 9, event.SettledCredits)
-	require.Equal(t, 91, event.RefundCredits)
+	require.Equal(t, 0, event.RefundCredits)
 	require.Equal(t, int64(26554), event.ProfitMicrousd)
 }
 
@@ -1938,9 +1543,6 @@ func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 		"prompt": "Use the uploaded reference image as visual context",
 		"size":   "1024x1024",
 	}, formValues)
-	require.Equal(t, []int{1}, store.reservations)
-	require.Equal(t, []int{1}, store.settlements)
-	require.Empty(t, store.releases)
 }
 
 func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *testing.T) {
@@ -1981,8 +1583,6 @@ func TestGenerateImageWithCommitTokenConsumesGenerationQuotaNotHostedCredits(t *
 	require.Equal(t, []byte("png-bytes"), resp.Data)
 	require.Equal(t, model.AccessModePaid, resp.AccessMode)
 	require.Equal(t, 89, resp.PaidQuotaRemaining)
-	require.Empty(t, store.reservations)
-	require.Empty(t, store.settlements)
 	require.Empty(t, store.events)
 	require.Len(t, quota.validations, 1)
 	require.Len(t, quota.consumes, 1)
@@ -2034,178 +1634,12 @@ func TestGenerateImageWithCommitTokenAndReferenceConsumesQuotaAfterEdit(t *testi
 	require.NoError(t, err)
 	require.Equal(t, []byte("png-bytes"), resp.Data)
 	require.Equal(t, 88, resp.PaidQuotaRemaining)
-	require.Empty(t, store.reservations)
 	require.Len(t, quota.validations, 1)
 	require.Len(t, quota.consumes, 1)
 }
 
-func TestGenerateImageFailureReleasesReservationWithoutCharge(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-	}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		HashSalt:   "salt",
-		ImageModel: "gpt-image-test",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
-		}},
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "A polished product launch hero image",
-		AspectRatio: 1,
-	})
-	require.Error(t, err)
-	require.Nil(t, resp)
-	require.Equal(t, []int{1}, store.reservations)
-	require.Equal(t, []int{1}, store.releases)
-	require.Empty(t, store.settlements)
-	require.Len(t, store.events, 1)
-	require.False(t, store.events[0].Charged)
-	require.Equal(t, 0, store.events[0].SettledCredits)
-	require.Equal(t, 1, store.events[0].RefundCredits)
-	require.NotNil(t, store.events[0].DocumentType)
-	require.Equal(t, "img", *store.events[0].DocumentType)
-}
-
-func TestCompleteFailureReleasesReservationWithCanceledRequestContext(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-		rules: []model.HostedPricingRule{{
-			DocumentProfile:      "text",
-			ReservationCredits:   24,
-			MinimumChargeCredits: 2,
-			Enabled:              true,
-		}},
-	}
-	svc := NewService(store, Config{
-		BaseURL:              upstream.URL,
-		HashSalt:             "salt",
-		TextModel:            "gpt-text-test",
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	resp, err := svc.Complete(ctx, "Bearer hosted-key", "", CompletionRequest{
-		Model:    "hosted/text",
-		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
-	})
-
-	require.Error(t, err)
-	require.Nil(t, resp)
-	require.Equal(t, []int{24}, store.reservations)
-	require.Equal(t, []int{24}, store.releases)
-	require.Empty(t, store.settlements)
-	require.Len(t, store.events, 1)
-	require.Equal(t, []error{nil}, store.releaseCtxErrs)
-	require.Equal(t, []error{nil}, store.eventCtxErrs)
-	require.Equal(t, 0, store.events[0].SettledCredits)
-	require.Equal(t, 24, store.events[0].RefundCredits)
-}
-
-func TestGenerateImageFailureReleasesReservationWithCanceledRequestContext(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer upstream.Close()
-
-	defaultRuntimeMode := "hosted"
-	userID := uint64(42)
-	store := &fakeAPIKeyStore{
-		key: &model.APIKey{
-			ID:                 7,
-			OwnerUserID:        &userID,
-			Status:             model.APIKeyStatusActive,
-			PlanName:           "Hosted",
-			KeyPrefix:          "cop_hosted",
-			AllowedModes:       "hosted_only",
-			HostedEnabled:      true,
-			DefaultRuntimeMode: &defaultRuntimeMode,
-			CreditBalance:      100,
-		},
-		rules: []model.HostedPricingRule{{
-			DocumentProfile:      "image",
-			ReservationCredits:   12,
-			MinimumChargeCredits: 6,
-			Enabled:              true,
-		}},
-	}
-	svc := NewService(store, Config{
-		BaseURL:              upstream.URL,
-		HashSalt:             "salt",
-		ImageModel:           "gpt-image-test",
-		TimeoutSec:           5,
-		AIGatewayKeyCipher:   testAIGatewayCipher(t),
-		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	resp, err := svc.GenerateImage(ctx, "Bearer hosted-key", "", ImageRequest{
-		Model:       "hosted/image",
-		Prompt:      "A polished product launch hero image",
-		AspectRatio: 1,
-	})
-
-	require.Error(t, err)
-	require.Nil(t, resp)
-	require.Equal(t, []int{12}, store.reservations)
-	require.Equal(t, []int{12}, store.releases)
-	require.Empty(t, store.settlements)
-	require.Len(t, store.events, 1)
-	require.Equal(t, []error{nil}, store.releaseCtxErrs)
-	require.Equal(t, []error{nil}, store.eventCtxErrs)
-	require.Equal(t, 0, store.events[0].SettledCredits)
-	require.Equal(t, 12, store.events[0].RefundCredits)
-}
-
 // chargeOnlyFixture builds an httptest upstream that responds with
-// upstreamHandler and a service preconfigured for ChargeOnlyMode=all.
+// upstreamHandler and a service preconfigured for charge-only operation.
 func chargeOnlyFixture(t *testing.T, upstreamHandler http.HandlerFunc) (*Service, *fakeAPIKeyStore, *httptest.Server) {
 	t.Helper()
 	upstream := httptest.NewServer(upstreamHandler)
@@ -2233,14 +1667,12 @@ func chargeOnlyFixture(t *testing.T, upstreamHandler http.HandlerFunc) (*Service
 		Rules: []model.HostedPricingRule{
 			{
 				DocumentProfile:      "text",
-				ReservationCredits:   1,
 				MinimumChargeCredits: 1,
 				Enabled:              true,
 			},
 			{
 				DocumentProfile:      "image",
 				ImagePerAssetCredits: 1,
-				ReservationCredits:   1,
 				MinimumChargeCredits: 1,
 				Enabled:              true,
 			},
@@ -2248,13 +1680,10 @@ func chargeOnlyFixture(t *testing.T, upstreamHandler http.HandlerFunc) (*Service
 		TimeoutSec:           5,
 		AIGatewayKeyCipher:   testAIGatewayCipher(t),
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"sk-user-42"}},
-		ChargeOnlyMode:       ChargeOnlyModeAll,
 	})
 	return svc, store, upstream
 }
 
-// AC-2.2: under ChargeOnlyMode=all, an upstream failure must produce ZERO
-// ledger rows (no charge, no charge_failed, no legacy reserve/settle/release).
 func TestChargeOnlyUpstreamFailureProducesZeroLedgerRows(t *testing.T) {
 	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upstream gone", http.StatusBadGateway)
@@ -2266,9 +1695,6 @@ func TestChargeOnlyUpstreamFailureProducesZeroLedgerRows(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, store.charges, "charge_only failed upstream must not write charge ledger")
 	require.Empty(t, store.chargeFailed, "charge_failed must not be written when ReconcileEnabled=false")
-	require.Empty(t, store.reservations, "legacy reserve path must not be invoked")
-	require.Empty(t, store.releases)
-	require.Empty(t, store.settlements)
 	require.Empty(t, store.events, "no usage_event written on upstream failure under charge_only")
 }
 
@@ -2291,9 +1717,6 @@ func TestChargeOnlySuccessWritesSingleChargeLedgerWithUsageEventID(t *testing.T)
 	require.NotNil(t, store.charges[0].UsageEventID, "charge ledger must carry usage_event_id")
 	require.NotZero(t, *store.charges[0].UsageEventID, "usage_event_id must be non-zero (audit chain F1)")
 	require.Empty(t, store.chargeFailed)
-	require.Empty(t, store.reservations, "no legacy reserve under charge_only")
-	require.Empty(t, store.settlements)
-	require.Empty(t, store.releases)
 	require.Len(t, store.events, 1)
 	// Verify the audit chain: charge.usage_event_id == events[0].ID.
 	require.Equal(t, store.events[0].ID, *store.charges[0].UsageEventID)
@@ -2315,7 +1738,6 @@ func TestChargeOnlyImageSuccessWritesChargeLedgerWithUsageEventID(t *testing.T) 
 	require.Equal(t, []byte("png-bytes"), resp.Data)
 	require.Len(t, store.charges, 1)
 	require.NotNil(t, store.charges[0].UsageEventID)
-	require.Empty(t, store.reservations)
 }
 
 // AC-2.2 image variant: upstream failure produces zero ledger rows.
@@ -2331,7 +1753,6 @@ func TestChargeOnlyImageUpstreamFailureProducesZeroLedger(t *testing.T) {
 	require.Error(t, err)
 	require.Empty(t, store.charges)
 	require.Empty(t, store.chargeFailed)
-	require.Empty(t, store.reservations)
 }
 
 // Decode failure under ChargeOnlyMode=all with ReconcileEnabled=false: do
@@ -2368,104 +1789,6 @@ func TestChargeOnlyDecodeFailureWritesChargeFailedWhenReconcileEnabled(t *testin
 	require.Contains(t, store.chargeFailed[0].MetadataJSON, "decode_failure")
 }
 
-// AC-2.5: Architect CAVEAT 3 — flag flip race invariant. For every
-// requestID in the ledger after the test, the source-type SET must be
-// either {reserve, settle} OR {charge}, NEVER both. Otherwise a single
-// request could be debited twice under different idempotency-key prefixes.
-//
-// Implementation note: we drive a fingerprint-only subject because the
-// legacy fingerprint path is the only one whose request_id flows into the
-// fake's `hostedRequests` slice (api_key reserve uses a key hash and does
-// not carry the request_id).
-func TestChargeOnlyFlagFlipRaceDoesNotProduceDualLedgerForSameRequestID(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
-	}))
-	defer upstream.Close()
-
-	store := &fakeAPIKeyStore{}
-	svc := NewService(store, Config{
-		BaseURL:    upstream.URL,
-		APIKey:     "platform-upstream-key",
-		HashSalt:   "salt",
-		TextModel:  "gpt-test",
-		Rules: []model.HostedPricingRule{{
-			DocumentProfile:      "text",
-			ReservationCredits:   1,
-			MinimumChargeCredits: 1,
-			Enabled:              true,
-		}},
-		TimeoutSec:     5,
-		ChargeOnlyMode: ChargeOnlyModeDisabled,
-	})
-
-	const goroutines = 20
-	const flips = 50
-
-	var stopFlipper atomic.Bool
-	flipperDone := make(chan struct{})
-	go func() {
-		defer close(flipperDone)
-		for i := 0; i < flips; i++ {
-			if stopFlipper.Load() {
-				return
-			}
-			// Flip between disabled and all to exercise both code paths
-			// for fingerprint subjects (covers fingerprint and user
-			// rollout values too via "all").
-			if i%2 == 0 {
-				svc.SetChargeOnlyMode(ChargeOnlyModeAll)
-			} else {
-				svc.SetChargeOnlyMode(ChargeOnlyModeDisabled)
-			}
-			time.Sleep(50 * time.Microsecond)
-		}
-	}()
-
-	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
-		wg.Add(1)
-		go func(g int) {
-			defer wg.Done()
-			requestID := fmt.Sprintf("req-race-%d", g)
-			_, _ = svc.Complete(context.Background(), "", "fp-race", CompletionRequest{
-				RequestID:       requestID,
-				Model:           "hosted/text",
-				Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
-				FingerprintHash: "fp-race",
-			})
-		}(g)
-	}
-	wg.Wait()
-	stopFlipper.Store(true)
-	<-flipperDone
-
-	store.mu.Lock()
-	chargeIDs := map[string]bool{}
-	for _, c := range store.charges {
-		chargeIDs[c.RequestID] = true
-	}
-	reserveIDs := map[string]bool{}
-	for _, id := range store.hostedRequests {
-		if id != "" {
-			reserveIDs[id] = true
-		}
-	}
-	store.mu.Unlock()
-	for id := range chargeIDs {
-		require.Falsef(t, reserveIDs[id], "requestID %q produced BOTH reserve and charge ledger rows (flag-flip race violation)", id)
-	}
-	for id := range reserveIDs {
-		require.Falsef(t, chargeIDs[id], "requestID %q produced BOTH reserve and charge ledger rows (flag-flip race violation)", id)
-	}
-	// Sanity check: we observed at least one charge AND at least one
-	// reserve, otherwise the test didn't actually exercise both paths.
-	require.NotEmpty(t, chargeIDs, "race test did not exercise the charge path")
-	require.NotEmpty(t, reserveIDs, "race test did not exercise the reserve path")
-}
-
-// Helper to ensure silenceAtomicImport is actually used. Run-only marker.
-func TestSilenceAtomicImportPlaceholder(t *testing.T) {
-	silenceAtomicImport.Store(1)
-	require.Equal(t, int64(1), silenceAtomicImport.Load())
-}
+// AC-2.5 (flag-flip race) was removed in 0.2.95 Phase 5 along with the
+// legacy reserve path — without two competing paths, no flag-flip can
+// produce dual ledger rows for the same requestID.

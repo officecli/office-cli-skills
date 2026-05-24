@@ -95,34 +95,26 @@ func TestNewAdminOAuthProviderUsesAdminOAuth2ClientOverride(t *testing.T) {
 	}
 }
 
-func TestLoadConfigReadsHostedChargeOnlyModeAndReconcileEnabled(t *testing.T) {
+func TestLoadConfigReadsHostedReconcileEnabled(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("HOSTED_CHARGE_ONLY_MODE", "all")
 	t.Setenv("HOSTED_RECONCILE_ENABLED", "true")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
-	if cfg.HostedChargeOnlyMode != "all" {
-		t.Fatalf("HostedChargeOnlyMode = %q, want all", cfg.HostedChargeOnlyMode)
-	}
 	if !cfg.HostedReconcileEnabled {
 		t.Fatalf("HostedReconcileEnabled = false, want true")
 	}
 }
 
-func TestLoadConfigDefaultsHostedChargeOnlyModeDisabled(t *testing.T) {
+func TestLoadConfigDefaultsHostedReconcileOff(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
-	t.Setenv("HOSTED_CHARGE_ONLY_MODE", "")
 	t.Setenv("HOSTED_RECONCILE_ENABLED", "")
 
 	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
-	}
-	if cfg.HostedChargeOnlyMode != "disabled" {
-		t.Fatalf("HostedChargeOnlyMode = %q, want disabled (Phase 3 §5 默认 OFF)", cfg.HostedChargeOnlyMode)
 	}
 	if cfg.HostedReconcileEnabled {
 		t.Fatalf("HostedReconcileEnabled = true, want false")

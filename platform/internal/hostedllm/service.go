@@ -27,18 +27,6 @@ import (
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
 
-// ChargeOnlyMode controls which subject types run the post-success Charge
-// path versus the legacy Reserve/Settle/Release path. Gradual rollout order
-// is fingerprint -> user -> all.
-type ChargeOnlyMode string
-
-const (
-	ChargeOnlyModeDisabled    ChargeOnlyMode = "disabled"
-	ChargeOnlyModeFingerprint ChargeOnlyMode = "fingerprint"
-	ChargeOnlyModeUser        ChargeOnlyMode = "user"
-	ChargeOnlyModeAll         ChargeOnlyMode = "all"
-)
-
 // ErrHostedCreditsExhausted is returned by the precheck path when the
 // subject's balance is below the minimum charge threshold. Mirrors the
 // store-layer error so callers can compare without importing sqlstore.
@@ -46,16 +34,7 @@ var ErrHostedCreditsExhausted = errors.New("hosted credits exhausted")
 
 type APIKeyStore interface {
 	FindAPIKeyByHash(ctx context.Context, hash string) (*model.APIKey, error)
-	ReserveCreditsByHash(ctx context.Context, hash string, credits int) (*model.APIKey, error)
-	ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error)
-	SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error)
-	ReserveHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int) (*model.UserHostedCreditAccount, error)
-	ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error)
-	SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error)
 	GetHostedCreditAccountByFingerprint(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error)
-	ReserveHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error)
-	ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error)
-	SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error)
 	ChargeHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int, usageEventID *uint64) (*model.UserHostedCreditAccount, error)
 	ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int, usageEventID *uint64) (*model.FingerprintCreditAccount, error)
 	ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, requestID string, credits int, usageEventID *uint64) (*model.APIKey, error)
@@ -99,7 +78,6 @@ type Config struct {
 	AIGatewayCreateKeyPath string
 	AIGatewayKeyCipher     *apikey.Cipher
 	AIGatewayAdminClient   AIGatewayAdminClient
-	ChargeOnlyMode         ChargeOnlyMode
 	ReconcileEnabled       bool
 }
 
@@ -110,7 +88,6 @@ type Service struct {
 	mu               sync.RWMutex
 	createKeyLocks   sync.Map
 	client           *http.Client
-	chargeOnlyMode   atomic.Value
 	reconcileEnabled atomic.Bool
 }
 
@@ -196,24 +173,8 @@ func NewService(store APIKeyStore, cfg Config, quotaManagers ...GenerationQuotaM
 		cfg:    cfg,
 		client: &http.Client{Timeout: timeout},
 	}
-	svc.chargeOnlyMode.Store(normalizeChargeOnlyMode(cfg.ChargeOnlyMode))
 	svc.reconcileEnabled.Store(cfg.ReconcileEnabled)
 	return svc
-}
-
-func normalizeChargeOnlyMode(value ChargeOnlyMode) ChargeOnlyMode {
-	switch value {
-	case ChargeOnlyModeFingerprint, ChargeOnlyModeUser, ChargeOnlyModeAll:
-		return value
-	default:
-		return ChargeOnlyModeDisabled
-	}
-}
-
-// SetChargeOnlyMode hot-swaps the charge-only rollout flag. Safe for
-// concurrent use; the next request reads the new value via the atomic.
-func (s *Service) SetChargeOnlyMode(mode ChargeOnlyMode) {
-	s.chargeOnlyMode.Store(normalizeChargeOnlyMode(mode))
 }
 
 // SetReconcileEnabled hot-swaps the reconcile (charge_failed ledger) flag.
@@ -221,46 +182,9 @@ func (s *Service) SetReconcileEnabled(enabled bool) {
 	s.reconcileEnabled.Store(enabled)
 }
 
-// CurrentChargeOnlyMode returns the live rollout flag for inspection by
-// admin/observability surfaces. Reads the same atomic the hot path uses,
-// so this is consistent with what the next request will see.
-func (s *Service) CurrentChargeOnlyMode() ChargeOnlyMode {
-	return s.currentChargeOnlyMode()
-}
-
 // CurrentReconcileEnabled returns the live reconcile flag for inspection.
 func (s *Service) CurrentReconcileEnabled() bool {
 	return s.reconcileEnabled.Load()
-}
-
-func (s *Service) currentChargeOnlyMode() ChargeOnlyMode {
-	if v, ok := s.chargeOnlyMode.Load().(ChargeOnlyMode); ok {
-		return v
-	}
-	return ChargeOnlyModeDisabled
-}
-
-// chargeOnly reports whether the new charge path applies to the given
-// subject under the current rollout flag. Gradual order is fingerprint ->
-// user -> all; each level INCLUDES the prior levels.
-func (s *Service) chargeOnly(subject *hostedSubject) bool {
-	if subject == nil {
-		return false
-	}
-	mode := s.currentChargeOnlyMode()
-	switch mode {
-	case ChargeOnlyModeAll:
-		return true
-	case ChargeOnlyModeUser:
-		if subject.APIKeyID != nil {
-			return false
-		}
-		return subject.UserID != 0 || subject.FingerprintHash != ""
-	case ChargeOnlyModeFingerprint:
-		return subject.UserID == 0 && subject.APIKeyID == nil && subject.FingerprintHash != ""
-	default:
-		return false
-	}
 }
 
 // precheckSubjectCredits routes a read-only balance check to the right
@@ -351,70 +275,7 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 	if err != nil {
 		return nil, err
 	}
-	// Sample the flag exactly once per request so that flag flips mid-request
-	// cannot cause the same requestID to take both the reserve and charge
-	// paths (which would produce duplicate ledger rows under different
-	// idempotency-key prefixes — see Pre-mortem #11 / AC-2.5).
-	if s.chargeOnly(subject) {
-		return s.completeChargeOnly(ctx, subject, req, upstreamAPIKey)
-	}
-	return s.completeReserveLegacy(ctx, subject, req, upstreamAPIKey)
-}
-
-func (s *Service) completeReserveLegacy(ctx context.Context, subject *hostedSubject, req CompletionRequest, upstreamAPIKey string) (*CompletionResponse, error) {
-	reservation := s.reserveCreditsForModel(ctx, req.Model, false)
-	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
-	if err != nil {
-		return nil, err
-	}
-	modelName := s.normalizeModel(ctx, req.Model, false)
-
-	payload, err := buildChatPayload(req, modelName)
-	if err != nil {
-		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		return nil, err
-	}
-
-	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
-	if err != nil && isUpstreamAuthError(err) {
-		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
-		if rotateErr != nil {
-			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
-		}
-		creditBalance, err = s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
-		if err != nil {
-			return nil, err
-		}
-		body, usage, err = s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
-	}
-	if err != nil {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
-		return nil, err
-	}
-	content, err := decodeChatContent(body)
-	if err != nil {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
-		return nil, err
-	}
-	pricing := s.priceUsage(ctx, req.Model, usage, false)
-	settled := pricing.ChargeCredits
-	if settled > reservation {
-		settled = reservation
-		pricing.CapApplied = true
-	}
-	creditBalance, err = s.settleSubjectCredits(ctx, subject, req.RequestID, reservation, settled)
-	if err != nil {
-		return nil, err
-	}
-	s.recordUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
-	return &CompletionResponse{
-		Content:        content,
-		CreditBalance:  creditBalance,
-		CreditsCharged: settled,
-	}, nil
+	return s.completeChargeOnly(ctx, subject, req, upstreamAPIKey)
 }
 
 func (s *Service) completeChargeOnly(ctx context.Context, subject *hostedSubject, req CompletionRequest, upstreamAPIKey string) (*CompletionResponse, error) {
@@ -613,69 +474,7 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 	if err != nil {
 		return nil, err
 	}
-	// Sample chargeOnly exactly once per request (see Complete for the
-	// rationale — AC-2.5 flag-flip race invariant).
-	if s.chargeOnly(subject) {
-		return s.generateImageChargeOnly(ctx, subject, req, upstreamAPIKey)
-	}
-	return s.generateImageReserveLegacy(ctx, subject, req, upstreamAPIKey)
-}
-
-func (s *Service) generateImageReserveLegacy(ctx context.Context, subject *hostedSubject, req ImageRequest, upstreamAPIKey string) (*ImageResponse, error) {
-	reservation := s.reserveCreditsForModel(ctx, req.Model, true)
-	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
-	if err != nil {
-		return nil, err
-	}
-	modelName := s.normalizeModel(ctx, req.Model, true)
-	payload := map[string]any{
-		"model":           modelName,
-		"prompt":          req.Prompt,
-		"size":            effectiveImageSize(req),
-		"response_format": "b64_json",
-	}
-	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
-	if err != nil && isUpstreamAuthError(err) {
-		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
-		if rotateErr != nil {
-			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
-		}
-		creditBalance, err = s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
-		if err != nil {
-			return nil, err
-		}
-		body, usage, err = s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
-	}
-	if err != nil {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
-		return nil, err
-	}
-	data, decodeErr := decodeImageData(body)
-	if decodeErr != nil {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
-		return nil, decodeErr
-	}
-	usage.ImageCount = 1
-	pricing := s.priceUsage(ctx, req.Model, usage, true)
-	settled := pricing.ChargeCredits
-	if settled > reservation {
-		settled = reservation
-		pricing.CapApplied = true
-	}
-	creditBalance, err = s.settleSubjectCredits(ctx, subject, req.RequestID, reservation, settled)
-	if err != nil {
-		return nil, err
-	}
-	s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
-	return &ImageResponse{
-		Data:           data,
-		MIME:           "image/png",
-		CreditBalance:  creditBalance,
-		CreditsCharged: settled,
-	}, nil
+	return s.generateImageChargeOnly(ctx, subject, req, upstreamAPIKey)
 }
 
 func (s *Service) generateImageChargeOnly(ctx context.Context, subject *hostedSubject, req ImageRequest, upstreamAPIKey string) (*ImageResponse, error) {
@@ -1186,58 +985,6 @@ func (s *Service) decryptUserAIGatewayAPIKey(key *model.UserAIGatewayAPIKey) (st
 	return strings.TrimSpace(plain), nil
 }
 
-func (s *Service) reserveSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, credits int) (int, error) {
-	if subject == nil {
-		return 0, fmt.Errorf("hosted subject is required")
-	}
-	if subject.Key != nil {
-		key, err := s.store.ReserveCreditsByHash(ctx, subject.APIKeyHash, credits)
-		return creditBalance(key), err
-	}
-	if subject.UserID == 0 && subject.FingerprintHash != "" {
-		account, err := s.store.ReserveHostedCreditsByFingerprint(ctx, subject.FingerprintHash, requestID, credits)
-		return fingerprintAccountCreditBalance(account), err
-	}
-	account, err := s.store.ReserveHostedCreditsByUser(ctx, subject.UserID, requestID, credits)
-	return accountCreditBalance(account), err
-}
-
-func (s *Service) releaseSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, reserved int) (int, error) {
-	if subject == nil {
-		return 0, fmt.Errorf("hosted subject is required")
-	}
-	opCtx, cancel := settlementContext(ctx)
-	defer cancel()
-	if subject.Key != nil && subject.APIKeyID != nil {
-		key, err := s.store.ReleaseReservedCredits(opCtx, *subject.APIKeyID, reserved)
-		return creditBalance(key), err
-	}
-	if subject.UserID == 0 && subject.FingerprintHash != "" {
-		account, err := s.store.ReleaseHostedCreditsByFingerprint(opCtx, subject.FingerprintHash, requestID, reserved)
-		return fingerprintAccountCreditBalance(account), err
-	}
-	account, err := s.store.ReleaseHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved)
-	return accountCreditBalance(account), err
-}
-
-func (s *Service) settleSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, reserved int, settled int) (int, error) {
-	if subject == nil {
-		return 0, fmt.Errorf("hosted subject is required")
-	}
-	opCtx, cancel := settlementContext(ctx)
-	defer cancel()
-	if subject.Key != nil && subject.APIKeyID != nil {
-		key, err := s.store.SettleReservedCredits(opCtx, *subject.APIKeyID, reserved, settled)
-		return creditBalance(key), err
-	}
-	if subject.UserID == 0 && subject.FingerprintHash != "" {
-		account, err := s.store.SettleHostedCreditsByFingerprint(opCtx, subject.FingerprintHash, requestID, reserved, settled)
-		return fingerprintAccountCreditBalance(account), err
-	}
-	account, err := s.store.SettleHostedCreditsByUser(opCtx, subject.UserID, requestID, reserved, settled)
-	return accountCreditBalance(account), err
-}
-
 func fingerprintAccountCreditBalance(account *model.FingerprintCreditAccount) int {
 	if account == nil {
 		return 0
@@ -1361,18 +1108,6 @@ func hostedRequestID(value string, token *licensesvc.CommitToken) string {
 		return fmt.Sprintf("hosted-%d", time.Now().UnixNano())
 	}
 	return "hosted-" + hex.EncodeToString(b[:])
-}
-
-func (s *Service) reserveCreditsForModel(ctx context.Context, modelName string, image bool) int {
-	if rule, ok := s.matchRule(ctx, modelName); ok && rule.ReservationCredits > 0 {
-		return rule.ReservationCredits
-	}
-	switch {
-	case image:
-		return 32
-	default:
-		return 16
-	}
 }
 
 type hostedPriceSnapshot struct {
@@ -1685,11 +1420,6 @@ func hostedUsageFingerprint(requestFingerprint string, token *licensesvc.CommitT
 	return "hosted"
 }
 
-func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
-	event := s.buildChatUsageEventFull(subject, req, modelName, usage, pricing, reserved, settled, refund)
-	s.persistUsageEvent(ctx, event)
-}
-
 func (s *Service) buildChatUsageEvent(subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, settled int) *model.UsageEvent {
 	return s.buildChatUsageEventFull(subject, req, modelName, usage, pricing, 0, settled, 0)
 }
@@ -1738,11 +1468,6 @@ func (s *Service) persistUsageEvent(ctx context.Context, event *model.UsageEvent
 	opCtx, cancel := settlementContext(ctx)
 	defer cancel()
 	_ = s.store.CreateUsageEvent(opCtx, event)
-}
-
-func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
-	event := s.buildImageUsageEventFull(subject, req, modelName, usage, pricing, reserved, settled, refund)
-	s.persistUsageEvent(ctx, event)
 }
 
 func (s *Service) buildImageUsageEvent(subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, settled int) *model.UsageEvent {

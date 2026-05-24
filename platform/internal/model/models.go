@@ -660,6 +660,10 @@ type HostedPricingRule struct {
 	OutputPer1KCostMicrousd    int64     `gorm:"column:output_per_1k_cost_microusd;not null;default:0" json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64     `gorm:"column:reasoning_per_1k_cost_microusd;not null;default:0" json:"reasoning_per_1k_cost_microusd"`
 	ImagePerAssetCostMicrousd  int64     `gorm:"column:image_per_asset_cost_microusd;not null;default:0" json:"image_per_asset_cost_microusd"`
+	// Deprecated: ReservationCredits is retained for migration compatibility
+	// only. The legacy Reserve/Settle/Release credit lifecycle was removed in
+	// 0.2.95 (Phase 5); the charge-only path ignores this field. The column
+	// will be dropped in Phase 6.
 	ReservationCredits         int       `gorm:"column:reservation_credits;not null;default:0" json:"reservation_credits"`
 	MinimumChargeCredits       int       `gorm:"column:minimum_charge_credits;not null;default:0" json:"minimum_charge_credits"`
 	MarkupBPS                  *int      `gorm:"column:markup_bps" json:"markup_bps,omitempty"`

@@ -884,90 +884,6 @@ func TestGrantHostedCreditsToUserAccountIsIdempotent(t *testing.T) {
 	require.Len(t, ledgers, 1)
 }
 
-func TestHostedCreditsReserveSettleAndReleaseUseUserAccount(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:hosted_credits_account_reserve_settle?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.UserHostedCreditAccount{}, &model.UserHostedCreditLedger{}))
-
-	store := NewWithDB(db)
-	_, account, _, err := store.GrantHostedCreditsToUser(context.Background(), 7, model.HostedCreditLedgerSourcePurchase, "order:1", 300, "purchase", "{}")
-	require.NoError(t, err)
-	require.Equal(t, 300, account.AvailableCredits())
-
-	account, err = store.ReserveHostedCreditsByUser(context.Background(), 7, "req-1", 120)
-	require.NoError(t, err)
-	require.Equal(t, 300, account.CreditBalance)
-	require.Equal(t, 120, account.CreditReserved)
-	require.Equal(t, 180, account.AvailableCredits())
-
-	account, err = store.ReserveHostedCreditsByUser(context.Background(), 7, "req-1", 120)
-	require.NoError(t, err)
-	require.Equal(t, 120, account.CreditReserved)
-
-	account, err = store.SettleHostedCreditsByUser(context.Background(), 7, "req-1", 120, 80)
-	require.NoError(t, err)
-	require.Equal(t, 220, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
-	require.Equal(t, 220, account.AvailableCredits())
-
-	account, err = store.ReserveHostedCreditsByUser(context.Background(), 7, "req-2", 90)
-	require.NoError(t, err)
-	require.Equal(t, 90, account.CreditReserved)
-
-	account, err = store.ReleaseHostedCreditsByUser(context.Background(), 7, "req-2", 90)
-	require.NoError(t, err)
-	require.Equal(t, 220, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
-
-	_, err = store.ReserveHostedCreditsByUser(context.Background(), 7, "req-3", 221)
-	require.ErrorContains(t, err, "hosted credits exhausted")
-}
-
-func TestAPIKeyHostedReservationUsesOwnerAccountCredits(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:api_key_hosted_reservation_uses_owner_account?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.UserHostedCreditAccount{}, &model.UserHostedCreditLedger{}))
-
-	store := NewWithDB(db)
-	userID := uint64(42)
-	require.NoError(t, db.Create(&model.User{ID: userID, GoogleSub: model.StringPtr("sub-account-key"), Email: "account-key@example.com", Name: "Account Key", InviteCode: "invite-account-key", Status: model.UserStatusActive}).Error)
-	defaultRuntimeMode := "hosted"
-	key := &model.APIKey{
-		OwnerUserID:        &userID,
-		KeyHash:            "hash-account-key",
-		KeyPrefix:          "cop_account",
-		Status:             model.APIKeyStatusActive,
-		PlanName:           "Starter",
-		AllowedModes:       "hosted_only",
-		HostedEnabled:      true,
-		DefaultRuntimeMode: &defaultRuntimeMode,
-		CreditBalance:      0,
-	}
-	require.NoError(t, store.CreateAPIKey(context.Background(), key))
-	_, _, _, err = store.GrantHostedCreditsToUser(context.Background(), userID, model.HostedCreditLedgerSourcePurchase, "order:account-key", 200, "purchase", "{}")
-	require.NoError(t, err)
-
-	reserved, err := store.ReserveCreditsByHash(context.Background(), "hash-account-key", 50)
-	require.NoError(t, err)
-	require.Equal(t, 200, reserved.CreditBalance)
-	require.Equal(t, 50, reserved.CreditReserved)
-
-	settled, err := store.SettleReservedCredits(context.Background(), key.ID, 50, 30)
-	require.NoError(t, err)
-	require.Equal(t, 170, settled.CreditBalance)
-	require.Equal(t, 0, settled.CreditReserved)
-
-	account, err := store.GetHostedCreditAccountByUser(context.Background(), userID)
-	require.NoError(t, err)
-	require.Equal(t, 170, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
-
-	loadedKey, err := store.FindAPIKeyByID(context.Background(), key.ID)
-	require.NoError(t, err)
-	require.Equal(t, 0, loadedKey.CreditBalance)
-	require.Equal(t, 0, loadedKey.CreditReserved)
-}
-
 func TestFindAPIKeyByHashUsesOwnerAccountCredits(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:find_api_key_by_hash_uses_owner_account_credits?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -992,8 +908,10 @@ func TestFindAPIKeyByHashUsesOwnerAccountCredits(t *testing.T) {
 	require.NoError(t, store.CreateAPIKey(context.Background(), key))
 	_, _, _, err = store.GrantHostedCreditsToUser(context.Background(), userID, model.HostedCreditLedgerSourcePurchase, "order:license-key", 120, "purchase", "{}")
 	require.NoError(t, err)
-	_, err = store.ReserveHostedCreditsByUser(context.Background(), userID, "req-license-key", 40)
-	require.NoError(t, err)
+	// Simulate a legacy account that still carries credit_reserved > 0
+	// (pre-Phase 6 column drop) so the FindAPIKeyByHash projection is
+	// exercised end-to-end.
+	require.NoError(t, db.Model(&model.UserHostedCreditAccount{}).Where("user_id = ?", userID).Update("credit_reserved", 40).Error)
 
 	loaded, err := store.FindAPIKeyByHash(context.Background(), "hash-license-key")
 	require.NoError(t, err)
@@ -1068,44 +986,6 @@ func TestConsumePaidQuotaByHashRejectsDisabledOwner(t *testing.T) {
 	var saved model.APIKey
 	require.NoError(t, db.First(&saved, key.ID).Error)
 	require.Equal(t, 0, saved.QuotaUsed)
-}
-
-func TestReserveCreditsByHashRejectsDisabledOwner(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:reserve_credits_by_hash_rejects_disabled_owner?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.APIKey{}))
-
-	store := NewWithDB(db)
-	user := &model.User{
-		GoogleSub:  model.StringPtr("google-sub-1"),
-		Email:      "demo@example.com",
-		Name:       "Demo User",
-		InviteCode: "invite-000001",
-		Status:     model.UserStatusDisabled,
-	}
-	require.NoError(t, db.Create(user).Error)
-
-	defaultRuntimeMode := "hosted"
-	key := &model.APIKey{
-		OwnerUserID:        &user.ID,
-		KeyHash:            "hash-hosted-disabled",
-		KeyPrefix:          "cop_live_hosted",
-		Status:             model.APIKeyStatusActive,
-		PlanName:           "Starter",
-		AllowedModes:       "hybrid",
-		HostedEnabled:      true,
-		DefaultRuntimeMode: &defaultRuntimeMode,
-		CreditBalance:      20,
-	}
-	require.NoError(t, db.Create(key).Error)
-
-	_, err = store.ReserveCreditsByHash(context.Background(), key.KeyHash, 5)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "api key is disabled")
-
-	var saved model.APIKey
-	require.NoError(t, db.First(&saved, key.ID).Error)
-	require.Equal(t, 0, saved.CreditReserved)
 }
 
 func TestUserAIGatewayAPIKeyLifecycleIsUniquePerUser(t *testing.T) {
