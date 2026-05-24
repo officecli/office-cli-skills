@@ -79,6 +79,7 @@ export default function RedeemPage() {
               autoFocus
               autoComplete="off"
               maxLength={64}
+              onChange={(e) => form.setFieldValue('code', e.target.value.toUpperCase())}
             />
           </Form.Item>
           <Space>

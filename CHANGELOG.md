@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.90 - 2026-05-24
+
+### Changed
+
+- Redemption code 输入框统一回归"强制大写"：兑换码是大小写不敏感的（后端 `redemption.normalizeCode` 与匹配都走 `strings.ToUpper`），auto-generated code 的字母表 `codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"` 本来就只产大写字符。Admin 在 `RedemptionCodesPage` 新增 code 的输入框之前没有任何大小写限制，会出现一会儿大写、一会儿小写或混写的运营创建记录；App `/app/redeem` 在 0.2.89 误移除了 `onChange.toUpperCase()` 之后允许用户输入小写，造成"用户看到的 code"和"admin 列表里的 code"视觉不一致。现在两端的 Code 输入框都重新加回 `onChange={(e) => form.setFieldValue('code', e.target.value.toUpperCase())}`，保持视觉与存储完全一致。
+
 ## 0.2.89 - 2026-05-24
 
 ### Fixed

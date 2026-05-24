@@ -188,7 +188,10 @@ function CreateCodeDrawer({ open, loading, onClose, onSubmit }: {
         onFinish={handleFinish}
       >
         <Form.Item label="Code（留空自动生成）" name="code">
-          <Input placeholder="例如 PROMO2026, 留空将生成 16 位随机码" />
+          <Input
+            placeholder="例如 PROMO2026, 留空将生成 16 位随机码"
+            onChange={(e) => form.setFieldValue('code', e.target.value.toUpperCase())}
+          />
         </Form.Item>
         <Form.Item
           label="兑换 credits 数量"
