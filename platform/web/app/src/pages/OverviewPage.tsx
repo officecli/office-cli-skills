@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { KeyRound, ShieldCheck } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { Alert } from 'antd'
 import { api } from '../api'
 import { APP_ANALYTICS_EVENTS } from '../analytics-events'
 import { trackEvent } from '../analytics'
@@ -11,6 +12,7 @@ const inviteRewardGuideHref = 'https://officecli.io/docs#invite-rewards'
 
 export default function OverviewPage() {
   const location = useLocation()
+  const LOW_BALANCE_THRESHOLD = 20
   const { data: overview, isLoading: isLoadingOverview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
   const { data: growth, isLoading: isLoadingGrowth } = useQuery({ queryKey: ['app-growth'], queryFn: api.growth })
   const { data: apiKeys = [], isLoading: isLoadingApiKeys } = useQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
@@ -50,6 +52,7 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
+      {!isLoadingOverview && hostedCredits < LOW_BALANCE_THRESHOLD ? <Alert type="warning" showIcon message={`Hosted credit balance low — ${hostedCredits} credits left`} description="Top up to keep generating documents and images." action={<Link to="/billing" className="app-primary-button">Buy credits</Link>} /> : null}
       {discordResult ? (
         <Panel className={discordResult === 'verified' ? 'border border-secondary/20 bg-secondary/10' : 'border border-tertiary/20 bg-tertiary/10'}>
           <div className="text-sm text-white">
@@ -80,7 +83,12 @@ export default function OverviewPage() {
             ) : (
               <>
                 <MetricCard label="API Keys" value={formatNumber(overview?.api_key_count)} detail="Account access credentials for advanced automation" />
-                <MetricCard label="Hosted Credits" value={formatNumber(hostedCredits)} detail={`${formatNumber(signupBonus)} credits granted to new users; hosted runtime spends credits`} />
+                <MetricCard label="Hosted Credits" value={formatNumber(hostedCredits)} detail={(
+                  <div>
+                    <div>{`${formatNumber(signupBonus)} credits granted to new users; hosted runtime spends credits`}</div>
+                    <Link to="/billing" className="mt-2 inline-flex text-xs font-semibold text-primary hover:text-white">Buy more credits →</Link>
+                  </div>
+                )} />
                 <MetricCard label="Recent Usage" value={formatNumber(overview?.recent_usage_count)} detail="External and hosted requests recorded recently" />
               </>
             )}

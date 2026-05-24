@@ -7,7 +7,6 @@ import DocsPage from './pages/DocsPage'
 import DownloadPage from './pages/DownloadPage'
 import FAQPage from './pages/FAQPage'
 import HomePage from './pages/HomePage'
-import LoginPage from './pages/LoginPage'
 import PricingPage from './pages/PricingPage'
 import AgentSkillsPage from './pages/AgentSkillsPage'
 import AgentSkillsInstallPage from './pages/AgentSkillsInstallPage'
@@ -78,7 +77,6 @@ function SiteShell() {
         <Route path="/officecli-skills/*" element={<LegacyAgentSkillsRedirect />} />
         <Route path="/claude-code-codex-office-skills" element={<AgentSkillsPage />} />
         <Route path="/faq" element={<FAQPage />} />
-        <Route path="/login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Footer />

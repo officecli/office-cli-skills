@@ -277,4 +277,89 @@ describe('billing page', () => {
     })
     expect(await screen.findByText('pi_test_123')).toBeInTheDocument()
   })
+
+  it('auto-starts checkout when ?pack=hosted-300&autostart=1 and pack matches', async () => {
+    const redirectSpy = vi.spyOn(navigation, 'redirectTo').mockImplementation(() => {})
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ code: 'hosted-300', name: 'Hosted 300', description: 'x', currency: 'usd', amount_total: 2900, credit_amount: 300, pack_kind: 'hosted_credits' }] }) }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/checkout') {
+        expect(init?.method).toBe('POST')
+        expect(init?.body).toBe(JSON.stringify({ pack_code: 'hosted-300' }))
+        return { ok: true, status: 200, json: async () => ({ data: { order: { id: 41, status: 'pending' }, checkout_url: 'https://stripe.test/abc' } }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage('/billing?pack=hosted-300&autostart=1')
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/app/checkout', expect.objectContaining({ method: 'POST' }))
+    })
+    const checkoutCalls = fetchMock.mock.calls.filter((call: unknown[]) => call[0] === '/api/app/checkout')
+    expect(checkoutCalls).toHaveLength(1)
+    expect(redirectSpy).toHaveBeenCalledWith('https://stripe.test/abc')
+  })
+
+  it('does not auto-start twice on re-render', async () => {
+    const redirectSpy = vi.spyOn(navigation, 'redirectTo').mockImplementation(() => {})
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ code: 'hosted-300', name: 'Hosted 300', description: 'x', currency: 'usd', amount_total: 2900, credit_amount: 300, pack_kind: 'hosted_credits' }] }) }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/checkout') {
+        return { ok: true, status: 200, json: async () => ({ data: { order: { id: 42, status: 'pending' }, checkout_url: 'https://stripe.test/def' } }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { rerender } = renderPage('/billing?pack=hosted-300&autostart=1')
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/app/checkout', expect.objectContaining({ method: 'POST' }))
+    })
+
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/billing?pack=hosted-300&autostart=1']}>
+          <BillingPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const checkoutCalls = fetchMock.mock.calls.filter((call: unknown[]) => call[0] === '/api/app/checkout')
+    expect(checkoutCalls).toHaveLength(1)
+  })
+
+  it('ignores autostart when pack not in pricing list', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [{ code: 'hosted-300', name: 'Hosted 300', description: 'x', currency: 'usd', amount_total: 2900, credit_amount: 300, pack_kind: 'hosted_credits' }] }) }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage('/billing?pack=does-not-exist&autostart=1')
+
+    await screen.findByText('Hosted 300')
+
+    const checkoutCalls = fetchMock.mock.calls.filter((call: unknown[]) => call[0] === '/api/app/checkout')
+    expect(checkoutCalls).toHaveLength(0)
+  })
 })

@@ -1,4 +1,4 @@
-import { CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Menu as MenuIcon, Ticket, Wallet, Workflow } from 'lucide-react'
+import { Archive, CreditCard, Download, KeyRound, LayoutDashboard, LogOut, Menu as MenuIcon, Ticket, Workflow } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Dropdown, Layout, Space, Tag, Typography } from 'antd'
@@ -16,9 +16,6 @@ const navItems = [
     queryClient.prefetchQuery({ queryKey: ['app-growth'], queryFn: api.growth })
     queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
   }},
-  { to: '/quota', label: 'Quota', icon: Wallet, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
-    queryClient.prefetchQuery({ queryKey: ['app-quota-summary'], queryFn: api.quotaSummary })
-  }},
   { to: '/api-keys', label: 'API Keys', icon: KeyRound, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
     queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
   }},
@@ -26,6 +23,9 @@ const navItems = [
     queryClient.prefetchQuery({ queryKey: ['pricing'], queryFn: api.pricing })
     queryClient.prefetchQuery({ queryKey: ['app-api-keys'], queryFn: api.apiKeys })
     queryClient.prefetchQuery({ queryKey: ['app-orders'], queryFn: api.orders })
+  }},
+  { to: '/quota', label: 'Legacy quota', icon: Archive, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
+    queryClient.prefetchQuery({ queryKey: ['app-quota-summary'], queryFn: api.quotaSummary })
   }},
   { to: '/usage', label: 'Usage', icon: Workflow, prefetch: (queryClient: ReturnType<typeof useQueryClient>) => {
     queryClient.prefetchQuery({ queryKey: ['app-usage'], queryFn: api.usage })

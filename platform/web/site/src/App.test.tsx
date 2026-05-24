@@ -218,9 +218,10 @@ describe('marketing site shell', () => {
     )
 
     expect(await screen.findByText(/300 credits/i)).toBeInTheDocument()
-    expect(screen.getByText(/≈ \$3\.00 USD/i)).toBeInTheDocument()
     expect(screen.getByText(/1000 credits/i)).toBeInTheDocument()
-    expect(screen.getByText(/≈ \$10\.00 USD/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/\$0\.01 \/ credit/i).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/≈ 30 images @ 10 credits each/i)).toBeInTheDocument()
+    expect(screen.getByText(/≈ 100 images @ 10 credits each/i)).toBeInTheDocument()
   })
 
   it('detects supported operating systems for install tabs', () => {

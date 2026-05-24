@@ -31,15 +31,36 @@ export function formatPrice(pack: PricingPack) {
   }).format(pack.amount_total / 100)
 }
 
+export function pricePerCreditLabel(pack: PricingPack): string {
+  const credits = pack.credit_amount ?? 0
+  if (credits <= 0) return ''
+  const perCredit = pack.amount_total / 100 / credits
+  return `$${parseFloat(perCredit.toPrecision(3))} / credit`
+}
+
+export function imagesPerPack(pack: PricingPack, creditsPerImage = 10): string {
+  const credits = pack.credit_amount ?? 0
+  if (credits <= 0) return ''
+  return `≈ ${Math.floor(credits / creditsPerImage)} images @ ${creditsPerImage} credits each`
+}
+
+export function bestValueCode(packs: PricingPack[]): string | undefined {
+  let best: { code: string; rate: number } | undefined
+  for (const p of packs) {
+    if (p.pack_kind !== 'hosted_credits') continue
+    const credits = p.credit_amount ?? 0
+    if (credits <= 0) continue
+    const rate = p.amount_total / credits
+    if (!best || rate < best.rate) best = { code: p.code, rate }
+  }
+  return best?.code
+}
+
 export function formatAuxiliaryPrice(pack: PricingPack) {
   if (pack.pack_kind !== 'hosted_credits') {
     return ''
   }
-  return `≈ ${new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: pack.currency.toUpperCase(),
-    minimumFractionDigits: 2,
-  }).format(pack.amount_total / 100)} USD at 100 credits = $1 USD`
+  return `${pricePerCreditLabel(pack)} · ${imagesPerPack(pack)}`
 }
 
 function packPrimaryAmount(pack: PricingPack) {

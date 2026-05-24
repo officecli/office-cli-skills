@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.82 - 2026-05-24
+
+### Changed
+
+- Web paywall funnel: site `Pricing` cards now deep-link to `platform.officecli.io/app/billing?pack=<code>&autostart=1`; on landing the app reads the query and auto-launches Stripe Checkout once (idempotent via `hasAutoStartedRef`). Marketing-site CTA → Stripe is now effectively 2 clicks for signed-in users (was 6 hops with pack-selection loss).
+- Pricing labels rewritten: removed the misleading "100 credits = $1 USD" auxiliary line. Each pack now shows real `$/credit` (3 sig figs) and an `≈ N images @ 10 credits each` business-value conversion, computed from the same pack data on both `site/Pricing` and `app/BillingPage`.
+- Site `Pricing` renders up to 3 hosted-credits packs (was hardcoded to 2). The "Best value" badge is data-driven (lowest `$/credit`); "POPULAR" stays on the middle card.
+- App `Overview` now shows a low-balance warning banner when hosted credits fall below 20, plus a "Buy more credits →" link on the Hosted Credits metric card.
+- App `Billing` page adds a "Have a redeem code?" link to `/redeem`.
+- Redeem page localized to English (form labels, errors, history table, success toast).
+- App sidebar: Quota nav entry demoted to "Legacy quota" with the `Archive` icon, moved below Billing — it remains routable but no longer competes for primary attention.
+- Site `/login` route removed (Navbar Login already jumps to `platform.officecli.io/app`); the orphan stub page file is left on disk for future reuse.
+
+### Added
+
+- `siteApi`: new helpers `pricePerCreditLabel`, `imagesPerPack`, `bestValueCode` for consistent pricing math.
+- Tests: 3 new autostart cases in `BillingPage.test.tsx` (autostart fires once, idempotent on re-render, ignored when pack unknown); new `Pricing.test.tsx` covering 3-card render, deep-link href shape, and Best value badge selection.
+
 ## 0.2.81 - 2026-05-23
 
 ### Added

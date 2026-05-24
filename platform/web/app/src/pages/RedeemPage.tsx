@@ -6,12 +6,12 @@ import { DataTable, EmptyState, Panel, SectionHeading, formatDate, formatNumber 
 import type { RedeemResponse, RedemptionHistoryItem } from '../types'
 
 const errorMessageMap: Record<string, string> = {
-  code_not_found: '兑换码不存在',
-  code_disabled: '兑换码已禁用',
-  code_expired: '兑换码已过期',
-  code_exhausted: '兑换码已被领完',
-  code_already_claimed: '您已经兑换过该兑换码',
-  code_required: '请填写兑换码',
+  code_not_found: 'Redemption code not found',
+  code_disabled: 'This code has been disabled',
+  code_expired: 'This code has expired',
+  code_exhausted: 'This code has been fully redeemed',
+  code_already_claimed: 'You have already redeemed this code',
+  code_required: 'Please enter a redemption code',
 }
 
 function friendlyError(err: unknown): string {
@@ -27,9 +27,9 @@ function friendlyError(err: unknown): string {
     for (const [code, label] of Object.entries(errorMessageMap)) {
       if (err.message.includes(code)) return label
     }
-    return err.message || '兑换失败'
+    return err.message || 'Redemption failed'
   }
-  return (err as Error)?.message || '兑换失败'
+  return (err as Error)?.message || 'Redemption failed'
 }
 
 export default function RedeemPage() {
@@ -44,7 +44,7 @@ export default function RedeemPage() {
     mutationFn: (code: string) => api.redeemCode(code),
     onSuccess: async (result) => {
       setLastResult(result)
-      message.success(`兑换成功，获得 ${result.credit_amount} credits，当前余额 ${result.new_balance}`)
+      message.success(`Redeemed successfully. +${result.credit_amount} credits. Balance: ${result.new_balance}`)
       form.resetFields()
       await queryClient.invalidateQueries({ queryKey: ['app-redemption-history'] })
       await queryClient.invalidateQueries({ queryKey: ['app-quota-summary'] })
@@ -60,8 +60,8 @@ export default function RedeemPage() {
       <Panel>
         <SectionHeading
           eyebrow="Redeem code"
-          title="兑换码"
-          body="输入兑换码即可领取 credits，可用于托管推理。每个兑换码可能有使用次数或有效期限制。"
+          title="Redemption code"
+          body="Enter a redemption code to add credits to your account. Codes may be limited by uses or expiration."
         />
         <Form
           form={form}
@@ -70,12 +70,12 @@ export default function RedeemPage() {
           className="max-w-md"
         >
           <Form.Item
-            label="兑换码"
+            label="Code"
             name="code"
-            rules={[{ required: true, message: '请输入兑换码' }, { min: 4, message: '兑换码至少 4 位' }]}
+            rules={[{ required: true, message: 'Please enter a code' }, { min: 4, message: 'Code must be at least 4 characters' }]}
           >
             <Input
-              placeholder="例如 PROMO2026"
+              placeholder="e.g. PROMO2026"
               autoFocus
               autoComplete="off"
               maxLength={64}
@@ -83,14 +83,14 @@ export default function RedeemPage() {
             />
           </Form.Item>
           <Space>
-            <Button type="primary" htmlType="submit" loading={redeem.isPending}>立即兑换</Button>
+            <Button type="primary" htmlType="submit" loading={redeem.isPending}>Redeem now</Button>
           </Space>
         </Form>
         {lastResult ? (
           <div className="mt-6 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4">
-            <Typography.Text className="text-emerald-300">兑换成功</Typography.Text>
+            <Typography.Text className="text-emerald-300">Redeemed successfully</Typography.Text>
             <Typography.Paragraph className="!mb-0 !mt-2">
-              兑换码 <code>{lastResult.code}</code> 已为您增加 <strong>{formatNumber(lastResult.credit_amount)}</strong> credits，当前可用余额：<strong>{formatNumber(lastResult.new_balance)}</strong>。
+              Code <code>{lastResult.code}</code> added <strong>{formatNumber(lastResult.credit_amount)}</strong> credits. New balance: <strong>{formatNumber(lastResult.new_balance)}</strong>.
             </Typography.Paragraph>
           </div>
         ) : null}
@@ -99,12 +99,12 @@ export default function RedeemPage() {
       <Panel>
         <SectionHeading
           eyebrow="History"
-          title="兑换记录"
-          body="您账号下的兑换流水，按时间倒序排列。"
+          title="Redemption history"
+          body="Account redemption activity, newest first."
         />
         {history.data && history.data.items.length > 0 ? (
           <DataTable
-            headers={['时间', 'Code', 'Credits', '入口', 'IP']}
+            headers={['Time', 'Code', 'Credits', 'Source', 'IP']}
             rows={history.data.items.map((row: RedemptionHistoryItem) => [
               <span key={`t-${row.id}`}>{formatDate(row.redeemed_at)}</span>,
               <code key={`c-${row.id}`} className="font-mono text-xs">{row.code}</code>,
@@ -114,7 +114,7 @@ export default function RedeemPage() {
             ])}
           />
         ) : (
-          <EmptyState title="暂无兑换记录" body="兑换成功后将在此处显示。" />
+          <EmptyState title="No redemptions yet" body="Successful redemptions will appear here." />
         )}
       </Panel>
     </div>

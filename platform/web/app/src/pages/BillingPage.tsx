@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Alert, Button } from 'antd'
 import { ArrowRight, Copy, CreditCard } from 'lucide-react'
 import { ApiError, api } from '../api'
@@ -26,6 +26,7 @@ export default function BillingPage() {
   const shouldAttemptReconcile = searchParams.get('status') === 'success' && checkoutSessionID !== ''
   const [copiedReference, setCopiedReference] = useState<string | null>(null)
   const [reconciledSessionID, setReconciledSessionID] = useState<string | null>(null)
+  const hasAutoStartedRef = useRef(false)
 
   const checkout = useMutation({
     mutationFn: ({ packCode }: { packCode: string }) => api.checkout({ pack_code: packCode }),
@@ -55,6 +56,20 @@ export default function BillingPage() {
     setReconciledSessionID(checkoutSessionID)
     reconcile.mutate({ sessionID: checkoutSessionID })
   }, [checkoutSessionID, reconcile, reconciledSessionID, shouldAttemptReconcile])
+
+  const autostartPack = searchParams.get('pack')?.trim() ?? ''
+  const shouldAutostart = searchParams.get('autostart') === '1' && autostartPack !== ''
+
+  useEffect(() => {
+    if (!shouldAutostart) return
+    if (hasAutoStartedRef.current) return
+    if (checkout.isPending) return
+    const match = pricing.find(p => p.code === autostartPack)
+    if (!match) return
+    hasAutoStartedRef.current = true
+    trackEvent(APP_ANALYTICS_EVENTS.checkoutStart, { surface: 'app', placement: 'deep-link-autostart', pack_code: match.code })
+    checkout.mutate({ packCode: match.code })
+  }, [shouldAutostart, autostartPack, pricing, checkout])
 
   async function copyReference(reference: string) {
     await navigator.clipboard?.writeText(reference)
@@ -90,6 +105,7 @@ export default function BillingPage() {
         {checkoutError ? (
           <Alert className="mb-6" type="error" showIcon title={`Checkout failed: ${checkoutError}`} />
         ) : null}
+        <div className="app-card-muted mb-4 p-4 text-sm text-outline">Have a redeem code? <Link to="/redeem" className="text-primary hover:text-white">Redeem here →</Link></div>
         {pricing.length ? (
           <div className="grid gap-4 lg:grid-cols-3">
             {pricing.map((pack) => (
@@ -177,7 +193,10 @@ function packPrimaryLabel(pack: { pack_kind?: string; amount_total: number; curr
 
 function packSecondaryLabel(pack: { pack_kind?: string; amount_total: number; currency: string; quota_amount?: number; credit_amount?: number }) {
   if (pack.pack_kind === 'hosted_credits') {
-    return `≈ ${usdLabel(pack.amount_total, pack.currency)} at 100 credits = $1 USD`
+    const creditAmount = pack.credit_amount ?? 0
+    const perCredit = creditAmount > 0 ? (pack.amount_total / 100 / creditAmount).toFixed(3) : '0.000'
+    const approxImages = Math.floor(creditAmount / 10)
+    return `$${perCredit} / credit · ≈ ${approxImages} images at 10 credits each`
   }
   return `${pack.quota_amount ?? 0} document generations per purchase`
 }
