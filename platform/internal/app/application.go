@@ -2086,7 +2086,7 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 		}
 		filtered := make([]model.Order, 0, len(data))
 		for _, order := range data {
-			if order.PackKind != model.PackKindExternalGeneration {
+			if order.PackKind == model.PackKindExternalGeneration {
 				continue
 			}
 			filtered = append(filtered, order)

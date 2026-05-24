@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.87 - 2026-05-24
+
+### Fixed
+
+- `/api/app/orders` (user-facing) was returning ONLY `external_generation` legacy orders and silently dropping every `hosted_credits` order — so paid hosted-100 purchases (#17, #18, #19, #21) never appeared in the BillingPage "Recent billing activity" list, only the old External 100 rows from April. The filter at platform/internal/app/application.go:2089 was originally written `if order.PackKind != PackKindExternalGeneration { continue }` back when external_generation was the only product (Apr 14, before hosted_credits launched). When the product line flipped to hosted_credits the condition was never inverted. Filter now correctly skips legacy external_generation and surfaces hosted_credits orders, matching the sidebar split (Billing = hosted, Legacy quota = external).
+
 ## 0.2.86 - 2026-05-24
 
 ### Changed
