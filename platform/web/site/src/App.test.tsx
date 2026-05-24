@@ -195,7 +195,7 @@ describe('marketing site shell', () => {
     expect(screen.queryByText('External 100')).not.toBeInTheDocument()
   })
 
-  it('renders hosted pricing with credits as the primary unit and USD as auxiliary copy', async () => {
+  it('renders hosted pricing with USD as the primary unit and credits as supporting copy', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       if (String(input) === '/api/events/track') {
         return { ok: true, json: async () => ({ data: { success: true } }) } as Response
@@ -217,8 +217,10 @@ describe('marketing site shell', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/300 credits/i)).toBeInTheDocument()
-    expect(screen.getByText(/1000 credits/i)).toBeInTheDocument()
+    expect(await screen.findByText(/^\$3$/)).toBeInTheDocument()
+    expect(screen.getByText(/^\$10$/)).toBeInTheDocument()
+    expect(screen.getByText(/^300 credits$/)).toBeInTheDocument()
+    expect(screen.getByText(/^1,000 credits$/)).toBeInTheDocument()
     expect(screen.getAllByText(/\$0\.01 \/ credit/i).length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText(/≈ 30 images @ 10 credits each/i)).toBeInTheDocument()
     expect(screen.getByText(/≈ 100 images @ 10 credits each/i)).toBeInTheDocument()

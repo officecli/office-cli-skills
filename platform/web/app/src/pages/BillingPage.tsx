@@ -48,6 +48,7 @@ export default function BillingPage() {
   const reconcileError = reconcile.error instanceof ApiError
     ? `${reconcile.error.message}${reconcile.error.requestId ? ` (request_id: ${reconcile.error.requestId})` : ''}`
     : reconcile.error?.message
+  const reconcileAwaitingConfirmation = reconcile.data?.awaiting_confirmation === true
 
   useEffect(() => {
     if (!shouldAttemptReconcile || reconciledSessionID === checkoutSessionID) {
@@ -141,6 +142,15 @@ export default function BillingPage() {
         <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase remains visible here for reconciliation." />
         {reconcile.isPending ? (
           <Alert className="mb-4" type="info" showIcon title="Syncing payment status" description="Payment returned from Stripe. Syncing the latest checkout status into this workspace now." />
+        ) : null}
+        {reconcileAwaitingConfirmation ? (
+          <Alert
+            className="mb-4"
+            type="info"
+            showIcon
+            title="Payment still confirming"
+            description="Stripe has not yet finalized this charge. Hosted credits will appear here once the payment clears — refresh in a moment, or contact support if the order stays pending."
+          />
         ) : null}
         {reconcileError ? (
           <Alert className="mb-4" type="warning" showIcon title={`Stripe payment sync failed: ${reconcileError}`} />

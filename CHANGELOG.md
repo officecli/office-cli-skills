@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.83 - 2026-05-24
+
+### Fixed
+
+- Hosted-credits pricing precedence: `billing.Service.Pricing()` and `pricingPack()` now dedupe by pack code with config-defined defaults winning over `hosted_credit_packs` DB rows. A stale `hosted-100` row at $5 in the DB was shadowing the config $1 SKU added in 0.2.81, so both the marketing pricing API surfaced duplicate cards and `CreateCheckout` snapshotted the wrong $5 amount onto new orders. Config defaults are git-tracked and now authoritative; admin DB rows continue to provide codes that config does not define.
+- Stripe checkout return UX: `/api/app/orders/reconcile` now returns `{order, awaiting_confirmation}`. When Stripe's `GetCheckoutSession` reports `payment_status != "paid"` (e.g., async payment method, 3DS still resolving, or the buyer landed before Stripe finalized), the app `BillingPage` renders a "Payment still confirming" info alert instead of silently leaving the order in `pending` without feedback.
+
+### Changed
+
+- Site `Pricing` cards now lead with the dollar headline (e.g. `$1`, `$5`, `$29`) and place credit count + per-credit math as supporting subtitles; per-credit values render via `Intl.NumberFormat` at a stable 2-decimal precision (so 0.0967 → `$0.10 / credit`).
+- `Best value` badge ties now break toward the largest pack (Hosted 500/1200 over Hosted 100) and the badge is suppressed on the `POPULAR` middle card to avoid double-badging.
+- Removed the redundant `{N} hosted credits` checkmark row from each card — the headline already carries that information.
+
 ## 0.2.82 - 2026-05-24
 
 ### Changed

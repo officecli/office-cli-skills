@@ -106,20 +106,32 @@ func NewService(store Store, gateway Gateway, packs []model.PricingPack) *Servic
 func (s *Service) Pricing() []model.PricingPack {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]model.PricingPack, 0, len(s.packs))
+	byCode := make(map[string]model.PricingPack, len(s.packs))
 	for _, pack := range s.packs {
 		if pack.PackKind == string(model.PackKindHostedCredits) {
-			result = append(result, pack)
+			byCode[pack.Code] = pack
 		}
 	}
 	if s.store != nil {
 		if hostedPacks, err := s.store.ListHostedCreditPacks(context.Background(), true); err == nil {
 			for _, pack := range hostedPacks {
-				result = append(result, pack.PricingPack())
+				if _, exists := byCode[pack.Code]; exists {
+					continue
+				}
+				byCode[pack.Code] = pack.PricingPack()
 			}
 		}
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].AmountTotal < result[j].AmountTotal })
+	result := make([]model.PricingPack, 0, len(byCode))
+	for _, pack := range byCode {
+		result = append(result, pack)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].AmountTotal == result[j].AmountTotal {
+			return result[i].Code < result[j].Code
+		}
+		return result[i].AmountTotal < result[j].AmountTotal
+	})
 	return result
 }
 
@@ -201,7 +213,7 @@ func (s *Service) pricingPack(ctx context.Context, code string) (model.PricingPa
 	s.mu.RLock()
 	pack, ok := s.packs[code]
 	s.mu.RUnlock()
-	if ok && pack.PackKind != string(model.PackKindHostedCredits) {
+	if ok {
 		return pack, true
 	}
 	if s.store != nil {
@@ -212,9 +224,6 @@ func (s *Service) pricingPack(ctx context.Context, code string) (model.PricingPa
 				}
 			}
 		}
-	}
-	if ok {
-		return pack, true
 	}
 	return model.PricingPack{}, false
 }

@@ -4,7 +4,7 @@ import { Check } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
 import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
-import { bestValueCode, fetchPricing, formatPrice, imagesPerPack, pricePerCreditLabel, type PricingPack } from '../siteApi'
+import { bestValueCode, fetchPricing, formatCreditCount, formatPrice, imagesPerPack, pricePerCreditLabel, type PricingPack } from '../siteApi'
 import { platformBillingURL } from '../siteData'
 
 interface PricingProps {
@@ -59,37 +59,34 @@ export default function Pricing({ standalone = false }: PricingProps) {
           <div className={`grid grid-cols-1 ${hostedPacks.length >= 3 ? 'md:grid-cols-3 max-w-6xl' : hostedPacks.length === 2 ? 'md:grid-cols-2 max-w-4xl' : 'max-w-lg'} gap-8 text-left mx-auto mb-16`}>
             {hostedPacks.map((pack, idx) => {
               const isPopular = idx === 1 && hostedPacks.length >= 2
-              const isBestValue = pack.code === bestCode
+              const isBestValue = pack.code === bestCode && !isPopular
               const packHref = buildTrackedURL(`${platformBillingURL}?pack=${encodeURIComponent(pack.code)}&autostart=1`, location.search)
               return (
                 <motion.div
                   key={pack.code}
                   whileHover={{ y: -5 }}
-                  className={`p-10 rounded-2xl relative overflow-hidden ${isPopular ? 'bg-surface-high border-2 border-primary shadow-[0_0_40px_rgba(174,198,255,0.1)]' : 'bg-surface-low border border-outline-variant/10'}`}
+                  className={`flex flex-col p-10 rounded-2xl relative overflow-hidden ${isPopular ? 'bg-surface-high border-2 border-primary shadow-[0_0_40px_rgba(174,198,255,0.1)]' : 'bg-surface-low border border-outline-variant/10'}`}
                 >
                   {isPopular && (
                     <div className="absolute top-5 right-5 bg-primary text-[#002e6b] text-[10px] font-bold px-2 py-1 rounded">POPULAR</div>
                   )}
-                  {isBestValue && !isPopular && (
+                  {isBestValue && (
                     <div className="absolute top-5 right-5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-[10px] font-bold px-2 py-1 rounded">Best value</div>
                   )}
-                  {isBestValue && isPopular && (
-                    <div className="absolute top-5 left-5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-[10px] font-bold px-2 py-1 rounded">Best value</div>
-                  )}
                   <h3 className="font-headline text-2xl font-bold text-white mb-2">{pack.name}</h3>
-                  <div className="text-4xl font-headline font-black text-primary mb-2">{formatPrice(pack)}</div>
-                  <div className="mb-6 text-xs text-outline-variant">
+                  <div className="text-5xl font-headline font-black text-primary leading-none mb-1">{formatPrice(pack)}</div>
+                  <div className="text-base font-headline font-semibold text-white/80 mb-3">{formatCreditCount(pack) || `${pack.quota_amount ?? 0} document generations`}</div>
+                  <div className="mb-6 text-xs text-outline-variant space-y-0.5">
                     <div>{pricePerCreditLabel(pack)}</div>
                     <div>{imagesPerPack(pack)}</div>
                   </div>
                   <ul className="space-y-4 mb-10 text-outline-variant text-sm">
                     <li className="text-outline-variant leading-relaxed">{pack.description}</li>
-                    <li className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> {packUnitItem(pack)}</li>
-                    <li className="flex gap-3"><Check className="text-tertiary w-5 h-5" /> External Mode remains free and unlimited</li>
+                    <li className="flex gap-3"><Check className="text-tertiary w-5 h-5 shrink-0" /> External Mode remains free and unlimited</li>
                   </ul>
                   <motion.a
                     whileHover={{ scale: 0.98 }}
-                    className={`w-full py-4 rounded-md font-bold transition-all inline-flex items-center justify-center ${isPopular ? 'bg-gradient-to-br from-primary to-primary-container text-[#002e6b]' : 'border border-outline-variant/30 hover:bg-white/5'}`}
+                    className={`mt-auto w-full py-4 rounded-md font-bold transition-all inline-flex items-center justify-center ${isPopular ? 'bg-gradient-to-br from-primary to-primary-container text-[#002e6b]' : 'border border-outline-variant/30 hover:bg-white/5'}`}
                     href={packHref}
                     onClick={() => trackEvent(SITE_ANALYTICS_EVENTS.checkoutStart, { surface: 'site', placement: standalone ? 'pricing-page' : 'home-pricing', pack_code: pack.code, ...extractAttributionParams(location.search) })}
                   >
@@ -132,12 +129,4 @@ export default function Pricing({ standalone = false }: PricingProps) {
       </div>
     </section>
   )
-}
-
-function packUnitItem(pack?: PricingPack) {
-  if (!pack) return '0 hosted credits'
-  if (pack.pack_kind === 'hosted_credits') {
-    return `${pack.credit_amount ?? 0} hosted credits`
-  }
-  return `${pack.quota_amount ?? 0} legacy document generations`
 }

@@ -21,21 +21,31 @@ export async function fetchPricing(): Promise<PricingPack[]> {
 }
 
 export function formatPrice(pack: PricingPack) {
-  if (pack.pack_kind === 'hosted_credits') {
-    return `${pack.credit_amount ?? 0} credits`
-  }
+  const dollars = pack.amount_total / 100
+  const fractionDigits = Number.isInteger(dollars) ? 0 : 2
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: pack.currency.toUpperCase(),
-    minimumFractionDigits: 2,
-  }).format(pack.amount_total / 100)
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(dollars)
+}
+
+export function formatCreditCount(pack: PricingPack): string {
+  if (pack.pack_kind !== 'hosted_credits') return ''
+  return `${(pack.credit_amount ?? 0).toLocaleString('en-US')} credits`
 }
 
 export function pricePerCreditLabel(pack: PricingPack): string {
   const credits = pack.credit_amount ?? 0
   if (credits <= 0) return ''
   const perCredit = pack.amount_total / 100 / credits
-  return `$${parseFloat(perCredit.toPrecision(3))} / credit`
+  return `${new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: pack.currency.toUpperCase(),
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(perCredit)} / credit`
 }
 
 export function imagesPerPack(pack: PricingPack, creditsPerImage = 10): string {
@@ -45,22 +55,17 @@ export function imagesPerPack(pack: PricingPack, creditsPerImage = 10): string {
 }
 
 export function bestValueCode(packs: PricingPack[]): string | undefined {
-  let best: { code: string; rate: number } | undefined
+  let best: { code: string; rate: number; credits: number } | undefined
   for (const p of packs) {
     if (p.pack_kind !== 'hosted_credits') continue
     const credits = p.credit_amount ?? 0
     if (credits <= 0) continue
     const rate = p.amount_total / credits
-    if (!best || rate < best.rate) best = { code: p.code, rate }
+    if (!best || rate < best.rate || (rate === best.rate && credits > best.credits)) {
+      best = { code: p.code, rate, credits }
+    }
   }
   return best?.code
-}
-
-export function formatAuxiliaryPrice(pack: PricingPack) {
-  if (pack.pack_kind !== 'hosted_credits') {
-    return ''
-  }
-  return `${pricePerCreditLabel(pack)} · ${imagesPerPack(pack)}`
 }
 
 function packPrimaryAmount(pack: PricingPack) {

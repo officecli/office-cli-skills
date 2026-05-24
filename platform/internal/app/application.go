@@ -2103,7 +2103,11 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 		order, err := billingSvc.ReconcileCheckoutSession(c.Request.Context(), req)
 		switch {
 		case err == nil:
-			httpapi.JSON(c, http.StatusOK, order)
+			awaiting := order != nil && order.Status == model.OrderStatusPending
+			httpapi.JSON(c, http.StatusOK, gin.H{
+				"order":                 order,
+				"awaiting_confirmation": awaiting,
+			})
 		case errors.Is(err, billing.ErrCheckoutSessionIDRequired):
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 		case errors.Is(err, billing.ErrOrderNotFound), errors.Is(err, billing.ErrOrderForbidden):

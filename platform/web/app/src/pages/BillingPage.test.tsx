@@ -248,18 +248,21 @@ describe('billing page', () => {
           status: 200,
           json: async () => ({
             data: {
-              id: 11,
-              status: 'paid',
-              currency: 'usd',
-              amount_total: 500,
-              pack_code: 'external-100',
-              pack_name: 'External 100',
-              pack_kind: 'external_generation',
-              quota_amount: 100,
-              target_api_key_id: 7,
-              stripe_checkout_session_id: 'cs_test_123',
-              stripe_payment_intent_id: 'pi_test_123',
-              created_at: '2026-04-03T00:00:00Z',
+              order: {
+                id: 11,
+                status: 'paid',
+                currency: 'usd',
+                amount_total: 500,
+                pack_code: 'external-100',
+                pack_name: 'External 100',
+                pack_kind: 'external_generation',
+                quota_amount: 100,
+                target_api_key_id: 7,
+                stripe_checkout_session_id: 'cs_test_123',
+                stripe_payment_intent_id: 'pi_test_123',
+                created_at: '2026-04-03T00:00:00Z',
+              },
+              awaiting_confirmation: false,
             },
           }),
         }
@@ -276,6 +279,67 @@ describe('billing page', () => {
       }))
     })
     expect(await screen.findByText('pi_test_123')).toBeInTheDocument()
+  })
+
+  it('shows the payment-still-confirming alert when reconcile returns awaiting_confirmation', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/orders') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 22,
+              status: 'pending',
+              currency: 'usd',
+              amount_total: 100,
+              pack_code: 'hosted-100',
+              pack_name: 'Hosted 100',
+              pack_kind: 'hosted_credits',
+              quota_amount: 0,
+              credit_amount: 100,
+              stripe_checkout_session_id: 'cs_live_pending_xyz',
+              created_at: '2026-05-24T00:00:00Z',
+            }],
+          }),
+        }
+      }
+      if (url === '/api/app/orders/reconcile') {
+        expect(init?.method).toBe('POST')
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              order: {
+                id: 22,
+                status: 'pending',
+                currency: 'usd',
+                amount_total: 100,
+                pack_code: 'hosted-100',
+                pack_name: 'Hosted 100',
+                pack_kind: 'hosted_credits',
+                quota_amount: 0,
+                credit_amount: 100,
+                stripe_checkout_session_id: 'cs_live_pending_xyz',
+                created_at: '2026-05-24T00:00:00Z',
+              },
+              awaiting_confirmation: true,
+            },
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage('/billing?status=success&session_id=cs_live_pending_xyz')
+
+    expect(await screen.findByText('Payment still confirming')).toBeInTheDocument()
   })
 
   it('auto-starts checkout when ?pack=hosted-300&autostart=1 and pack matches', async () => {

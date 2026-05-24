@@ -690,3 +690,89 @@ func TestHandleWebhookAndReconcileRemainIdempotent(t *testing.T) {
 	require.Equal(t, 105, *store.apiKeys[7].QuotaTotal)
 	require.Equal(t, 1, store.createdAuditCount)
 }
+
+func TestPricingDedupesByCodeWithConfigWinningOverStaleDBPack(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		hostedPacks: []model.HostedCreditPack{
+			{ID: 1, Code: "hosted-100", Name: "Hosted 100 (stale)", Currency: "usd", AmountTotal: 500, CreditAmount: 100, Enabled: true},
+			{ID: 2, Code: "hosted-2500", Name: "Hosted 2500", Currency: "usd", AmountTotal: 19900, CreditAmount: 2500, Enabled: true},
+		},
+	}
+	svc := NewService(store, &fakeGateway{}, []model.PricingPack{
+		{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)},
+		{Code: "hosted-300", Name: "Hosted 300", Currency: "usd", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
+	})
+
+	packs := svc.Pricing()
+
+	require.Len(t, packs, 3)
+	byCode := map[string]model.PricingPack{}
+	for _, p := range packs {
+		byCode[p.Code] = p
+	}
+	require.Equal(t, int64(100), byCode["hosted-100"].AmountTotal, "config-defined hosted-100 ($1) must override stale DB row ($5)")
+	require.Equal(t, "Hosted 100", byCode["hosted-100"].Name)
+	require.Equal(t, int64(2900), byCode["hosted-300"].AmountTotal)
+	require.Equal(t, int64(19900), byCode["hosted-2500"].AmountTotal, "admin-added pack with no config equivalent must still surface")
+}
+
+func TestCreateCheckoutSnapshotsConfigPriceWhenStaleDBPackShadowsCode(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{
+		hostedPacks: []model.HostedCreditPack{
+			{ID: 1, Code: "hosted-100", Name: "Hosted 100 (stale)", Currency: "usd", AmountTotal: 500, CreditAmount: 100, Enabled: true},
+		},
+	}
+	gateway := &fakeGateway{}
+	svc := NewService(store, gateway, []model.PricingPack{
+		{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)},
+	})
+
+	order, checkoutURL, err := svc.CreateCheckout(context.Background(), CheckoutRequest{UserID: 42, PackCode: "hosted-100"})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NotEmpty(t, checkoutURL)
+	require.Equal(t, int64(100), order.AmountTotal, "checkout must use config $1 price, not stale DB $5 price")
+	require.Equal(t, 100, order.CreditAmount)
+	require.Equal(t, "Hosted 100", order.PackName)
+}
+
+func TestReconcileCheckoutSessionLeavesOrderPendingWhenStripePaymentNotConfirmed(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_unpaid_xyz"
+	store := &fakeStore{
+		orders: []*model.Order{{
+			ID:                      77,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "hosted-100",
+			PackName:                "Hosted 100",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             100,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		checkoutSession: &CheckoutSessionDetails{
+			ID:            sessionID,
+			PaymentStatus: "unpaid",
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	order, err := svc.ReconcileCheckoutSession(context.Background(), ReconcileOrderRequest{
+		UserID:            42,
+		CheckoutSessionID: sessionID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.Equal(t, model.OrderStatusPending, order.Status, "order must remain pending so the route can return awaiting_confirmation=true")
+	require.Equal(t, 0, store.finalizePaymentCalls)
+}
