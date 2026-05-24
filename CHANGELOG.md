@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.85 - 2026-05-24
+
+### Fixed
+
+- Webhook audit gap: `billing.Service.HandleWebhook` now records an `ignored` billing event when a `checkout.session.completed` delivery lands on an order that was already paid (e.g., reconcile beat the webhook). Previously `FinalizeOrderPayment` rolled back the transaction on `order.Status != pending` and the route returned 200 silently with no row in `billing_events`, so a resent webhook (visible at 200 in Stripe Dashboard) looked like nothing happened from the admin side. Now every accepted webhook event lands an idempotent row tagged `ignored` so the audit trail matches Stripe's delivery log.
+
 ## 0.2.84 - 2026-05-24
 
 ### Fixed

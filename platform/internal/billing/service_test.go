@@ -776,3 +776,43 @@ func TestReconcileCheckoutSessionLeavesOrderPendingWhenStripePaymentNotConfirmed
 	require.Equal(t, model.OrderStatusPending, order.Status, "order must remain pending so the route can return awaiting_confirmation=true")
 	require.Equal(t, 0, store.finalizePaymentCalls)
 }
+
+func TestHandleWebhookRecordsIgnoredEventWhenOrderAlreadyPaid(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_already_paid_xyz"
+	paidIntent := "pi_already_paid_123"
+	store := &fakeStore{
+		orders: []*model.Order{{
+			ID:                      55,
+			UserID:                  42,
+			Status:                  model.OrderStatusPaid,
+			PackCode:                "hosted-100",
+			PackName:                "Hosted 100",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             100,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+			StripePaymentIntentID:   &paidIntent,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_double_delivery_456",
+			Type:              "checkout.session.completed",
+			CheckoutSessionID: sessionID,
+			PaymentIntentID:   paidIntent,
+			RawPayload:        `{"id":"evt_double_delivery_456"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Contains(t, store.billingEvents, "evt_double_delivery_456", "webhook event must be recorded even when order was already paid")
+	recorded := store.billingEvents["evt_double_delivery_456"]
+	require.Equal(t, model.BillingEventStatusIgnored, recorded.Status)
+	require.NotNil(t, recorded.OrderID)
+	require.Equal(t, uint64(55), *recorded.OrderID)
+	require.NotNil(t, recorded.ProcessedAt)
+}

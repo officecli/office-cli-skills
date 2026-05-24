@@ -255,8 +255,18 @@ func (s *Service) HandleWebhook(ctx context.Context, payload []byte, signature s
 			_ = s.store.CreateBillingEvent(ctx, billEvent)
 			return fmt.Errorf("%s", msg)
 		}
-		_, _, err = s.finalizePaidOrder(ctx, order, billEvent, event.PaymentIntentID, event.CustomerID)
-		return err
+		_, transitioned, err := s.finalizePaidOrder(ctx, order, billEvent, event.PaymentIntentID, event.CustomerID)
+		if err != nil {
+			return err
+		}
+		if transitioned {
+			return nil
+		}
+		billEvent.Status = model.BillingEventStatusIgnored
+		billEvent.OrderID = &order.ID
+		processedAt := time.Now().UTC()
+		billEvent.ProcessedAt = &processedAt
+		return s.store.CreateBillingEvent(ctx, billEvent)
 	case "payment_intent.payment_failed":
 		order, _ := s.store.GetOrderByCheckoutSessionID(ctx, event.CheckoutSessionID)
 		if order != nil {
