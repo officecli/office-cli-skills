@@ -45,6 +45,7 @@ type Config struct {
 	GitHubClientSecret           string
 	GitHubRedirectURL            string
 	AppGitHubAllowlist           []string
+	SiteCORSAllowedOrigins       []string
 	OAuth2ClientID               string
 	OAuth2ClientSecret           string
 	OAuth2AuthURL                string
@@ -145,6 +146,7 @@ func LoadConfig() (Config, error) {
 		GitHubClientSecret:           os.Getenv("GITHUB_CLIENT_SECRET"),
 		GitHubRedirectURL:            mustEnvDefault("GITHUB_REDIRECT_URL", "https://platform.officecli.io/api/auth/github/callback"),
 		AppGitHubAllowlist:           parseCSVList(os.Getenv("APP_GITHUB_ALLOWLIST")),
+		SiteCORSAllowedOrigins:       parseCSVList(os.Getenv("SITE_CORS_ALLOWED_ORIGINS")),
 		OAuth2ClientID:               os.Getenv("OAUTH2_CLIENT_ID"),
 		OAuth2ClientSecret:           os.Getenv("OAUTH2_CLIENT_SECRET"),
 		OAuth2AuthURL:                os.Getenv("OAUTH2_AUTH_URL"),
@@ -300,9 +302,9 @@ func defaultPricingPacks(unitPriceCents int64, external500PriceRatio string) ([]
 
 func hostedPricingPacks() []model.PricingPack {
 	return []model.PricingPack{
-		{Code: "hosted-100", Name: "Hosted 100", Description: "100 hosted credits to try the platform-managed LLM runtime for one dollar.", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)},
-		{Code: "hosted-300", Name: "Hosted 300", Description: "300 hosted credits for low-volume runs on the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 2900, CreditAmount: 300, PackKind: string(model.PackKindHostedCredits)},
-		{Code: "hosted-1200", Name: "Hosted 1200", Description: "1200 hosted credits for teams that want the platform-managed LLM runtime.", Currency: "usd", AmountTotal: 9900, CreditAmount: 1200, PackKind: string(model.PackKindHostedCredits)},
+		{Code: "hosted-100", Name: "Hosted 100", Description: "100 hosted credits for $1 — try the platform-managed runtime.", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)},
+		{Code: "hosted-500", Name: "Hosted 500", Description: "500 hosted credits for $5 — recurring individual usage.", Currency: "usd", AmountTotal: 500, CreditAmount: 500, PackKind: string(model.PackKindHostedCredits)},
+		{Code: "hosted-2000", Name: "Hosted 2000", Description: "2000 hosted credits for $19 — best value for teams.", Currency: "usd", AmountTotal: 1900, CreditAmount: 2000, PackKind: string(model.PackKindHostedCredits)},
 	}
 }
 

@@ -707,7 +707,7 @@ func TestPricingDedupesByCodeWithConfigWinningOverStaleDBPack(t *testing.T) {
 
 	packs := svc.Pricing()
 
-	require.Len(t, packs, 3)
+	require.Len(t, packs, 2, "DB-only pack hosted-2500 must be filtered out by config whitelist")
 	byCode := map[string]model.PricingPack{}
 	for _, p := range packs {
 		byCode[p.Code] = p
@@ -715,7 +715,8 @@ func TestPricingDedupesByCodeWithConfigWinningOverStaleDBPack(t *testing.T) {
 	require.Equal(t, int64(100), byCode["hosted-100"].AmountTotal, "config-defined hosted-100 ($1) must override stale DB row ($5)")
 	require.Equal(t, "Hosted 100", byCode["hosted-100"].Name)
 	require.Equal(t, int64(2900), byCode["hosted-300"].AmountTotal)
-	require.Equal(t, int64(19900), byCode["hosted-2500"].AmountTotal, "admin-added pack with no config equivalent must still surface")
+	_, has2500 := byCode["hosted-2500"]
+	require.False(t, has2500, "DB-only pack not in config whitelist must not appear")
 }
 
 func TestCreateCheckoutSnapshotsConfigPriceWhenStaleDBPackShadowsCode(t *testing.T) {

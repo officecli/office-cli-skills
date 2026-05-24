@@ -106,9 +106,12 @@ func NewService(store Store, gateway Gateway, packs []model.PricingPack) *Servic
 func (s *Service) Pricing() []model.PricingPack {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	hostedWhitelist := make(map[string]struct{})
 	byCode := make(map[string]model.PricingPack, len(s.packs))
 	for _, pack := range s.packs {
 		if pack.PackKind == string(model.PackKindHostedCredits) {
+			hostedWhitelist[pack.Code] = struct{}{}
 			byCode[pack.Code] = pack
 		}
 	}
@@ -116,6 +119,9 @@ func (s *Service) Pricing() []model.PricingPack {
 		if hostedPacks, err := s.store.ListHostedCreditPacks(context.Background(), true); err == nil {
 			for _, pack := range hostedPacks {
 				if _, exists := byCode[pack.Code]; exists {
+					continue
+				}
+				if _, allowed := hostedWhitelist[pack.Code]; !allowed {
 					continue
 				}
 				byCode[pack.Code] = pack.PricingPack()

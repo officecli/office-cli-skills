@@ -107,7 +107,7 @@ export default function BillingPage() {
             <div className="info-eyebrow text-tertiary">Billing flow</div>
             <ol className="mt-4 space-y-3 text-sm text-outline">
               <li>1. Pick a hosted credits pack below.</li>
-              <li>2. Continue to Stripe Checkout.</li>
+              <li>2. Confirm payment on Stripe (cards, Apple Pay, Google Pay).</li>
               <li>3. Return to Billing and let the workspace reconcile payment status.</li>
             </ol>
           </div>
@@ -137,7 +137,7 @@ export default function BillingPage() {
                     checkout.mutate({ packCode: pack.code })
                   }}
                 >
-                  Continue to Stripe Checkout
+                  Buy {pack.credit_amount ?? 0} credits
                 </Button>
               </div>
             ))}

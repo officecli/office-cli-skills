@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.88 - 2026-05-24
+
+### Changed
+
+- Hosted credits 套餐重定档：`hosted-100` ($1 / 100 credits)、`hosted-500` ($5 / 500 credits)、`hosted-2000` ($19 / 2000 credits)，替代旧的 hosted-100/300/1200 ($1/$29/$99)。`billing.Service.Pricing()` 对 hosted_credits 加 code 白名单，DB 里残留的旧 pack 不再返给前端；migration 022 把残留旧 pack 的 `enabled` 翻为 0 让 admin UI 与目录一致。
+- 营销站 `/pricing`：按钮原来 popular badge 与 best-value badge 同位重叠、卡片按钮高度不对齐；现在合并/移位 badge、用 `flex flex-col flex-1` wrapper 让三张卡按钮基线对齐，文案改为动态 `Buy {credit_amount} credits`。点击按钮新走跨域 auth-aware 流程：`fetch ${platformBaseURL}/api/auth/me` → 200 直接 `POST /api/app/checkout` 拿 `checkout_url` 跳转 Stripe；401 跳 `${platformBaseURL}/api/auth/oauth2/login?return_to=/app/billing?pack=…&autostart=1`，登录回来由 BillingPage 现有 autostart 兜底；网络/CORS 异常 fallback 到旧链接 `${platformBillingURL}?pack=…&autostart=1`。`motion.a` 保留 `href` 以兼容右键打开新窗口。
+- App `/app/billing`：按钮文案与 site 同步为 `Buy {credit_amount} credits`，"Billing flow" 步骤 2 文案对齐到新叙事；checkout/autostart/reconcile 逻辑保持不变。
+- 新增 `siteCORSMiddleware` (`platform/internal/app/cors.go`)，跨子域允许 `officecli.io` / `www.officecli.io` 携 cookie 访问 `/api/auth/me` 和 `/api/app/checkout` 两条路径（其它 `/api/*` 路径不受影响、OPTIONS 不会被短路）。允许 origin 列表可通过 `SITE_CORS_ALLOWED_ORIGINS` 环境变量覆盖；未设置时 production 默认 `https://officecli.io` + `https://www.officecli.io`，非 production 额外允许 `http://localhost:5173/4173`。
+
+### Removed
+
+- `registerOfficeSDKProxy` 不再使用已弃用的 `httputil.ReverseProxy.Director`；改为直接构造 `&httputil.ReverseProxy{Rewrite: …, ModifyResponse: …}`，行为等价。
+
 ## 0.2.87 - 2026-05-24
 
 ### Fixed

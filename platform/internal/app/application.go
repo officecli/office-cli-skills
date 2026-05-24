@@ -287,6 +287,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	r.Use(gin.Recovery())
 	r.GET("/healthz", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, gin.H{"status": "ok"}) })
 	api := r.Group("/api")
+	api.Use(siteCORSMiddleware(cfg))
 
 	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
 	registerHostedLLMRoutes(api, hostedSvc)
@@ -1671,24 +1672,24 @@ func registerOfficeSDKProxy(router *gin.Engine, cfg Config) {
 	if err != nil {
 		return
 	}
-	proxy := httputil.NewSingleHostReverseProxy(parsed)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		publicHost := forwardedRequestHost(req)
-		publicProto := forwardedRequestProto(req)
-		originalDirector(req)
-		if publicHost != "" {
-			req.Host = publicHost
-			req.Header.Set("X-Forwarded-Host", publicHost)
-		}
-		if publicProto != "" {
-			req.Header.Set("X-Forwarded-Proto", publicProto)
-			req.Header.Set("X-Forwarded-Port", forwardedRequestPort(publicHost, publicProto))
-		}
-	}
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		rewriteOfficeSDKProxyLocation(resp)
-		return nil
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			publicHost := forwardedRequestHost(pr.In)
+			publicProto := forwardedRequestProto(pr.In)
+			pr.SetURL(parsed)
+			if publicHost != "" {
+				pr.Out.Host = publicHost
+				pr.Out.Header.Set("X-Forwarded-Host", publicHost)
+			}
+			if publicProto != "" {
+				pr.Out.Header.Set("X-Forwarded-Proto", publicProto)
+				pr.Out.Header.Set("X-Forwarded-Port", forwardedRequestPort(publicHost, publicProto))
+			}
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			rewriteOfficeSDKProxyLocation(resp)
+			return nil
+		},
 	}
 	router.Any("/sdk/turbo-ai/*path", func(c *gin.Context) {
 		proxy.ServeHTTP(c.Writer, c.Request)
