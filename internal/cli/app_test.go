@@ -3661,6 +3661,57 @@ func TestAppRun_WhoamiShowsLoggedInSession(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer ocli_sess_account" {
 			t.Fatalf("authorization = %q", got)
 		}
+		_, _ = fmt.Fprintf(w, `{"data":{"authenticated":true,"user_id":42,"user_email":"alice@example.com","token_prefix":"ocli_sess","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
+	}))
+	defer server.Close()
+
+	_, err := WriteConfig("", Config{
+		License: LicenseConfig{
+			BaseURL:            server.URL,
+			UserID:             42,
+			SessionToken:       "ocli_sess_account",
+			SessionTokenPrefix: "ocli_sess",
+			SessionExpiresAt:   &expiresAt,
+			Enabled:            true,
+			TimeoutSec:         60,
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	if err := app.Run(t.Context(), []string{"whoami"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	for _, needle := range []string{"Mode: logged in", "User ID: 42", "Email: alice@example.com", "Session: ocli_sess"} {
+		if !strings.Contains(output, needle) {
+			t.Fatalf("stdout missing %q: %s", needle, output)
+		}
+	}
+	if idx := strings.Index(output, "User ID:"); idx < 0 || !strings.Contains(output[idx:], "Email: alice@example.com") {
+		t.Fatalf("Email: line must follow User ID: line, got: %s", output)
+	}
+	if emailIdx, sessionIdx := strings.Index(output, "Email:"), strings.Index(output, "Session:"); emailIdx < 0 || sessionIdx < 0 || emailIdx > sessionIdx {
+		t.Fatalf("Email: must appear before Session:, got: %s", output)
+	}
+}
+
+func TestAppRun_WhoamiOmitsEmailWhenMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+
+	expiresAt := time.Now().Add(180 * 24 * time.Hour).UTC().Truncate(time.Second)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/cli/session" {
+			http.NotFound(w, r)
+			return
+		}
 		_, _ = fmt.Fprintf(w, `{"data":{"authenticated":true,"user_id":42,"token_prefix":"ocli_sess","expires_at":%q}}`, expiresAt.Format(time.RFC3339))
 	}))
 	defer server.Close()
@@ -3692,6 +3743,9 @@ func TestAppRun_WhoamiShowsLoggedInSession(t *testing.T) {
 		if !strings.Contains(output, needle) {
 			t.Fatalf("stdout missing %q: %s", needle, output)
 		}
+	}
+	if strings.Contains(output, "Email:") {
+		t.Fatalf("expected no Email: line when user has no email, got: %s", output)
 	}
 }
 

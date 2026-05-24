@@ -214,6 +214,89 @@ func TestDeviceLoginFlowCreatesSessionWithoutLocalRedirect(t *testing.T) {
 	}
 }
 
+func TestSessionResponseIncludesUserEmail(t *testing.T) {
+	store := newFakeStore()
+	store.users[42] = &model.User{ID: 42, Email: "dev@example.com"}
+	svc := NewService(store, "https://platform.example.com")
+
+	verifier := "test-verifier"
+	start, err := svc.Start(context.Background(), StartRequest{
+		CodeChallenge:       expectedS256(verifier),
+		CodeChallengeMethod: "S256",
+		RedirectURI:         "http://127.0.0.1:12345/callback",
+		State:               "state",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, code, err := svc.Complete(context.Background(), start.ChallengeID, 42)
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	exchange, err := svc.Exchange(context.Background(), ExchangeRequest{
+		ChallengeID:  start.ChallengeID,
+		Code:         code,
+		CodeVerifier: verifier,
+	})
+	if err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+
+	resp, err := svc.Session(context.Background(), exchange.Token)
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	if !resp.Authenticated {
+		t.Fatalf("Authenticated = false")
+	}
+	if resp.UserID != 42 {
+		t.Fatalf("UserID = %d", resp.UserID)
+	}
+	if resp.UserEmail != "dev@example.com" {
+		t.Fatalf("UserEmail = %q", resp.UserEmail)
+	}
+}
+
+func TestSessionResponseOmitsEmailWhenMissing(t *testing.T) {
+	store := newFakeStore()
+	store.users[42] = &model.User{ID: 42, Email: ""}
+	svc := NewService(store, "https://platform.example.com")
+
+	verifier := "test-verifier"
+	start, err := svc.Start(context.Background(), StartRequest{
+		CodeChallenge:       expectedS256(verifier),
+		CodeChallengeMethod: "S256",
+		RedirectURI:         "http://127.0.0.1:12345/callback",
+		State:               "state",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, code, err := svc.Complete(context.Background(), start.ChallengeID, 42)
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	exchange, err := svc.Exchange(context.Background(), ExchangeRequest{
+		ChallengeID:  start.ChallengeID,
+		Code:         code,
+		CodeVerifier: verifier,
+	})
+	if err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+
+	resp, err := svc.Session(context.Background(), exchange.Token)
+	if err != nil {
+		t.Fatalf("Session: %v", err)
+	}
+	if !resp.Authenticated {
+		t.Fatalf("Authenticated = false")
+	}
+	if resp.UserEmail != "" {
+		t.Fatalf("expected empty UserEmail, got %q", resp.UserEmail)
+	}
+}
+
 func TestCallbackLoginFlowUsesProviderNeutralOAuth2Route(t *testing.T) {
 	store := newFakeStore()
 	svc := NewService(store, "https://platform.example.com")

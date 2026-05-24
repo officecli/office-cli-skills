@@ -1254,6 +1254,7 @@ type cliLoginExchangeResponse struct {
 type cliSessionResponse struct {
 	Authenticated bool       `json:"authenticated"`
 	UserID        uint64     `json:"user_id,omitempty"`
+	UserEmail     string     `json:"user_email,omitempty"`
 	TokenPrefix   string     `json:"token_prefix,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
@@ -1394,7 +1395,15 @@ func (a *App) runWhoami(ctx context.Context, cfg Config) error {
 		var session cliSessionResponse
 		err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodGet, "/api/cli/session", nil, cfg.License.SessionToken, &session)
 		if err == nil && session.Authenticated {
-			if _, err := fmt.Fprintf(a.Stdout, "Mode: logged in\nUser ID: %d\nSession: %s\n", session.UserID, session.TokenPrefix); err != nil {
+			if _, err := fmt.Fprintf(a.Stdout, "Mode: logged in\nUser ID: %d\n", session.UserID); err != nil {
+				return err
+			}
+			if email := strings.TrimSpace(session.UserEmail); email != "" {
+				if _, err := fmt.Fprintf(a.Stdout, "Email: %s\n", email); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintf(a.Stdout, "Session: %s\n", session.TokenPrefix); err != nil {
 				return err
 			}
 			if session.ExpiresAt != nil {

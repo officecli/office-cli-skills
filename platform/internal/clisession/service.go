@@ -85,6 +85,7 @@ type ExchangeResponse struct {
 type SessionResponse struct {
 	Authenticated bool       `json:"authenticated"`
 	UserID        uint64     `json:"user_id,omitempty"`
+	UserEmail     string     `json:"user_email,omitempty"`
 	TokenPrefix   string     `json:"token_prefix,omitempty"`
 	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
 }
@@ -267,7 +268,11 @@ func (s *Service) Session(ctx context.Context, token string) (*SessionResponse, 
 	if err != nil {
 		return &SessionResponse{Authenticated: false}, nil
 	}
-	return &SessionResponse{Authenticated: true, UserID: session.UserID, TokenPrefix: session.TokenPrefix, ExpiresAt: &session.ExpiresAt}, nil
+	userEmail := ""
+	if user, err := s.store.GetUserByID(ctx, session.UserID); err == nil && user != nil {
+		userEmail = strings.TrimSpace(user.Email)
+	}
+	return &SessionResponse{Authenticated: true, UserID: session.UserID, UserEmail: userEmail, TokenPrefix: session.TokenPrefix, ExpiresAt: &session.ExpiresAt}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {

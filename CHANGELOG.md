@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.92 - 2026-05-24
+
+### Added
+
+- `officecli whoami` 在 `logged_in` 模式下新增一行 `Email: <user-email>`，紧跟在 `User ID:` 之后、`Session:` 之前，方便 OfficeDex 桌面端「设置 / 账户」页用 `(?i)email:\s*(\S+)` 正则解析展示当前登录邮箱。Platform `/api/cli/session` 响应同步新增 `user_email` 字段（`SessionResponse.UserEmail`），由 `clisession.Service.Session` 通过 `GetUserByID` 取出 `model.User.Email` 后回填；用户未绑定邮箱时该字段为空，CLI 同时省略 `Email:` 行（不输出空值）。`anonymous` / `api_key` 模式输出维持原状。新增覆盖四种场景的单测：logged_in 带 email、logged_in 无 email、anonymous、api_key。
+
 ## 0.2.91 - 2026-05-24
 
 ### Added
