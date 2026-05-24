@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.93 - 2026-05-24
+
+### Added
+
+- Hosted credits: 新增 charge-only 单阶段扣费路径（Reserve→Settle/Release 三阶段的替代方案），由 `HOSTED_CHARGE_ONLY_MODE` env 控制灰度（默认 `disabled`，可选 `fingerprint` / `user` / `all`）。Store 层新增 9 个对称函数：`ChargeHostedCreditsByUser` / `ChargeHostedCreditsByFingerprint` / `ChargeAPIKeyCredits`、`WriteChargeFailedLedgerFor{User,Fingerprint,APIKey}`、`PrecheckHostedCredits{ByUser,ByFingerprint,APIKey}`。Charge 路径在事务内 `SELECT FOR UPDATE` 做余额准入 + 单行 ledger 写入，幂等键 `charge:{requestID}`，并修复了 settle 行 `usage_event_id` 全为 NULL 的审计断链（每笔 charge 行强制关联 usage_event_id）。新增 `HOSTED_RECONCILE_ENABLED` env 控制上游 200+解码失败场景下是否写 `charge_failed_post_upstream` 兜底 ledger。
+- Cutover 一次性工具 `platform/cmd/cutover-reserved`：将三张账户表的 `credit_reserved` 字段清零并写入 `reserved_cutover` 审计 ledger，安全门为 `OFFICECLI_ALLOW_CUTOVER=1`，默认 dry-run、`--commit` 才落库。
+- Admin /credit-ledger 页面：新增 ledger 浏览视图，含「显示历史 reserve 记录」开关；用户/管理员 billing list API 新增 `include_zero_delta` 参数，默认 `false` 过滤 `credit_delta=0` 的 reserve/release/settle 噪声行。
+
+### Changed
+
+- 新增的 charge-only 路径在 ADR Trade-off 1 下显式承认 ≤ max(chat, image) credits 的单次透支边界（当前约 6 credits），跨副本严格并发准入交由 DB 行锁实现，**显式不引入** sync.Map 或 Redis；plan 与实现细节见 `.omc/plans/2026-05-24-remove-credit-reserve-v2.md`。本版本所有行为 flag-gated default off，零行为变更基线。
+
 ## 0.2.92 - 2026-05-24
 
 ### Added
