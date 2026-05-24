@@ -20,6 +20,8 @@ export default function BillingPage() {
     queryFn: api.orders,
     refetchInterval: (query) => query.state.data?.some((item) => item.status === 'pending') ? pendingPollInterval : false,
   })
+  const { data: overview } = useQuery({ queryKey: ['app-overview'], queryFn: api.overview })
+  const hostedCreditBalance = overview?.hosted_credit_balance ?? 0
   const pricing = useMemo(() => pricingRaw.filter((pack) => pack.pack_kind === 'hosted_credits'), [pricingRaw])
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const checkoutSessionID = searchParams.get('session_id')?.trim() ?? ''
@@ -39,6 +41,7 @@ export default function BillingPage() {
     mutationFn: ({ sessionID }: { sessionID: string }) => api.reconcileOrder({ checkout_session_id: sessionID }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['app-orders'] })
+      await queryClient.invalidateQueries({ queryKey: ['app-overview'] })
     },
   })
 
@@ -49,6 +52,11 @@ export default function BillingPage() {
     ? `${reconcile.error.message}${reconcile.error.requestId ? ` (request_id: ${reconcile.error.requestId})` : ''}`
     : reconcile.error?.message
   const reconcileAwaitingConfirmation = reconcile.data?.awaiting_confirmation === true
+  const reconciledOrder = reconcile.data?.order ?? null
+  const reconciledOrderPaid = reconciledOrder !== null && reconciledOrder.status === 'paid' && !reconcileAwaitingConfirmation
+  const reconciledCreditsAdded = reconciledOrderPaid && reconciledOrder.pack_kind === 'hosted_credits'
+    ? reconciledOrder.credit_amount ?? 0
+    : 0
 
   useEffect(() => {
     if (!shouldAttemptReconcile || reconciledSessionID === checkoutSessionID) {
@@ -86,9 +94,10 @@ export default function BillingPage() {
         <SectionHeading eyebrow="Secure checkout" title="Buy account hosted credits" body="External Mode is free and unlimited. Checkout adds hosted credits to your signed-in account, and all CLI sessions or API keys on that account share the same balance." />
         <div className="billing-shell mb-6">
           <div className="app-card-muted p-5">
-            <div className="info-eyebrow text-primary">Target destination</div>
-            <div className="mt-4 text-sm text-outline">
-              Credits are added to your account balance. `officecli login` sessions and `officecli set-key` API key mode consume the same account hosted credits.
+            <div className="info-eyebrow text-primary">Hosted credit balance</div>
+            <div className="mt-3 text-4xl font-bold text-white">{hostedCreditBalance.toLocaleString('en-US')}</div>
+            <div className="mt-2 text-sm text-outline">
+              Credits are pooled at the account level. `officecli login` sessions and `officecli set-key` API key mode draw from the same balance.
             </div>
             <div className="mt-3 text-xs text-outline">
               Usage rate: each AI image generation deducts 10 credits (~$0.10).
@@ -142,6 +151,17 @@ export default function BillingPage() {
         <SectionHeading eyebrow="Order trail" title="Recent billing activity" body="Every completed, pending, or failed pack purchase remains visible here for reconciliation." />
         {reconcile.isPending ? (
           <Alert className="mb-4" type="info" showIcon title="Syncing payment status" description="Payment returned from Stripe. Syncing the latest checkout status into this workspace now." />
+        ) : null}
+        {reconciledOrderPaid ? (
+          <Alert
+            className="mb-4"
+            type="success"
+            showIcon
+            title={`Payment received — order #${reconciledOrder!.id} paid`}
+            description={reconciledCreditsAdded > 0
+              ? `${reconciledCreditsAdded.toLocaleString('en-US')} hosted credits have been added to your account balance.`
+              : `Pack "${reconciledOrder!.pack_name}" is now active on your account.`}
+          />
         ) : null}
         {reconcileAwaitingConfirmation ? (
           <Alert

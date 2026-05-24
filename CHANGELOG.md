@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.86 - 2026-05-24
+
+### Changed
+
+- App `BillingPage` now confirms successful checkout returns: when reconcile finalizes a paid hosted-credits order, a green success alert reads `Payment received — order #N paid` with the credit count added to the account, and the page also surfaces the current hosted credit balance prominently in the "Hosted credit balance" card (fetched from `/api/app/overview`, invalidated together with orders on reconcile). Previously a user returning from Stripe saw no top-of-page indication that payment succeeded — only the orders list at the bottom reflected the transition, which felt like nothing happened.
+
 ## 0.2.85 - 2026-05-24
 
 ### Fixed

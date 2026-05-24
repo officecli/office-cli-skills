@@ -426,4 +426,52 @@ describe('billing page', () => {
     const checkoutCalls = fetchMock.mock.calls.filter((call: unknown[]) => call[0] === '/api/app/checkout')
     expect(checkoutCalls).toHaveLength(0)
   })
+
+  it('renders hosted credit balance from overview and a success alert when reconcile finalizes a paid hosted-credits order', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/pricing') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/overview') {
+        return { ok: true, status: 200, json: async () => ({ data: { api_key_count: 1, total_remaining: 0, hosted_credit_balance: 1100244, signup_credit_bonus: 100, reward_remaining: 0, invite_code: 'x', invite_limit: 0, invite_remaining: 0, reward_per_invite: 0, referral_count: 0, activated_referral_count: 0, discord_connected: false, discord_guild_member: false, recent_usage_count: 0, recent_orders_count: 4, pricing: [] } }) }
+      }
+      if (url === '/api/app/orders') {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/app/orders/reconcile') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              order: {
+                id: 19,
+                status: 'paid',
+                currency: 'usd',
+                amount_total: 100,
+                pack_code: 'hosted-100',
+                pack_name: 'Hosted 100',
+                pack_kind: 'hosted_credits',
+                quota_amount: 0,
+                credit_amount: 100,
+                stripe_checkout_session_id: 'cs_live_a1OF4f',
+                stripe_payment_intent_id: 'pi_3TaSFn086Uy792wD0BVr1Zoz',
+                created_at: '2026-05-24T02:58:42Z',
+              },
+              awaiting_confirmation: false,
+            },
+          }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage('/billing?status=success&session_id=cs_live_a1OF4f')
+
+    expect(await screen.findByText('1,100,244')).toBeInTheDocument()
+    expect(await screen.findByText(/Payment received — order #19 paid/)).toBeInTheDocument()
+    expect(await screen.findByText(/100 hosted credits have been added/)).toBeInTheDocument()
+  })
 })
