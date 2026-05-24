@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.89 - 2026-05-24
+
+### Fixed
+
+- App `/app/redeem`：Code 输入框之前在 `onChange` 强行 `toUpperCase()`，导致用户无法输入小写字符（即使粘贴小写也立刻被覆盖成大写）。后端 `redemption/service.go` 本来就用 `strings.ToUpper(strings.TrimSpace(code))` 归一化，因此前端不需要再做大小写转换。移除该 `onChange` 让输入框保留用户实际按键。
+
 ## 0.2.88 - 2026-05-24
 
 ### Changed
