@@ -103,7 +103,9 @@ func (g *StripeGateway) ParseWebhook(payload []byte, signature string) (*Webhook
 	if g.webhookSecret == "" {
 		return nil, fmt.Errorf("stripe webhook secret is not configured")
 	}
-	event, err := webhook.ConstructEvent(payload, signature, g.webhookSecret)
+	event, err := webhook.ConstructEventWithOptions(payload, signature, g.webhookSecret, webhook.ConstructEventOptions{
+		IgnoreAPIVersionMismatch: true,
+	})
 	if err != nil {
 		return nil, err
 	}

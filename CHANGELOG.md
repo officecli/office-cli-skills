@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.84 - 2026-05-24
+
+### Fixed
+
+- Stripe webhook 400s due to API version mismatch: `billing.StripeGateway.ParseWebhook` now calls `webhook.ConstructEventWithOptions(..., IgnoreAPIVersionMismatch: true)`. Stripe Dashboard configures webhook endpoints with the current API version (e.g. `2026-03-25.dahlia`) while the embedded `stripe-go v82` SDK ships with `2025-08-27.basil`, causing every `checkout.session.completed` delivery to fail with `Received event with API version 2026-03-25.dahlia, but stripe-go 82.5.1 expects API version 2025-08-27.basil`. Order finalization still worked because the success-URL reconcile path covered it, but webhooks (and the failure / refund events that rely on them) were dropped. The fields we read off the event payload — id, type, data.id, payment_intent, customer, metadata — are stable across these API versions.
+
 ## 0.2.83 - 2026-05-24
 
 ### Fixed
