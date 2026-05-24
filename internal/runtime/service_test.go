@@ -246,7 +246,7 @@ func TestServiceGenerateXLSXWithFakeLLM(t *testing.T) {
 func TestServiceGenerateIMGUsesImageProviderAndRatio(t *testing.T) {
 	imageBytes := []byte("server-image")
 	llm := &fakeLLMClient{
-		imageResult: &engine.ImageGenerationResult{Data: imageBytes, MIME: "image/png", CreditBalance: intPtr(9)},
+		imageResult: &engine.ImageGenerationResult{Data: imageBytes, MIME: "image/png", CreditBalance: intPtr(9), CreditsCharged: intPtr(3)},
 	}
 	service := NewService(llm, nil)
 
@@ -279,6 +279,30 @@ func TestServiceGenerateIMGUsesImageProviderAndRatio(t *testing.T) {
 	}
 	if doc.HostedCreditBalance == nil || *doc.HostedCreditBalance != 9 {
 		t.Fatalf("hosted credit balance = %#v", doc.HostedCreditBalance)
+	}
+	if doc.HostedCreditsCharged == nil || *doc.HostedCreditsCharged != 3 {
+		t.Fatalf("hosted credits charged = %#v", doc.HostedCreditsCharged)
+	}
+}
+
+func TestPPTXBuildOptionsCreditChargedSinkAccumulates(t *testing.T) {
+	called := 0
+	totalCharged := 0
+	sink := func(charged int) {
+		called++
+		totalCharged += charged
+	}
+	opts := PPTXBuildOptions{
+		CreditChargedSink: sink,
+	}
+	opts.CreditChargedSink(4)
+	opts.CreditChargedSink(7)
+	opts.CreditChargedSink(11)
+	if called != 3 {
+		t.Fatalf("expected 3 sink invocations, got %d", called)
+	}
+	if totalCharged != 22 {
+		t.Fatalf("expected accumulated total 22, got %d", totalCharged)
 	}
 }
 
@@ -388,7 +412,7 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 
 func TestServiceRenderPPTXWithoutTextLLMCalls(t *testing.T) {
 	llm := &fakeLLMClient{
-		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png", CreditBalance: intPtr(42), CreditsCharged: intPtr(5)},
 	}
 	service := NewService(llm, nil)
 
@@ -416,6 +440,9 @@ func TestServiceRenderPPTXWithoutTextLLMCalls(t *testing.T) {
 	}
 	if countZipEntries(doc.Bytes, "ppt/media/", ".png") == 0 {
 		t.Fatal("expected embedded ppt media")
+	}
+	if doc.HostedCreditsCharged == nil || *doc.HostedCreditsCharged != 5 {
+		t.Fatalf("hosted credits charged = %#v", doc.HostedCreditsCharged)
 	}
 }
 

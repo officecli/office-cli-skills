@@ -768,6 +768,7 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		Data               string `json:"data"`
 		MIME               string `json:"mime"`
 		CreditBalance      *int   `json:"credit_balance,omitempty"`
+		CreditsCharged     *int   `json:"credits_charged,omitempty"`
 		AccessMode         string `json:"access_mode,omitempty"`
 		Remaining          int    `json:"remaining,omitempty"`
 		RewardRemaining    int    `json:"reward_remaining,omitempty"`
@@ -787,6 +788,7 @@ func (c *internalClient) GenerateImage(ctx context.Context, req engine.ImageGene
 		Data:               data,
 		MIME:               resp.MIME,
 		CreditBalance:      resp.CreditBalance,
+		CreditsCharged:     resp.CreditsCharged,
 		AccessMode:         resp.AccessMode,
 		Remaining:          resp.Remaining,
 		RewardRemaining:    resp.RewardRemaining,

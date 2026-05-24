@@ -106,8 +106,9 @@ type ChatMessage struct {
 }
 
 type CompletionResponse struct {
-	Content       string
-	CreditBalance int
+	Content        string
+	CreditBalance  int
+	CreditsCharged int
 }
 
 type ImageRequest struct {
@@ -136,6 +137,7 @@ type ImageResponse struct {
 	Data               []byte
 	MIME               string
 	CreditBalance      int
+	CreditsCharged     int
 	AccessMode         model.AccessMode
 	Remaining          int
 	RewardRemaining    int
@@ -266,8 +268,9 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 	}
 	s.recordUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
 	return &CompletionResponse{
-		Content:       resp.Choices[0].Message.Content,
-		CreditBalance: creditBalance,
+		Content:        resp.Choices[0].Message.Content,
+		CreditBalance:  creditBalance,
+		CreditsCharged: settled,
 	}, nil
 }
 
@@ -406,9 +409,10 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 	}
 	s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
 	return &ImageResponse{
-		Data:          data,
-		MIME:          "image/png",
-		CreditBalance: creditBalance,
+		Data:           data,
+		MIME:           "image/png",
+		CreditBalance:  creditBalance,
+		CreditsCharged: settled,
 	}, nil
 }
 

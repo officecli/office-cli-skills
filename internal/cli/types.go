@@ -116,6 +116,8 @@ type GenerateResult struct {
 	AllowedModes           []string `json:"allowed_modes,omitempty"`
 	HostedEnabled          bool     `json:"hosted_enabled,omitempty"`
 	CreditBalance          int      `json:"credit_balance,omitempty"`
+	CreditsCharged         int      `json:"credits_charged"`
+	CreditMode             string   `json:"credit_mode,omitempty"`
 	RewardRemaining        int      `json:"reward_remaining,omitempty"`
 	PaidQuotaRemaining     int      `json:"paid_quota_remaining,omitempty"`
 	Remaining              int      `json:"remaining,omitempty"`

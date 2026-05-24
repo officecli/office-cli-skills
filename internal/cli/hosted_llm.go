@@ -109,6 +109,22 @@ func resultRuntimeMode(job GenerateJob, result *LicenseCheckResult) string {
 	return runtimeModeLabel(job.RuntimeMode)
 }
 
+func inferCreditMode(job GenerateJob) string {
+	if job.LicenseCheck != nil && job.LicenseCheck.AccessMode == LicenseAccessModeHosted {
+		if strings.TrimSpace(job.LicenseCheck.CommitToken.FingerprintHash) != "" && job.LicenseCheck.CommitToken.UserID == 0 {
+			return "anonymous"
+		}
+		return "hosted"
+	}
+	if job.RuntimeMode == RuntimeModeHosted {
+		if job.LicenseCheck != nil && job.LicenseCheck.CommitToken.UserID == 0 && strings.TrimSpace(job.LicenseCheck.CommitToken.FingerprintHash) != "" {
+			return "anonymous"
+		}
+		return "hosted"
+	}
+	return "api_key"
+}
+
 func hostedContext(ctx context.Context) context.Context {
 	return ctx
 }

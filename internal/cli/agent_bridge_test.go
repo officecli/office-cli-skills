@@ -1072,3 +1072,120 @@ func TestAgentBridgeReviewTask(t *testing.T) {
 		t.Fatalf("bridge exited with error: %v", err)
 	}
 }
+
+func TestInferCreditModeReturnsExpectedLabels(t *testing.T) {
+	cases := []struct {
+		name string
+		job  GenerateJob
+		want string
+	}{
+		{
+			name: "hosted runtime with authenticated user",
+			job:  GenerateJob{RuntimeMode: RuntimeModeHosted, LicenseCheck: &LicenseCheckResult{AccessMode: LicenseAccessModeHosted, CommitToken: UsageCommitToken{UserID: 42, FingerprintHash: "fp"}}},
+			want: "hosted",
+		},
+		{
+			name: "hosted runtime with anonymous fingerprint only",
+			job:  GenerateJob{RuntimeMode: RuntimeModeHosted, LicenseCheck: &LicenseCheckResult{AccessMode: LicenseAccessModeHosted, CommitToken: UsageCommitToken{FingerprintHash: "fp-anon"}}},
+			want: "anonymous",
+		},
+		{
+			name: "external runtime mapped to api_key",
+			job:  GenerateJob{RuntimeMode: RuntimeModeExternal, LicenseCheck: &LicenseCheckResult{AccessMode: LicenseAccessModePaid, CommitToken: UsageCommitToken{UserID: 7, FingerprintHash: "fp"}}},
+			want: "api_key",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := inferCreditMode(tc.job); got != tc.want {
+				t.Fatalf("inferCreditMode = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFailureEventPayloadIncludesCreditFields(t *testing.T) {
+	payload := failureEventPayload(bridgeErrorPayload{Type: "llm_error", Code: "llm_request_failed", Message: "boom", Retryable: true}, "hosted")
+	if payload["type"] != "llm_error" || payload["code"] != "llm_request_failed" || payload["message"] != "boom" {
+		t.Fatalf("missing classified fields: %#v", payload)
+	}
+	if payload["retryable"] != true {
+		t.Fatalf("retryable not preserved: %#v", payload)
+	}
+	if payload["credits_charged"] != 0 {
+		t.Fatalf("credits_charged = %#v, want 0", payload["credits_charged"])
+	}
+	if payload["credit_mode"] != "hosted" {
+		t.Fatalf("credit_mode = %#v, want hosted", payload["credit_mode"])
+	}
+}
+
+func TestAgentBridgeRenderEmitsCreditFieldsInTaskCompleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
+		t.Fatal("render path should not initialize llm")
+		return nil, nil
+	}
+
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- newAgentBridgeServer(app, Config{
+			Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+			License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+			Publish:  disabledPublishConfig(),
+		}, inR, outW, bytes.NewBuffer(nil)).Serve(ctx)
+	}()
+	outReader := bufio.NewReader(outR)
+
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "task/invoke", "params": map[string]any{
+		"tool":          bridgeToolOfficeRender,
+		"output_format": "json",
+		"args": map[string]any{
+			"document_type": "docx",
+			"topic":         "Quarterly Brief",
+			"payload":       json.RawMessage(`{"title":"Quarterly Brief","sections":[{"heading":"Summary","level":1,"paragraphs":["Delivery-ready content."]}]}`),
+			"output_dir":    tmpDir,
+			"publish":       false,
+		},
+	}})
+
+	var sawCompleted bool
+	var completedParams map[string]any
+	timeout := time.After(3 * time.Second)
+	for !sawCompleted {
+		select {
+		case <-timeout:
+			t.Fatal("timed out waiting for completion event")
+		default:
+		}
+		msg := readRPC(t, outReader)
+		if msg["method"] != "event" {
+			continue
+		}
+		params := msg["params"].(map[string]any)
+		if params["type"] == bridgeEventTaskCompleted {
+			completedParams = params["payload"].(map[string]any)
+			sawCompleted = true
+		}
+	}
+
+	if _, ok := completedParams["credits_charged"]; !ok {
+		t.Fatalf("task.completed missing credits_charged: %#v", completedParams)
+	}
+	if mode, ok := completedParams["credit_mode"].(string); !ok || mode == "" {
+		t.Fatalf("task.completed missing credit_mode string: %#v", completedParams)
+	}
+
+	_ = inW.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("bridge exited with error: %v", err)
+	}
+}

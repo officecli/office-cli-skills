@@ -31,23 +31,25 @@ type GenerateParams struct {
 }
 
 type PPTXBuildOptions struct {
-	ImageQuality      string
-	CreditBalanceSink func(int)
+	ImageQuality       string
+	CreditBalanceSink  func(int)
+	CreditChargedSink  func(int)
 }
 
 type GeneratedArtifact struct {
-	DocumentName        string
-	DocumentType        string
-	Bytes               []byte
-	Warnings            []engine.GenerateIssue
-	Errors              []engine.GenerateIssue
-	PreviewHTML         []byte
-	PreviewJSON         []byte
-	HostedCreditBalance *int
-	AccessMode          string
-	Remaining           int
-	RewardRemaining     int
-	PaidQuotaRemaining  int
+	DocumentName         string
+	DocumentType         string
+	Bytes                []byte
+	Warnings             []engine.GenerateIssue
+	Errors               []engine.GenerateIssue
+	PreviewHTML          []byte
+	PreviewJSON          []byte
+	HostedCreditBalance  *int
+	HostedCreditsCharged *int
+	AccessMode           string
+	Remaining            int
+	RewardRemaining      int
+	PaidQuotaRemaining   int
 }
 
 type Service struct {
@@ -226,15 +228,16 @@ func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target 
 		title = "image"
 	}
 	return &GeneratedArtifact{
-		DocumentName:        fmt.Sprintf("%s%s", generateengine.SanitizeFileName(title), imageExtensionFromMIME(image.MIME)),
-		DocumentType:        string(engine.DocumentTypeIMG),
-		Bytes:               image.Data,
-		Warnings:            convertIssues(meta),
-		HostedCreditBalance: image.CreditBalance,
-		AccessMode:          image.AccessMode,
-		Remaining:           image.Remaining,
-		RewardRemaining:     image.RewardRemaining,
-		PaidQuotaRemaining:  image.PaidQuotaRemaining,
+		DocumentName:         fmt.Sprintf("%s%s", generateengine.SanitizeFileName(title), imageExtensionFromMIME(image.MIME)),
+		DocumentType:         string(engine.DocumentTypeIMG),
+		Bytes:                image.Data,
+		Warnings:             convertIssues(meta),
+		HostedCreditBalance:  image.CreditBalance,
+		HostedCreditsCharged: image.CreditsCharged,
+		AccessMode:           image.AccessMode,
+		Remaining:            image.Remaining,
+		RewardRemaining:      image.RewardRemaining,
+		PaidQuotaRemaining:   image.PaidQuotaRemaining,
 	}, nil
 }
 
@@ -297,11 +300,17 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		imageLLM = s.imageLLM
 	}
 	var hostedCreditBalance *int
+	hostedCreditsCharged := 0
+	hostedCreditsChargedSet := false
 	buildOptions := PPTXBuildOptions{
 		ImageQuality: imageQuality,
 		CreditBalanceSink: func(balance int) {
 			value := balance
 			hostedCreditBalance = &value
+		},
+		CreditChargedSink: func(charged int) {
+			hostedCreditsCharged += charged
+			hostedCreditsChargedSet = true
 		},
 	}
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
@@ -317,19 +326,27 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		}
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX output after structured repair")
 		hostedCreditBalance = nil
+		hostedCreditsCharged = 0
+		hostedCreditsChargedSet = false
 		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 		if err != nil {
 			return nil, err
 		}
 	}
+	var hostedCreditsChargedPtr *int
+	if hostedCreditsChargedSet {
+		value := hostedCreditsCharged
+		hostedCreditsChargedPtr = &value
+	}
 	return &GeneratedArtifact{
-		DocumentName:        fileName,
-		DocumentType:        string(engine.DocumentTypePPTX),
-		Bytes:               fileBytes,
-		Warnings:            append(convertIssues(meta), warnings...),
-		PreviewHTML:         previewHTML,
-		PreviewJSON:         previewJSON,
-		HostedCreditBalance: hostedCreditBalance,
+		DocumentName:         fileName,
+		DocumentType:         string(engine.DocumentTypePPTX),
+		Bytes:                fileBytes,
+		Warnings:             append(convertIssues(meta), warnings...),
+		PreviewHTML:          previewHTML,
+		PreviewJSON:          previewJSON,
+		HostedCreditBalance:  hostedCreditBalance,
+		HostedCreditsCharged: hostedCreditsChargedPtr,
 	}, nil
 }
 
@@ -724,6 +741,9 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 						options.CreditBalanceSink(value)
 					}
 				}
+				if image.CreditsCharged != nil && options.CreditChargedSink != nil {
+					options.CreditChargedSink(*image.CreditsCharged)
+				}
 				continue
 			}
 			payload.Slides[idx].ImageData = nil
@@ -758,6 +778,9 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 					if options.CreditBalanceSink != nil {
 						options.CreditBalanceSink(value)
 					}
+				}
+				if image.CreditsCharged != nil && options.CreditChargedSink != nil {
+					options.CreditChargedSink(*image.CreditsCharged)
 				}
 				continue
 			}

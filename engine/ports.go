@@ -69,6 +69,7 @@ type ImageGenerationResult struct {
 	Data               []byte
 	MIME               string
 	CreditBalance      *int
+	CreditsCharged     *int
 	AccessMode         string
 	Remaining          int
 	RewardRemaining    int

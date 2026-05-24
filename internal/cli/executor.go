@@ -70,6 +70,10 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		DocumentName: artifact.DocumentName,
 		RuntimeMode:  resultRuntimeMode(job, job.LicenseCheck),
 		Warnings:     warningMessages(allWarnings),
+		CreditMode:   inferCreditMode(job),
+	}
+	if artifact.HostedCreditsCharged != nil {
+		result.CreditsCharged = *artifact.HostedCreditsCharged
 	}
 	if job.LicenseCheck != nil {
 		result.AccessMode = string(job.LicenseCheck.AccessMode)

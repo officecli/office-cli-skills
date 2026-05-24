@@ -808,13 +808,13 @@ func (s *agentBridgeServer) runRenderTask(ctx context.Context, task *bridgeTask,
 			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
 			return
 		}
-		payload := classifyBridgeError(err)
+		errPayload := failureEventPayload(classifyBridgeError(err), inferCreditMode(job))
 		s.updateTask(task.ID, func(t *bridgeTask) {
 			t.Status = "failed"
 			t.UpdatedAt = time.Now().UTC()
 			t.LastError = err.Error()
 		})
-		s.emitEvent(task, bridgeEventTaskFailed, payload)
+		s.emitEvent(task, bridgeEventTaskFailed, errPayload)
 		return
 	}
 
@@ -825,12 +825,14 @@ func (s *agentBridgeServer) runRenderTask(ctx context.Context, task *bridgeTask,
 	})
 	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
 	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
-		"status":        result.Status,
-		"document_type": result.DocumentType,
-		"document_name": result.DocumentName,
-		"file_path":     result.FilePath,
-		"warnings":      append([]string(nil), result.Warnings...),
-		"result_meta":   buildGenerateBridgeMeta(result),
+		"status":          result.Status,
+		"document_type":   result.DocumentType,
+		"document_name":   result.DocumentName,
+		"file_path":       result.FilePath,
+		"warnings":        append([]string(nil), result.Warnings...),
+		"result_meta":     buildGenerateBridgeMeta(result),
+		"credits_charged": result.CreditsCharged,
+		"credit_mode":     result.CreditMode,
 	})
 }
 
@@ -852,14 +854,14 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
 			return
 		}
-		payload := classifyBridgeError(err)
+		errPayload := failureEventPayload(classifyBridgeError(err), inferCreditMode(job))
 		s.updateTask(task.ID, func(t *bridgeTask) {
 			t.Status = "failed"
 			t.UpdatedAt = time.Now().UTC()
 			t.LastError = err.Error()
 			t.CurrentQ = nil
 		})
-		s.emitEvent(task, bridgeEventTaskFailed, payload)
+		s.emitEvent(task, bridgeEventTaskFailed, errPayload)
 		return
 	}
 
@@ -871,12 +873,14 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 	})
 	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
 	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
-		"status":        result.Status,
-		"document_type": result.DocumentType,
-		"document_name": result.DocumentName,
-		"file_path":     result.FilePath,
-		"warnings":      append([]string(nil), result.Warnings...),
-		"result_meta":   buildGenerateBridgeMeta(result),
+		"status":          result.Status,
+		"document_type":   result.DocumentType,
+		"document_name":   result.DocumentName,
+		"file_path":       result.FilePath,
+		"warnings":        append([]string(nil), result.Warnings...),
+		"result_meta":     buildGenerateBridgeMeta(result),
+		"credits_charged": result.CreditsCharged,
+		"credit_mode":     result.CreditMode,
 	})
 }
 
@@ -1181,6 +1185,17 @@ func normalizeRPCID(raw json.RawMessage) string {
 		}
 	}
 	return strings.Trim(trimmed, `"`)
+}
+
+func failureEventPayload(errInfo bridgeErrorPayload, creditMode string) map[string]any {
+	return map[string]any{
+		"type":            errInfo.Type,
+		"code":            errInfo.Code,
+		"message":         errInfo.Message,
+		"retryable":       errInfo.Retryable,
+		"credits_charged": 0,
+		"credit_mode":     creditMode,
+	}
 }
 
 func classifyBridgeError(err error) bridgeErrorPayload {

@@ -893,6 +893,7 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, []byte("png-bytes"), resp.Data)
 	require.Equal(t, "image/png", resp.MIME)
 	require.Equal(t, 99, resp.CreditBalance)
+	require.Equal(t, 1, resp.CreditsCharged)
 	require.Equal(t, []int{1}, store.reservations)
 	require.Equal(t, []int{1}, store.settlements)
 	require.Empty(t, store.releases)
@@ -903,6 +904,109 @@ func TestGenerateImageUsesImgPricingAndRecordsImgDocumentType(t *testing.T) {
 	require.Equal(t, 1, store.events[0].ImageCount)
 	require.Equal(t, "gpt-image-test", upstreamPayload["model"])
 	require.Equal(t, "1536x1024", upstreamPayload["size"])
+}
+
+func TestGenerateImageReleasesWithoutSettlingOnUpstreamFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprint(w, `{"error":"boom"}`)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      100,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-test",
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "image",
+			Provider:             "openai",
+			Model:                "gpt-image-test",
+			ImagePerAssetCredits: 1,
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+		}},
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "A polished product launch hero image",
+		AspectRatio: 16.0 / 9.0,
+	})
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.NotEmpty(t, store.reservations)
+	require.NotEmpty(t, store.releases)
+	require.Empty(t, store.settlements)
+}
+
+func TestGenerateImageReturnsCreditsChargedMatchingSettledValue(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	}))
+	defer upstream.Close()
+
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      500,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "upstream-key",
+		HashSalt:   "salt",
+		ImageModel: "gpt-image-test",
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "image",
+			Provider:             "openai",
+			Model:                "gpt-image-test",
+			ImagePerAssetCredits: 7,
+			ReservationCredits:   7,
+			MinimumChargeCredits: 7,
+		}},
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"upstream-key"}},
+	})
+
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "Hero",
+		AspectRatio: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 7, resp.CreditsCharged)
+	require.Equal(t, store.settlements[0], resp.CreditsCharged)
+	require.Equal(t, 493, resp.CreditBalance)
 }
 
 func TestGenerateImageDefaultPricingChargesTenCreditsPerImage(t *testing.T) {
@@ -957,6 +1061,7 @@ func TestGenerateImageDefaultPricingChargesTenCreditsPerImage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 90, resp.CreditBalance)
+	require.Equal(t, 10, resp.CreditsCharged)
 	require.Equal(t, []int{10}, store.reservations)
 	require.Equal(t, []int{10}, store.settlements)
 	require.Empty(t, store.releases)
