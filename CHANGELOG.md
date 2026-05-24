@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.94 - 2026-05-24
+
+### Fixed
+
+- PPTX `assemble` 阶段在 hosted 模式下进入 `Generating image asset (N/M)` 后，因 `llm.GenerateImage` 是阻塞调用且单张图常态需要几十秒到几分钟，agent-bridge stdout 会出现长达 10 分钟以上的静默，OfficeDex 桌面端 stall 检测（≥5 分钟无 progress）会误把任务标记为卡死。`internal/runtime/progress.go` 新增 `generateImageWithHeartbeat`：每 25 秒发一条 `Still waiting on image provider (asset N/M, elapsed Xs)` 的 `task.progress` 心跳，`GenerateImage` 返回或 ctx 取消时心跳 goroutine 立即结束（无泄漏）。PPTX 的 slide 主图和 visual 子图、独立 IMG 三处 `GenerateImage` 调用点全部接入心跳。PPTX 每张图还补了 `Image asset N/M ready` / `Image asset N/M failed: <reason>` 收尾事件；打包阶段在 `Packaging the PPTX file` 与 `PPTX assembly completed` 之间补一条 `Finalizing PPTX layout and writing output bytes`。同时新增 `SetImageHeartbeatIntervalForTesting` 供测试调短心跳节奏，新增 `TestAgentBridgeForwardsImageHeartbeatProgressUnder60s` 端到端断言任意两条 `task.progress` 间隔 ≤ 60s 且心跳事件确实抵达 JSON-RPC stdout。
+
+### Added
+
+- Platform 新增 OfficeDex 桌面端「用户主动提交问题报告」接收端：`POST /api/issue-reports`（clisession 鉴权，60 req/min/user）与 `POST /api/issue-reports/anonymous`（30 req/min/IP + 100 req/min 全局），数据落入 postgres migration 028 新增的 `issue_reports` 与 `issue_report_request_ids` 两张表。服务端基于 v1 算法（sha256）派生 `client_event_id` 实现幂等重放、RFC3339 时间戳 ±5min 校验并在偏差时退化为 `server_now`；4KB body 上限、`schema_version` 协商（不支持时返回 400 `unsupported_schema`）、长度截断 + 反 script/spam 正则的内容过滤（已规避 ReDoS）；GDPR：`contact_email` 可为 NULL、90 天保留 hook。新增 6 条 slog 指标（received / dropped / anonymous_ratio / clock_skew / truncate 等）和 `httpapi.BearerToken` 助手；rate-limit 中间件扩展了 keyFunc。Reviewer 改动已折叠：token 入 rate-limit key 前先 hash、空 bearer 在调用 resolver 前 401 短路、重放路径在 composite unique index 上以 `OnConflict DoNothing` 仅追加新 request_ids。
+
 ## 0.2.93 - 2026-05-24
 
 ### Added

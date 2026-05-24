@@ -1754,6 +1754,118 @@ func TestServiceGeneratePPTX_RetriesOnceWhenJSONIsTruncated(t *testing.T) {
 	}
 }
 
+func TestBuildPPTXFromJSON_EmitsStartAndReadyPerImage(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"},
+	}
+	collector := &runtimeProgressCollector{}
+	content := `{
+		"title":"Visual Gallery Demo",
+		"slides":[
+			{"title":"Visual Gallery Demo","layout":"title","variant":"title-center","subtitle":"Open with the topic"},
+			{"title":"Product Scenes","layout":"gallery","variant":"gallery","narrativeRole":"analysis","sectionIndex":1,"sectionTitle":"Core Storyline","subtitle":"Use visuals to show the product context","visuals":[
+				{"label":"Workspace","prompt":"A modern collaboration workspace","caption":"Workspace view"},
+				{"label":"Meeting","prompt":"A product review meeting","caption":"Review scene"},
+				{"label":"Field","prompt":"A field deployment scene","caption":"Field scene"}
+			]}
+		]
+	}`
+
+	_, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), llm, collector, content, "Visual Gallery Demo", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+
+	starts := 0
+	readys := 0
+	for _, event := range collector.events {
+		if event.Step != progressStepAssemble {
+			continue
+		}
+		if strings.HasPrefix(event.Content, "Generating image asset (") {
+			starts++
+		}
+		if strings.HasPrefix(event.Content, "Image asset ") && strings.HasSuffix(event.Content, " ready") {
+			readys++
+		}
+	}
+	if starts < 3 {
+		t.Fatalf("expected >=3 'Generating image asset' events, got %d (events=%+v)", starts, collector.events)
+	}
+	if readys != starts {
+		t.Fatalf("expected one 'ready' per start; starts=%d readys=%d (events=%+v)", starts, readys, collector.events)
+	}
+	if llm.imageCalls != starts {
+		t.Fatalf("expected imageCalls (%d) to equal start events (%d)", llm.imageCalls, starts)
+	}
+}
+
+func TestBuildPPTXFromJSON_EmitsFailedPerAssetWhenImageProviderErrors(t *testing.T) {
+	llm := &fakeLLMClient{
+		imageErr: errors.New("provider unreachable"),
+	}
+	collector := &runtimeProgressCollector{}
+	content := `{
+		"title":"Visual Gallery Demo",
+		"slides":[
+			{"title":"Visual Gallery Demo","layout":"title","variant":"title-center","subtitle":"Open"},
+			{"title":"Scene","layout":"gallery","variant":"gallery","narrativeRole":"analysis","sectionIndex":1,"sectionTitle":"Core","subtitle":"caption","visuals":[
+				{"label":"Workspace","prompt":"A workspace","caption":"Workspace view"}
+			]}
+		]
+	}`
+
+	_, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), llm, collector, content, "Visual Gallery Demo", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+
+	failed := 0
+	for _, event := range collector.events {
+		if strings.HasPrefix(event.Content, "Image asset ") && strings.Contains(event.Content, " failed: ") {
+			failed++
+		}
+	}
+	if failed == 0 {
+		t.Fatalf("expected at least one 'failed' progress event, got events=%+v", collector.events)
+	}
+}
+
+func TestBuildPPTXFromJSON_EmitsFinalizingBeforeAssemblyCompleted(t *testing.T) {
+	collector := &runtimeProgressCollector{}
+	content := `{
+		"title":"Text Only Deck",
+		"slides":[
+			{"title":"Text Only Deck","layout":"title","variant":"title-center","subtitle":"Cover"},
+			{"title":"Body","layout":"text","variant":"bullets","subtitle":"Points","points":["alpha","beta"]}
+		]
+	}`
+
+	_, _, _, _, _, err := BuildPPTXFromJSON(context.Background(), &fakeLLMClient{}, collector, content, "Text Only Deck", "", false, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+
+	var finalizingIdx, completedIdx int = -1, -1
+	for i, event := range collector.events {
+		if strings.Contains(event.Content, "Finalizing PPTX layout") {
+			finalizingIdx = i
+		}
+		if strings.Contains(event.Content, "PPTX assembly completed") {
+			completedIdx = i
+		}
+	}
+	if finalizingIdx < 0 {
+		t.Fatalf("expected 'Finalizing PPTX layout' event, got events=%+v", collector.events)
+	}
+	if completedIdx < 0 {
+		t.Fatalf("expected 'PPTX assembly completed' event, got events=%+v", collector.events)
+	}
+	if finalizingIdx >= completedIdx {
+		t.Fatalf("finalizing event should come before completed, got finalizing=%d completed=%d", finalizingIdx, completedIdx)
+	}
+}
+
 func TestServiceGenerateDOCXEmitsProgressEvents(t *testing.T) {
 	collector := &runtimeProgressCollector{}
 	service := NewService(&fakeLLMClient{

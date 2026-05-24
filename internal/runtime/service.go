@@ -205,11 +205,11 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 
 func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting image generation from the configured image provider")
-	image, err := s.llm.GenerateImage(ctx, engine.ImageGenerationRequest{
+	image, err := generateImageWithHeartbeat(ctx, s.llm, s.progress, engine.ImageGenerationRequest{
 		Prompt:            buildImageGenerationPrompt(prompt, target),
 		TargetAspectRatio: imageAspectRatio(ratio),
 		ReferenceImages:   append([]engine.ImageReference(nil), references...),
-	})
+	}, progressStepGenerateLLM, 1, 1)
 	if err != nil {
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Image generation failed")
 		return nil, fmt.Errorf("image generation failed: %w", err)
@@ -727,10 +727,10 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			imageIndex++
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
 			aspectRatio := officegen.TargetAspectRatioForSlide(payload.Slides[idx])
-			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
+			image, err := generateImageWithHeartbeat(ctx, llm, progress, engine.ImageGenerationRequest{
 				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].ImagePrompt, imageQuality),
 				TargetAspectRatio: aspectRatio,
-			})
+			}, progressStepAssemble, imageIndex, imageTotal)
 			if err == nil && image != nil {
 				payload.Slides[idx].ImageData = image.Data
 				payload.Slides[idx].ImageMIME = image.MIME
@@ -744,12 +744,15 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 				if image.CreditsCharged != nil && options.CreditChargedSink != nil {
 					options.CreditChargedSink(*image.CreditsCharged)
 				}
+				emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Image asset %d/%d ready", imageIndex, imageTotal))
 				continue
 			}
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
+			failureReason := summarizeImageGenerationError(err)
+			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Image asset %d/%d failed: %s", imageIndex, imageTotal, failureReason))
 			if firstImageFailure == "" && err != nil {
-				firstImageFailure = summarizeImageGenerationError(err)
+				firstImageFailure = failureReason
 			}
 			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
@@ -765,10 +768,10 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			}
 			imageIndex++
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
-			image, err := llm.GenerateImage(ctx, engine.ImageGenerationRequest{
+			image, err := generateImageWithHeartbeat(ctx, llm, progress, engine.ImageGenerationRequest{
 				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].Visuals[visualIdx].Prompt, imageQuality),
 				TargetAspectRatio: 16.0 / 9.0,
-			})
+			}, progressStepAssemble, imageIndex, imageTotal)
 			if err == nil && image != nil {
 				payload.Slides[idx].Visuals[visualIdx].ImageData = image.Data
 				payload.Slides[idx].Visuals[visualIdx].ImageMIME = image.MIME
@@ -782,12 +785,15 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 				if image.CreditsCharged != nil && options.CreditChargedSink != nil {
 					options.CreditChargedSink(*image.CreditsCharged)
 				}
+				emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Image asset %d/%d ready", imageIndex, imageTotal))
 				continue
 			}
 			payload.Slides[idx].Visuals[visualIdx].ImageData = nil
 			payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
+			failureReason := summarizeImageGenerationError(err)
+			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Image asset %d/%d failed: %s", imageIndex, imageTotal, failureReason))
 			if firstImageFailure == "" && err != nil {
-				firstImageFailure = summarizeImageGenerationError(err)
+				firstImageFailure = failureReason
 			}
 			if !hasWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED") {
 				warnings = append(warnings, engine.GenerateIssue{
@@ -818,6 +824,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX packaging failed")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: generate pptx: %w", err)
 	}
+	emitProgress(ctx, progress, progressStepAssemble, "running", "Finalizing PPTX layout and writing output bytes")
 	emitProgress(ctx, progress, progressStepAssemble, "completed", "PPTX assembly completed")
 
 	var previewHTML []byte

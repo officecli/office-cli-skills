@@ -1,6 +1,6 @@
 {
   "name": "officecli",
-  "version": "0.2.93",
+  "version": "0.2.94",
   "description": "AI document generation CLI for PPTX, DOCX, XLSX, reports, and images.",
   "license": "UNLICENSED",
   "private": false,

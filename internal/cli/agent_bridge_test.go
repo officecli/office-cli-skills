@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli-internal/internal/runtime"
 	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
@@ -1187,5 +1188,163 @@ func TestAgentBridgeRenderEmitsCreditFieldsInTaskCompleted(t *testing.T) {
 	_ = inW.Close()
 	if err := <-done; err != nil {
 		t.Fatalf("bridge exited with error: %v", err)
+	}
+}
+
+type heartbeatSlowLLM struct {
+	delay  time.Duration
+	result *engine.ImageGenerationResult
+}
+
+func (heartbeatSlowLLM) CompleteText(context.Context, []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (heartbeatSlowLLM) CompleteJSON(context.Context, []engine.LLMMessage) (string, error) {
+	return "", nil
+}
+
+func (heartbeatSlowLLM) CompleteStructured(context.Context, engine.StructuredCompletionRequest) (string, error) {
+	return "", nil
+}
+
+func (s heartbeatSlowLLM) GenerateImage(ctx context.Context, _ engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	select {
+	case <-time.After(s.delay):
+		return s.result, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// TestAgentBridgeForwardsImageHeartbeatProgressUnder60s verifies the bug-report
+// acceptance criterion: when a hosted image provider takes a long time to
+// respond, the bridge stdout MUST emit a task.progress notification at least
+// every 60 seconds so OfficeDex's stall detector does not falsely flag the
+// task as stuck.
+func TestAgentBridgeForwardsImageHeartbeatProgressUnder60s(t *testing.T) {
+	restore := runtime.SetImageHeartbeatIntervalForTesting(40 * time.Millisecond)
+	defer restore()
+
+	out := bytes.NewBuffer(nil)
+	app := NewApp(out, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	server := newAgentBridgeServer(app, Config{
+		Defaults: DefaultsConfig{Publish: false, Mode: "fast"},
+		Publish:  disabledPublishConfig(),
+	}, bytes.NewBuffer(nil), out, bytes.NewBuffer(nil))
+
+	task := &bridgeTask{
+		ID:        "task-test",
+		SessionID: "default",
+		RequestID: "1",
+		Tool:      bridgeToolOfficeRender,
+		Status:    "running",
+		OutputFmt: "json",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	emitter := &bridgeProgressEmitter{server: server, task: task}
+
+	llm := heartbeatSlowLLM{
+		delay:  260 * time.Millisecond,
+		result: &engine.ImageGenerationResult{Data: mustTinyPNGForCLI(t), MIME: "image/png"},
+	}
+	content := `{
+		"title":"Heartbeat Demo",
+		"slides":[
+			{"title":"Heartbeat Demo","layout":"title","variant":"title-center","subtitle":"Cover","hasImage":true,"imagePrompt":"A neutral hero image","imagePos":"background"}
+		]
+	}`
+
+	_, _, _, _, _, err := runtime.BuildPPTXFromJSON(context.Background(), llm, emitter, content, "Heartbeat Demo", "", true, false)
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSON: %v", err)
+	}
+
+	progressEvents := parseBridgeProgressTimes(t, out.Bytes())
+	if len(progressEvents) < 3 {
+		t.Fatalf("expected at least 3 task.progress events, got %d: %+v", len(progressEvents), progressEvents)
+	}
+
+	maxGap := time.Duration(0)
+	for i := 1; i < len(progressEvents); i++ {
+		if gap := progressEvents[i].ts.Sub(progressEvents[i-1].ts); gap > maxGap {
+			maxGap = gap
+		}
+	}
+	if maxGap > 60*time.Second {
+		t.Fatalf("max gap between task.progress events exceeds 60s budget: %s", maxGap)
+	}
+
+	heartbeatSeen := false
+	for _, event := range progressEvents {
+		if strings.Contains(event.content, "Still waiting on image provider") {
+			heartbeatSeen = true
+			break
+		}
+	}
+	if !heartbeatSeen {
+		t.Fatalf("no 'Still waiting on image provider' heartbeat event observed in bridge stdout: %+v", progressEvents)
+	}
+}
+
+type bridgeProgressRecord struct {
+	ts      time.Time
+	step    string
+	content string
+}
+
+func parseBridgeProgressTimes(t *testing.T, raw []byte) []bridgeProgressRecord {
+	t.Helper()
+	reader := bufio.NewReader(bytes.NewReader(raw))
+	out := make([]bridgeProgressRecord, 0, 8)
+	for {
+		var contentLength int
+		headerDone := false
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return out
+			}
+			line = strings.TrimSpace(line)
+			if line == "" {
+				headerDone = true
+				break
+			}
+			if strings.HasPrefix(strings.ToLower(line), "content-length:") {
+				value := strings.TrimSpace(line[len("content-length:"):])
+				n, perr := strconv.Atoi(value)
+				if perr != nil {
+					t.Fatalf("bad Content-Length: %v", perr)
+				}
+				contentLength = n
+			}
+		}
+		if !headerDone || contentLength <= 0 {
+			return out
+		}
+		body := make([]byte, contentLength)
+		if _, err := io.ReadFull(reader, body); err != nil {
+			return out
+		}
+		var msg map[string]any
+		if err := json.Unmarshal(body, &msg); err != nil {
+			t.Fatalf("invalid bridge stdout message: %v", err)
+		}
+		if msg["method"] != "event" {
+			continue
+		}
+		params, ok := msg["params"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if params["type"] != bridgeEventTaskProgress {
+			continue
+		}
+		ts, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(params["ts"]))
+		payload, _ := params["payload"].(map[string]any)
+		step, _ := payload["step"].(string)
+		content, _ := payload["content"].(string)
+		out = append(out, bridgeProgressRecord{ts: ts, step: step, content: content})
 	}
 }
