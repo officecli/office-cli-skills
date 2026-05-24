@@ -106,7 +106,8 @@ describe('marketing site shell', () => {
 
     expect(screen.getByRole('link', { name: /Join Discord/i })).toHaveAttribute('href', 'https://discord.gg/ezAHMkdG')
     expect(screen.getByRole('link', { name: /Follow on X/i })).toHaveAttribute('href', 'https://x.com/officecli')
-    expect(screen.getByRole('link', { name: /Star on GitHub/i })).toHaveAttribute('href', 'https://github.com/officecli/officecli')
+    expect(screen.getByRole('link', { name: /officecli on GitHub/i })).toHaveAttribute('href', 'https://github.com/officecli/officecli')
+    expect(screen.getByRole('link', { name: /officedex on GitHub/i })).toHaveAttribute('href', 'https://github.com/officecli/officedex')
   })
 
   it('renders three surface tabs with officedex selected by default', () => {
@@ -146,15 +147,25 @@ describe('marketing site shell', () => {
     expect(dexPanel).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('marks the officedex CTA as coming soon and shares the install link across tui and cli', () => {
+  it('renders Download + GitHub CTAs on the officedex tab and shares the install link across tui and cli', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
       </MemoryRouter>,
     )
 
-    const notifyButton = screen.getByRole('button', { name: /Coming soon/ })
-    expect(notifyButton).toHaveAttribute('aria-disabled', 'true')
+    const dexDownload = screen.getAllByRole('link', { name: /^Download$/i, hidden: true })
+    expect(dexDownload.length).toBeGreaterThanOrEqual(1)
+    expect(dexDownload[0]).toHaveAttribute('href', 'https://github.com/officecli/officedex/releases/latest')
+    expect(dexDownload[0]).toHaveAttribute('target', '_blank')
+
+    const dexGithubCtas = screen
+      .getAllByRole('link', { name: /^GitHub$/i, hidden: true })
+      .filter((link) => link.getAttribute('href') === 'https://github.com/officecli/officedex')
+    expect(dexGithubCtas.length).toBeGreaterThanOrEqual(1)
+
+    expect(screen.queryByRole('button', { name: /Coming soon/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Read about officedex/i, hidden: true })).toBeNull()
 
     const installLinks = screen.getAllByRole('link', { name: /^Install officecli$/i, hidden: true })
     expect(installLinks.length).toBeGreaterThanOrEqual(2)

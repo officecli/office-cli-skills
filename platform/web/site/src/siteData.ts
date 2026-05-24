@@ -12,8 +12,9 @@ export const platformAppURL = `${platformBaseURL}/app`
 export const platformBillingURL = `${platformBaseURL}/app/billing`
 export const platformLicenseAPIURL = `${platformBaseURL}/api/license/check`
 export const githubRepoURL = 'https://github.com/officecli/officecli'
+export const officedexRepoURL = 'https://github.com/officecli/officedex'
+export const officedexReleasesURL = 'https://github.com/officecli/officedex/releases/latest'
 export const installOfficeCliPath = '/download'
-export const officedexNotifyPath = '/officedex-notify'
 
 export const navItems: NavItem[] = [
   { to: '/#', label: 'Home' },

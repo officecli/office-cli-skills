@@ -1,12 +1,12 @@
-import { installOfficeCliPath, officedexNotifyPath } from './siteData'
+import { installOfficeCliPath, officedexReleasesURL, officedexRepoURL } from './siteData'
 
 export type SurfaceId = 'officedex' | 'officecli-tui' | 'officecli'
 
-export type SurfaceCtaVariant = 'primary' | 'ghost' | 'comingSoon'
+export type SurfaceCtaVariant = 'primary' | 'ghost'
 
 export interface SurfaceCta {
   label: string
-  href: string | null
+  href: string
   variant: SurfaceCtaVariant
   external?: boolean
 }
@@ -26,7 +26,7 @@ export interface SurfaceData {
 export const surfaces: SurfaceData[] = [
   {
     id: 'officedex',
-    eyebrow: 'Desktop GUI · Coming soon',
+    eyebrow: 'Desktop GUI',
     name: 'officedex',
     tabSub: 'Native workspace for non-terminal users',
     lede: 'A native desktop workspace for designers, PMs, and ops teams—zero terminal, what-you-see-is-what-you-get. Shares the same document generation engine as officecli, shipped as a standalone app.',
@@ -36,8 +36,8 @@ export const surfaces: SurfaceData[] = [
       'One-click switch between External Mode (bring-your-own model) and Hosted Mode (managed credits)',
     ],
     ctas: [
-      { label: 'Coming soon', href: officedexNotifyPath, variant: 'comingSoon' },
-      { label: 'Read about officedex', href: officedexNotifyPath, variant: 'ghost' },
+      { label: 'Download', href: officedexReleasesURL, variant: 'primary', external: true },
+      { label: 'GitHub', href: officedexRepoURL, variant: 'ghost', external: true },
     ],
     preview: 'desktop',
   },

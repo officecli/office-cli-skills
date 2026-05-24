@@ -76,11 +76,6 @@ export default function HeroProductTabs({ defaultSurface = defaultSurfaceId }: H
                 >
                   {surface.eyebrow}
                 </span>
-                {surface.id === 'officedex' ? (
-                  <span className="rounded border border-[#ffbd2e]/50 bg-[#ffbd2e]/15 px-1.5 py-0.5 text-[9px] font-headline uppercase tracking-widest text-[#ffbd2e]">
-                    Soon
-                  </span>
-                ) : null}
               </span>
               <span className="mt-1.5 block font-mono text-base font-bold">{surface.name}</span>
               <span className="mt-1 block text-xs text-outline-variant">{surface.tabSub}</span>
@@ -147,31 +142,10 @@ function SurfaceCopy({ surface }: { surface: SurfaceData }) {
 }
 
 function CtaButton({ cta }: { cta: SurfaceCta }) {
-  if (cta.variant === 'comingSoon') {
-    return (
-      <button
-        type="button"
-        aria-disabled="true"
-        className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-[#ffbd2e]/50 bg-[#ffbd2e]/10 px-5 py-2.5 text-sm font-bold text-[#ffd97a]"
-        onClick={(event) => event.preventDefault()}
-      >
-        {cta.label}
-      </button>
-    )
-  }
-
   const className =
     cta.variant === 'primary'
       ? 'inline-flex items-center gap-2 rounded-md bg-gradient-to-br from-primary to-primary-container px-5 py-2.5 text-sm font-bold text-[#002e6b]'
       : 'inline-flex items-center gap-2 rounded-md border border-outline-variant/25 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/5'
-
-  if (!cta.href) {
-    return (
-      <span className={className} aria-disabled="true">
-        {cta.label}
-      </span>
-    )
-  }
 
   if (cta.external || /^https?:/.test(cta.href)) {
     return (
@@ -212,9 +186,6 @@ function DesktopPreview() {
   return (
     <PreviewShell caption="officedex · Workspace · preview">
       <div className="relative grid min-h-[20rem] grid-cols-[10rem_1fr]">
-        <div className="absolute right-[-2.5rem] top-4 rotate-[35deg] bg-gradient-to-r from-[#ffbd2e] to-[#ff9d00] px-12 py-1 text-[10px] font-extrabold uppercase tracking-[0.25em] text-[#2a1900]">
-          Coming soon
-        </div>
         <div className="space-y-1 border-r border-outline-variant/10 bg-black/30 p-3 text-xs">
           {['Projects', 'Templates', 'History', 'Settings'].map((label, idx) => (
             <div

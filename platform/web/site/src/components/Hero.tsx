@@ -2,7 +2,7 @@ import { motion } from 'motion/react'
 import { Link, useLocation } from 'react-router-dom'
 import { buildTrackedURL, extractAttributionParams, trackEvent } from '../analytics'
 import { SITE_ANALYTICS_EVENTS } from '../analytics-events'
-import { githubRepoURL, platformAppURL } from '../siteData'
+import { githubRepoURL, officedexRepoURL, platformAppURL } from '../siteData'
 import { DiscordMark, GithubMark, XMark } from './branding'
 import HeroOutputFormats from './HeroOutputFormats'
 import HeroProductTabs from './HeroProductTabs'
@@ -17,10 +17,19 @@ function InlineCode({ children }: { children: string }) {
 
 const HERO_SOCIAL_LINKS = [
   {
-    label: 'Star on GitHub',
-    title: 'GitHub',
-    description: 'Open-source repo',
+    label: 'officecli on GitHub',
+    title: 'officecli',
+    description: 'CLI source repo',
     href: githubRepoURL,
+    icon: GithubMark,
+    className: 'border-outline-variant/25 bg-surface-high/40 hover:border-outline-variant/45 hover:bg-surface-high/60',
+    iconClassName: 'text-white',
+  },
+  {
+    label: 'officedex on GitHub',
+    title: 'officedex',
+    description: 'Desktop app repo',
+    href: officedexRepoURL,
     icon: GithubMark,
     className: 'border-outline-variant/25 bg-surface-high/40 hover:border-outline-variant/45 hover:bg-surface-high/60',
     iconClassName: 'text-white',
@@ -73,7 +82,7 @@ export default function Hero() {
           <p className="mt-4 max-w-3xl text-base leading-relaxed text-outline-variant sm:text-lg">
             Run <InlineCode>officecli new pptx …</InlineCode> from scripts; just{' '}
             <InlineCode>officecli</InlineCode> to enter the interactive terminal—same binary. For non-terminal users, the{' '}
-            <InlineCode>officedex</InlineCode> desktop app is on the way.
+            <InlineCode>officedex</InlineCode> desktop app is here.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
