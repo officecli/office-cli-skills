@@ -7,6 +7,7 @@ import { AdminSidebar, AdminTopBar } from './components/chrome'
 import AccessDeniedPage from './pages/AccessDeniedPage'
 import ApiKeysPage from './pages/ApiKeysPage'
 import BillingEventsPage from './pages/BillingEventsPage'
+import CreditLedgerPage from './pages/CreditLedgerPage'
 import DashboardPage from './pages/DashboardPage'
 import GrowthPage from './pages/GrowthPage'
 import HostedPricingRulesPage from './pages/HostedPricingRulesPage'
@@ -59,6 +60,7 @@ function ProtectedShell() {
               <Route path="/users" element={<UsersPage />} />
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/billing-events" element={<BillingEventsPage />} />
+              <Route path="/credit-ledger" element={<CreditLedgerPage />} />
               <Route path="/quota-sources" element={<QuotaSourcesPage />} />
               <Route path="/redemption-codes" element={<RedemptionCodesPage />} />
               <Route path="/redemption-records" element={<RedemptionRecordsPage />} />

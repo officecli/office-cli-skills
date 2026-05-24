@@ -145,6 +145,10 @@ func (s *overviewRouteStore) IsAPIKeyOwnedByUser(_ context.Context, _, _ uint64)
 	return true, nil
 }
 
+func (s *overviewRouteStore) ListUserHostedCreditLedger(_ context.Context, _ uint64, _ bool) ([]model.UserHostedCreditLedger, error) {
+	return nil, nil
+}
+
 type overviewRouteBilling struct {
 	orders  []model.Order
 	pricing []model.PricingPack

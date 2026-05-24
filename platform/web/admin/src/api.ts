@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreditLedgerEntry, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -52,6 +52,7 @@ export const api = {
   orders: () => request<Order[]>('/api/admin/orders'),
   updateOrder: (id: number, payload: Record<string, unknown>) => request(`/api/admin/orders/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   billingEvents: () => request<BillingEvent[]>('/api/admin/billing-events'),
+  creditLedger: (includeZeroDelta = false) => request<CreditLedgerEntry[]>(`/api/admin/credit-ledger${includeZeroDelta ? '?include_zero_delta=true' : ''}`),
   hostedPricingRules: () => request<HostedPricingRule[]>('/api/admin/hosted-pricing-rules'),
   hostedBilling: () => request<HostedBillingConfig>('/api/admin/hosted-billing'),
   updateHostedPricingSettings: (payload: Partial<HostedPricingSetting>) => request<HostedPricingSetting>('/api/admin/hosted-pricing-settings', { method: 'PATCH', body: JSON.stringify(payload) }),

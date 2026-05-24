@@ -410,3 +410,17 @@ export interface UpdateRedemptionCodeRequest {
   clear_expires_at?: boolean
   notes?: string
 }
+
+export interface CreditLedgerEntry {
+  id: number
+  user_id: number
+  source_type: string
+  idempotency_key: string
+  credit_delta: number
+  reserved_delta: number
+  usage_event_id?: number
+  order_id?: number
+  reason: string
+  metadata_json: string
+  created_at: string
+}

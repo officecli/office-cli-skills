@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,14 @@ import (
 	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
+
+// Compile-time guarantee: keep test fakes in sync with the production
+// APIKeyStore surface.
+var _ APIKeyStore = (*fakeAPIKeyStore)(nil)
+
+// silenceAtomicImport keeps the sync/atomic import in use for AC-2.5
+// concurrency tests below.
+var silenceAtomicImport = atomic.Int64{}
 
 type fakeAPIKeyStore struct {
 	key            *model.APIKey
@@ -36,6 +46,40 @@ type fakeAPIKeyStore struct {
 	releaseCtxErrs []error
 	settleCtxErrs  []error
 	eventCtxErrs   []error
+
+	mu                       sync.Mutex
+	charges                  []chargeRecord
+	chargeFailed             []chargeFailedRecord
+	chargeIdempotency        map[string]bool
+	chargeFailIdempotency    map[string]bool
+	chargeBalances           map[string]int
+	chargeReturnErr          map[string]error
+	chargeErrOnce            map[string]error
+	precheckErr              error
+	precheckBalance          int
+	usageEventNextID         uint64
+	eventIDByRequest         map[string]uint64
+	chargeUsageEventByRequest map[string]*uint64
+}
+
+type chargeRecord struct {
+	SubjectType   string
+	SubjectID     uint64
+	Fingerprint   string
+	APIKeyID      uint64
+	RequestID     string
+	Credits       int
+	UsageEventID  *uint64
+}
+
+type chargeFailedRecord struct {
+	SubjectType  string
+	SubjectID    uint64
+	Fingerprint  string
+	APIKeyID     uint64
+	RequestID    string
+	Credits      int
+	MetadataJSON string
 }
 
 func (f *fakeAPIKeyStore) FindAPIKeyByHash(_ context.Context, hash string) (*model.APIKey, error) {
@@ -54,19 +98,25 @@ func (f *fakeAPIKeyStore) FindAPIKeyByHash(_ context.Context, hash string) (*mod
 }
 
 func (f *fakeAPIKeyStore) ReserveCreditsByHash(_ context.Context, hash string, credits int) (*model.APIKey, error) {
+	f.mu.Lock()
 	f.reservations = append(f.reservations, credits)
+	f.mu.Unlock()
 	return f.FindAPIKeyByHash(context.Background(), hash)
 }
 
 func (f *fakeAPIKeyStore) ReleaseReservedCredits(ctx context.Context, apiKeyID uint64, reserved int) (*model.APIKey, error) {
+	f.mu.Lock()
 	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
 	f.releases = append(f.releases, reserved)
+	f.mu.Unlock()
 	return f.FindAPIKeyByHash(context.Background(), "")
 }
 
 func (f *fakeAPIKeyStore) SettleReservedCredits(ctx context.Context, apiKeyID uint64, reserved int, settled int) (*model.APIKey, error) {
+	f.mu.Lock()
 	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
 	f.settlements = append(f.settlements, settled)
+	f.mu.Unlock()
 	key, err := f.FindAPIKeyByHash(context.Background(), "")
 	if key == nil && f.keysByHash != nil {
 		for _, candidate := range f.keysByHash {
@@ -87,20 +137,26 @@ func (f *fakeAPIKeyStore) ReserveHostedCreditsByUser(_ context.Context, userID u
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
+	f.mu.Lock()
 	f.hostedRequests = append(f.hostedRequests, requestID)
 	f.reservations = append(f.reservations, credits)
+	f.mu.Unlock()
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100, CreditReserved: credits}, nil
 }
 
 func (f *fakeAPIKeyStore) ReleaseHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int) (*model.UserHostedCreditAccount, error) {
+	f.mu.Lock()
 	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
 	f.releases = append(f.releases, reserved)
+	f.mu.Unlock()
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100}, nil
 }
 
 func (f *fakeAPIKeyStore) SettleHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, reserved int, settled int) (*model.UserHostedCreditAccount, error) {
+	f.mu.Lock()
 	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
 	f.settlements = append(f.settlements, settled)
+	f.mu.Unlock()
 	return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - settled}, nil
 }
 
@@ -109,20 +165,26 @@ func (f *fakeAPIKeyStore) GetHostedCreditAccountByFingerprint(_ context.Context,
 }
 
 func (f *fakeAPIKeyStore) ReserveHostedCreditsByFingerprint(_ context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error) {
+	f.mu.Lock()
 	f.reservations = append(f.reservations, credits)
 	f.hostedRequests = append(f.hostedRequests, requestID)
+	f.mu.Unlock()
 	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100, CreditReserved: credits}, nil
 }
 
 func (f *fakeAPIKeyStore) ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error) {
+	f.mu.Lock()
 	f.releaseCtxErrs = append(f.releaseCtxErrs, ctx.Err())
 	f.releases = append(f.releases, reserved)
+	f.mu.Unlock()
 	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100}, nil
 }
 
 func (f *fakeAPIKeyStore) SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error) {
+	f.mu.Lock()
 	f.settleCtxErrs = append(f.settleCtxErrs, ctx.Err())
 	f.settlements = append(f.settlements, settled)
+	f.mu.Unlock()
 	return &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100 - settled}, nil
 }
 
@@ -141,7 +203,17 @@ func (f *fakeAPIKeyStore) TouchCLISession(_ context.Context, id uint64, usedAt t
 }
 
 func (f *fakeAPIKeyStore) CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.eventCtxErrs = append(f.eventCtxErrs, ctx.Err())
+	f.usageEventNextID++
+	event.ID = f.usageEventNextID
+	if event.RequestID != nil {
+		if f.eventIDByRequest == nil {
+			f.eventIDByRequest = map[string]uint64{}
+		}
+		f.eventIDByRequest[*event.RequestID] = event.ID
+	}
 	f.events = append(f.events, event)
 	return nil
 }
@@ -247,6 +319,132 @@ func (f *fakeAPIKeyStore) MarkUserAIGatewayAPIKeyCreationError(_ context.Context
 	key.LastError = message
 	cloned := *key
 	return &cloned, nil
+}
+
+func (f *fakeAPIKeyStore) ChargeHostedCreditsByUser(_ context.Context, userID uint64, requestID string, credits int, usageEventID *uint64) (*model.UserHostedCreditAccount, error) {
+	return f.recordCharge("user", userID, "", 0, requestID, credits, usageEventID, func() *model.UserHostedCreditAccount {
+		return &model.UserHostedCreditAccount{UserID: userID, CreditBalance: 100 - credits}
+	})
+}
+
+func (f *fakeAPIKeyStore) ChargeHostedCreditsByFingerprint(_ context.Context, fingerprint string, requestID string, credits int, usageEventID *uint64) (*model.FingerprintCreditAccount, error) {
+	account := &model.FingerprintCreditAccount{FingerprintHash: fingerprint, CreditBalance: 100 - credits}
+	if _, err := f.recordCharge("fingerprint", 0, fingerprint, 0, requestID, credits, usageEventID, func() *model.UserHostedCreditAccount { return nil }); err != nil {
+		return nil, err
+	}
+	return account, nil
+}
+
+func (f *fakeAPIKeyStore) ChargeAPIKeyCredits(_ context.Context, apiKeyID uint64, requestID string, credits int, usageEventID *uint64) (*model.APIKey, error) {
+	key := &model.APIKey{ID: apiKeyID, CreditBalance: 100 - credits}
+	if _, err := f.recordCharge("api_key", 0, "", apiKeyID, requestID, credits, usageEventID, func() *model.UserHostedCreditAccount { return nil }); err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+// recordCharge centralizes the per-subject charge recording so we can
+// enforce idempotency and injected failures. Returns a stubbed account for
+// user subjects; callers building fingerprint/api_key accounts ignore it.
+func (f *fakeAPIKeyStore) recordCharge(subjectType string, userID uint64, fingerprint string, apiKeyID uint64, requestID string, credits int, usageEventID *uint64, makeAccount func() *model.UserHostedCreditAccount) (*model.UserHostedCreditAccount, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	// Injected error has priority. Once-per-request errors fire and clear.
+	if f.chargeErrOnce != nil {
+		if err, ok := f.chargeErrOnce[requestID]; ok && err != nil {
+			delete(f.chargeErrOnce, requestID)
+			return nil, err
+		}
+	}
+	if f.chargeReturnErr != nil {
+		if err, ok := f.chargeReturnErr[requestID]; ok && err != nil {
+			return nil, err
+		}
+	}
+	idemKey := "charge:" + requestID
+	if f.chargeIdempotency == nil {
+		f.chargeIdempotency = map[string]bool{}
+	}
+	if f.chargeIdempotency[idemKey] {
+		return makeAccount(), nil
+	}
+	f.chargeIdempotency[idemKey] = true
+	f.charges = append(f.charges, chargeRecord{
+		SubjectType:  subjectType,
+		SubjectID:    userID,
+		Fingerprint:  fingerprint,
+		APIKeyID:     apiKeyID,
+		RequestID:    requestID,
+		Credits:      credits,
+		UsageEventID: usageEventID,
+	})
+	if f.chargeUsageEventByRequest == nil {
+		f.chargeUsageEventByRequest = map[string]*uint64{}
+	}
+	f.chargeUsageEventByRequest[requestID] = usageEventID
+	return makeAccount(), nil
+}
+
+func (f *fakeAPIKeyStore) PrecheckHostedCreditsByUser(_ context.Context, userID uint64, minCredits int) error {
+	return f.precheckErrOrBalance(minCredits)
+}
+
+func (f *fakeAPIKeyStore) PrecheckHostedCreditsByFingerprint(_ context.Context, fingerprint string, minCredits int) error {
+	return f.precheckErrOrBalance(minCredits)
+}
+
+func (f *fakeAPIKeyStore) PrecheckAPIKeyCredits(_ context.Context, apiKeyID uint64, minCredits int) error {
+	return f.precheckErrOrBalance(minCredits)
+}
+
+func (f *fakeAPIKeyStore) precheckErrOrBalance(minCredits int) error {
+	if f.precheckErr != nil {
+		return f.precheckErr
+	}
+	if f.precheckBalance > 0 && f.precheckBalance < minCredits {
+		// Mirrors sqlstore.ErrHostedCreditsExhausted by returning the
+		// service-layer sentinel so tests can use errors.Is.
+		return ErrHostedCreditsExhausted
+	}
+	return nil
+}
+
+func (f *fakeAPIKeyStore) WriteChargeFailedLedgerForUser(_ context.Context, userID uint64, requestID string, credits int, metadataJSON string) error {
+	return f.recordChargeFailed("user", userID, "", 0, requestID, credits, metadataJSON)
+}
+
+func (f *fakeAPIKeyStore) WriteChargeFailedLedgerForFingerprint(_ context.Context, fingerprint string, requestID string, credits int, metadataJSON string) error {
+	return f.recordChargeFailed("fingerprint", 0, fingerprint, 0, requestID, credits, metadataJSON)
+}
+
+func (f *fakeAPIKeyStore) WriteChargeFailedLedgerForAPIKey(_ context.Context, apiKeyID uint64, requestID string, credits int, metadataJSON string) error {
+	return f.recordChargeFailed("api_key", 0, "", apiKeyID, requestID, credits, metadataJSON)
+}
+
+func (f *fakeAPIKeyStore) recordChargeFailed(subjectType string, userID uint64, fingerprint string, apiKeyID uint64, requestID string, credits int, metadataJSON string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	idemKey := "charge_failed:" + requestID
+	if f.chargeFailIdempotency == nil {
+		f.chargeFailIdempotency = map[string]bool{}
+	}
+	if f.chargeFailIdempotency[idemKey] {
+		return nil
+	}
+	f.chargeFailIdempotency[idemKey] = true
+	f.chargeFailed = append(f.chargeFailed, chargeFailedRecord{
+		SubjectType:  subjectType,
+		SubjectID:    userID,
+		Fingerprint:  fingerprint,
+		APIKeyID:     apiKeyID,
+		RequestID:    requestID,
+		Credits:      credits,
+		MetadataJSON: metadataJSON,
+	})
+	return nil
 }
 
 type fakeGenerationQuotaManager struct {
@@ -2004,4 +2202,270 @@ func TestGenerateImageFailureReleasesReservationWithCanceledRequestContext(t *te
 	require.Equal(t, []error{nil}, store.eventCtxErrs)
 	require.Equal(t, 0, store.events[0].SettledCredits)
 	require.Equal(t, 12, store.events[0].RefundCredits)
+}
+
+// chargeOnlyFixture builds an httptest upstream that responds with
+// upstreamHandler and a service preconfigured for ChargeOnlyMode=all.
+func chargeOnlyFixture(t *testing.T, upstreamHandler http.HandlerFunc) (*Service, *fakeAPIKeyStore, *httptest.Server) {
+	t.Helper()
+	upstream := httptest.NewServer(upstreamHandler)
+	t.Cleanup(upstream.Close)
+	defaultRuntimeMode := "hosted"
+	userID := uint64(42)
+	store := &fakeAPIKeyStore{
+		key: &model.APIKey{
+			ID:                 7,
+			OwnerUserID:        &userID,
+			Status:             model.APIKeyStatusActive,
+			PlanName:           "Hosted",
+			KeyPrefix:          "cop_hosted",
+			AllowedModes:       "hosted_only",
+			HostedEnabled:      true,
+			DefaultRuntimeMode: &defaultRuntimeMode,
+			CreditBalance:      1000,
+		},
+	}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		ImageModel: "gpt-image-test",
+		Rules: []model.HostedPricingRule{
+			{
+				DocumentProfile:      "text",
+				ReservationCredits:   1,
+				MinimumChargeCredits: 1,
+				Enabled:              true,
+			},
+			{
+				DocumentProfile:      "image",
+				ImagePerAssetCredits: 1,
+				ReservationCredits:   1,
+				MinimumChargeCredits: 1,
+				Enabled:              true,
+			},
+		},
+		TimeoutSec:           5,
+		AIGatewayKeyCipher:   testAIGatewayCipher(t),
+		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"sk-user-42"}},
+		ChargeOnlyMode:       ChargeOnlyModeAll,
+	})
+	return svc, store, upstream
+}
+
+// AC-2.2: under ChargeOnlyMode=all, an upstream failure must produce ZERO
+// ledger rows (no charge, no charge_failed, no legacy reserve/settle/release).
+func TestChargeOnlyUpstreamFailureProducesZeroLedgerRows(t *testing.T) {
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream gone", http.StatusBadGateway)
+	})
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+	require.Error(t, err)
+	require.Empty(t, store.charges, "charge_only failed upstream must not write charge ledger")
+	require.Empty(t, store.chargeFailed, "charge_failed must not be written when ReconcileEnabled=false")
+	require.Empty(t, store.reservations, "legacy reserve path must not be invoked")
+	require.Empty(t, store.releases)
+	require.Empty(t, store.settlements)
+	require.Empty(t, store.events, "no usage_event written on upstream failure under charge_only")
+}
+
+// AC-2.3: under ChargeOnlyMode=all, a successful request produces exactly
+// one charge ledger row whose usage_event_id is non-nil (fixes F1 audit
+// chain).
+func TestChargeOnlySuccessWritesSingleChargeLedgerWithUsageEventID(t *testing.T) {
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":4}}`)
+	})
+	resp, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
+		RequestID: "req-charge-success",
+		Model:     "hosted/text",
+		Messages:  []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "ok", resp.Content)
+	require.Len(t, store.charges, 1, "exactly one charge ledger row")
+	require.Equal(t, "req-charge-success", store.charges[0].RequestID)
+	require.NotNil(t, store.charges[0].UsageEventID, "charge ledger must carry usage_event_id")
+	require.NotZero(t, *store.charges[0].UsageEventID, "usage_event_id must be non-zero (audit chain F1)")
+	require.Empty(t, store.chargeFailed)
+	require.Empty(t, store.reservations, "no legacy reserve under charge_only")
+	require.Empty(t, store.settlements)
+	require.Empty(t, store.releases)
+	require.Len(t, store.events, 1)
+	// Verify the audit chain: charge.usage_event_id == events[0].ID.
+	require.Equal(t, store.events[0].ID, *store.charges[0].UsageEventID)
+}
+
+// AC-2.3 image variant: same invariant for GenerateImage.
+func TestChargeOnlyImageSuccessWritesChargeLedgerWithUsageEventID(t *testing.T) {
+	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"data":[{"b64_json":"%s"}]}`, imageData)
+	})
+	resp, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
+		RequestID:   "req-img-success",
+		Model:       "hosted/image",
+		Prompt:      "hero",
+		AspectRatio: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("png-bytes"), resp.Data)
+	require.Len(t, store.charges, 1)
+	require.NotNil(t, store.charges[0].UsageEventID)
+	require.Empty(t, store.reservations)
+}
+
+// AC-2.2 image variant: upstream failure produces zero ledger rows.
+func TestChargeOnlyImageUpstreamFailureProducesZeroLedger(t *testing.T) {
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+	_, err := svc.GenerateImage(context.Background(), "Bearer hosted-key", "", ImageRequest{
+		Model:       "hosted/image",
+		Prompt:      "x",
+		AspectRatio: 1,
+	})
+	require.Error(t, err)
+	require.Empty(t, store.charges)
+	require.Empty(t, store.chargeFailed)
+	require.Empty(t, store.reservations)
+}
+
+// Decode failure under ChargeOnlyMode=all with ReconcileEnabled=false: do
+// NOT charge and do NOT write charge_failed. Product is lost; account
+// untouched. (Plan §5 Phase 2 step 5)
+func TestChargeOnlyDecodeFailureDoesNotChargeOrWriteFailedByDefault(t *testing.T) {
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `not-json-at-all`)
+	})
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
+		Model:    "hosted/text",
+		Messages: []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+	require.Error(t, err)
+	require.Empty(t, store.charges)
+	require.Empty(t, store.chargeFailed, "ReconcileEnabled=false: no charge_failed row on decode failure")
+}
+
+// Decode failure under ReconcileEnabled=true: write charge_failed ledger.
+func TestChargeOnlyDecodeFailureWritesChargeFailedWhenReconcileEnabled(t *testing.T) {
+	svc, store, _ := chargeOnlyFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `not-json`)
+	})
+	svc.SetReconcileEnabled(true)
+	_, err := svc.Complete(context.Background(), "Bearer hosted-key", "", CompletionRequest{
+		RequestID: "req-decode-fail",
+		Model:     "hosted/text",
+		Messages:  []ChatMessage{{Role: "user", Content: "hello"}},
+	})
+	require.Error(t, err)
+	require.Empty(t, store.charges)
+	require.Len(t, store.chargeFailed, 1)
+	require.Equal(t, "req-decode-fail", store.chargeFailed[0].RequestID)
+	require.Contains(t, store.chargeFailed[0].MetadataJSON, "decode_failure")
+}
+
+// AC-2.5: Architect CAVEAT 3 — flag flip race invariant. For every
+// requestID in the ledger after the test, the source-type SET must be
+// either {reserve, settle} OR {charge}, NEVER both. Otherwise a single
+// request could be debited twice under different idempotency-key prefixes.
+//
+// Implementation note: we drive a fingerprint-only subject because the
+// legacy fingerprint path is the only one whose request_id flows into the
+// fake's `hostedRequests` slice (api_key reserve uses a key hash and does
+// not carry the request_id).
+func TestChargeOnlyFlagFlipRaceDoesNotProduceDualLedgerForSameRequestID(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer upstream.Close()
+
+	store := &fakeAPIKeyStore{}
+	svc := NewService(store, Config{
+		BaseURL:    upstream.URL,
+		APIKey:     "platform-upstream-key",
+		HashSalt:   "salt",
+		TextModel:  "gpt-test",
+		Rules: []model.HostedPricingRule{{
+			DocumentProfile:      "text",
+			ReservationCredits:   1,
+			MinimumChargeCredits: 1,
+			Enabled:              true,
+		}},
+		TimeoutSec:     5,
+		ChargeOnlyMode: ChargeOnlyModeDisabled,
+	})
+
+	const goroutines = 20
+	const flips = 50
+
+	var stopFlipper atomic.Bool
+	flipperDone := make(chan struct{})
+	go func() {
+		defer close(flipperDone)
+		for i := 0; i < flips; i++ {
+			if stopFlipper.Load() {
+				return
+			}
+			// Flip between disabled and all to exercise both code paths
+			// for fingerprint subjects (covers fingerprint and user
+			// rollout values too via "all").
+			if i%2 == 0 {
+				svc.SetChargeOnlyMode(ChargeOnlyModeAll)
+			} else {
+				svc.SetChargeOnlyMode(ChargeOnlyModeDisabled)
+			}
+			time.Sleep(50 * time.Microsecond)
+		}
+	}()
+
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			requestID := fmt.Sprintf("req-race-%d", g)
+			_, _ = svc.Complete(context.Background(), "", "fp-race", CompletionRequest{
+				RequestID:       requestID,
+				Model:           "hosted/text",
+				Messages:        []ChatMessage{{Role: "user", Content: "hello"}},
+				FingerprintHash: "fp-race",
+			})
+		}(g)
+	}
+	wg.Wait()
+	stopFlipper.Store(true)
+	<-flipperDone
+
+	store.mu.Lock()
+	chargeIDs := map[string]bool{}
+	for _, c := range store.charges {
+		chargeIDs[c.RequestID] = true
+	}
+	reserveIDs := map[string]bool{}
+	for _, id := range store.hostedRequests {
+		if id != "" {
+			reserveIDs[id] = true
+		}
+	}
+	store.mu.Unlock()
+	for id := range chargeIDs {
+		require.Falsef(t, reserveIDs[id], "requestID %q produced BOTH reserve and charge ledger rows (flag-flip race violation)", id)
+	}
+	for id := range reserveIDs {
+		require.Falsef(t, chargeIDs[id], "requestID %q produced BOTH reserve and charge ledger rows (flag-flip race violation)", id)
+	}
+	// Sanity check: we observed at least one charge AND at least one
+	// reserve, otherwise the test didn't actually exercise both paths.
+	require.NotEmpty(t, chargeIDs, "race test did not exercise the charge path")
+	require.NotEmpty(t, reserveIDs, "race test did not exercise the reserve path")
+}
+
+// Helper to ensure silenceAtomicImport is actually used. Run-only marker.
+func TestSilenceAtomicImportPlaceholder(t *testing.T) {
+	silenceAtomicImport.Store(1)
+	require.Equal(t, int64(1), silenceAtomicImport.Load())
 }

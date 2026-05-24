@@ -33,6 +33,7 @@ type Store interface {
 	TransferAnonymousCreditsToUser(ctx context.Context, fingerprint string, userID uint64) (int, error)
 	UpdateAPIKey(ctx context.Context, id uint64, values map[string]any) error
 	IsAPIKeyOwnedByUser(ctx context.Context, apiKeyID, userID uint64) (bool, error)
+	ListUserHostedCreditLedger(ctx context.Context, userID uint64, includeZeroDelta bool) ([]model.UserHostedCreditLedger, error)
 }
 
 type Billing interface {
@@ -519,6 +520,10 @@ func (s *Service) ListUsageEvents(ctx context.Context, userID uint64) ([]UsageEv
 		return []UsageEventView{}, nil
 	}
 	return visible, nil
+}
+
+func (s *Service) ListCreditLedger(ctx context.Context, userID uint64) ([]model.UserHostedCreditLedger, error) {
+	return s.store.ListUserHostedCreditLedger(ctx, userID, false)
 }
 
 func (s *Service) QuotaSummary(ctx context.Context, userID uint64) (*QuotaSummary, error) {

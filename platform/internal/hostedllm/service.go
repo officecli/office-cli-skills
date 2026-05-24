@@ -18,6 +18,7 @@ import (
 	"net/textproto"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/officecli/officecli-internal/platform/internal/apikey"
@@ -25,6 +26,23 @@ import (
 	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 )
+
+// ChargeOnlyMode controls which subject types run the post-success Charge
+// path versus the legacy Reserve/Settle/Release path. Gradual rollout order
+// is fingerprint -> user -> all.
+type ChargeOnlyMode string
+
+const (
+	ChargeOnlyModeDisabled    ChargeOnlyMode = "disabled"
+	ChargeOnlyModeFingerprint ChargeOnlyMode = "fingerprint"
+	ChargeOnlyModeUser        ChargeOnlyMode = "user"
+	ChargeOnlyModeAll         ChargeOnlyMode = "all"
+)
+
+// ErrHostedCreditsExhausted is returned by the precheck path when the
+// subject's balance is below the minimum charge threshold. Mirrors the
+// store-layer error so callers can compare without importing sqlstore.
+var ErrHostedCreditsExhausted = errors.New("hosted credits exhausted")
 
 type APIKeyStore interface {
 	FindAPIKeyByHash(ctx context.Context, hash string) (*model.APIKey, error)
@@ -38,6 +56,15 @@ type APIKeyStore interface {
 	ReserveHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int) (*model.FingerprintCreditAccount, error)
 	ReleaseHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int) (*model.FingerprintCreditAccount, error)
 	SettleHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, reserved int, settled int) (*model.FingerprintCreditAccount, error)
+	ChargeHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int, usageEventID *uint64) (*model.UserHostedCreditAccount, error)
+	ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int, usageEventID *uint64) (*model.FingerprintCreditAccount, error)
+	ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, requestID string, credits int, usageEventID *uint64) (*model.APIKey, error)
+	PrecheckHostedCreditsByUser(ctx context.Context, userID uint64, minCredits int) error
+	PrecheckHostedCreditsByFingerprint(ctx context.Context, fingerprint string, minCredits int) error
+	PrecheckAPIKeyCredits(ctx context.Context, apiKeyID uint64, minCredits int) error
+	WriteChargeFailedLedgerForUser(ctx context.Context, userID uint64, requestID string, credits int, metadataJSON string) error
+	WriteChargeFailedLedgerForFingerprint(ctx context.Context, fingerprint string, requestID string, credits int, metadataJSON string) error
+	WriteChargeFailedLedgerForAPIKey(ctx context.Context, apiKeyID uint64, requestID string, credits int, metadataJSON string) error
 	FindCLISessionByTokenHash(ctx context.Context, tokenHash string) (*model.CLISession, error)
 	TouchCLISession(ctx context.Context, id uint64, usedAt time.Time) error
 	CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error
@@ -72,15 +99,19 @@ type Config struct {
 	AIGatewayCreateKeyPath string
 	AIGatewayKeyCipher     *apikey.Cipher
 	AIGatewayAdminClient   AIGatewayAdminClient
+	ChargeOnlyMode         ChargeOnlyMode
+	ReconcileEnabled       bool
 }
 
 type Service struct {
-	store          APIKeyStore
-	quota          GenerationQuotaManager
-	cfg            Config
-	mu             sync.RWMutex
-	createKeyLocks sync.Map
-	client         *http.Client
+	store            APIKeyStore
+	quota            GenerationQuotaManager
+	cfg              Config
+	mu               sync.RWMutex
+	createKeyLocks   sync.Map
+	client           *http.Client
+	chargeOnlyMode   atomic.Value
+	reconcileEnabled atomic.Bool
 }
 
 type CompletionRequest struct {
@@ -159,12 +190,141 @@ func NewService(store APIKeyStore, cfg Config, quotaManagers ...GenerationQuotaM
 	if len(quotaManagers) > 0 {
 		quota = quotaManagers[0]
 	}
-	return &Service{
+	svc := &Service{
 		store:  store,
 		quota:  quota,
 		cfg:    cfg,
 		client: &http.Client{Timeout: timeout},
 	}
+	svc.chargeOnlyMode.Store(normalizeChargeOnlyMode(cfg.ChargeOnlyMode))
+	svc.reconcileEnabled.Store(cfg.ReconcileEnabled)
+	return svc
+}
+
+func normalizeChargeOnlyMode(value ChargeOnlyMode) ChargeOnlyMode {
+	switch value {
+	case ChargeOnlyModeFingerprint, ChargeOnlyModeUser, ChargeOnlyModeAll:
+		return value
+	default:
+		return ChargeOnlyModeDisabled
+	}
+}
+
+// SetChargeOnlyMode hot-swaps the charge-only rollout flag. Safe for
+// concurrent use; the next request reads the new value via the atomic.
+func (s *Service) SetChargeOnlyMode(mode ChargeOnlyMode) {
+	s.chargeOnlyMode.Store(normalizeChargeOnlyMode(mode))
+}
+
+// SetReconcileEnabled hot-swaps the reconcile (charge_failed ledger) flag.
+func (s *Service) SetReconcileEnabled(enabled bool) {
+	s.reconcileEnabled.Store(enabled)
+}
+
+// CurrentChargeOnlyMode returns the live rollout flag for inspection by
+// admin/observability surfaces. Reads the same atomic the hot path uses,
+// so this is consistent with what the next request will see.
+func (s *Service) CurrentChargeOnlyMode() ChargeOnlyMode {
+	return s.currentChargeOnlyMode()
+}
+
+// CurrentReconcileEnabled returns the live reconcile flag for inspection.
+func (s *Service) CurrentReconcileEnabled() bool {
+	return s.reconcileEnabled.Load()
+}
+
+func (s *Service) currentChargeOnlyMode() ChargeOnlyMode {
+	if v, ok := s.chargeOnlyMode.Load().(ChargeOnlyMode); ok {
+		return v
+	}
+	return ChargeOnlyModeDisabled
+}
+
+// chargeOnly reports whether the new charge path applies to the given
+// subject under the current rollout flag. Gradual order is fingerprint ->
+// user -> all; each level INCLUDES the prior levels.
+func (s *Service) chargeOnly(subject *hostedSubject) bool {
+	if subject == nil {
+		return false
+	}
+	mode := s.currentChargeOnlyMode()
+	switch mode {
+	case ChargeOnlyModeAll:
+		return true
+	case ChargeOnlyModeUser:
+		if subject.APIKeyID != nil {
+			return false
+		}
+		return subject.UserID != 0 || subject.FingerprintHash != ""
+	case ChargeOnlyModeFingerprint:
+		return subject.UserID == 0 && subject.APIKeyID == nil && subject.FingerprintHash != ""
+	default:
+		return false
+	}
+}
+
+// precheckSubjectCredits routes a read-only balance check to the right
+// store function based on subject type. Returns ErrHostedCreditsExhausted
+// when the balance is below minCharge.
+func (s *Service) precheckSubjectCredits(ctx context.Context, subject *hostedSubject, minCharge int) error {
+	if subject == nil {
+		return fmt.Errorf("hosted subject is required")
+	}
+	if subject.Key != nil && subject.APIKeyID != nil {
+		return s.store.PrecheckAPIKeyCredits(ctx, *subject.APIKeyID, minCharge)
+	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		return s.store.PrecheckHostedCreditsByFingerprint(ctx, subject.FingerprintHash, minCharge)
+	}
+	return s.store.PrecheckHostedCreditsByUser(ctx, subject.UserID, minCharge)
+}
+
+// chargeSubjectCredits routes the post-success charge transaction to the
+// right store function. Returns the new balance and any error from the
+// charge attempt (including ErrHostedCreditsExhausted on concurrent
+// depletion, which callers should treat as a transient overspend under
+// the ADR Trade-off 1 boundary).
+func (s *Service) chargeSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, credits int, usageEventID *uint64) (int, error) {
+	if subject == nil {
+		return 0, fmt.Errorf("hosted subject is required")
+	}
+	opCtx, cancel := settlementContext(ctx)
+	defer cancel()
+	if subject.Key != nil && subject.APIKeyID != nil {
+		key, err := s.store.ChargeAPIKeyCredits(opCtx, *subject.APIKeyID, requestID, credits, usageEventID)
+		return creditBalance(key), err
+	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		account, err := s.store.ChargeHostedCreditsByFingerprint(opCtx, subject.FingerprintHash, requestID, credits, usageEventID)
+		return fingerprintAccountCreditBalance(account), err
+	}
+	account, err := s.store.ChargeHostedCreditsByUser(opCtx, subject.UserID, requestID, credits, usageEventID)
+	return accountCreditBalance(account), err
+}
+
+// writeChargeFailedForSubject marshals the metadata to JSON and writes a
+// charge_failed_post_upstream ledger row via the appropriate store helper.
+// Only called when ReconcileEnabled=true, per ADR Trade-off 2.
+func (s *Service) writeChargeFailedForSubject(ctx context.Context, subject *hostedSubject, requestID string, credits int, meta map[string]any) error {
+	if subject == nil {
+		return fmt.Errorf("hosted subject is required")
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("marshal charge_failed metadata: %w", err)
+	}
+	opCtx, cancel := settlementContext(ctx)
+	defer cancel()
+	if subject.Key != nil && subject.APIKeyID != nil {
+		return s.store.WriteChargeFailedLedgerForAPIKey(opCtx, *subject.APIKeyID, requestID, credits, string(raw))
+	}
+	if subject.UserID == 0 && subject.FingerprintHash != "" {
+		return s.store.WriteChargeFailedLedgerForFingerprint(opCtx, subject.FingerprintHash, requestID, credits, string(raw))
+	}
+	return s.store.WriteChargeFailedLedgerForUser(opCtx, subject.UserID, requestID, credits, string(raw))
 }
 
 func (s *Service) HostedPricingRules() []model.HostedPricingRule {
@@ -191,6 +351,17 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 	if err != nil {
 		return nil, err
 	}
+	// Sample the flag exactly once per request so that flag flips mid-request
+	// cannot cause the same requestID to take both the reserve and charge
+	// paths (which would produce duplicate ledger rows under different
+	// idempotency-key prefixes — see Pre-mortem #11 / AC-2.5).
+	if s.chargeOnly(subject) {
+		return s.completeChargeOnly(ctx, subject, req, upstreamAPIKey)
+	}
+	return s.completeReserveLegacy(ctx, subject, req, upstreamAPIKey)
+}
+
+func (s *Service) completeReserveLegacy(ctx context.Context, subject *hostedSubject, req CompletionRequest, upstreamAPIKey string) (*CompletionResponse, error) {
 	reservation := s.reserveCreditsForModel(ctx, req.Model, false)
 	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 	if err != nil {
@@ -198,27 +369,10 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 	}
 	modelName := s.normalizeModel(ctx, req.Model, false)
 
-	payload := map[string]any{
-		"model":    modelName,
-		"messages": req.Messages,
-	}
-	if req.JSONMode {
-		payload["response_format"] = map[string]any{"type": "json_object"}
-	}
-	if len(req.Schema) > 0 {
-		var schema map[string]any
-		if err := json.Unmarshal(req.Schema, &schema); err != nil {
-			_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-			return nil, fmt.Errorf("parse schema: %w", err)
-		}
-		payload["response_format"] = map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   req.SchemaName,
-				"strict": req.Strict,
-				"schema": schema,
-			},
-		}
+	payload, err := buildChatPayload(req, modelName)
+	if err != nil {
+		_, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
+		return nil, err
 	}
 
 	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
@@ -239,22 +393,11 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
 		return nil, err
 	}
-	var resp struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
+	content, err := decodeChatContent(body)
+	if err != nil {
 		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
 		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
-		return nil, fmt.Errorf("decode hosted completion: %w", err)
-	}
-	if len(resp.Choices) == 0 {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, false))
-		return nil, fmt.Errorf("hosted completion is empty")
+		return nil, err
 	}
 	pricing := s.priceUsage(ctx, req.Model, usage, false)
 	settled := pricing.ChargeCredits
@@ -268,10 +411,135 @@ func (s *Service) Complete(ctx context.Context, bearer string, fingerprint strin
 	}
 	s.recordUsage(ctx, subject, req, modelName, usage, reservation, settled, reservation-settled, pricing)
 	return &CompletionResponse{
-		Content:        resp.Choices[0].Message.Content,
+		Content:        content,
 		CreditBalance:  creditBalance,
 		CreditsCharged: settled,
 	}, nil
+}
+
+func (s *Service) completeChargeOnly(ctx context.Context, subject *hostedSubject, req CompletionRequest, upstreamAPIKey string) (*CompletionResponse, error) {
+	modelName := s.normalizeModel(ctx, req.Model, false)
+	payload, err := buildChatPayload(req, modelName)
+	if err != nil {
+		return nil, err
+	}
+	// Cheap read-only admission check: spare the upstream call and the
+	// user-visible error path when the balance is clearly below the
+	// minimum charge. NOT the authoritative admission — the DB row lock
+	// inside Charge re-validates atomically.
+	if err := s.precheckSubjectCredits(ctx, subject, 1); err != nil {
+		return nil, err
+	}
+
+	body, usage, err := s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
+	if err != nil && isUpstreamAuthError(err) {
+		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
+		if rotateErr != nil {
+			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
+		}
+		body, usage, err = s.post(ctx, strings.TrimRight(s.cfg.BaseURL, "/")+"/chat/completions", payload, upstreamAPIKey)
+	}
+	if err != nil {
+		// Upstream failure: zero side effects on the account (no charge,
+		// no charge_failed ledger). This is the core P2 property.
+		return nil, err
+	}
+	content, decodeErr := decodeChatContent(body)
+	if decodeErr != nil {
+		s.handleDecodeFailureChargeOnly(ctx, subject, req, modelName, usage, false, decodeErr)
+		return nil, decodeErr
+	}
+	pricing := s.priceUsage(ctx, req.Model, usage, false)
+	// Record the usage event first so we can attach its primary key to the
+	// charge ledger row (fixes F1 — audit chain).
+	event := s.buildChatUsageEvent(subject, req, modelName, usage, pricing, pricing.ChargeCredits)
+	s.persistUsageEvent(ctx, event)
+	var eventIDPtr *uint64
+	if event.ID != 0 {
+		eid := event.ID
+		eventIDPtr = &eid
+	}
+	balance, chargeErr := s.chargeSubjectCredits(ctx, subject, req.RequestID, pricing.ChargeCredits, eventIDPtr)
+	if chargeErr != nil {
+		if errors.Is(chargeErr, ErrHostedCreditsExhausted) {
+			// Transient overspend ≤ max charge (ADR Trade-off 1). Product
+			// was already produced and returned; the account just couldn't
+			// be debited because a concurrent request beat us to zero. We
+			// eat the cost; no charge_failed row.
+			slog.Warn("hosted_charge_overspend",
+				"request_id", req.RequestID,
+				"subject_user_id", subject.UserID,
+				"subject_fingerprint", subject.FingerprintHash,
+				"credits", pricing.ChargeCredits,
+			)
+		} else if s.reconcileEnabled.Load() {
+			meta := map[string]any{
+				"reason":              "charge_tx_failed",
+				"upstream_request_id": req.RequestID,
+				"pricing_rule_id":     pricing.RuleID,
+				"charge_tx_error":     chargeErr.Error(),
+			}
+			if writeErr := s.writeChargeFailedForSubject(ctx, subject, req.RequestID, pricing.ChargeCredits, meta); writeErr != nil {
+				slog.Warn("hosted_charge_failed_write_failed",
+					"request_id", req.RequestID,
+					"err", writeErr,
+				)
+			}
+		} else {
+			slog.Warn("hosted_charge_tx_failed",
+				"request_id", req.RequestID,
+				"credits", pricing.ChargeCredits,
+				"err", chargeErr,
+			)
+		}
+	}
+	return &CompletionResponse{
+		Content:        content,
+		CreditBalance:  balance,
+		CreditsCharged: pricing.ChargeCredits,
+	}, nil
+}
+
+func buildChatPayload(req CompletionRequest, modelName string) (map[string]any, error) {
+	payload := map[string]any{
+		"model":    modelName,
+		"messages": req.Messages,
+	}
+	if req.JSONMode {
+		payload["response_format"] = map[string]any{"type": "json_object"}
+	}
+	if len(req.Schema) > 0 {
+		var schema map[string]any
+		if err := json.Unmarshal(req.Schema, &schema); err != nil {
+			return nil, fmt.Errorf("parse schema: %w", err)
+		}
+		payload["response_format"] = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   req.SchemaName,
+				"strict": req.Strict,
+				"schema": schema,
+			},
+		}
+	}
+	return payload, nil
+}
+
+func decodeChatContent(body []byte) (string, error) {
+	var resp struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", fmt.Errorf("decode hosted completion: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("hosted completion is empty")
+	}
+	return resp.Choices[0].Message.Content, nil
 }
 
 func (s *Service) completeQuotaText(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
@@ -345,6 +613,15 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 	if err != nil {
 		return nil, err
 	}
+	// Sample chargeOnly exactly once per request (see Complete for the
+	// rationale — AC-2.5 flag-flip race invariant).
+	if s.chargeOnly(subject) {
+		return s.generateImageChargeOnly(ctx, subject, req, upstreamAPIKey)
+	}
+	return s.generateImageReserveLegacy(ctx, subject, req, upstreamAPIKey)
+}
+
+func (s *Service) generateImageReserveLegacy(ctx context.Context, subject *hostedSubject, req ImageRequest, upstreamAPIKey string) (*ImageResponse, error) {
 	reservation := s.reserveCreditsForModel(ctx, req.Model, true)
 	creditBalance, err := s.reserveSubjectCredits(ctx, subject, req.RequestID, reservation)
 	if err != nil {
@@ -375,26 +652,11 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
 		return nil, err
 	}
-	var resp struct {
-		Data []struct {
-			B64JSON string `json:"b64_json"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &resp); err != nil {
+	data, decodeErr := decodeImageData(body)
+	if decodeErr != nil {
 		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
 		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
-		return nil, fmt.Errorf("decode hosted image: %w", err)
-	}
-	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
-		return nil, fmt.Errorf("hosted image is empty")
-	}
-	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
-	if err != nil {
-		creditBalance, _ = s.releaseSubjectCredits(ctx, subject, req.RequestID, reservation)
-		s.recordImageUsage(ctx, subject, req, modelName, usage, reservation, 0, reservation, s.priceUsage(ctx, req.Model, usage, true))
-		return nil, fmt.Errorf("decode hosted image data: %w", err)
+		return nil, decodeErr
 	}
 	usage.ImageCount = 1
 	pricing := s.priceUsage(ctx, req.Model, usage, true)
@@ -414,6 +676,102 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 		CreditBalance:  creditBalance,
 		CreditsCharged: settled,
 	}, nil
+}
+
+func (s *Service) generateImageChargeOnly(ctx context.Context, subject *hostedSubject, req ImageRequest, upstreamAPIKey string) (*ImageResponse, error) {
+	modelName := s.normalizeModel(ctx, req.Model, true)
+	payload := map[string]any{
+		"model":           modelName,
+		"prompt":          req.Prompt,
+		"size":            effectiveImageSize(req),
+		"response_format": "b64_json",
+	}
+	if err := s.precheckSubjectCredits(ctx, subject, 1); err != nil {
+		return nil, err
+	}
+	body, usage, err := s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
+	if err != nil && isUpstreamAuthError(err) {
+		upstreamAPIKey, rotateErr := s.rotateSubjectAIGatewayAPIKey(ctx, subject, err)
+		if rotateErr != nil {
+			return nil, fmt.Errorf("hosted upstream credential rotation failed: %w", rotateErr)
+		}
+		body, usage, err = s.postImageRequest(ctx, modelName, req, payload, upstreamAPIKey)
+	}
+	if err != nil {
+		return nil, err
+	}
+	data, decodeErr := decodeImageData(body)
+	if decodeErr != nil {
+		s.handleDecodeFailureChargeOnly(ctx, subject, req, modelName, usage, true, decodeErr)
+		return nil, decodeErr
+	}
+	usage.ImageCount = 1
+	pricing := s.priceUsage(ctx, req.Model, usage, true)
+	event := s.buildImageUsageEvent(subject, req, modelName, usage, pricing, pricing.ChargeCredits)
+	s.persistUsageEvent(ctx, event)
+	var eventIDPtr *uint64
+	if event.ID != 0 {
+		eid := event.ID
+		eventIDPtr = &eid
+	}
+	balance, chargeErr := s.chargeSubjectCredits(ctx, subject, req.RequestID, pricing.ChargeCredits, eventIDPtr)
+	if chargeErr != nil {
+		if errors.Is(chargeErr, ErrHostedCreditsExhausted) {
+			slog.Warn("hosted_charge_overspend",
+				"request_id", req.RequestID,
+				"subject_user_id", subject.UserID,
+				"subject_fingerprint", subject.FingerprintHash,
+				"credits", pricing.ChargeCredits,
+				"is_image", true,
+			)
+		} else if s.reconcileEnabled.Load() {
+			meta := map[string]any{
+				"reason":              "charge_tx_failed",
+				"upstream_request_id": req.RequestID,
+				"pricing_rule_id":     pricing.RuleID,
+				"charge_tx_error":     chargeErr.Error(),
+				"is_image":            true,
+			}
+			if writeErr := s.writeChargeFailedForSubject(ctx, subject, req.RequestID, pricing.ChargeCredits, meta); writeErr != nil {
+				slog.Warn("hosted_charge_failed_write_failed",
+					"request_id", req.RequestID,
+					"err", writeErr,
+				)
+			}
+		} else {
+			slog.Warn("hosted_charge_tx_failed",
+				"request_id", req.RequestID,
+				"credits", pricing.ChargeCredits,
+				"err", chargeErr,
+				"is_image", true,
+			)
+		}
+	}
+	return &ImageResponse{
+		Data:           data,
+		MIME:           "image/png",
+		CreditBalance:  balance,
+		CreditsCharged: pricing.ChargeCredits,
+	}, nil
+}
+
+func decodeImageData(body []byte) ([]byte, error) {
+	var resp struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("decode hosted image: %w", err)
+	}
+	if len(resp.Data) == 0 || strings.TrimSpace(resp.Data[0].B64JSON) == "" {
+		return nil, fmt.Errorf("hosted image is empty")
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data[0].B64JSON)
+	if err != nil {
+		return nil, fmt.Errorf("decode hosted image data: %w", err)
+	}
+	return data, nil
 }
 
 func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req ImageRequest) (*ImageResponse, error) {
@@ -1328,8 +1686,15 @@ func hostedUsageFingerprint(requestFingerprint string, token *licensesvc.CommitT
 }
 
 func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
-	ctx, cancel := settlementContext(ctx)
-	defer cancel()
+	event := s.buildChatUsageEventFull(subject, req, modelName, usage, pricing, reserved, settled, refund)
+	s.persistUsageEvent(ctx, event)
+}
+
+func (s *Service) buildChatUsageEvent(subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, settled int) *model.UsageEvent {
+	return s.buildChatUsageEventFull(subject, req, modelName, usage, pricing, 0, settled, 0)
+}
+
+func (s *Service) buildChatUsageEventFull(subject *hostedSubject, req CompletionRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, reserved, settled, refund int) *model.UsageEvent {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1366,12 +1731,25 @@ func (s *Service) recordUsage(ctx context.Context, subject *hostedSubject, req C
 		event.APIKeyID = subject.APIKeyID
 	}
 	event.ApplyAuditContext(req.AuditContext)
-	_ = s.store.CreateUsageEvent(ctx, event)
+	return event
+}
+
+func (s *Service) persistUsageEvent(ctx context.Context, event *model.UsageEvent) {
+	opCtx, cancel := settlementContext(ctx)
+	defer cancel()
+	_ = s.store.CreateUsageEvent(opCtx, event)
 }
 
 func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, reserved, settled, refund int, pricing hostedPriceSnapshot) {
-	ctx, cancel := settlementContext(ctx)
-	defer cancel()
+	event := s.buildImageUsageEventFull(subject, req, modelName, usage, pricing, reserved, settled, refund)
+	s.persistUsageEvent(ctx, event)
+}
+
+func (s *Service) buildImageUsageEvent(subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, settled int) *model.UsageEvent {
+	return s.buildImageUsageEventFull(subject, req, modelName, usage, pricing, 0, settled, 0)
+}
+
+func (s *Service) buildImageUsageEventFull(subject *hostedSubject, req ImageRequest, modelName string, usage usageSummary, pricing hostedPriceSnapshot, reserved, settled, refund int) *model.UsageEvent {
 	runtimeMode := "hosted"
 	provider := s.cfg.Provider
 	if provider == "" {
@@ -1419,7 +1797,45 @@ func (s *Service) recordImageUsage(ctx context.Context, subject *hostedSubject, 
 			"api_key_id", event.APIKeyID,
 		)
 	}
-	_ = s.store.CreateUsageEvent(ctx, event)
+	return event
+}
+
+// handleDecodeFailureChargeOnly is invoked when the upstream returned 200
+// but the body could not be decoded (or was empty). Default behavior is to
+// log + return — the product is lost to the user but the account is not
+// charged. When ReconcileEnabled is set, a charge_failed_post_upstream
+// ledger row is written so an out-of-band reconciliation can compensate.
+func (s *Service) handleDecodeFailureChargeOnly(ctx context.Context, subject *hostedSubject, req any, modelName string, usage usageSummary, isImage bool, cause error) {
+	var requestID string
+	switch r := req.(type) {
+	case CompletionRequest:
+		requestID = r.RequestID
+	case ImageRequest:
+		requestID = r.RequestID
+	}
+	slog.Warn("hosted_decode_failure_post_upstream",
+		"request_id", requestID,
+		"model", modelName,
+		"is_image", isImage,
+		"err", cause,
+	)
+	if !s.reconcileEnabled.Load() {
+		return
+	}
+	pricing := s.priceUsage(ctx, modelName, usage, isImage)
+	meta := map[string]any{
+		"reason":              "decode_failure",
+		"upstream_request_id": requestID,
+		"pricing_rule_id":     pricing.RuleID,
+		"decode_error":        cause.Error(),
+		"upstream_http_status": 200,
+	}
+	if writeErr := s.writeChargeFailedForSubject(ctx, subject, requestID, pricing.ChargeCredits, meta); writeErr != nil {
+		slog.Warn("hosted_charge_failed_write_failed",
+			"request_id", requestID,
+			"err", writeErr,
+		)
+	}
 }
 
 func creditBalance(key *model.APIKey) int {

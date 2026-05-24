@@ -136,6 +136,9 @@ func (f *fakeStore) UpdateAPIKey(_ context.Context, _ uint64, values map[string]
 func (f *fakeStore) IsAPIKeyOwnedByUser(_ context.Context, _, _ uint64) (bool, error) {
 	return f.owned, nil
 }
+func (f *fakeStore) ListUserHostedCreditLedger(_ context.Context, _ uint64, _ bool) ([]model.UserHostedCreditLedger, error) {
+	return nil, nil
+}
 
 type fakeBilling struct{}
 

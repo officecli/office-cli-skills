@@ -106,6 +106,9 @@ func (fakeAdminRouteFailureService) UpdateOrder(_ context.Context, id uint64, re
 func (fakeAdminRouteFailureService) ListBillingEvents(_ context.Context) ([]model.BillingEvent, error) {
 	return nil, nil
 }
+func (fakeAdminRouteFailureService) ListCreditLedger(_ context.Context, _ bool) ([]model.UserHostedCreditLedger, error) {
+	return nil, nil
+}
 func (fakeAdminRouteFailureService) Growth(_ context.Context) (*admin.GrowthSnapshot, error) {
 	return &admin.GrowthSnapshot{}, nil
 }

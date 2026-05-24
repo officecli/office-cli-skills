@@ -521,6 +521,10 @@ func (s *Service) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, 
 	return s.store.ListBillingEvents(ctx)
 }
 
+func (s *Service) ListCreditLedger(ctx context.Context, includeZeroDelta bool) ([]model.UserHostedCreditLedger, error) {
+	return s.store.ListAllUserHostedCreditLedger(ctx, includeZeroDelta)
+}
+
 func (s *Service) Growth(ctx context.Context) (*GrowthSnapshot, error) {
 	if s.mockData {
 		return mockGrowth(), nil

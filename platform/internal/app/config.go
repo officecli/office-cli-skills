@@ -73,6 +73,8 @@ type Config struct {
 	HostedLLMImageModel          string
 	HostedLLMProvider            string
 	HostedLLMTimeoutSec          int
+	HostedChargeOnlyMode         string
+	HostedReconcileEnabled       bool
 	AIGatewayAdminBaseURL        string
 	AIGatewayAdminAPIKey         string
 	AIGatewayAPIKeyGroup         string
@@ -174,6 +176,8 @@ func LoadConfig() (Config, error) {
 		HostedLLMImageModel:          mustEnvDefault("HOSTED_LLM_IMAGE_MODEL", "gpt-image-2"),
 		HostedLLMProvider:            mustEnvDefault("HOSTED_LLM_PROVIDER", "openai"),
 		HostedLLMTimeoutSec:          mustEnvInt("HOSTED_LLM_TIMEOUT_SEC", 1200),
+		HostedChargeOnlyMode:         mustEnvDefault("HOSTED_CHARGE_ONLY_MODE", "disabled"),
+		HostedReconcileEnabled:       mustEnvBool("HOSTED_RECONCILE_ENABLED", false),
 		AIGatewayAdminBaseURL:        mustEnvDefault("AIGATEWAY_ADMIN_BASE_URL", "https://aigateway.claudeoffice.com"),
 		AIGatewayAdminAPIKey:         os.Getenv("AIGATEWAY_ADMIN_API_KEY"),
 		AIGatewayAPIKeyGroup:         os.Getenv("AIGATEWAY_API_KEY_GROUP"),

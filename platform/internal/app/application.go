@@ -93,6 +93,7 @@ type adminRouteService interface {
 	ListOrders(ctx context.Context) ([]model.Order, error)
 	UpdateOrder(ctx context.Context, id uint64, req admin.UpdateOrderRequest) error
 	ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error)
+	ListCreditLedger(ctx context.Context, includeZeroDelta bool) ([]model.UserHostedCreditLedger, error)
 	Growth(ctx context.Context) (*admin.GrowthSnapshot, error)
 	QuotaSources(ctx context.Context, filter admin.QuotaSourcesFilter) (*admin.QuotaSources, error)
 	HostedPricingRules(ctx context.Context) ([]model.HostedPricingRule, error)
@@ -202,6 +203,8 @@ func New() (*Application, error) {
 		AIGatewayAPIKeyGroup:   cfg.AIGatewayAPIKeyGroup,
 		AIGatewayCreateKeyPath: cfg.AIGatewayCreateAPIKeyPath,
 		AIGatewayKeyCipher:     apiKeyCipher,
+		ChargeOnlyMode:         hostedllm.ChargeOnlyMode(cfg.HostedChargeOnlyMode),
+		ReconcileEnabled:       cfg.HostedReconcileEnabled,
 	}, lic)
 	adminProvider := newAdminOAuthProvider(cfg)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
@@ -1234,6 +1237,15 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+	protected.GET("/credit-ledger", func(c *gin.Context) {
+		includeZeroDelta := c.Query("include_zero_delta") == "true"
+		data, err := adminSvc.ListCreditLedger(c.Request.Context(), includeZeroDelta)
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
 	protected.GET("/growth", func(c *gin.Context) {
 		data, err := adminSvc.Growth(c.Request.Context())
 		if err != nil {
@@ -2070,6 +2082,14 @@ func registerAppRoutes(api *gin.RouterGroup, cfg Config, authSvc *auth.Service, 
 	})
 	protected.GET("/usage-events", func(c *gin.Context) {
 		data, err := appSvc.ListUsageEvents(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/credit-ledger", func(c *gin.Context) {
+		data, err := appSvc.ListCreditLedger(c.Request.Context(), currentUserID(c))
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
 			return

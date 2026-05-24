@@ -1153,6 +1153,365 @@ func (s *Store) SettleReservedCredits(ctx context.Context, apiKeyID uint64, rese
 	return withRemaining(key), nil
 }
 
+// ErrHostedCreditsExhausted is returned by Precheck/Charge functions when an
+// account does not have sufficient available balance to satisfy the requested
+// amount.
+var ErrHostedCreditsExhausted = errors.New("hosted credits exhausted")
+
+// ChargeHostedCreditsByUser deducts credits from a user hosted credit account
+// in a single committed transaction. The idempotency key is "charge:{requestID}"
+// so concurrent or retried calls with the same requestID result in exactly one
+// ledger row. Balance is clamped at zero (overdraft is recorded as a partial
+// deduction). The usageEventID, when non-nil, is persisted on the ledger entry
+// so each charge keeps an audit link back to the originating request.
+func (s *Store) ChargeHostedCreditsByUser(ctx context.Context, userID uint64, requestID string, credits int, usageEventID *uint64) (*model.UserHostedCreditAccount, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	if credits < 0 {
+		return nil, fmt.Errorf("credits must be non-negative")
+	}
+	idempotencyKey := "charge:" + requestID
+	var account *model.UserHostedCreditAccount
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.UserHostedCreditLedger
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			loaded, loadErr := lockedHostedCreditAccountTx(tx, userID)
+			if loadErr != nil {
+				return loadErr
+			}
+			account = loaded
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		loaded, err := lockedHostedCreditAccountTx(tx, userID)
+		if err != nil {
+			return err
+		}
+		loaded.CreditBalance -= credits
+		if loaded.CreditBalance < 0 {
+			loaded.CreditBalance = 0
+		}
+		if err := tx.Save(loaded).Error; err != nil {
+			return err
+		}
+		entry := &model.UserHostedCreditLedger{
+			UserID:         userID,
+			SourceType:     model.HostedCreditLedgerSourceCharge,
+			IdempotencyKey: idempotencyKey,
+			CreditDelta:    -credits,
+			ReservedDelta:  0,
+			UsageEventID:   usageEventID,
+			Reason:         string(model.HostedCreditLedgerSourceCharge),
+			MetadataJSON:   "{}",
+		}
+		if err := tx.Create(entry).Error; err != nil {
+			if isDuplicateConstraintError(err) {
+				account = loaded
+				return nil
+			}
+			return err
+		}
+		account = loaded
+		return nil
+	})
+	return account, err
+}
+
+// ChargeHostedCreditsByFingerprint mirrors ChargeHostedCreditsByUser for
+// fingerprint-scoped accounts.
+func (s *Store) ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprint string, requestID string, credits int, usageEventID *uint64) (*model.FingerprintCreditAccount, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return nil, fmt.Errorf("fingerprint is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	if credits < 0 {
+		return nil, fmt.Errorf("credits must be non-negative")
+	}
+	idempotencyKey := "charge:" + requestID
+	var account *model.FingerprintCreditAccount
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.FingerprintCreditLedger
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			loaded, loadErr := lockedFingerprintCreditAccountTx(tx, fingerprint)
+			if loadErr != nil {
+				return loadErr
+			}
+			account = loaded
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		loaded, err := lockedFingerprintCreditAccountTx(tx, fingerprint)
+		if err != nil {
+			return err
+		}
+		loaded.CreditBalance -= credits
+		if loaded.CreditBalance < 0 {
+			loaded.CreditBalance = 0
+		}
+		if err := tx.Save(loaded).Error; err != nil {
+			return err
+		}
+		entry := &model.FingerprintCreditLedger{
+			FingerprintHash: fingerprint,
+			SourceType:      model.HostedCreditLedgerSourceCharge,
+			IdempotencyKey:  idempotencyKey,
+			CreditDelta:     -credits,
+			ReservedDelta:   0,
+			UsageEventID:    usageEventID,
+			Reason:          string(model.HostedCreditLedgerSourceCharge),
+			MetadataJSON:    "{}",
+		}
+		if err := tx.Create(entry).Error; err != nil {
+			if isDuplicateConstraintError(err) {
+				account = loaded
+				return nil
+			}
+			return err
+		}
+		account = loaded
+		return nil
+	})
+	return account, err
+}
+
+// ChargeAPIKeyCredits deducts credits from the hosted account owned by the
+// supplied API key. It is the charge-path counterpart to SettleReservedCredits.
+func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, requestID string, credits int, usageEventID *uint64) (*model.APIKey, error) {
+	if apiKeyID == 0 {
+		return nil, fmt.Errorf("api_key_id is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	if credits < 0 {
+		return nil, fmt.Errorf("credits must be non-negative")
+	}
+	idempotencyKey := "charge:" + requestID
+	var resultKey model.APIKey
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var key model.APIKey
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&key, apiKeyID).Error; err != nil {
+			return err
+		}
+		if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+			return fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+		}
+		ownerID := *key.OwnerUserID
+
+		var existing model.UserHostedCreditLedger
+		if err := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error; err == nil {
+			account, loadErr := lockedHostedCreditAccountTx(tx, ownerID)
+			if loadErr != nil {
+				return loadErr
+			}
+			key.CreditBalance = account.CreditBalance
+			key.CreditReserved = account.CreditReserved
+			resultKey = key
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		account, err := lockedHostedCreditAccountTx(tx, ownerID)
+		if err != nil {
+			return err
+		}
+		account.CreditBalance -= credits
+		if account.CreditBalance < 0 {
+			account.CreditBalance = 0
+		}
+		if err := tx.Save(account).Error; err != nil {
+			return err
+		}
+		entry := &model.UserHostedCreditLedger{
+			UserID:         ownerID,
+			SourceType:     model.HostedCreditLedgerSourceCharge,
+			IdempotencyKey: idempotencyKey,
+			CreditDelta:    -credits,
+			ReservedDelta:  0,
+			UsageEventID:   usageEventID,
+			Reason:         string(model.HostedCreditLedgerSourceCharge),
+			MetadataJSON:   "{}",
+		}
+		if err := tx.Create(entry).Error; err != nil {
+			if !isDuplicateConstraintError(err) {
+				return err
+			}
+		}
+		key.CreditBalance = account.CreditBalance
+		key.CreditReserved = account.CreditReserved
+		resultKey = key
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return withRemaining(resultKey), nil
+}
+
+// WriteChargeFailedLedgerForUser records a compensation ledger row for a
+// post-upstream-success failure path (decode error / charge transaction error).
+// It does NOT modify the account balance; reconciliation jobs are responsible
+// for any follow-up. Idempotency key is "charge_failed:{requestID}" so the
+// same requestID cannot simultaneously appear as both "charge:" and
+// "charge_failed:" in normal flow (callers must enforce mutual exclusion at
+// the service layer).
+func (s *Store) WriteChargeFailedLedgerForUser(ctx context.Context, userID uint64, requestID string, credits int, metadataJSON string) error {
+	if userID == 0 {
+		return fmt.Errorf("user_id is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return fmt.Errorf("request_id is required")
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		metadataJSON = "{}"
+	}
+	idempotencyKey := "charge_failed:" + requestID
+	entry := &model.UserHostedCreditLedger{
+		UserID:         userID,
+		SourceType:     model.HostedCreditLedgerSourceChargeFailedPostUpstream,
+		IdempotencyKey: idempotencyKey,
+		CreditDelta:    -credits,
+		ReservedDelta:  0,
+		Reason:         string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
+		MetadataJSON:   metadataJSON,
+	}
+	if err := s.db.WithContext(ctx).Create(entry).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// WriteChargeFailedLedgerForFingerprint mirrors WriteChargeFailedLedgerForUser
+// for fingerprint-scoped accounts.
+func (s *Store) WriteChargeFailedLedgerForFingerprint(ctx context.Context, fingerprint string, requestID string, credits int, metadataJSON string) error {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return fmt.Errorf("fingerprint is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return fmt.Errorf("request_id is required")
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		metadataJSON = "{}"
+	}
+	idempotencyKey := "charge_failed:" + requestID
+	entry := &model.FingerprintCreditLedger{
+		FingerprintHash: fingerprint,
+		SourceType:      model.HostedCreditLedgerSourceChargeFailedPostUpstream,
+		IdempotencyKey:  idempotencyKey,
+		CreditDelta:     -credits,
+		ReservedDelta:   0,
+		Reason:          string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
+		MetadataJSON:    metadataJSON,
+	}
+	if err := s.db.WithContext(ctx).Create(entry).Error; err != nil {
+		if isDuplicateConstraintError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// WriteChargeFailedLedgerForAPIKey looks up the owner user of the api key and
+// writes the compensation ledger under that user account.
+func (s *Store) WriteChargeFailedLedgerForAPIKey(ctx context.Context, apiKeyID uint64, requestID string, credits int, metadataJSON string) error {
+	if apiKeyID == 0 {
+		return fmt.Errorf("api_key_id is required")
+	}
+	var key model.APIKey
+	if err := s.db.WithContext(ctx).First(&key, apiKeyID).Error; err != nil {
+		return err
+	}
+	if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		return fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+	}
+	return s.WriteChargeFailedLedgerForUser(ctx, *key.OwnerUserID, requestID, credits, metadataJSON)
+}
+
+// PrecheckHostedCreditsByUser performs a read-only balance check. It returns
+// ErrHostedCreditsExhausted when CreditBalance < minCredits. It does NOT lock
+// the row — admission control is enforced by the Charge transaction.
+func (s *Store) PrecheckHostedCreditsByUser(ctx context.Context, userID uint64, minCredits int) error {
+	if userID == 0 {
+		return fmt.Errorf("user_id is required")
+	}
+	if minCredits <= 0 {
+		return nil
+	}
+	var account model.UserHostedCreditAccount
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&account).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrHostedCreditsExhausted
+		}
+		return err
+	}
+	if account.CreditBalance < minCredits {
+		return ErrHostedCreditsExhausted
+	}
+	return nil
+}
+
+// PrecheckHostedCreditsByFingerprint mirrors PrecheckHostedCreditsByUser for
+// fingerprint accounts.
+func (s *Store) PrecheckHostedCreditsByFingerprint(ctx context.Context, fingerprint string, minCredits int) error {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return fmt.Errorf("fingerprint is required")
+	}
+	if minCredits <= 0 {
+		return nil
+	}
+	var account model.FingerprintCreditAccount
+	err := s.db.WithContext(ctx).Where("fingerprint_hash = ?", fingerprint).First(&account).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrHostedCreditsExhausted
+		}
+		return err
+	}
+	if account.CreditBalance < minCredits {
+		return ErrHostedCreditsExhausted
+	}
+	return nil
+}
+
+// PrecheckAPIKeyCredits checks the owner account's balance for an api key.
+func (s *Store) PrecheckAPIKeyCredits(ctx context.Context, apiKeyID uint64, minCredits int) error {
+	if apiKeyID == 0 {
+		return fmt.Errorf("api_key_id is required")
+	}
+	if minCredits <= 0 {
+		return nil
+	}
+	var key model.APIKey
+	if err := s.db.WithContext(ctx).First(&key, apiKeyID).Error; err != nil {
+		return err
+	}
+	if key.OwnerUserID == nil || *key.OwnerUserID == 0 {
+		return fmt.Errorf("hosted mode requires an owner user for the officecli api key")
+	}
+	return s.PrecheckHostedCreditsByUser(ctx, *key.OwnerUserID, minCredits)
+}
+
 func (s *Store) CreateUsageEvent(ctx context.Context, event *model.UsageEvent) error {
 	return s.db.WithContext(ctx).Create(event).Error
 }
@@ -2652,6 +3011,38 @@ func (s *Store) ListBillingEvents(ctx context.Context) ([]model.BillingEvent, er
 		return nil, err
 	}
 	return events, nil
+}
+
+func (s *Store) ListUserHostedCreditLedger(ctx context.Context, userID uint64, includeZeroDelta bool) ([]model.UserHostedCreditLedger, error) {
+	q := s.db.WithContext(ctx).Where("user_id = ?", userID)
+	if !includeZeroDelta {
+		q = q.Where("credit_delta != 0 OR source_type IN ?", []string{
+			string(model.HostedCreditLedgerSourceCharge),
+			string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
+			string(model.HostedCreditLedgerSourceReservedCutover),
+		})
+	}
+	var entries []model.UserHostedCreditLedger
+	if err := q.Order("created_at desc").Limit(500).Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func (s *Store) ListAllUserHostedCreditLedger(ctx context.Context, includeZeroDelta bool) ([]model.UserHostedCreditLedger, error) {
+	q := s.db.WithContext(ctx)
+	if !includeZeroDelta {
+		q = q.Where("credit_delta != 0 OR source_type IN ?", []string{
+			string(model.HostedCreditLedgerSourceCharge),
+			string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
+			string(model.HostedCreditLedgerSourceReservedCutover),
+		})
+	}
+	var entries []model.UserHostedCreditLedger
+	if err := q.Order("created_at desc").Limit(1000).Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {

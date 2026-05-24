@@ -57,6 +57,7 @@ const routeSEO: Record<string, RouteSEO> = {
   '/users': buildRouteSEO('/users', 'OfficeCLI Admin | Users', 'Inspect registered OfficeCLI platform users and account state from the admin plane.'),
   '/orders': buildRouteSEO('/orders', 'OfficeCLI Admin | Orders', 'Track OfficeCLI platform orders, checkout transitions, and operator actions.'),
   '/billing-events': buildRouteSEO('/billing-events', 'OfficeCLI Admin | Billing Events', 'Review Stripe webhook ingestion and payment-side event processing for OfficeCLI.'),
+  '/credit-ledger': buildRouteSEO('/credit-ledger', 'OfficeCLI Admin | Credit Ledger', 'Browse hosted credit ledger entries with optional reserve/settle/release noise filtering.'),
   '/quota-sources': buildRouteSEO('/quota-sources', 'OfficeCLI Admin | Quota Sources', 'Audit OfficeCLI quota compatibility views across free, reward, paid, and hosted surfaces.'),
   '/usage-events': buildRouteSEO('/usage-events', 'OfficeCLI Admin | Usage Events', 'Filter OfficeCLI usage events to investigate blocked or allowed traffic.'),
   '/access-denied': buildRouteSEO('/access-denied', 'OfficeCLI Admin | Access Denied', 'This company account is not present in the OfficeCLI admin allowlist.'),
