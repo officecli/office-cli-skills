@@ -989,7 +989,7 @@ func fingerprintAccountCreditBalance(account *model.FingerprintCreditAccount) in
 	if account == nil {
 		return 0
 	}
-	return account.AvailableCredits()
+	return account.CreditBalance
 }
 
 func settlementContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -1567,14 +1567,14 @@ func creditBalance(key *model.APIKey) int {
 	if key == nil {
 		return 0
 	}
-	return key.AvailableCredits()
+	return key.CreditBalance
 }
 
 func accountCreditBalance(account *model.UserHostedCreditAccount) int {
 	if account == nil {
 		return 0
 	}
-	return account.AvailableCredits()
+	return account.CreditBalance
 }
 
 func stringPtr(value string) *string {

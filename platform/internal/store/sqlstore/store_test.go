@@ -870,14 +870,12 @@ func TestGrantHostedCreditsToUserAccountIsIdempotent(t *testing.T) {
 	require.True(t, created)
 	require.Equal(t, 100, grant.CreditDelta)
 	require.Equal(t, 100, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
 
 	grant, account, created, err = store.GrantHostedCreditsToUser(context.Background(), 42, model.HostedCreditLedgerSourceSignupBonus, "signup-hosted-credits:42", 100, "signup hosted credits", "{}")
 	require.NoError(t, err)
 	require.False(t, created)
 	require.Equal(t, 100, grant.CreditDelta)
 	require.Equal(t, 100, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
 
 	var ledgers []model.UserHostedCreditLedger
 	require.NoError(t, db.Find(&ledgers).Error)
@@ -903,22 +901,15 @@ func TestFindAPIKeyByHashUsesOwnerAccountCredits(t *testing.T) {
 		HostedEnabled:      true,
 		DefaultRuntimeMode: &defaultRuntimeMode,
 		CreditBalance:      0,
-		CreditReserved:     0,
 	}
 	require.NoError(t, store.CreateAPIKey(context.Background(), key))
 	_, _, _, err = store.GrantHostedCreditsToUser(context.Background(), userID, model.HostedCreditLedgerSourcePurchase, "order:license-key", 120, "purchase", "{}")
 	require.NoError(t, err)
-	// Simulate a legacy account that still carries credit_reserved > 0
-	// (pre-Phase 6 column drop) so the FindAPIKeyByHash projection is
-	// exercised end-to-end.
-	require.NoError(t, db.Model(&model.UserHostedCreditAccount{}).Where("user_id = ?", userID).Update("credit_reserved", 40).Error)
 
 	loaded, err := store.FindAPIKeyByHash(context.Background(), "hash-license-key")
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	require.Equal(t, 120, loaded.CreditBalance)
-	require.Equal(t, 40, loaded.CreditReserved)
-	require.Equal(t, 80, loaded.AvailableCredits())
 }
 
 func TestFindAPIKeyByHashTreatsDisabledOwnerAsDisabledKey(t *testing.T) {
@@ -1059,12 +1050,8 @@ func TestListUserHostedCreditLedgerFiltersZeroDeltaNoise(t *testing.T) {
 
 	rows := []model.UserHostedCreditLedger{
 		{UserID: userID, SourceType: model.HostedCreditLedgerSourceSignupBonus, IdempotencyKey: "signup:42", CreditDelta: 100, Reason: "signup bonus", MetadataJSON: "{}"},
-		{UserID: userID, SourceType: model.HostedCreditLedgerSourceReserve, IdempotencyKey: "reserve:r1", CreditDelta: 0, ReservedDelta: 16, Reason: "reserve", MetadataJSON: "{}"},
-		{UserID: userID, SourceType: model.HostedCreditLedgerSourceSettle, IdempotencyKey: "settle:r1", CreditDelta: -4, ReservedDelta: -16, Reason: "settle", MetadataJSON: "{}"},
-		{UserID: userID, SourceType: model.HostedCreditLedgerSourceRelease, IdempotencyKey: "release:r2", CreditDelta: 0, ReservedDelta: -16, Reason: "release", MetadataJSON: "{}"},
 		{UserID: userID, SourceType: model.HostedCreditLedgerSourceCharge, IdempotencyKey: "charge:c1", CreditDelta: -10, Reason: "charge", MetadataJSON: "{}"},
 		{UserID: userID, SourceType: model.HostedCreditLedgerSourceChargeFailedPostUpstream, IdempotencyKey: "charge_failed:c2", CreditDelta: 0, Reason: "charge failed post upstream", MetadataJSON: "{}"},
-		{UserID: userID, SourceType: model.HostedCreditLedgerSourceReservedCutover, IdempotencyKey: "cutover:42", CreditDelta: 0, Reason: "cutover", MetadataJSON: "{}"},
 		{UserID: userID, SourceType: model.HostedCreditLedgerSourcePurchase, IdempotencyKey: "order:1", CreditDelta: 500, Reason: "purchase", MetadataJSON: "{}"},
 	}
 	for i := range rows {
@@ -1077,15 +1064,14 @@ func TestListUserHostedCreditLedgerFiltersZeroDeltaNoise(t *testing.T) {
 	for _, entry := range filtered {
 		if entry.CreditDelta == 0 {
 			allowed := entry.SourceType == model.HostedCreditLedgerSourceCharge ||
-				entry.SourceType == model.HostedCreditLedgerSourceChargeFailedPostUpstream ||
-				entry.SourceType == model.HostedCreditLedgerSourceReservedCutover
+				entry.SourceType == model.HostedCreditLedgerSourceChargeFailedPostUpstream
 			require.True(t, allowed, "filtered list contains zero-delta row with unexpected source_type: %s (id=%d)", entry.SourceType, entry.ID)
 		}
 	}
 
-	require.Equal(t, 6, len(filtered), "expected signup_bonus, settle, charge, charge_failed, cutover, purchase")
+	require.Equal(t, 4, len(filtered), "expected signup_bonus, charge, charge_failed, purchase")
 
 	all, err := store.ListUserHostedCreditLedger(ctx, userID, true)
 	require.NoError(t, err)
-	require.Equal(t, 8, len(all), "include_zero_delta=true should return all rows")
+	require.Equal(t, 4, len(all), "include_zero_delta=true should return all rows")
 }

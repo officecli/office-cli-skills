@@ -49,7 +49,6 @@ type CommitToken struct {
 type CreditAccountSnapshot struct {
 	OwnerKind string `json:"owner_kind,omitempty"`
 	Balance   int    `json:"balance,omitempty"`
-	Reserved  int    `json:"reserved,omitempty"`
 	Available int    `json:"available,omitempty"`
 }
 

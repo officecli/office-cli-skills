@@ -415,7 +415,6 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			OutputPer1KCredits:    2,
 			ReasoningPer1KCredits: 2,
 			ImagePerAssetCredits:  0,
-			ReservationCredits:    16,
 			MinimumChargeCredits:  2,
 		},
 		{
@@ -424,7 +423,6 @@ func defaultHostedPricingRules() []model.HostedPricingRule {
 			Model:                "gpt-image-2",
 			ImageModelKey:        "image_default",
 			ImagePerAssetCredits: 10,
-			ReservationCredits:   10,
 			MinimumChargeCredits: 10,
 		},
 	}

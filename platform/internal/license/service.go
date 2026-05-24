@@ -146,9 +146,9 @@ func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*Ch
 		DefaultRuntimeMode:  string(model.AccessModeHosted),
 		SelectedRuntimeMode: string(model.AccessModeHosted),
 		HostedEnabled:       true,
-		CreditBalance:       account.AvailableCredits(),
+		CreditBalance:       account.CreditBalance,
 	}
-	if account.AvailableCredits() <= 0 {
+	if account.CreditBalance <= 0 {
 		response.Allowed = false
 		response.AccessMode = model.AccessModeBlocked
 		response.ReasonCode = "hosted_credit_exhausted"
@@ -156,7 +156,7 @@ func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*Ch
 	} else {
 		response.Allowed = true
 		response.AccessMode = model.AccessModeHosted
-		response.Message = fmt.Sprintf("Hosted account mode is active with %d credits remaining.", account.AvailableCredits())
+		response.Message = fmt.Sprintf("Hosted account mode is active with %d credits remaining.", account.CreditBalance)
 		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeHosted, "")
 		if err != nil {
 			return nil, err
@@ -203,7 +203,7 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 	case requestedRuntimeMode(req, key) == "external" && !key.SupportsExternal():
 		response.ReasonCode = "external_not_enabled"
 		response.Message = "the current key does not allow external mode"
-	case requestedRuntimeMode(req, key) == string(model.AccessModeHosted) && key.AvailableCredits() <= 0:
+	case requestedRuntimeMode(req, key) == string(model.AccessModeHosted) && key.CreditBalance <= 0:
 		response.ReasonCode = "hosted_credit_exhausted"
 		response.Message = "hosted credits are exhausted; add more credits first"
 	case requestedRuntimeMode(req, key) != string(model.AccessModeHosted) && key.QuotaTotal != nil && key.PaidQuotaRemaining() <= 0:
@@ -214,7 +214,7 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 		if requestedRuntimeMode(req, key) == string(model.AccessModeHosted) {
 			response.AccessMode = model.AccessModeHosted
 			response.HostedEnabled = key.SupportsHosted()
-			response.CreditBalance = key.AvailableCredits()
+			response.CreditBalance = key.CreditBalance
 		} else {
 			response.AccessMode = model.AccessModePaid
 		}
@@ -293,9 +293,9 @@ func (s *Service) checkAnonymousHosted(ctx context.Context, req CheckRequest) (*
 		DefaultRuntimeMode:  string(model.AccessModeHosted),
 		SelectedRuntimeMode: string(model.AccessModeHosted),
 		HostedEnabled:       true,
-		CreditBalance:       account.AvailableCredits(),
+		CreditBalance:       account.CreditBalance,
 	}
-	if account.AvailableCredits() <= 0 {
+	if account.CreditBalance <= 0 {
 		response.Allowed = false
 		response.AccessMode = model.AccessModeBlocked
 		response.ReasonCode = "hosted_credit_exhausted"
@@ -303,7 +303,7 @@ func (s *Service) checkAnonymousHosted(ctx context.Context, req CheckRequest) (*
 	} else {
 		response.Allowed = true
 		response.AccessMode = model.AccessModeHosted
-		response.Message = fmt.Sprintf("Anonymous hosted mode is active with %d credits remaining.", account.AvailableCredits())
+		response.Message = fmt.Sprintf("Anonymous hosted mode is active with %d credits remaining.", account.CreditBalance)
 		response.CommitToken, err = s.issueCommitToken(req, model.AccessModeHosted, "")
 		if err != nil {
 			return nil, err
@@ -454,8 +454,8 @@ func (s *Service) restoreConsumeResult(ctx context.Context, req ConsumeRequest, 
 		resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
 		if s.fingerprintCredits != nil {
 			if account, err := s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash); err == nil && account != nil {
-				resp.CreditBalance = account.AvailableCredits()
-				resp.Remaining = account.AvailableCredits()
+				resp.CreditBalance = account.CreditBalance
+				resp.Remaining = account.CreditBalance
 			}
 		}
 		if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
@@ -524,8 +524,8 @@ func (s *Service) consumeFree(ctx context.Context, req ConsumeRequest) (*Consume
 	resp := &ConsumeResponse{AccessMode: model.AccessModeFree}
 	if s.fingerprintCredits != nil {
 		if account, err := s.fingerprintCredits.GetHostedCreditAccountByFingerprint(ctx, req.FingerprintHash); err == nil && account != nil {
-			resp.CreditBalance = account.AvailableCredits()
-			resp.Remaining = account.AvailableCredits()
+			resp.CreditBalance = account.CreditBalance
+			resp.Remaining = account.CreditBalance
 		}
 	}
 	if err := s.idem.SaveConsumeResult(ctx, req.RequestID, resp, s.idemTTL); err != nil {
@@ -664,8 +664,7 @@ func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key 
 		snapshot.CreditAccount = CreditAccountSnapshot{
 			OwnerKind: "fingerprint",
 			Balance:   fingerprintAccount.CreditBalance,
-			Reserved:  fingerprintAccount.CreditReserved,
-			Available: fingerprintAccount.AvailableCredits(),
+			Available: fingerprintAccount.CreditBalance,
 		}
 	}
 

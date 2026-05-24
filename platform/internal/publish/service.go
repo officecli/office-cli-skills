@@ -229,7 +229,7 @@ func hasPublishEntitlement(key *model.APIKey) bool {
 	if key.QuotaUsed > 0 {
 		return true
 	}
-	if key.CreditBalance > 0 || key.CreditReserved > 0 {
+	if key.CreditBalance > 0 {
 		return true
 	}
 	return false

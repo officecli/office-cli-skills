@@ -293,7 +293,7 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 	return &Overview{
 		APIKeyCount:            count,
 		TotalRemaining:         remaining,
-		HostedCreditBalance:    hostedCreditAccount.AvailableCredits(),
+		HostedCreditBalance:    hostedCreditAccount.CreditBalance,
 		SignupCreditBonus:      SignupHostedCreditBonus,
 		RewardRemaining:        rewardRemaining,
 		InviteCode:             inviteCode,

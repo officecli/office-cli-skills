@@ -280,7 +280,7 @@ func (s *Service) Redeem(ctx context.Context, req RedeemRequest) (*RedeemRespons
 		ExpiresAt:    res.Code.ExpiresAt,
 	}
 	if res.Account != nil {
-		resp.NewBalance = res.Account.AvailableCredits()
+		resp.NewBalance = res.Account.CreditBalance
 	}
 	return resp, nil
 }

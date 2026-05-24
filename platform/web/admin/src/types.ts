@@ -33,7 +33,6 @@ export interface ApiKey {
   quota_used: number
   quota_remaining?: number
   credit_balance?: number
-  credit_reserved?: number
 }
 
 export interface QuotaSources {
@@ -179,7 +178,6 @@ export interface HostedPricingRule {
   output_per_1k_cost_microusd: number
   reasoning_per_1k_cost_microusd: number
   image_per_asset_cost_microusd: number
-  reservation_credits: number
   minimum_charge_credits: number
   markup_bps?: number
   enabled: boolean
@@ -417,7 +415,6 @@ export interface CreditLedgerEntry {
   source_type: string
   idempotency_key: string
   credit_delta: number
-  reserved_delta: number
   usage_event_id?: number
   order_id?: number
   reason: string

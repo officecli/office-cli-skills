@@ -133,10 +133,8 @@ export default function QuotaSourcesPage() {
                     </div>
                     <StatusPill value={key.status} />
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-1">
                     <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Balance</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_balance)}</div></div>
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Reserved</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_reserved)}</div></div>
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Available</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber((key.credit_balance ?? 0) - (key.credit_reserved ?? 0))}</div></div>
                   </div>
                 </div>
               ))}

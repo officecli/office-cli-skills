@@ -55,7 +55,6 @@ type UpdateAPIKeyRequest struct {
 	QuotaTotal         *int       `json:"quota_total,omitempty"`
 	QuotaUsed          *int       `json:"quota_used,omitempty"`
 	CreditBalance      *int       `json:"credit_balance,omitempty"`
-	CreditReserved     *int       `json:"credit_reserved,omitempty"`
 }
 
 type AdminPreferenceResponse struct {
@@ -108,7 +107,6 @@ type UpsertHostedPricingRuleRequest struct {
 	OutputPer1KCostMicrousd    int64  `json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64  `json:"reasoning_per_1k_cost_microusd"`
 	ImagePerAssetCostMicrousd  int64  `json:"image_per_asset_cost_microusd"`
-	ReservationCredits         int    `json:"reservation_credits"`
 	MinimumChargeCredits       int    `json:"minimum_charge_credits"`
 	MarkupBPS                  *int   `json:"markup_bps,omitempty"`
 	Enabled                    bool   `json:"enabled"`

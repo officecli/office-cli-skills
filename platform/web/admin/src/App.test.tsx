@@ -467,7 +467,7 @@ describe('platform admin shell', () => {
                 { id: 4, key: 'text_default', kind: 'text', provider: 'aigateway', model: 'gpt-4.1', prompt_per_1m_cost_microusd: 1000000, output_per_1m_cost_microusd: 2000000, reasoning_per_1m_cost_microusd: 4000000, prompt_per_1m_cost_credits: 100, output_per_1m_cost_credits: 200, reasoning_per_1m_cost_credits: 400, enabled: true },
                 { id: 5, key: 'image_default', kind: 'image', provider: 'aigateway', model: 'gpt-image-2', prompt_per_1m_cost_microusd: 8000000, output_per_1m_cost_microusd: 30000000, reasoning_per_1m_cost_microusd: 0, prompt_per_1m_cost_credits: 800, output_per_1m_cost_credits: 3000, reasoning_per_1m_cost_credits: 0, enabled: true },
               ],
-              rules: [{ id: 9, document_profile: 'text', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, reservation_credits: 20, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
+              rules: [{ id: 9, document_profile: 'text', provider: 'aigateway', model: 'gpt-4.1', text_model_key: 'text_default', image_model_key: '', prompt_per_1k_cost_microusd: 10000, output_per_1k_cost_microusd: 20000, reasoning_per_1k_cost_microusd: 40000, image_per_asset_cost_microusd: 0, minimum_charge_credits: 2, markup_bps: 5000, enabled: true }],
               packs: [{ id: 3, code: 'hosted-300', name: 'Hosted 300', description: '300 hosted credits', currency: 'usd', amount_total: 300, credit_amount: 300, enabled: true }],
             },
           }),

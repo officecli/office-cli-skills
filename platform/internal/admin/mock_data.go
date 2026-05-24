@@ -99,10 +99,10 @@ func mockAPIKeys(ownerUserID *uint64) []model.APIKey {
 	totalExternal := 500
 	totalHybrid := 1500
 	keys := []model.APIKey{
-		{ID: 201, OwnerUserID: &owner101, KeyPrefix: "ocli_mock_hosted_7KQ2", Status: model.APIKeyStatusActive, PlanName: "Hosted Team", PlanCode: &planCodeHosted, AllowedModes: "hosted_only", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 1200, CreditReserved: 96, LastUsedAt: &lastUsed, Note: &noteHosted, PlaintextAvailable: true, CreatedAt: mockBaseTime.Add(-70 * time.Hour), UpdatedAt: mockBaseTime.Add(-20 * time.Minute)},
-		{ID: 202, OwnerUserID: &owner103, KeyPrefix: "ocli_mock_hybrid_LONGPREFIX", Status: model.APIKeyStatusActive, PlanName: "Hybrid Pro", PlanCode: &planCodeHybrid, AllowedModes: "hybrid", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 450, CreditReserved: 44, QuotaTotal: &totalHybrid, QuotaUsed: 320, QuotaRemaining: intPtr(1180), ExpiresAt: &expires, LastUsedAt: &lastUsed, Note: &noteHybrid, PlaintextAvailable: true, CreatedAt: mockBaseTime.Add(-36 * time.Hour), UpdatedAt: mockBaseTime.Add(-10 * time.Minute)},
+		{ID: 201, OwnerUserID: &owner101, KeyPrefix: "ocli_mock_hosted_7KQ2", Status: model.APIKeyStatusActive, PlanName: "Hosted Team", PlanCode: &planCodeHosted, AllowedModes: "hosted_only", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 1200, LastUsedAt: &lastUsed, Note: &noteHosted, PlaintextAvailable: true, CreatedAt: mockBaseTime.Add(-70 * time.Hour), UpdatedAt: mockBaseTime.Add(-20 * time.Minute)},
+		{ID: 202, OwnerUserID: &owner103, KeyPrefix: "ocli_mock_hybrid_LONGPREFIX", Status: model.APIKeyStatusActive, PlanName: "Hybrid Pro", PlanCode: &planCodeHybrid, AllowedModes: "hybrid", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 450, QuotaTotal: &totalHybrid, QuotaUsed: 320, QuotaRemaining: intPtr(1180), ExpiresAt: &expires, LastUsedAt: &lastUsed, Note: &noteHybrid, PlaintextAvailable: true, CreatedAt: mockBaseTime.Add(-36 * time.Hour), UpdatedAt: mockBaseTime.Add(-10 * time.Minute)},
 		{ID: 203, OwnerUserID: &owner101, KeyPrefix: "ocli_mock_external_Q9X1", Status: model.APIKeyStatusActive, PlanName: "External 500", PlanCode: &planCodeExternal, AllowedModes: "external_only", HostedEnabled: false, DefaultRuntimeMode: &defaultExternal, QuotaTotal: &totalExternal, QuotaUsed: 480, QuotaRemaining: intPtr(20), ExpiresAt: &expires, Note: &noteExternal, CreatedAt: mockBaseTime.Add(-22 * time.Hour), UpdatedAt: mockBaseTime.Add(-1 * time.Hour)},
-		{ID: 204, OwnerUserID: &owner102, KeyPrefix: "ocli_mock_disabled_0Z9", Status: model.APIKeyStatusDisabled, PlanName: "Suspended Hosted", AllowedModes: "hosted_only", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 20, CreditReserved: 0, CreatedAt: mockBaseTime.Add(-14 * time.Hour), UpdatedAt: mockBaseTime.Add(-3 * time.Hour)},
+		{ID: 204, OwnerUserID: &owner102, KeyPrefix: "ocli_mock_disabled_0Z9", Status: model.APIKeyStatusDisabled, PlanName: "Suspended Hosted", AllowedModes: "hosted_only", HostedEnabled: true, DefaultRuntimeMode: &defaultHosted, CreditBalance: 20, CreatedAt: mockBaseTime.Add(-14 * time.Hour), UpdatedAt: mockBaseTime.Add(-3 * time.Hour)},
 	}
 	if ownerUserID == nil {
 		return keys
@@ -242,7 +242,7 @@ func mockQuotaSources(filter QuotaSourcesFilter) *QuotaSources {
 		if key.QuotaTotal != nil {
 			paid = append(paid, key)
 		}
-		if key.SupportsHosted() || key.CreditBalance > 0 || key.CreditReserved > 0 {
+		if key.SupportsHosted() || key.CreditBalance > 0 {
 			hosted = append(hosted, key)
 		}
 	}
@@ -252,8 +252,8 @@ func mockQuotaSources(filter QuotaSourcesFilter) *QuotaSources {
 func mockHostedPricingRules() []model.HostedPricingRule {
 	markup := 3000
 	return []model.HostedPricingRule{
-		{ID: 801, DocumentProfile: "text", Provider: "openai", Model: "gpt-4.1", TextModelKey: "text_default", PromptPer1KCostMicrousd: 2, OutputPer1KCostMicrousd: 8, ReasoningPer1KCostMicrousd: 8, ReservationCredits: 16, MinimumChargeCredits: 2, MarkupBPS: &markup, Enabled: true},
-		{ID: 802, DocumentProfile: "image", Provider: "openai", Model: "gpt-image-2", ImageModelKey: "image_default", ImagePerAssetCostMicrousd: 100000, ReservationCredits: 10, MinimumChargeCredits: 10, MarkupBPS: &markup, Enabled: true},
+		{ID: 801, DocumentProfile: "text", Provider: "openai", Model: "gpt-4.1", TextModelKey: "text_default", PromptPer1KCostMicrousd: 2, OutputPer1KCostMicrousd: 8, ReasoningPer1KCostMicrousd: 8, MinimumChargeCredits: 2, MarkupBPS: &markup, Enabled: true},
+		{ID: 802, DocumentProfile: "image", Provider: "openai", Model: "gpt-image-2", ImageModelKey: "image_default", ImagePerAssetCostMicrousd: 100000, MinimumChargeCredits: 10, MarkupBPS: &markup, Enabled: true},
 	}
 }
 

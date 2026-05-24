@@ -69,12 +69,8 @@ const (
 	HostedCreditLedgerSourceSignupBonus             HostedCreditLedgerSource = "signup_bonus"
 	HostedCreditLedgerSourceInviteActivationBonus   HostedCreditLedgerSource = "invite_activation_bonus"
 	HostedCreditLedgerSourceDiscordJoinBonus        HostedCreditLedgerSource = "discord_join_bonus"
-	HostedCreditLedgerSourceReserve                 HostedCreditLedgerSource = "reserve"
-	HostedCreditLedgerSourceSettle                  HostedCreditLedgerSource = "settle"
-	HostedCreditLedgerSourceRelease                 HostedCreditLedgerSource = "release"
 	HostedCreditLedgerSourceCharge                  HostedCreditLedgerSource = "charge"
 	HostedCreditLedgerSourceChargeFailedPostUpstream HostedCreditLedgerSource = "charge_failed_post_upstream"
-	HostedCreditLedgerSourceReservedCutover         HostedCreditLedgerSource = "reserved_cutover"
 	HostedCreditLedgerSourceMigration               HostedCreditLedgerSource = "migration"
 	HostedCreditLedgerSourceAnonymousSignupBonus    HostedCreditLedgerSource = "anonymous_signup_bonus"
 	HostedCreditLedgerSourceAnonymousTransferOut    HostedCreditLedgerSource = "anonymous_transfer_out"
@@ -131,7 +127,6 @@ type APIKey struct {
 	HostedEnabled      bool         `gorm:"column:hosted_enabled;not null;default:false" json:"hosted_enabled"`
 	DefaultRuntimeMode *string      `gorm:"column:default_runtime_mode;size:16" json:"default_runtime_mode,omitempty"`
 	CreditBalance      int          `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
-	CreditReserved     int          `gorm:"column:credit_reserved;not null;default:0" json:"credit_reserved"`
 	ExpiresAt          *time.Time   `gorm:"column:expires_at" json:"expires_at,omitempty"`
 	Note               *string      `gorm:"column:note;type:text" json:"note,omitempty"`
 	LastUsedAt         *time.Time   `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
@@ -175,14 +170,6 @@ func (k APIKey) SupportsHosted() bool {
 	default:
 		return false
 	}
-}
-
-func (k APIKey) AvailableCredits() int {
-	remaining := k.CreditBalance - k.CreditReserved
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
 }
 
 func (k APIKey) HasStoredPlaintext() bool {
@@ -244,7 +231,6 @@ func (CLISession) TableName() string { return "cli_sessions" }
 type FingerprintCreditAccount struct {
 	FingerprintHash  string    `gorm:"column:fingerprint_hash;size:128;primaryKey" json:"fingerprint_hash"`
 	CreditBalance    int       `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
-	CreditReserved   int       `gorm:"column:credit_reserved;not null;default:0" json:"credit_reserved"`
 	BonusGranted     bool      `gorm:"column:bonus_granted;not null;default:false" json:"bonus_granted"`
 	MigratedToUserID *uint64   `gorm:"column:migrated_to_user_id;index" json:"migrated_to_user_id,omitempty"`
 	CreatedAt        time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
@@ -253,21 +239,12 @@ type FingerprintCreditAccount struct {
 
 func (FingerprintCreditAccount) TableName() string { return "fingerprint_credit_accounts" }
 
-func (a FingerprintCreditAccount) AvailableCredits() int {
-	remaining := a.CreditBalance - a.CreditReserved
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
-
 type FingerprintCreditLedger struct {
 	ID              uint64                   `gorm:"primaryKey" json:"id"`
 	FingerprintHash string                   `gorm:"column:fingerprint_hash;size:128;index;not null" json:"fingerprint_hash"`
 	SourceType      HostedCreditLedgerSource `gorm:"column:source_type;size:64;index;not null" json:"source_type"`
 	IdempotencyKey  string                   `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
 	CreditDelta     int                      `gorm:"column:credit_delta;not null;default:0" json:"credit_delta"`
-	ReservedDelta   int                      `gorm:"column:reserved_delta;not null;default:0" json:"reserved_delta"`
 	UsageEventID    *uint64                  `gorm:"column:usage_event_id;index" json:"usage_event_id,omitempty"`
 	OrderID         *uint64                  `gorm:"column:order_id;index" json:"order_id,omitempty"`
 	Reason          string                   `gorm:"column:reason;size:191;not null" json:"reason"`
@@ -425,22 +402,13 @@ type HostedCreditGrant struct {
 func (HostedCreditGrant) TableName() string { return "hosted_credit_grants" }
 
 type UserHostedCreditAccount struct {
-	UserID         uint64    `gorm:"column:user_id;primaryKey" json:"user_id"`
-	CreditBalance  int       `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
-	CreditReserved int       `gorm:"column:credit_reserved;not null;default:0" json:"credit_reserved"`
-	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	UserID        uint64    `gorm:"column:user_id;primaryKey" json:"user_id"`
+	CreditBalance int       `gorm:"column:credit_balance;not null;default:0" json:"credit_balance"`
+	CreatedAt     time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
 
 func (UserHostedCreditAccount) TableName() string { return "user_hosted_credit_accounts" }
-
-func (a UserHostedCreditAccount) AvailableCredits() int {
-	remaining := a.CreditBalance - a.CreditReserved
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
 
 type UserHostedCreditLedger struct {
 	ID             uint64                   `gorm:"primaryKey" json:"id"`
@@ -448,7 +416,6 @@ type UserHostedCreditLedger struct {
 	SourceType     HostedCreditLedgerSource `gorm:"column:source_type;size:64;index;not null" json:"source_type"`
 	IdempotencyKey string                   `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
 	CreditDelta    int                      `gorm:"column:credit_delta;not null;default:0" json:"credit_delta"`
-	ReservedDelta  int                      `gorm:"column:reserved_delta;not null;default:0" json:"reserved_delta"`
 	UsageEventID   *uint64                  `gorm:"column:usage_event_id;index" json:"usage_event_id,omitempty"`
 	OrderID        *uint64                  `gorm:"column:order_id;index" json:"order_id,omitempty"`
 	Reason         string                   `gorm:"column:reason;size:191;not null" json:"reason"`
@@ -660,11 +627,6 @@ type HostedPricingRule struct {
 	OutputPer1KCostMicrousd    int64     `gorm:"column:output_per_1k_cost_microusd;not null;default:0" json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64     `gorm:"column:reasoning_per_1k_cost_microusd;not null;default:0" json:"reasoning_per_1k_cost_microusd"`
 	ImagePerAssetCostMicrousd  int64     `gorm:"column:image_per_asset_cost_microusd;not null;default:0" json:"image_per_asset_cost_microusd"`
-	// Deprecated: ReservationCredits is retained for migration compatibility
-	// only. The legacy Reserve/Settle/Release credit lifecycle was removed in
-	// 0.2.95 (Phase 5); the charge-only path ignores this field. The column
-	// will be dropped in Phase 6.
-	ReservationCredits         int       `gorm:"column:reservation_credits;not null;default:0" json:"reservation_credits"`
 	MinimumChargeCredits       int       `gorm:"column:minimum_charge_credits;not null;default:0" json:"minimum_charge_credits"`
 	MarkupBPS                  *int      `gorm:"column:markup_bps" json:"markup_bps,omitempty"`
 	Enabled                    bool      `gorm:"column:enabled;not null;default:true" json:"enabled"`

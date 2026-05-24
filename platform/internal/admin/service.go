@@ -416,9 +416,6 @@ func (s *Service) UpdateAPIKey(ctx context.Context, id uint64, req UpdateAPIKeyR
 	if req.CreditBalance != nil {
 		updates["credit_balance"] = *req.CreditBalance
 	}
-	if req.CreditReserved != nil {
-		updates["credit_reserved"] = *req.CreditReserved
-	}
 	if len(updates) == 0 {
 		return nil
 	}
@@ -587,7 +584,7 @@ func (s *Service) QuotaSources(ctx context.Context, filter QuotaSourcesFilter) (
 		if filter.KeyPrefix != "" && !strings.Contains(strings.ToLower(key.KeyPrefix), strings.ToLower(filter.KeyPrefix)) {
 			continue
 		}
-		if key.SupportsHosted() || key.CreditBalance > 0 || key.CreditReserved > 0 {
+		if key.SupportsHosted() || key.CreditBalance > 0 {
 			result.HostedKeys = append(result.HostedKeys, key)
 		}
 		if key.QuotaTotal != nil {
@@ -699,7 +696,6 @@ func (s *Service) UpdateHostedPricingRule(ctx context.Context, id uint64, req Up
 		"output_per_1k_cost_microusd":    rule.OutputPer1KCostMicrousd,
 		"reasoning_per_1k_cost_microusd": rule.ReasoningPer1KCostMicrousd,
 		"image_per_asset_cost_microusd":  rule.ImagePerAssetCostMicrousd,
-		"reservation_credits":            rule.ReservationCredits,
 		"minimum_charge_credits":         rule.MinimumChargeCredits,
 		"markup_bps":                     rule.MarkupBPS,
 		"enabled":                        rule.Enabled,
@@ -776,7 +772,6 @@ func hostedPricingRuleFromRequest(req UpsertHostedPricingRuleRequest) model.Host
 		OutputPer1KCostMicrousd:    req.OutputPer1KCostMicrousd,
 		ReasoningPer1KCostMicrousd: req.ReasoningPer1KCostMicrousd,
 		ImagePerAssetCostMicrousd:  req.ImagePerAssetCostMicrousd,
-		ReservationCredits:         req.ReservationCredits,
 		MinimumChargeCredits:       req.MinimumChargeCredits,
 		MarkupBPS:                  req.MarkupBPS,
 		Enabled:                    req.Enabled,

@@ -16,21 +16,20 @@ export default function CreditLedgerPage() {
       <SectionHeading
         eyebrow="Hosted credits"
         title="Credit ledger"
-        body="Account-level hosted credit transactions. By default, zero-delta noise rows (reserve / settle / release) are hidden."
+        body="Account-level hosted credit transactions. By default, zero-delta rows are hidden."
       />
       <div className="mb-4 flex items-center gap-3">
         <Switch checked={includeZeroDelta} onChange={setIncludeZeroDelta} />
-        <span className="text-sm text-outline">Show historical reserve rows</span>
+        <span className="text-sm text-outline">Show zero-delta rows</span>
       </div>
       {entries.length ? (
         <DataTable
-          headers={['User', 'Source', 'Delta', 'Reserved', 'Reason', 'Usage', 'Created']}
-          columns="minmax(0,0.6fr) minmax(0,1fr) minmax(0,0.6fr) minmax(0,0.6fr) minmax(0,1.2fr) minmax(0,0.6fr) minmax(0,1fr)"
+          headers={['User', 'Source', 'Delta', 'Reason', 'Usage', 'Created']}
+          columns="minmax(0,0.6fr) minmax(0,1fr) minmax(0,0.6fr) minmax(0,1.2fr) minmax(0,0.6fr) minmax(0,1fr)"
           rows={entries.map((entry) => [
             <span key={`user-${entry.id}`}>#{entry.user_id}</span>,
             <span key={`source-${entry.id}`} className="font-mono text-xs">{entry.source_type}</span>,
             <span key={`delta-${entry.id}`} className={entry.credit_delta > 0 ? 'text-green-400' : entry.credit_delta < 0 ? 'text-red-400' : 'text-outline'}>{entry.credit_delta > 0 ? '+' : ''}{entry.credit_delta}</span>,
-            <span key={`reserved-${entry.id}`} className="text-outline">{entry.reserved_delta !== 0 ? entry.reserved_delta : '—'}</span>,
             <span key={`reason-${entry.id}`} className="text-xs">{entry.reason}</span>,
             <span key={`usage-${entry.id}`}>{entry.usage_event_id ? `#${entry.usage_event_id}` : '—'}</span>,
             <span key={`created-${entry.id}`}>{formatDate(entry.created_at)}</span>,

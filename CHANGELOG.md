@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.96 - 2026-05-24
+
+### Removed
+
+- Phase 6 (POINT OF NO RETURN): 永久删除 `credit_reserved` 列与 `reserved_delta` 列。Postgres migration `029_drop_credit_reserved.sql` 一次性对 `user_hosted_credit_accounts` / `fingerprint_credit_accounts` / `api_keys` 三张账户表 `DROP COLUMN credit_reserved`，并对 `user_hosted_credit_ledger` / `fingerprint_credit_ledger` 两张 ledger 表 `DROP COLUMN reserved_delta`。Go model 同步删除 `APIKey.CreditReserved` / `FingerprintCreditAccount.CreditReserved` / `UserHostedCreditAccount.CreditReserved` 字段及三者各自的 `AvailableCredits()` 方法，删除 `UserHostedCreditLedger.ReservedDelta` 与 `FingerprintCreditLedger.ReservedDelta` 字段；删除 `HostedPricingRule.ReservationCredits` 列与字段（0.2.95 已标 deprecated）；删除 `HostedCreditLedgerSourceReserve/SourceSettle/SourceRelease/SourceReservedCutover` 四个 ledger 源常量。`store.ListUserHostedCreditLedger/ListAllUserHostedCreditLedger` 的 source_type 白名单同步去掉 `reserved_cutover`。Cutover 一次性工具 `platform/cmd/cutover-reserved/` 整目录删除。
+
+### Changed
+
+- 所有 `account.AvailableCredits()` / `key.AvailableCredits()` 调用点改为直接访问 `CreditBalance` 字段，覆盖 `appuser` / `license` / `hostedllm` / `redemption` 各 service。`license.CreditAccountSnapshot.Reserved` 字段及外部 API 中 `reserved` 概念全部清除。Admin web UI 的 `credit_reserved` / `reservation_credits` / `reserved_delta` 字段、表格列、表单输入及 mock 数据同步剔除：UsersPage 移除「Key reserved legacy」徽章，QuotaSourcesPage 移除 Reserved/Available 双列只留 Balance，HostedPricingRulesPage 移除 Reservation credits 表单字段和文案，CreditLedgerPage 删除 Reserved 列与文案改写。
+
+### Notes
+
+- 生产数据库已在 server 上完成 pre-Phase-6 备份（`/tmp/officecli-platform-pre-phase6-20260524-145615.sql.gz`）。Cutover 在 0.2.94 灰度后已将所有 `credit_reserved=0`，Phase 6 deploy 后回滚需走 schema 重建+备份恢复路径。
+
 ## 0.2.95 - 2026-05-24
 
 ### Removed

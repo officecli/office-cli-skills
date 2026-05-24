@@ -88,7 +88,6 @@ describe('admin users page', () => {
                 quota_total: 20,
                 quota_remaining: 17,
                 credit_balance: 120,
-                credit_reserved: 5,
                 created_at: '2026-04-02T00:00:00Z',
               },
             ],

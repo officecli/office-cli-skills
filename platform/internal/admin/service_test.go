@@ -321,7 +321,6 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 		OutputPer1KCostMicrousd:    20000,
 		ReasoningPer1KCostMicrousd: 40000,
 		ImagePerAssetCostMicrousd:  0,
-		ReservationCredits:         20,
 		MinimumChargeCredits:       2,
 		MarkupBPS:                  &override,
 		Enabled:                    true,

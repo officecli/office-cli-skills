@@ -282,7 +282,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 			{InvitedUserID: 101, ActivatedAt: timePtr()},
 		},
 		discord:       &model.DiscordConnection{UserID: 42, GuildMember: true},
-		hostedAccount: &model.UserHostedCreditAccount{UserID: 42, CreditBalance: 180, CreditReserved: 50},
+		hostedAccount: &model.UserHostedCreditAccount{UserID: 42, CreditBalance: 180},
 		hostedLedgers: map[string]*model.UserHostedCreditLedger{
 			"signup-hosted-credits:42": {UserID: 42, SourceType: model.HostedCreditLedgerSourceSignupBonus, IdempotencyKey: "signup-hosted-credits:42", CreditDelta: SignupHostedCreditBonus},
 		},
@@ -302,7 +302,7 @@ func TestOverviewIncludesRewardInviteAndDiscordState(t *testing.T) {
 	overview, err := svc.Overview(context.Background(), 42)
 	require.NoError(t, err)
 	require.Equal(t, 7, overview.TotalRemaining)
-	require.Equal(t, 130, overview.HostedCreditBalance)
+	require.Equal(t, 180, overview.HostedCreditBalance)
 	require.Equal(t, 8, overview.RewardRemaining)
 	require.Equal(t, "invite-xyz", overview.InviteCode)
 	require.Equal(t, growthsvc.MaxReferralsPerInviter, overview.InviteLimit)

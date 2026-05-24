@@ -14,7 +14,6 @@ const blankRule: HostedPricingRule = {
   output_per_1k_cost_microusd: 0,
   reasoning_per_1k_cost_microusd: 0,
   image_per_asset_cost_microusd: 0,
-  reservation_credits: 16,
   minimum_charge_credits: 2,
   enabled: true,
 }
@@ -151,7 +150,6 @@ export default function HostedPricingRulesPage() {
           <ModelSelect label="Text model" value={ruleDraft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
           <ModelSelect label="Image model" value={ruleDraft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
           <NumberField label="Markup % override" value={bpsToPercentValue(ruleDraft.markup_bps)} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
-          <NumberField label="Reservation credits" value={ruleDraft.reservation_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, reservation_credits: Number(value) })} />
           <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
           <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
           <button type="submit" className="admin-primary-button self-end" disabled={createRule.isPending}>Create rule</button>
@@ -247,7 +245,7 @@ function RuleRow({ rule, textModelConfigs, imageModelConfigs, onSave, onToggle }
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 text-white">{profileLabel(rule.document_profile)} / text {rule.text_model_key || '-'} / image {rule.image_model_key || '-'}<StatusPill value={rule.enabled ? 'active' : 'disabled'} /></div>
-          <div className="mt-1 text-sm text-outline">Reservation {rule.reservation_credits} credits; minimum {rule.minimum_charge_credits} credits; markup {markupLabel(rule.markup_bps)}</div>
+          <div className="mt-1 text-sm text-outline">Minimum {rule.minimum_charge_credits} credits; markup {markupLabel(rule.markup_bps)}</div>
         </div>
         <button type="button" className="admin-secondary-button" onClick={onToggle}>{rule.enabled ? 'Disable' : 'Enable'}</button>
       </div>
@@ -256,7 +254,6 @@ function RuleRow({ rule, textModelConfigs, imageModelConfigs, onSave, onToggle }
         <ModelSelect label={`Text model ${rule.id ?? rule.document_profile}`} value={draft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setDraft({ ...draft, text_model_key: value })} />
         <ModelSelect label={`Image model ${rule.id ?? rule.document_profile}`} value={draft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setDraft({ ...draft, image_model_key: value })} />
         <NumberField label={`Markup % override ${rule.id ?? rule.document_profile}`} value={bpsToPercentValue(draft.markup_bps)} onChange={(value) => setDraft({ ...draft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
-        <NumberField label={`Reservation ${rule.id ?? rule.document_profile}`} value={draft.reservation_credits} onChange={(value) => setDraft({ ...draft, reservation_credits: Number(value) })} />
         <NumberField label={`Minimum ${rule.id ?? rule.document_profile}`} value={draft.minimum_charge_credits} onChange={(value) => setDraft({ ...draft, minimum_charge_credits: Number(value) })} />
         <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /> Enabled</label>
         <button type="button" className="admin-primary-button self-end" aria-label={`Save hosted pricing rule ${rule.id ?? rule.document_profile}`} onClick={() => onSave(normalizeRule(draft))}>Save rule</button>

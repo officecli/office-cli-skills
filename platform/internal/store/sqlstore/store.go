@@ -800,7 +800,7 @@ func (s *Store) TransferAnonymousCreditsToUser(ctx context.Context, fingerprint 
 		if err != nil {
 			return err
 		}
-		amount := fpAccount.CreditBalance - fpAccount.CreditReserved
+		amount := fpAccount.CreditBalance
 		if amount < 0 {
 			amount = 0
 		}
@@ -903,7 +903,6 @@ func (s *Store) ChargeHostedCreditsByUser(ctx context.Context, userID uint64, re
 			SourceType:     model.HostedCreditLedgerSourceCharge,
 			IdempotencyKey: idempotencyKey,
 			CreditDelta:    -credits,
-			ReservedDelta:  0,
 			UsageEventID:   usageEventID,
 			Reason:         string(model.HostedCreditLedgerSourceCharge),
 			MetadataJSON:   "{}",
@@ -965,7 +964,6 @@ func (s *Store) ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprin
 			SourceType:      model.HostedCreditLedgerSourceCharge,
 			IdempotencyKey:  idempotencyKey,
 			CreditDelta:     -credits,
-			ReservedDelta:   0,
 			UsageEventID:    usageEventID,
 			Reason:          string(model.HostedCreditLedgerSourceCharge),
 			MetadataJSON:    "{}",
@@ -1015,7 +1013,6 @@ func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, reques
 				return loadErr
 			}
 			key.CreditBalance = account.CreditBalance
-			key.CreditReserved = account.CreditReserved
 			resultKey = key
 			return nil
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1037,7 +1034,6 @@ func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, reques
 			SourceType:     model.HostedCreditLedgerSourceCharge,
 			IdempotencyKey: idempotencyKey,
 			CreditDelta:    -credits,
-			ReservedDelta:  0,
 			UsageEventID:   usageEventID,
 			Reason:         string(model.HostedCreditLedgerSourceCharge),
 			MetadataJSON:   "{}",
@@ -1048,7 +1044,6 @@ func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, reques
 			}
 		}
 		key.CreditBalance = account.CreditBalance
-		key.CreditReserved = account.CreditReserved
 		resultKey = key
 		return nil
 	})
@@ -1082,7 +1077,6 @@ func (s *Store) WriteChargeFailedLedgerForUser(ctx context.Context, userID uint6
 		SourceType:     model.HostedCreditLedgerSourceChargeFailedPostUpstream,
 		IdempotencyKey: idempotencyKey,
 		CreditDelta:    -credits,
-		ReservedDelta:  0,
 		Reason:         string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
 		MetadataJSON:   metadataJSON,
 	}
@@ -1115,7 +1109,6 @@ func (s *Store) WriteChargeFailedLedgerForFingerprint(ctx context.Context, finge
 		SourceType:      model.HostedCreditLedgerSourceChargeFailedPostUpstream,
 		IdempotencyKey:  idempotencyKey,
 		CreditDelta:     -credits,
-		ReservedDelta:   0,
 		Reason:          string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
 		MetadataJSON:    metadataJSON,
 	}
@@ -2717,7 +2710,6 @@ func (s *Store) ListUserHostedCreditLedger(ctx context.Context, userID uint64, i
 		q = q.Where("credit_delta != 0 OR source_type IN ?", []string{
 			string(model.HostedCreditLedgerSourceCharge),
 			string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
-			string(model.HostedCreditLedgerSourceReservedCutover),
 		})
 	}
 	var entries []model.UserHostedCreditLedger
@@ -2733,7 +2725,6 @@ func (s *Store) ListAllUserHostedCreditLedger(ctx context.Context, includeZeroDe
 		q = q.Where("credit_delta != 0 OR source_type IN ?", []string{
 			string(model.HostedCreditLedgerSourceCharge),
 			string(model.HostedCreditLedgerSourceChargeFailedPostUpstream),
-			string(model.HostedCreditLedgerSourceReservedCutover),
 		})
 	}
 	var entries []model.UserHostedCreditLedger
@@ -3027,7 +3018,6 @@ func (s *Store) withEffectiveAPIKeyStatus(ctx context.Context, key model.APIKey)
 		}
 	} else {
 		key.CreditBalance = account.CreditBalance
-		key.CreditReserved = account.CreditReserved
 	}
 	disabled, err := ownerUserDisabledWithDB(s.db.WithContext(ctx), *key.OwnerUserID)
 	if err != nil {

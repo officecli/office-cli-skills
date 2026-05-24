@@ -14,11 +14,11 @@ func TestDefaultHostedPricingRulesUseTextAndImageProfiles(t *testing.T) {
 		profiles[rule.DocumentProfile] = true
 		switch rule.DocumentProfile {
 		case "text":
-			if rule.TextModelKey != "text_default" || rule.ImageModelKey != "" || rule.ReservationCredits != 16 || rule.MinimumChargeCredits != 2 {
+			if rule.TextModelKey != "text_default" || rule.ImageModelKey != "" || rule.MinimumChargeCredits != 2 {
 				t.Fatalf("unexpected text pricing rule: %#v", rule)
 			}
 		case "image":
-			if rule.ImageModelKey != "image_default" || rule.ImagePerAssetCredits != 10 || rule.ReservationCredits != 10 || rule.MinimumChargeCredits != 10 {
+			if rule.ImageModelKey != "image_default" || rule.ImagePerAssetCredits != 10 || rule.MinimumChargeCredits != 10 {
 				t.Fatalf("unexpected image pricing rule: %#v", rule)
 			}
 		default:

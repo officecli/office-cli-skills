@@ -38,7 +38,6 @@ func TestChargeHostedCreditsByUserDeductsAndIsIdempotent(t *testing.T) {
 	account, err := store.ChargeHostedCreditsByUser(context.Background(), 11, "req-charge-1", 30, &usageEventID)
 	require.NoError(t, err)
 	require.Equal(t, 70, account.CreditBalance)
-	require.Equal(t, 0, account.CreditReserved)
 
 	// Second call with same requestID must be a no-op (idempotent).
 	account2, err := store.ChargeHostedCreditsByUser(context.Background(), 11, "req-charge-1", 30, &usageEventID)
@@ -49,7 +48,6 @@ func TestChargeHostedCreditsByUserDeductsAndIsIdempotent(t *testing.T) {
 	require.NoError(t, db.Where("source_type = ?", model.HostedCreditLedgerSourceCharge).Find(&ledgers).Error)
 	require.Len(t, ledgers, 1)
 	require.Equal(t, -30, ledgers[0].CreditDelta)
-	require.Equal(t, 0, ledgers[0].ReservedDelta)
 	require.NotNil(t, ledgers[0].UsageEventID)
 	require.Equal(t, uint64(42), *ledgers[0].UsageEventID)
 	require.Equal(t, "charge:req-charge-1", ledgers[0].IdempotencyKey)

@@ -430,7 +430,6 @@ func TestCompleteWithCLISessionGeneratesMissingRequestID(t *testing.T) {
 		},
 		rules: []model.HostedPricingRule{{
 			DocumentProfile:      "text",
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
 	}
@@ -483,7 +482,6 @@ func TestCompleteCreatesAndReusesUserAIGatewayAPIKey(t *testing.T) {
 		AIGatewayAdminClient: adminClient,
 		Rules: []model.HostedPricingRule{{
 			DocumentProfile:      "text",
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
 		TimeoutSec: 5,
@@ -556,7 +554,6 @@ func TestCompleteRotatesStoredUserAIGatewayAPIKeyAfterUpstreamAuthFailure(t *tes
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"fresh-key"}},
 		Rules: []model.HostedPricingRule{{
 			DocumentProfile:      "text",
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
 		TimeoutSec: 5,
@@ -785,7 +782,6 @@ func TestCompleteUsesDifferentAIGatewayAPIKeysForDifferentUsers(t *testing.T) {
 		AIGatewayAdminClient: &fakeAIGatewayAdminClient{keys: []string{"sk-user-42", "sk-user-43"}},
 		Rules: []model.HostedPricingRule{{
 			DocumentProfile:      "text",
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
 		TimeoutSec: 5,
@@ -1032,7 +1028,6 @@ func TestCompleteSettlesCreditsFromAIGatewayCostMarkupAndRecordsSnapshot(t *test
 			PromptPer1KCostMicrousd:    10000,
 			OutputPer1KCostMicrousd:    20000,
 			ReasoningPer1KCostMicrousd: 40000,
-			ReservationCredits:         20,
 			MinimumChargeCredits:       2,
 			MarkupBPS:                  &markupOverride,
 			Enabled:                    true,
@@ -1082,7 +1077,6 @@ func TestCompletePersistsAuditContextOnUsageEvent(t *testing.T) {
 		},
 		rules: []model.HostedPricingRule{{
 			DocumentProfile:      "text",
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 			Enabled:              true,
 		}},
@@ -1223,7 +1217,6 @@ func TestCompletePricesSharedTextModelConfigPer1MTokens(t *testing.T) {
 			ID:                   11,
 			DocumentProfile:      "text",
 			TextModelKey:         "text_default",
-			ReservationCredits:   20,
 			MinimumChargeCredits: 1,
 			Enabled:              true,
 		}},
@@ -1295,7 +1288,6 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 			DocumentProfile:      "image",
 			ImageModelKey:        "image_default",
 			ImagePerAssetCredits: 99,
-			ReservationCredits:   12,
 			MinimumChargeCredits: 1,
 			Enabled:              true,
 		}},
@@ -1362,7 +1354,6 @@ func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T)
 			ImageModelKey:             "image_default",
 			ImagePerAssetCredits:      999,
 			ImagePerAssetCostMicrousd: 999000000,
-			ReservationCredits:        100,
 			MinimumChargeCredits:      6,
 			Enabled:                   true,
 		}},
@@ -1438,7 +1429,6 @@ func TestGenerateImageResponsesFallbackParsesInputOutputTokens(t *testing.T) {
 			ID:                   21,
 			DocumentProfile:      "image",
 			ImageModelKey:        "image_default",
-			ReservationCredits:   12,
 			MinimumChargeCredits: 1,
 			Enabled:              true,
 		}},
@@ -1517,7 +1507,6 @@ func TestGenerateImageWithReferenceUsesImageEditEndpoint(t *testing.T) {
 			Provider:             "openai",
 			Model:                "gpt-image-test",
 			ImagePerAssetCredits: 1,
-			ReservationCredits:   1,
 			MinimumChargeCredits: 1,
 		}},
 		TimeoutSec:           5,
