@@ -849,3 +849,42 @@ func StringValue(p *string) string {
 	}
 	return *p
 }
+
+type IssueReport struct {
+	ID                uint64     `gorm:"primaryKey" json:"id"`
+	TicketID          string     `gorm:"column:ticket_id;size:40;uniqueIndex" json:"ticket_id"`
+	UserID            *uint64    `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	ClientEventID     string     `gorm:"column:client_event_id;size:128;uniqueIndex" json:"client_event_id"`
+	SchemaVersion     int        `gorm:"column:schema_version;not null" json:"schema_version"`
+	RuntimeMode       string     `gorm:"column:runtime_mode;size:16;not null" json:"runtime_mode"`
+	Category          string     `gorm:"column:category;size:64;not null;default:''" json:"category"`
+	Severity          string     `gorm:"column:severity;size:16;not null;default:''" json:"severity"`
+	Summary           string     `gorm:"column:summary;size:500;not null" json:"summary"`
+	Detail            string     `gorm:"column:detail;size:2000;not null;default:''" json:"detail"`
+	ContactEmail      *string    `gorm:"column:contact_email;size:254" json:"contact_email,omitempty"`
+	TaskID            string     `gorm:"column:task_id;size:128;not null;default:''" json:"task_id,omitempty"`
+	ErrorCode         string     `gorm:"column:error_code;size:64;not null;default:''" json:"error_code,omitempty"`
+	ErrorMessage      string     `gorm:"column:error_message;size:500;not null;default:''" json:"error_message,omitempty"`
+	Via               string     `gorm:"column:via;size:16;not null;default:'http'" json:"via"`
+	ClientMeta        []byte     `gorm:"column:client_meta;type:jsonb;not null;default:'{}'" json:"client_meta,omitempty"`
+	ClientTsMs        int64      `gorm:"column:client_ts_ms;not null" json:"client_ts_ms"`
+	ServerNowMs       int64      `gorm:"column:server_now_ms;not null" json:"server_now_ms"`
+	ClockSkewFallback bool       `gorm:"column:clock_skew_fallback;not null;default:false" json:"clock_skew_fallback"`
+	ClientIP          string     `gorm:"column:client_ip;size:64;not null;default:''" json:"client_ip,omitempty"`
+	UserAgent         string     `gorm:"column:user_agent;size:512;not null;default:''" json:"user_agent,omitempty"`
+	Status            string     `gorm:"column:status;size:16;not null;default:'new'" json:"status"`
+	TriagedAt         *time.Time `gorm:"column:triaged_at" json:"triaged_at,omitempty"`
+	TriagedBy         string     `gorm:"column:triaged_by;size:191;not null;default:''" json:"triaged_by,omitempty"`
+	CreatedAt         time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+func (IssueReport) TableName() string { return "issue_reports" }
+
+type IssueReportRequestID struct {
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	ReportID  uint64    `gorm:"column:report_id;not null;index;uniqueIndex:uq_issue_report_request_ids_report_request,priority:1" json:"report_id"`
+	RequestID string    `gorm:"column:request_id;size:128;not null;index;uniqueIndex:uq_issue_report_request_ids_report_request,priority:2" json:"request_id"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+func (IssueReportRequestID) TableName() string { return "issue_report_request_ids" }

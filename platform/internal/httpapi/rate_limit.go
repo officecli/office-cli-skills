@@ -23,6 +23,16 @@ type inMemoryRateLimiter struct {
 }
 
 func NewRateLimitMiddleware(limit rate.Limit, burst int, ttl time.Duration) gin.HandlerFunc {
+	return NewRateLimitMiddlewareWithKey(limit, burst, ttl, func(c *gin.Context) string {
+		return c.Request.URL.Path + ":" + c.ClientIP()
+	})
+}
+
+// NewRateLimitMiddlewareWithKey lets the caller supply a custom key function,
+// enabling per-user, per-IP, or per-arbitrary-bucket rate limits. Returning an
+// empty string from keyFunc skips the limit check for that request (useful for
+// allowlisted callers).
+func NewRateLimitMiddlewareWithKey(limit rate.Limit, burst int, ttl time.Duration, keyFunc func(*gin.Context) string) gin.HandlerFunc {
 	store := &inMemoryRateLimiter{
 		visitors: map[string]*rateLimitedVisitor{},
 		limit:    limit,
@@ -30,12 +40,17 @@ func NewRateLimitMiddleware(limit rate.Limit, burst int, ttl time.Duration) gin.
 		ttl:      ttl,
 	}
 	return func(c *gin.Context) {
-		key := c.Request.URL.Path + ":" + c.ClientIP()
+		key := keyFunc(c)
+		if key == "" {
+			c.Next()
+			return
+		}
 		if !store.allow(key, time.Now()) {
 			LogWarnRequest(c, "rate_limit_exceeded",
 				"path", c.Request.URL.Path,
 				"method", c.Request.Method,
 				"client_ip", c.ClientIP(),
+				"limit_key", key,
 			)
 			Error(c, http.StatusTooManyRequests, "rate limit exceeded")
 			c.Abort()

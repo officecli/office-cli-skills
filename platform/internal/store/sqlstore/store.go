@@ -3363,3 +3363,85 @@ func JSONString(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
 }
+
+func (s *Store) CreateIssueReport(ctx context.Context, report *model.IssueReport, requestIDs []string) (created *model.IssueReport, isReplay bool, err error) {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(report).Error; err != nil {
+			if isDuplicateConstraintError(err) {
+				var existing model.IssueReport
+				if loadErr := tx.Where("client_event_id = ?", report.ClientEventID).First(&existing).Error; loadErr != nil {
+					return loadErr
+				}
+				created = &existing
+				isReplay = true
+				// Replay still may carry new request_id values (hosted-mode evidence chain
+				// across retries). Attempt to append; existing pairs are skipped via the
+				// uq_issue_report_request_ids_report_request unique index.
+				if err := appendIssueReportRequestIDs(tx, existing.ID, requestIDs); err != nil {
+					return err
+				}
+				return nil
+			}
+			return err
+		}
+		if err := appendIssueReportRequestIDs(tx, report.ID, requestIDs); err != nil {
+			return err
+		}
+		created = report
+		return nil
+	})
+	return
+}
+
+func appendIssueReportRequestIDs(tx *gorm.DB, reportID uint64, requestIDs []string) error {
+	if len(requestIDs) == 0 {
+		return nil
+	}
+	rows := make([]model.IssueReportRequestID, len(requestIDs))
+	for i, rid := range requestIDs {
+		rows[i] = model.IssueReportRequestID{
+			ReportID:  reportID,
+			RequestID: rid,
+		}
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
+}
+
+func (s *Store) FindIssueReportByClientEventID(ctx context.Context, clientEventID string) (*model.IssueReport, error) {
+	var report model.IssueReport
+	if err := s.db.WithContext(ctx).Where("client_event_id = ?", clientEventID).First(&report).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &report, nil
+}
+
+func (s *Store) FindIssueReportByTicketID(ctx context.Context, ticketID string) (*model.IssueReport, error) {
+	var report model.IssueReport
+	if err := s.db.WithContext(ctx).Where("ticket_id = ?", ticketID).First(&report).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &report, nil
+}
+
+func (s *Store) ListIssueReportRequestIDs(ctx context.Context, reportID uint64) ([]model.IssueReportRequestID, error) {
+	var rows []model.IssueReportRequestID
+	if err := s.db.WithContext(ctx).Where("report_id = ?", reportID).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (s *Store) NullifyIssueReportContactEmail(ctx context.Context, ticketID string) error {
+	return s.db.WithContext(ctx).Model(&model.IssueReport{}).Where("ticket_id = ?", ticketID).Update("contact_email", nil).Error
+}
+
+func (s *Store) DeleteIssueReportsOlderThan(ctx context.Context, before time.Time) (int64, error) {
+	result := s.db.WithContext(ctx).Where("created_at < ?", before).Delete(&model.IssueReport{})
+	return result.RowsAffected, result.Error
+}

@@ -3,12 +3,15 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"mime"
 	"net"
 	"net/http"
@@ -36,6 +39,7 @@ import (
 	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
 	"github.com/officecli/officecli-internal/platform/internal/hostedllm"
 	"github.com/officecli/officecli-internal/platform/internal/httpapi"
+	"github.com/officecli/officecli-internal/platform/internal/issuereports"
 	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
 	"github.com/officecli/officecli-internal/platform/internal/model"
 	"github.com/officecli/officecli-internal/platform/internal/objectstore"
@@ -238,13 +242,14 @@ func New() (*Application, error) {
 	)
 	cliSessionSvc := clisession.NewService(dbStore, cfg.PlatformBaseURL)
 	operationsSvc := operations.NewService(dbStore)
+	issueReportsSvc := issuereports.NewService(dbStore, issuereports.NewMetrics(slog.Default()), time.Now)
 
 	port, err := parsePort(cfg.HTTPAddr)
 	if err != nil {
 		return nil, err
 	}
 	server := egin.DefaultContainer().Build(egin.WithHost(hostPart(cfg.HTTPAddr)), egin.WithPort(port))
-	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider, operationsSvc, redemptionSvc)
+	registerRoutesWithHosted(server, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, hostedLLMSvc, publishService, discordOAuthSvc, cliSessionSvc, previewShares, sdkHandler, sdkProvider, operationsSvc, redemptionSvc, issueReportsSvc)
 
 	application := ego.New()
 	application.Serve(server)
@@ -281,10 +286,10 @@ func newOAuthProvider(cfg Config, oauth2ClientID, oauth2ClientSecret, oauth2Redi
 func (a *Application) Run() error { return a.ego.Run() }
 
 func registerRoutes(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, discordSvc discordOAuthRouteService) {
-	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil, nil, nil)
+	registerRoutesWithHosted(r, cfg, lic, adminSvc, authSvc, appSvc, billingSvc, nil, nil, discordSvc, nil, nil, nil, nil, nil, nil, nil)
 }
 
-func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider, operationsSvc *operations.Service, redemptionSvc *redemptionsvc.Service) {
+func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Service, adminSvc *admin.Service, authSvc *auth.Service, appSvc *appuser.Service, billingSvc *billing.Service, hostedSvc *hostedllm.Service, publishService publishRouteService, discordSvc discordOAuthRouteService, cliSessionSvc *clisession.Service, previewShares *previewshare.Service, sdkHandler *officesdk.Handler, sdkProvider *officesdk.FileProvider, operationsSvc *operations.Service, redemptionSvc *redemptionsvc.Service, issueReportsSvc *issuereports.Service) {
 	r.Use(httpapi.RequestIDMiddleware())
 	r.Use(httpapi.AccessLogMiddleware(time.Second))
 	r.Use(gin.Recovery())
@@ -303,6 +308,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	api.GET("/pricing", func(c *gin.Context) { httpapi.JSON(c, http.StatusOK, billingSvc.Pricing()) })
 	registerAppRoutes(api, cfg, authSvc, appSvc, billingSvc, discordSvc, cliSessionSvc)
 	registerStripeRoutes(api, billingSvc)
+	registerIssueReportRoutes(api, cfg, cliSessionSvc, issueReportsSvc)
 	registerPreviewRoutes(r, cfg, authSvc, previewShares, sdkHandler, sdkProvider)
 	registerStatic(r.Engine, cfg)
 }
@@ -1799,7 +1805,7 @@ func shouldUseSecureCookies(cfg Config) bool {
 }
 
 func bearerToken(header string) string {
-	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(header), "Bearer "))
+	return httpapi.BearerToken(header)
 }
 
 // redemptionErrorStatus maps redemption package errors to HTTP status codes
@@ -2218,6 +2224,46 @@ func registerStripeRoutes(api *gin.RouterGroup, billingSvc stripeRouteService) {
 		}
 		httpapi.JSON(c, http.StatusOK, gin.H{"received": true})
 	})
+}
+
+func registerIssueReportRoutes(api *gin.RouterGroup, cfg Config, cliSvc *clisession.Service, issueReportsSvc *issuereports.Service) {
+	if cliSvc == nil || issueReportsSvc == nil {
+		return
+	}
+
+	rateLimitTTL := cfg.RateLimitVisitorTTL
+	if rateLimitTTL <= 0 {
+		rateLimitTTL = defaultRateLimitVisitorTTL(cfg.AppEnv)
+	}
+
+	issueReportsHandler := issuereports.NewHandler(issueReportsSvc, cliSvc)
+
+	// Authenticated route: 60/min keyed by hashed token (avoid retaining credential
+	// material in the limiter map) or IP fallback. IP-based limits assume the
+	// platform-level Gin trusted-proxy allowlist is configured at the engine; if not,
+	// X-Forwarded-For can rotate the bucket per request — tracked as M1b prerequisite.
+	mainLimiter := httpapi.NewRateLimitMiddlewareWithKey(
+		rate.Every(time.Minute/60), 60, rateLimitTTL,
+		func(c *gin.Context) string {
+			if tok := httpapi.BearerToken(c.GetHeader("Authorization")); tok != "" {
+				sum := sha256.Sum256([]byte(tok))
+				return "user:" + hex.EncodeToString(sum[:8])
+			}
+			return "ip:" + c.ClientIP()
+		},
+	)
+	api.POST("/issue-reports", mainLimiter, issueReportsHandler.Authenticated)
+
+	// Anonymous route: 30/min/IP + global 100/min.
+	anonIPLimiter := httpapi.NewRateLimitMiddlewareWithKey(
+		rate.Every(time.Minute/30), 30, rateLimitTTL,
+		func(c *gin.Context) string { return "anon-ip:" + c.ClientIP() },
+	)
+	anonGlobalLimiter := httpapi.NewRateLimitMiddlewareWithKey(
+		rate.Every(time.Minute/100), 100, rateLimitTTL,
+		func(c *gin.Context) string { return "anon-global" },
+	)
+	api.POST("/issue-reports/anonymous", anonIPLimiter, anonGlobalLimiter, issueReportsHandler.Anonymous)
 }
 
 func registerStatic(router *gin.Engine, cfg Config) {

@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -32,6 +34,17 @@ func RequestID(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// BearerToken extracts the credential from an "Authorization: Bearer ..." header,
+// trimming whitespace around the prefix and value. Returns "" when the header
+// is missing, malformed, or contains only the prefix.
+func BearerToken(header string) string {
+	trimmed := strings.TrimSpace(header)
+	if !strings.HasPrefix(trimmed, "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmed, "Bearer "))
 }
 
 func RequireAdmin(sessionResolver func(cookieValue string) (string, error), cookieName string) gin.HandlerFunc {
