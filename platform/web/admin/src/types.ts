@@ -178,6 +178,10 @@ export interface HostedPricingRule {
   output_per_1k_cost_microusd: number
   reasoning_per_1k_cost_microusd: number
   image_per_asset_cost_microusd: number
+  prompt_per_1k_credits?: number
+  output_per_1k_credits?: number
+  reasoning_per_1k_credits?: number
+  image_per_asset_credits?: number
   minimum_charge_credits: number
   markup_bps?: number
   enabled: boolean

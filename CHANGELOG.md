@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.99 - 2026-05-25
+
+### Fixed
+
+- `HostedPricingRule` 的四个 `*Credits` 字段（`PromptPer1KCredits` / `OutputPer1KCredits` / `ReasoningPer1KCredits` / `ImagePerAssetCredits`）原本标注 `gorm:"-"` 不入库，导致 0.2.98 引入的 image fast-path（`priceUsage` 中 `rule.ImagePerAssetCredits > 0` 分支）在生产从未触发——image 生成按 `image_per_asset_cost_microusd × markup × credits_per_usd` 反算，结果约 9 credits/张，与预期固定 10 credits 不符。本次将四个字段持久化到 `hosted_pricing_rules` 表，admin API `UpsertHostedPricingRuleRequest` 同步暴露，admin 前端在创建/编辑规则面板新增 `Image credits/asset` 输入。
+
+### Migration
+
+- `030_hosted_pricing_rule_credits_columns.sql`：新增 `prompt_per_1k_credits` / `output_per_1k_credits` / `reasoning_per_1k_credits` / `image_per_asset_credits` 四列（默认 0），并 `UPDATE` 现有 `document_profile='image'` 且 `image_per_asset_credits=0` 的规则为 `image_per_asset_credits=10, minimum_charge_credits=10`，使生产 image rule 落地为 10 credits/张。条件 UPDATE 保证重跑与管理员后续手改值不被覆盖。
+
 ## 0.2.98 - 2026-05-25
 
 ### Added

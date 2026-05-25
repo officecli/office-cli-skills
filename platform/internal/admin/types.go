@@ -107,6 +107,10 @@ type UpsertHostedPricingRuleRequest struct {
 	OutputPer1KCostMicrousd    int64  `json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64  `json:"reasoning_per_1k_cost_microusd"`
 	ImagePerAssetCostMicrousd  int64  `json:"image_per_asset_cost_microusd"`
+	PromptPer1KCredits         int    `json:"prompt_per_1k_credits"`
+	OutputPer1KCredits         int    `json:"output_per_1k_credits"`
+	ReasoningPer1KCredits      int    `json:"reasoning_per_1k_credits"`
+	ImagePerAssetCredits       int    `json:"image_per_asset_credits"`
 	MinimumChargeCredits       int    `json:"minimum_charge_credits"`
 	MarkupBPS                  *int   `json:"markup_bps,omitempty"`
 	Enabled                    bool   `json:"enabled"`

@@ -619,10 +619,10 @@ type HostedPricingRule struct {
 	Model                      string    `gorm:"column:model;size:128;not null" json:"model"`
 	TextModelKey               string    `gorm:"column:text_model_key;size:64;index;not null;default:''" json:"text_model_key"`
 	ImageModelKey              string    `gorm:"column:image_model_key;size:64;index;not null;default:''" json:"image_model_key"`
-	PromptPer1KCredits         int       `gorm:"-" json:"prompt_per_1k_credits,omitempty"`
-	OutputPer1KCredits         int       `gorm:"-" json:"output_per_1k_credits,omitempty"`
-	ReasoningPer1KCredits      int       `gorm:"-" json:"reasoning_per_1k_credits,omitempty"`
-	ImagePerAssetCredits       int       `gorm:"-" json:"image_per_asset_credits,omitempty"`
+	PromptPer1KCredits         int       `gorm:"column:prompt_per_1k_credits;not null;default:0" json:"prompt_per_1k_credits,omitempty"`
+	OutputPer1KCredits         int       `gorm:"column:output_per_1k_credits;not null;default:0" json:"output_per_1k_credits,omitempty"`
+	ReasoningPer1KCredits      int       `gorm:"column:reasoning_per_1k_credits;not null;default:0" json:"reasoning_per_1k_credits,omitempty"`
+	ImagePerAssetCredits       int       `gorm:"column:image_per_asset_credits;not null;default:0" json:"image_per_asset_credits,omitempty"`
 	PromptPer1KCostMicrousd    int64     `gorm:"column:prompt_per_1k_cost_microusd;not null;default:0" json:"prompt_per_1k_cost_microusd"`
 	OutputPer1KCostMicrousd    int64     `gorm:"column:output_per_1k_cost_microusd;not null;default:0" json:"output_per_1k_cost_microusd"`
 	ReasoningPer1KCostMicrousd int64     `gorm:"column:reasoning_per_1k_cost_microusd;not null;default:0" json:"reasoning_per_1k_cost_microusd"`
