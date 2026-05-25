@@ -3,10 +3,12 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +18,44 @@ import (
 	"github.com/officecli/officecli-internal/engine"
 	"github.com/officecli/officecli-internal/internal/runtime"
 )
+
+const bridgeTaskIDMaxLen = 128
+
+var (
+	bridgeTaskIDUUIDPattern   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	bridgeTaskIDLegacyPattern = regexp.MustCompile(`^task-[0-9]+$`)
+)
+
+// generateTaskID returns a lowercase 36-character UUIDv7 string. Time-ordered
+// so on-disk artefacts and log lines sort naturally; never resets across
+// process restarts, so collisions with prior bridge runs cannot occur.
+func generateTaskID() string {
+	var b [16]byte
+	ts := time.Now().UnixMilli()
+	b[0] = byte(ts >> 40)
+	b[1] = byte(ts >> 32)
+	b[2] = byte(ts >> 24)
+	b[3] = byte(ts >> 16)
+	b[4] = byte(ts >> 8)
+	b[5] = byte(ts)
+	if _, err := rand.Read(b[6:]); err != nil {
+		panic(fmt.Errorf("bridge: crypto/rand failed: %w", err))
+	}
+	b[6] = (b[6] & 0x0f) | 0x70 // version 7
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// IsValidTaskID accepts both the new UUIDv7 format and the legacy
+// task-<digits> counter format used by bridge versions before the UUID
+// switchover. Length is capped to keep accidental garbage from sneaking
+// through. The check is strict-lowercase to match what we emit.
+func IsValidTaskID(id string) bool {
+	if id == "" || len(id) > bridgeTaskIDMaxLen {
+		return false
+	}
+	return bridgeTaskIDUUIDPattern.MatchString(id) || bridgeTaskIDLegacyPattern.MatchString(id)
+}
 
 const (
 	bridgeToolOfficeGenerate = "office.generate"
@@ -334,6 +374,10 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 			s.writeError(req.ID, -32602, err.Error(), nil)
 			return
 		}
+		if !IsValidTaskID(params.TaskID) {
+			s.writeError(req.ID, -32602, "invalid_task_id", map[string]any{"task_id": params.TaskID})
+			return
+		}
 		if err := s.respondTask(params); err != nil {
 			s.writeError(req.ID, -32000, err.Error(), nil)
 			return
@@ -355,6 +399,10 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 		var params bridgeCancelParams
 		if err := decodeParams(req.Params, &params); err != nil {
 			s.writeError(req.ID, -32602, err.Error(), nil)
+			return
+		}
+		if !IsValidTaskID(params.TaskID) {
+			s.writeError(req.ID, -32602, "invalid_task_id", map[string]any{"task_id": params.TaskID})
 			return
 		}
 		if err := s.cancelTask(params.TaskID); err != nil {
@@ -647,7 +695,7 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		return nil, fmt.Errorf("session not found: %s", sessionID)
 	}
 	task := &bridgeTask{
-		ID:          s.nextID("task"),
+		ID:          generateTaskID(),
 		SessionID:   sessionID,
 		RequestID:   normalizeRPCID(rpcID),
 		Tool:        defaultIfEmpty(strings.TrimSpace(params.Tool), bridgeToolOfficeGenerate),

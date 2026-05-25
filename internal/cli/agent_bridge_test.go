@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -389,6 +390,8 @@ func TestAgentBridgePrepareReportReturnsWorkbookContext(t *testing.T) {
 	}})
 
 	var sawCompleted bool
+	var taskID string
+	eventTaskIDs := map[string]struct{}{}
 	timeout := time.After(3 * time.Second)
 	for !sawCompleted {
 		select {
@@ -397,16 +400,34 @@ func TestAgentBridgePrepareReportReturnsWorkbookContext(t *testing.T) {
 		default:
 		}
 		msg := readRPC(t, outReader)
+		if result, ok := msg["result"].(map[string]any); ok {
+			if id, ok := result["task_id"].(string); ok {
+				taskID = id
+			}
+			continue
+		}
 		if msg["method"] != "event" {
 			continue
 		}
 		params := msg["params"].(map[string]any)
+		if eventTaskID, ok := params["task_id"].(string); ok {
+			eventTaskIDs[eventTaskID] = struct{}{}
+		}
 		if params["type"] == bridgeEventTaskCompleted {
 			sawCompleted = true
 		}
 	}
+	if taskID == "" {
+		t.Fatal("expected task_id from invoke response")
+	}
+	if len(eventTaskIDs) != 1 {
+		t.Fatalf("expected single distinct event task_id, got %v", eventTaskIDs)
+	}
+	if _, ok := eventTaskIDs[taskID]; !ok {
+		t.Fatalf("event task_id set %v does not contain invoke task_id %q", eventTaskIDs, taskID)
+	}
 
-	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "task/status", "params": map[string]any{"task_id": "task-000001"}})
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "task/status", "params": map[string]any{"task_id": taskID}})
 	statusMsg := readRPC(t, outReader)
 	status := statusMsg["result"].(map[string]any)
 	result := status["result"].(map[string]any)
@@ -1346,5 +1367,179 @@ func parseBridgeProgressTimes(t *testing.T, raw []byte) []bridgeProgressRecord {
 		step, _ := payload["step"].(string)
 		content, _ := payload["content"].(string)
 		out = append(out, bridgeProgressRecord{ts: ts, step: step, content: content})
+	}
+}
+
+func TestGenerateTaskIDIsUniqueAndUUIDv7(t *testing.T) {
+	const n = 100
+	seen := make(map[string]struct{}, n)
+	for i := 0; i < n; i++ {
+		id := generateTaskID()
+		if !bridgeTaskIDUUIDPattern.MatchString(id) {
+			t.Fatalf("id %q does not match UUID regex", id)
+		}
+		if id[14] != '7' {
+			t.Fatalf("id %q is not UUIDv7 (version nibble = %c)", id, id[14])
+		}
+		if v := id[19]; v != '8' && v != '9' && v != 'a' && v != 'b' {
+			t.Fatalf("id %q has wrong UUID variant nibble %c", id, v)
+		}
+		if _, dup := seen[id]; dup {
+			t.Fatalf("duplicate id generated at iteration %d: %s", i, id)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
+func TestAgentBridgeConcurrentInvokeProducesUniqueUUIDs(t *testing.T) {
+	tmpDir := t.TempDir()
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{checkResult: &LicenseCheckResult{Allowed: true, AccessMode: LicenseAccessModePaid}}, nil
+	}
+	server := newAgentBridgeServer(app, Config{
+		Defaults: DefaultsConfig{OutputDir: tmpDir, Publish: false, Mode: "fast"},
+		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		Publish:  disabledPublishConfig(),
+	}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	const n = 100
+	var wg sync.WaitGroup
+	ids := make([]string, n)
+	errs := make([]error, n)
+	payload := json.RawMessage(`{"title":"T","sections":[{"heading":"H","level":1,"paragraphs":["x"]}]}`)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			task, err := server.invokeTask(context.Background(), json.RawMessage(strconv.Itoa(idx)), bridgeInvokeParams{
+				Tool:         "office.render",
+				OutputFormat: "json",
+				Args: bridgeInvokeArgs{
+					DocumentType: "docx",
+					Topic:        "Concurrent",
+					Payload:      payload,
+					OutputDir:    tmpDir,
+					Publish:      boolPtr(false),
+				},
+			})
+			if err != nil {
+				errs[idx] = err
+				return
+			}
+			ids[idx] = task.ID
+		}(i)
+	}
+	wg.Wait()
+
+	seen := make(map[string]struct{}, n)
+	for i, id := range ids {
+		if errs[i] != nil {
+			t.Fatalf("invoke %d failed: %v", i, errs[i])
+		}
+		if !bridgeTaskIDUUIDPattern.MatchString(id) {
+			t.Fatalf("task id %q does not match UUID regex", id)
+		}
+		if _, dup := seen[id]; dup {
+			t.Fatalf("duplicate task id across concurrent invokes: %s", id)
+		}
+		seen[id] = struct{}{}
+	}
+
+	// Drain async render goroutines so t.TempDir cleanup doesn't race with
+	// in-flight file writes.
+	deadline := time.Now().Add(10 * time.Second)
+	for _, id := range ids {
+		for time.Now().Before(deadline) {
+			status, err := server.taskStatus(id)
+			if err != nil {
+				t.Fatalf("taskStatus(%s): %v", id, err)
+			}
+			if status.Status == "completed" || status.Status == "failed" || status.Status == "cancelled" {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func TestIsValidTaskIDAcceptsUUIDAndLegacy(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"new uuidv7", generateTaskID(), true},
+		{"legacy task 1", "task-1", true},
+		{"legacy task padded", "task-000001", true},
+		{"legacy task large", "task-9999999999", true},
+		{"empty", "", false},
+		{"bare word", "hello", false},
+		{"uppercase uuid", strings.ToUpper(generateTaskID()), false},
+		{"task without digits", "task-", false},
+		{"task with letters", "task-abc", false},
+		{"oversize", strings.Repeat("a", 256), false},
+		{"uuid with prefix", "task-" + generateTaskID(), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsValidTaskID(tc.input); got != tc.want {
+				t.Fatalf("IsValidTaskID(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAgentBridgeCancelAcceptsLegacyAndRejectsGarbage(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	outReader := bufio.NewReader(outR)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- newAgentBridgeServer(app, Config{}, inR, outW, bytes.NewBuffer(nil)).Serve(ctx)
+	}()
+
+	// Legacy ID on an empty server: must route through, returning task-not-found
+	// (NOT invalid_task_id) so we stay backward-compatible with on-disk records.
+	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "task/cancel", "params": map[string]any{"task_id": "task-000001"}})
+	msg := readRPC(t, outReader)
+	errObj, ok := msg["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error for unknown legacy task, got: %#v", msg)
+	}
+	if message, _ := errObj["message"].(string); !strings.Contains(message, "task not found") {
+		t.Fatalf("expected task not found, got: %#v", errObj)
+	}
+
+	for i, bad := range []string{"", "hello", strings.Repeat("a", 256)} {
+		writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2 + i, "method": "task/cancel", "params": map[string]any{"task_id": bad}})
+		msg := readRPC(t, outReader)
+		errObj, ok := msg["error"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected error for garbage task_id %q, got: %#v", bad, msg)
+		}
+		if message, _ := errObj["message"].(string); !strings.Contains(message, "invalid_task_id") {
+			t.Fatalf("expected invalid_task_id for %q, got: %#v", bad, errObj)
+		}
+	}
+
+	for i, bad := range []string{"", "hello", strings.Repeat("a", 256)} {
+		writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 100 + i, "method": "task/respond", "params": map[string]any{"task_id": bad, "answer": "x"}})
+		msg := readRPC(t, outReader)
+		errObj, ok := msg["error"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected error for garbage task/respond task_id %q, got: %#v", bad, msg)
+		}
+		if message, _ := errObj["message"].(string); !strings.Contains(message, "invalid_task_id") {
+			t.Fatalf("expected invalid_task_id for respond %q, got: %#v", bad, errObj)
+		}
+	}
+
+	_ = inW.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("bridge exited with error: %v", err)
 	}
 }

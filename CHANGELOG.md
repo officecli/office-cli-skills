@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.97 - 2026-05-25
+
+### Changed
+
+- `agent-bridge` 的 `task_id` 由进程内单调递增的 `task-\d+` 计数器（每次进程重启从 1 开始）改为 UUIDv7（裸格式，36 字符小写、无 `task-` 前缀，例如 `019e5db8-4f6a-7a7e-8f92-7d7f498c5c8a`），覆盖 `task/invoke` 响应、`task/status`、所有 `bridge:event` payload（`task.started` / `task.progress` / `task.output` / `task.question` / `task.completed` / `task.failed` / `task.cancelled`）。事件 `event_id`、`session_id`、`question_id` 的现有格式不变。**下游集成方注意：task_id 格式变更，请按 UUID 处理；旧 `task-\d+` 仅在入口校验与 task 查询路径上作为读兼容保留，bridge 不会再生成旧格式。**
+
+### Added
+
+- 内部导出 `cli.IsValidTaskID(string) bool` 同时接受 UUIDv7 与旧 `task-\d+` 两种格式。`task/respond` 和 `task/cancel` 在执行前先调用该校验，非法 task_id 立即返回 JSON-RPC error 且 message 为 `invalid_task_id`（不再进入 map 查找，避免无意义的 "task not found" 误导），空串、超过 128 字节、以及任意非匹配字符串都被拒绝且不会 panic。
+
 ## 0.2.96 - 2026-05-24
 
 ### Removed
