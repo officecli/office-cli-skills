@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPreflightOutputFilter_SuppressesSkillRefreshNoise(t *testing.T) {
@@ -185,5 +186,81 @@ func TestPreflightStatusError_BlockedInstallIncludesHint(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "OFFICECLI_SKIP_SKILL_PREFLIGHT=1") {
 		t.Fatalf("expected skip hint for install failure, got: %s", msg)
+	}
+}
+
+func TestShouldOverrideAccountLoginPreflight_AcceptsBlockedAndRepairable(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.json")
+	expiresAt := time.Now().Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
+	cfgJSON := `{"license":{"base_url":"https://platform.officecli.io","session_token":"ocli_sess_dummy","session_expires_at":"` + expiresAt + `","enabled":true}}`
+	if err := os.WriteFile(cfgPath, []byte(cfgJSON), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+	t.Setenv("OFFICE_CLI_CONFIG", cfgPath)
+
+	for _, status := range []string{"repairable", "blocked", "REPAIRABLE", "Blocked"} {
+		t.Run(status, func(t *testing.T) {
+			statusErr := &preflightStatusError{payload: preflightStatusPayload{
+				Status:       status,
+				MissingItems: []string{"account_login"},
+			}}
+			if !shouldOverrideAccountLoginPreflight(statusErr) {
+				t.Fatalf("expected override to fire for status %q with valid session", status)
+			}
+		})
+	}
+
+	// Sanity: still rejects other missing items even on blocked status.
+	statusErr := &preflightStatusError{payload: preflightStatusPayload{
+		Status:       "blocked",
+		MissingItems: []string{"account_login", "license_config"},
+	}}
+	if shouldOverrideAccountLoginPreflight(statusErr) {
+		t.Fatal("override should not fire when other items are missing")
+	}
+
+	// Sanity: still rejects unknown statuses.
+	statusErr = &preflightStatusError{payload: preflightStatusPayload{
+		Status:       "ready",
+		MissingItems: []string{"account_login"},
+	}}
+	if shouldOverrideAccountLoginPreflight(statusErr) {
+		t.Fatal("override should not fire for non-failure status")
+	}
+}
+
+func TestRunInstalledSkillPreflight_OverridesBlockedAccountLoginWhenSessionValid(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	scriptPath := filepath.Join(homeDir, ".codex", "skills", "officecli", "fix-officecli-env.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Simulate a stale fix-officecli-env.sh that misclassifies a logged-in
+	// session as anonymous and exits with status=blocked.
+	if err := os.WriteFile(scriptPath, []byte(`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' '{"status":"blocked","failure_reason":"account login or API key required for image generation","missing_items":["account_login"]}'
+exit 10
+`), 0o755); err != nil {
+		t.Fatalf("WriteFile(script): %v", err)
+	}
+
+	cfgPath := filepath.Join(tmpDir, "config.json")
+	expiresAt := time.Now().Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
+	cfgJSON := `{"license":{"base_url":"https://platform.officecli.io","session_token":"ocli_sess_dummy","session_expires_at":"` + expiresAt + `","enabled":true}}`
+	if err := os.WriteFile(cfgPath, []byte(cfgJSON), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("OFFICE_CLI_CONFIG", cfgPath)
+	t.Setenv(officeTaskPreflightSkipEnv, "0")
+
+	var stdout, stderr bytes.Buffer
+	err := runInstalledSkillPreflight(context.Background(), bytes.NewBuffer(nil), &stdout, &stderr, "new", []string{"img", "Launch Visual"})
+	if err != nil {
+		t.Fatalf("expected blocked account_login to be overridden, got: %v (stderr=%q)", err, stderr.String())
 	}
 }

@@ -82,12 +82,17 @@ func runInstalledSkillPreflight(ctx context.Context, stdin io.Reader, stdout, st
 // preflight verdict when its ONLY complaint is the user being "anonymous" but
 // the binary's own config shows a valid CLI session or an API key. This guards
 // against an older ~/.codex/skills/officecli/env-common.sh whose parse_auth_mode
-// does not yet understand the binary's "Mode: logged in" whoami output.
+// does not yet understand the binary's "Mode: logged in" whoami output. The
+// stale fix script emits status="blocked" via fail_fix; older repairable
+// verdicts are also accepted for forward-compatibility with future scripts
+// that downgrade the severity.
 func shouldOverrideAccountLoginPreflight(statusErr *preflightStatusError) bool {
 	if statusErr == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(statusErr.payload.Status), "repairable") {
+	switch strings.ToLower(strings.TrimSpace(statusErr.payload.Status)) {
+	case "repairable", "blocked":
+	default:
 		return false
 	}
 	hasAccountLogin := false

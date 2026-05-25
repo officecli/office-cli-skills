@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.100 - 2026-05-25
+
+### Fixed
+
+- `officecli new img` 在已 `officecli login` 的账号下仍报 `account login or API key required for image generation`：`fix-officecli-env.sh` 通过 `parse_auth_mode` 解析 `officecli whoami`，对只剩 "Mode: logged in" 的新版输出无匹配关键字 → 误判 anonymous → 调用 `fail_fix` 输出 `status="blocked"` 的 JSON。Go 端兜底 `shouldOverrideAccountLoginPreflight` 此前只接受 `status="repairable"`，对 `blocked` 一律放行失败。现把兜底放宽到同时接受 `repairable` / `blocked`，并保持「只允许 `account_login` 单独缺失 + 本地 config 存在有效 session 或 API key」的双重约束，避免误放真正的多项缺失场景。新增覆盖该路径的端到端预检测试。
+
 ## 0.2.99 - 2026-05-25
 
 ### Fixed
