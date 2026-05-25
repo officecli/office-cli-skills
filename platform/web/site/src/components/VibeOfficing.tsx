@@ -77,14 +77,14 @@ export default function VibeOfficing() {
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.55 }}
-          className="relative rounded-3xl border border-primary/15 bg-gradient-to-br from-surface-low to-background p-3 md:p-4 shadow-[0_0_60px_rgba(174,198,255,0.08)] flex items-center justify-center min-h-0 overflow-hidden"
+          className="relative rounded-3xl border border-primary/15 bg-gradient-to-br from-surface-low to-background p-3 md:p-4 shadow-[0_0_60px_rgba(174,198,255,0.08)] overflow-hidden lg:min-h-0"
         >
           <div className="absolute -inset-1 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-tertiary/10 blur-2xl -z-10 pointer-events-none" />
           <img
             src="/vibeofficing.png?v=1"
             alt="OfficeDex — AI-Native VibeOfficing platform. VibeCoding (Claude, Codex) is to developers what VibeOfficing (OfficeDex) is to office users."
             loading="lazy"
-            className="max-h-full max-w-full w-auto h-auto object-contain rounded-2xl"
+            className="block w-full h-auto rounded-2xl lg:absolute lg:inset-4 lg:w-[calc(100%-2rem)] lg:h-[calc(100%-2rem)] lg:object-contain"
           />
         </motion.div>
       </div>
