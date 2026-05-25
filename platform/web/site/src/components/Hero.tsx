@@ -17,19 +17,19 @@ function InlineCode({ children }: { children: string }) {
 
 const HERO_SOCIAL_LINKS = [
   {
-    label: 'officecli on GitHub',
-    title: 'officecli',
-    description: 'CLI source repo',
-    href: githubRepoURL,
+    label: 'officedex on GitHub',
+    title: 'officedex',
+    description: 'Desktop app repo',
+    href: officedexRepoURL,
     icon: GithubMark,
     className: 'border-outline-variant/25 bg-surface-high/40 hover:border-outline-variant/45 hover:bg-surface-high/60',
     iconClassName: 'text-white',
   },
   {
-    label: 'officedex on GitHub',
-    title: 'officedex',
-    description: 'Desktop app repo',
-    href: officedexRepoURL,
+    label: 'officecli on GitHub',
+    title: 'officecli',
+    description: 'CLI source repo',
+    href: githubRepoURL,
     icon: GithubMark,
     className: 'border-outline-variant/25 bg-surface-high/40 hover:border-outline-variant/45 hover:bg-surface-high/60',
     iconClassName: 'text-white',
