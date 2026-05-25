@@ -151,6 +151,112 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 	if _, err := os.Stat(result.LocalPreviewDataPath); err != nil {
 		t.Fatalf("stat preview json: %v", err)
 	}
+	// No temp orphans should remain after a successful atomic write.
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.Contains(name, ".tmp-") || strings.HasSuffix(name, ".tmp") {
+			t.Fatalf("orphan temp file remains: %s", name)
+		}
+	}
+}
+
+// docPreviewGenerator emits a sidecar-shaped artifact for any document type.
+// Used to confirm the executor enforces the preview allowlist regardless of
+// what the generator returns.
+type docPreviewGenerator struct {
+	ext string
+}
+
+func (g docPreviewGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + "." + g.ext,
+		DocumentType: string(params.DocumentType),
+		Bytes:        []byte("primary-bytes"),
+		PreviewHTML:  []byte("<html>preview</html>"),
+		PreviewJSON:  []byte(`{"title":"preview"}`),
+	}, nil
+}
+
+func TestExecutorSkipsPreviewSidecarsForNonAllowlistedTypes(t *testing.T) {
+	cases := []struct {
+		name string
+		dt   engine.DocumentType
+		ext  string
+	}{
+		{"img", engine.DocumentTypeIMG, "png"},
+		{"report", engine.DocumentTypeReport, "html"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			executor := NewExecutor(docPreviewGenerator{ext: tc.ext}, fakePublisher{}, nil)
+
+			result, err := executor.Run(context.Background(), GenerateJob{
+				DocumentType: tc.dt,
+				Topic:        "Preview Test",
+				OutputDir:    tmpDir,
+				LocalPreview: true,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if result.LocalPreviewPath != "" {
+				t.Fatalf("expected no LocalPreviewPath for %s, got %q", tc.dt, result.LocalPreviewPath)
+			}
+			if result.LocalPreviewDataPath != "" {
+				t.Fatalf("expected no LocalPreviewDataPath for %s, got %q", tc.dt, result.LocalPreviewDataPath)
+			}
+			entries, err := os.ReadDir(tmpDir)
+			if err != nil {
+				t.Fatalf("ReadDir: %v", err)
+			}
+			for _, entry := range entries {
+				if strings.HasSuffix(entry.Name(), ".preview.html") || strings.HasSuffix(entry.Name(), ".preview.json") {
+					t.Fatalf("unexpected sidecar emitted for %s: %s", tc.dt, entry.Name())
+				}
+			}
+		})
+	}
+}
+
+func TestExecutorWritesPreviewSidecarsForDOCXAndXLSX(t *testing.T) {
+	cases := []struct {
+		name string
+		dt   engine.DocumentType
+		ext  string
+	}{
+		{"docx", engine.DocumentTypeDOCX, "docx"},
+		{"xlsx", engine.DocumentTypeXLSX, "xlsx"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			executor := NewExecutor(docPreviewGenerator{ext: tc.ext}, fakePublisher{}, nil)
+
+			result, err := executor.Run(context.Background(), GenerateJob{
+				DocumentType: tc.dt,
+				Topic:        "Preview Allowlist",
+				OutputDir:    tmpDir,
+				LocalPreview: true,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if result.LocalPreviewPath == "" || result.LocalPreviewDataPath == "" {
+				t.Fatalf("expected sidecar paths for %s, got %+v", tc.dt, result)
+			}
+			if _, err := os.Stat(result.LocalPreviewPath); err != nil {
+				t.Fatalf("stat sidecar html: %v", err)
+			}
+			if _, err := os.Stat(result.LocalPreviewDataPath); err != nil {
+				t.Fatalf("stat sidecar json: %v", err)
+			}
+		})
+	}
 }
 
 func TestExecutorPublishesReport(t *testing.T) {

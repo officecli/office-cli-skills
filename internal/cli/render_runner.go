@@ -153,6 +153,8 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
 
+	localPreview := req.Args.EmitPreview != nil && *req.Args.EmitPreview
+
 	return GenerateJob{
 		DocumentType:   documentType,
 		Topic:          topic,
@@ -167,7 +169,7 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 		Audience:       strings.TrimSpace(req.Args.Audience),
 		EnableImages:   enableImages,
 		ImageQuality:   imageQuality,
-		LocalPreview:   false,
+		LocalPreview:   localPreview,
 		OutputDir:      outputDir,
 		Publish:        publish,
 		JSONOutput:     true,

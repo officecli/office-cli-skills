@@ -175,6 +175,7 @@ type bridgeInvokeArgs struct {
 	EnableImages    *bool           `json:"enable_images,omitempty"`
 	EnableVisual    *bool           `json:"enable_visual,omitempty"`
 	FailBelow       *int            `json:"fail_below,omitempty"`
+	EmitPreview     *bool           `json:"emit_preview,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -503,6 +504,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"publish":       "boolean",
 					"enable_images": "boolean",
 					"image_quality": "standard|premium (pptx only)",
+					"emit_preview":  "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
 				},
 			},
 			{
@@ -520,6 +522,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"reference_images": "array of paths or URLs (img only)",
 					"image_quality":    "standard|premium (pptx only)",
 					"publish":          "boolean",
+					"emit_preview":     "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
 				},
 			},
 			{

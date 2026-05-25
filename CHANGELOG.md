@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.98 - 2026-05-25
+
+### Added
+
+- `agent-bridge` 的 `office.generate` 与 `office.render` 新增 `emit_preview: boolean` 参数。当 `emit_preview=true` 且产物扩展名属于预览白名单（`pptx` / `docx` / `xlsx`）时，officecli 会在产物同目录下、按 `<basename>.preview.html` 命名写出 sidecar 预览文件（同时写 `<basename>.preview.json`），路径回填到 `GenerateResult.local_preview_path` / `local_preview_data_path`。`office.generate` / `office.render` 的 `input_schema` 同步声明新字段。本字段对应 officedex Wails `RenderPreviewHtml` 绑定所消费的 sidecar 契约。
+
+### Changed
+
+- Sidecar 写入改为原子写：先在同目录创建临时文件，`Write` + `Chmod` + `Sync` + `Close` 后再 `os.Rename` 到目标路径，渲染端不会看到半写状态的 `.preview.html` / `.preview.json`；任意失败路径都会移除临时文件，不会留下 `.tmp` 残留。sidecar 仅对预览白名单（`pptx` / `docx` / `xlsx`）生效；`img` 与 `report` 即使 `LocalPreview=true` 也不再产出 sidecar，避免渲染端静默丢弃。
+- 老调用方未传 `emit_preview` 时维持原行为（`LocalPreview=false`，不输出 sidecar），向后兼容。
+
 ## 0.2.97 - 2026-05-25
 
 ### Changed

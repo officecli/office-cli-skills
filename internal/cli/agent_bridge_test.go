@@ -586,6 +586,65 @@ func TestBuildGenerateJobFromRequest_PPTXImageQuality(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJobFromRequest_EmitPreviewFlag(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	mk := func(flag *bool) GenerateJob {
+		job, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+			Tool: "office.generate",
+			Args: bridgeInvokeArgs{
+				DocumentType: "pptx",
+				Topic:        "Quarterly Review",
+				EmitPreview:  flag,
+			},
+		})
+		if err != nil {
+			t.Fatalf("buildGenerateJobFromRequest: %v", err)
+		}
+		return job
+	}
+
+	if mk(nil).LocalPreview {
+		t.Fatal("omitted emit_preview should leave LocalPreview=false")
+	}
+	if mk(boolPtr(false)).LocalPreview {
+		t.Fatal("emit_preview=false should leave LocalPreview=false")
+	}
+	if !mk(boolPtr(true)).LocalPreview {
+		t.Fatal("emit_preview=true should set LocalPreview=true")
+	}
+}
+
+func TestBuildRenderJobFromRequest_EmitPreviewFlag(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	mk := func(flag *bool) GenerateJob {
+		job, _, err := app.buildRenderJobFromRequest(Config{}, bridgeInvokeParams{
+			Tool: bridgeToolOfficeRender,
+			Args: bridgeInvokeArgs{
+				DocumentType: "pptx",
+				Topic:        "Quarterly Review",
+				Payload:      json.RawMessage(`{"title":"x"}`),
+				EmitPreview:  flag,
+			},
+		})
+		if err != nil {
+			t.Fatalf("buildRenderJobFromRequest: %v", err)
+		}
+		return job
+	}
+
+	if mk(nil).LocalPreview {
+		t.Fatal("omitted emit_preview should leave LocalPreview=false")
+	}
+	if mk(boolPtr(false)).LocalPreview {
+		t.Fatal("emit_preview=false should leave LocalPreview=false")
+	}
+	if !mk(boolPtr(true)).LocalPreview {
+		t.Fatal("emit_preview=true should set LocalPreview=true")
+	}
+}
+
 func TestAgentBridgeGenerateIMGUsesServerImageRoute(t *testing.T) {
 	tmpDir := t.TempDir()
 	refPath := filepath.Join(tmpDir, "reference.png")

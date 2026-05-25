@@ -159,19 +159,21 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "File write failed")
 		return GenerateResult{}, fmt.Errorf("file write failed: %w", err)
 	}
-	if len(artifact.PreviewHTML) > 0 {
-		if err := os.WriteFile(localPreviewPath, artifact.PreviewHTML, 0o644); err != nil {
-			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview file write failed")
-			return GenerateResult{}, fmt.Errorf("preview file write failed: %w", err)
+	if previewSidecarAllowed(job.DocumentType) {
+		if len(artifact.PreviewHTML) > 0 {
+			if err := writeFileAtomic(localPreviewPath, artifact.PreviewHTML, 0o644); err != nil {
+				emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview file write failed")
+				return GenerateResult{}, fmt.Errorf("preview file write failed: %w", err)
+			}
+			result.LocalPreviewPath = localPreviewPath
 		}
-		result.LocalPreviewPath = localPreviewPath
-	}
-	if len(artifact.PreviewJSON) > 0 {
-		if err := os.WriteFile(localPreviewDataPath, artifact.PreviewJSON, 0o644); err != nil {
-			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview file write failed")
-			return GenerateResult{}, fmt.Errorf("preview file write failed: %w", err)
+		if len(artifact.PreviewJSON) > 0 {
+			if err := writeFileAtomic(localPreviewDataPath, artifact.PreviewJSON, 0o644); err != nil {
+				emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Preview file write failed")
+				return GenerateResult{}, fmt.Errorf("preview file write failed: %w", err)
+			}
+			result.LocalPreviewDataPath = localPreviewDataPath
 		}
-		result.LocalPreviewDataPath = localPreviewDataPath
 	}
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file write completed")
 
@@ -223,4 +225,53 @@ func warningMessages(items []engine.GenerateIssue) []string {
 		out = append(out, item.Message)
 	}
 	return out
+}
+
+// previewSidecarAllowed gates *.preview.html / *.preview.json emission to the
+// extensions officedex's renderer actually consumes; other types would be
+// silently ignored on the consumer side.
+func previewSidecarAllowed(documentType engine.DocumentType) bool {
+	switch documentType {
+	case engine.DocumentTypePPTX, engine.DocumentTypeDOCX, engine.DocumentTypeXLSX:
+		return true
+	default:
+		return false
+	}
+}
+
+// writeFileAtomic writes data via a sibling temp file then renames it into
+// place so the renderer never observes a partially-written sidecar.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	tmp, err := os.CreateTemp(dir, "."+base+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpName) }
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		cleanup()
+		return err
+	}
+	return nil
 }

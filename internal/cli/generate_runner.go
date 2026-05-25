@@ -381,6 +381,8 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		}
 	}
 
+	localPreview := req.Args.EmitPreview != nil && *req.Args.EmitPreview
+
 	return GenerateJob{
 		DocumentType:          documentType,
 		Topic:                 topic,
@@ -398,7 +400,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		ImageRatio:            imageRatio,
 		ImageSize:             imageSize,
 		ReferenceImageSources: referenceImageList,
-		LocalPreview:          false,
+		LocalPreview:          localPreview,
 		OutputDir:             outputDir,
 		Publish:               publish,
 		JSONOutput:            true,
