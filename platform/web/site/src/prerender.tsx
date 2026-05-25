@@ -271,7 +271,7 @@ export function renderRouteApp(pathname: string) {
     '          <div class="bg-surface-low rounded-2xl border border-white/5 p-6"><h3 class="font-headline text-xl font-bold text-white mb-2">Memory · Format · Agent</h3><p class="text-outline-variant leading-relaxed text-sm">Three engines work together: Memory remembers how your docs look, Format handles OOXML natively, and Agents collaborate to produce slide decks, reports, analyses, chart exports, and dashboard summaries.</p></div>',
     '          <p class="text-sm text-outline-variant italic px-2">Digitize your style, your habits, your design language into OfficeDex — never start from scratch again.</p>',
     '        </div>',
-    '        <div class="relative rounded-3xl border border-primary/15 bg-surface-low p-3 md:p-4"><img src="/vibeofficing.png" alt="OfficeDex — AI-Native VibeOfficing platform. VibeCoding (Claude, Codex) is to developers what VibeOfficing (OfficeDex) is to office users." loading="lazy" class="w-full h-auto rounded-2xl" /></div>',
+    '        <div class="relative rounded-3xl border border-primary/15 bg-surface-low p-3 md:p-4"><img src="/vibeofficing.png?v=1" alt="OfficeDex — AI-Native VibeOfficing platform. VibeCoding (Claude, Codex) is to developers what VibeOfficing (OfficeDex) is to office users." loading="lazy" class="w-full h-auto rounded-2xl" /></div>',
     '      </div>',
     '    </section>',
     '    <section id="what-is-officecli" class="py-24 px-8 md:px-16 max-w-[1440px] mx-auto">',

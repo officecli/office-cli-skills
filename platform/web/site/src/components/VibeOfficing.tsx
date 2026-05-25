@@ -81,7 +81,7 @@ export default function VibeOfficing() {
         >
           <div className="absolute -inset-1 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-tertiary/10 blur-2xl -z-10 pointer-events-none" />
           <img
-            src="/vibeofficing.png"
+            src="/vibeofficing.png?v=1"
             alt="OfficeDex — AI-Native VibeOfficing platform. VibeCoding (Claude, Codex) is to developers what VibeOfficing (OfficeDex) is to office users."
             loading="lazy"
             className="w-full h-auto rounded-2xl"
