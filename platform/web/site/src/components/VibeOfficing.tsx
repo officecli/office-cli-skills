@@ -17,7 +17,7 @@ export default function VibeOfficing() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-10 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-10 lg:items-stretch">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -77,14 +77,14 @@ export default function VibeOfficing() {
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.55 }}
-          className="relative rounded-3xl border border-primary/15 bg-gradient-to-br from-surface-low to-background p-3 md:p-4 shadow-[0_0_60px_rgba(174,198,255,0.08)]"
+          className="relative rounded-3xl border border-primary/15 bg-gradient-to-br from-surface-low to-background p-3 md:p-4 shadow-[0_0_60px_rgba(174,198,255,0.08)] flex items-center justify-center min-h-0 overflow-hidden"
         >
           <div className="absolute -inset-1 rounded-3xl bg-gradient-to-br from-primary/10 via-transparent to-tertiary/10 blur-2xl -z-10 pointer-events-none" />
           <img
             src="/vibeofficing.png?v=1"
             alt="OfficeDex — AI-Native VibeOfficing platform. VibeCoding (Claude, Codex) is to developers what VibeOfficing (OfficeDex) is to office users."
             loading="lazy"
-            className="w-full h-auto rounded-2xl"
+            className="max-h-full max-w-full w-auto h-auto object-contain rounded-2xl"
           />
         </motion.div>
       </div>
