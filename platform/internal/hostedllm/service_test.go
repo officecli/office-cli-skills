@@ -1313,7 +1313,7 @@ func TestGenerateImagePricesModelConfigPer1MTokens(t *testing.T) {
 	require.Equal(t, "gpt-image-shared", upstreamPayload["model"])
 	require.Len(t, store.events, 1)
 	require.Equal(t, int64(5000), store.events[0].UpstreamCostMicrousd)
-	require.Equal(t, 1, store.events[0].SettledCredits)
+	require.Equal(t, 99, store.events[0].SettledCredits)
 }
 
 func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T) {
@@ -1383,9 +1383,9 @@ func TestGenerateImageParsesInputOutputTokenUsageAndPersistsTokens(t *testing.T)
 	require.Equal(t, 0, event.ReasoningTokens)
 	require.Equal(t, 1, event.ImageCount)
 	require.Equal(t, int64(63446), event.UpstreamCostMicrousd)
-	require.Equal(t, 9, event.SettledCredits)
+	require.Equal(t, 999, event.SettledCredits)
 	require.Equal(t, 0, event.RefundCredits)
-	require.Equal(t, int64(26554), event.ProfitMicrousd)
+	require.Equal(t, int64(9926554), event.ProfitMicrousd)
 }
 
 func TestGenerateImageResponsesFallbackParsesInputOutputTokens(t *testing.T) {

@@ -1126,6 +1126,26 @@ func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageS
 	creditsPerUSD := s.effectiveCreditsPerUSD(ctx)
 	if rule, ok := s.matchRule(ctx, modelName); ok {
 		markupBPS := s.effectiveMarkupBPS(ctx, rule)
+		if image && usage.ImageCount > 0 && rule.ImagePerAssetCredits > 0 {
+			charge := rule.ImagePerAssetCredits * usage.ImageCount
+			if charge < rule.MinimumChargeCredits {
+				charge = rule.MinimumChargeCredits
+			}
+			var cost int64
+			if config, ok := s.matchModelConfig(ctx, rule, true); ok {
+				cost = hostedUsageModelConfigCostMicrousd(config, usage)
+			} else {
+				cost = hostedUsageCostMicrousd(rule, usage)
+			}
+			return hostedPriceSnapshot{
+				RuleID:                rule.ID,
+				MarkupBPS:             markupBPS,
+				UpstreamCostMicrousd:  cost,
+				ChargeCredits:         charge,
+				UncappedChargeCredits: charge,
+				ProfitMicrousd:        microusdFromCredits(charge, creditsPerUSD) - cost,
+			}
+		}
 		if config, ok := s.matchModelConfig(ctx, rule, image); ok {
 			cost := hostedUsageModelConfigCostMicrousd(config, usage)
 			charge := creditsFromCostMicrousd(cost, markupBPS, creditsPerUSD)
