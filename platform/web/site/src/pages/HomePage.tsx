@@ -8,11 +8,13 @@ import Roadmap from '../components/Roadmap'
 import Pricing from '../components/Pricing'
 import FAQ from '../components/FAQ'
 import Contact from '../components/Contact'
+import VibeOfficing from '../components/VibeOfficing'
 
 export default function HomePage() {
   return (
     <main className="overflow-x-hidden">
       <Hero />
+      <VibeOfficing />
       <Features />
       <CLIShowcase />
       <Workflow />
