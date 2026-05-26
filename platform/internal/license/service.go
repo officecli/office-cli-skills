@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
+	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 )
 
 type APIKeyStore interface {

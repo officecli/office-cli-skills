@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
-	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
-	"github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/engine"
+	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 func (a *App) executeRenderJob(ctx context.Context, cfg Config, job GenerateJob, payload json.RawMessage, progress progressController) (GenerateResult, error) {

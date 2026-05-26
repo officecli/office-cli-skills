@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 // Store is the storage surface this service depends on. It is satisfied by

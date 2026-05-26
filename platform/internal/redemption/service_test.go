@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 // fakeStore implements Store. It is deliberately simple: maps by ID and by

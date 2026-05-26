@@ -16,9 +16,9 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/officecli/officecli-internal/platform/internal/clisession"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/clisession"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 func clisessionTestS256(verifier string) string {

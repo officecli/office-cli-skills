@@ -13,12 +13,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/auth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/redemption"
-	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/auth"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/redemption"
+	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type SessionPayload struct {
@@ -676,6 +676,9 @@ func (s *Service) UpdateHostedModelPricingConfig(ctx context.Context, id uint64,
 }
 
 func (s *Service) CreateHostedPricingRule(ctx context.Context, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	if err := validateHostedPricingRuleRequest(req); err != nil {
+		return nil, err
+	}
 	rule := hostedPricingRuleFromRequest(req)
 	if err := s.store.CreateHostedPricingRule(ctx, &rule); err != nil {
 		return nil, err
@@ -685,6 +688,9 @@ func (s *Service) CreateHostedPricingRule(ctx context.Context, req UpsertHostedP
 }
 
 func (s *Service) UpdateHostedPricingRule(ctx context.Context, id uint64, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
+	if err := validateHostedPricingRuleRequest(req); err != nil {
+		return nil, err
+	}
 	rule := hostedPricingRuleFromRequest(req)
 	values := map[string]any{
 		"document_profile":               rule.DocumentProfile,

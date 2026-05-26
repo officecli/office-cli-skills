@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 type frameworkBlueprint struct {

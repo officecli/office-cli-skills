@@ -16,10 +16,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/officecli/officecli-internal/platform/internal/httpapi"
-	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
+	"github.com/officecli/officecli/platform/internal/httpapi"
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
+	"github.com/officecli/officecli/platform/internal/model"
+	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 )
 
 type testAPIKeyStore struct{}

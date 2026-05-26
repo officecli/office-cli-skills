@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 const successURL = "https://platform.officecli.io/app/billing?status=success&session_id={CHECKOUT_SESSION_ID}"

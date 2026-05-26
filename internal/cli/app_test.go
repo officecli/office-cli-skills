@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	licenseprovider "github.com/officecli/officecli-internal/internal/license"
-	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
+	"github.com/officecli/officecli/engine"
+	licenseprovider "github.com/officecli/officecli/internal/license"
+	publishprovider "github.com/officecli/officecli/internal/providers/publish"
 )
 
 type stubLicenseManager struct {

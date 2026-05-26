@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 const bridgeTaskIDMaxLen = 128

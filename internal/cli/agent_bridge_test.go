@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/internal/runtime"
-	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 type blockingLLMClient struct {

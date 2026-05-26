@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/officesdk"
-	"github.com/officecli/officecli-internal/platform/internal/previewshare"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/officesdk"
+	"github.com/officecli/officecli/platform/internal/previewshare"
 )
 
 type fakeAPIKeyStore struct {

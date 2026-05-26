@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 func TestBuildExecutionPlanQuestions_PPTXReturnsThreeHighValueQuestions(t *testing.T) {

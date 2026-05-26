@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/officecli/officecli-internal/platform/internal/httpapi"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/httpapi"
+	"github.com/officecli/officecli/platform/internal/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )

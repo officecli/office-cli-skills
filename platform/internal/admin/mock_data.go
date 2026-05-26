@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 var mockBaseTime = time.Date(2026, 5, 17, 9, 30, 0, 0, time.UTC)

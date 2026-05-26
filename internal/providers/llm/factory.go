@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/internal/httpclient"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/httpclient"
 )
 
 type Config struct {

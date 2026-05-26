@@ -17,13 +17,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	planengine "github.com/officecli/officecli-internal/engine/plan"
-	"github.com/officecli/officecli-internal/internal/httpclient"
-	licenseprovider "github.com/officecli/officecli-internal/internal/license"
-	llmprovider "github.com/officecli/officecli-internal/internal/providers/llm"
-	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
-	reviewprovider "github.com/officecli/officecli-internal/internal/review"
+	"github.com/officecli/officecli/engine"
+	planengine "github.com/officecli/officecli/engine/plan"
+	"github.com/officecli/officecli/internal/httpclient"
+	licenseprovider "github.com/officecli/officecli/internal/license"
+	llmprovider "github.com/officecli/officecli/internal/providers/llm"
+	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 )
 
 type App struct {

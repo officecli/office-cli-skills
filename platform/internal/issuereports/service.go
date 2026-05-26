@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/officecli/officecli-internal/platform/internal/issuereports/contentfilter"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/issuereports/contentfilter"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 const CurrentSchemaVersion = 1

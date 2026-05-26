@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/officecli/officecli-internal/platform/internal/app"
-	"github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/app"
+	"github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 func main() {

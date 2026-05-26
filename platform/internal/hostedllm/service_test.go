@@ -15,10 +15,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/clisession"
-	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/clisession"
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 // Compile-time guarantee: keep test fakes in sync with the production

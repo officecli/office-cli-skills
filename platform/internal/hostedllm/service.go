@@ -21,10 +21,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/clisession"
-	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/clisession"
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 // ErrHostedCreditsExhausted is returned by the precheck path when the
@@ -1120,9 +1120,21 @@ type hostedPriceSnapshot struct {
 	CapApplied            bool
 }
 
-func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) hostedPriceSnapshot {
+func (s *Service) priceUsage(ctx context.Context, modelName string, usage usageSummary, image bool) (snapshot hostedPriceSnapshot) {
 	ctx, cancel := settlementContext(ctx)
 	defer cancel()
+	// Global floor: every successful generation costs at least 1 credit,
+	// even when the matched rule has MinimumChargeCredits=0 or upstream
+	// cost rounds to zero. Guards against ImageCount=0 / near-zero token
+	// edge cases that would otherwise debit 0.
+	defer func() {
+		if snapshot.ChargeCredits < 1 {
+			snapshot.ChargeCredits = 1
+		}
+		if snapshot.UncappedChargeCredits < 1 {
+			snapshot.UncappedChargeCredits = 1
+		}
+	}()
 	creditsPerUSD := s.effectiveCreditsPerUSD(ctx)
 	if rule, ok := s.matchRule(ctx, modelName); ok {
 		markupBPS := s.effectiveMarkupBPS(ctx, rule)
