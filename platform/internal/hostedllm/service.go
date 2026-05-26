@@ -194,6 +194,9 @@ func (s *Service) precheckSubjectCredits(ctx context.Context, subject *hostedSub
 	if subject == nil {
 		return fmt.Errorf("hosted subject is required")
 	}
+	if minCharge < 1 {
+		minCharge = 1
+	}
 	if subject.Key != nil && subject.APIKeyID != nil {
 		return s.store.PrecheckAPIKeyCredits(ctx, *subject.APIKeyID, minCharge)
 	}
@@ -211,6 +214,9 @@ func (s *Service) precheckSubjectCredits(ctx context.Context, subject *hostedSub
 func (s *Service) chargeSubjectCredits(ctx context.Context, subject *hostedSubject, requestID string, credits int, usageEventID *uint64) (int, error) {
 	if subject == nil {
 		return 0, fmt.Errorf("hosted subject is required")
+	}
+	if credits < 1 {
+		credits = 1
 	}
 	opCtx, cancel := settlementContext(ctx)
 	defer cancel()

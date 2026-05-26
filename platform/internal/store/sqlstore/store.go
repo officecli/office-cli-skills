@@ -870,8 +870,8 @@ func (s *Store) ChargeHostedCreditsByUser(ctx context.Context, userID uint64, re
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var account *model.UserHostedCreditAccount
@@ -931,8 +931,8 @@ func (s *Store) ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprin
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var account *model.FingerprintCreditAccount
@@ -991,8 +991,8 @@ func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, reques
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var resultKey model.APIKey
