@@ -245,19 +245,8 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 			return GenerateJob{}, err
 		}
 	}
-	imageQualitySpecified := strings.TrimSpace(imageQuality) != ""
-	finalImageQuality := strings.ToLower(strings.TrimSpace(imageQuality))
-	if finalImageQuality == "" {
-		finalImageQuality = ImageQualityStandard
-	}
-	switch finalImageQuality {
-	case ImageQualityStandard, ImageQualityPremium:
-	default:
-		return GenerateJob{}, fmt.Errorf("unsupported image quality: %s", imageQuality)
-	}
-	if imageQualitySpecified && documentType != engine.DocumentTypePPTX {
-		return GenerateJob{}, fmt.Errorf("--image-quality is only supported for pptx generation")
-	}
+	// --image-quality 标志已废弃：仍解析以保持向后兼容，但取值被忽略，永远走 hosted image 路径。
+	_ = imageQuality
 	imageRatio := strings.ToLower(strings.TrimSpace(ratio))
 	if imageRatio == "" {
 		imageRatio = "square"
@@ -307,7 +296,6 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		StyleSpecified:        styleSpecified,
 		Audience:              strings.TrimSpace(audience),
 		EnableImages:          enableImages,
-		ImageQuality:          finalImageQuality,
 		ImageRatio:            imageRatio,
 		ImageSize:             finalImageSize,
 		ReferenceImageSources: referenceImageList,
@@ -397,15 +385,6 @@ func parseImageSize(value string) (int, int, error) {
 		return 0, 0, fmt.Errorf("--size height is invalid: %s", value)
 	}
 	return w, h, nil
-}
-
-func normalizeImageQuality(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case ImageQualityPremium:
-		return ImageQualityPremium
-	default:
-		return ImageQualityStandard
-	}
 }
 
 func parseDocumentType(value string) (engine.DocumentType, error) {

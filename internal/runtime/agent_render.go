@@ -312,11 +312,10 @@ func (s *Service) Render(ctx context.Context, params GenerateParams, payload jso
 		hostedCreditsCharged := 0
 		hostedCreditsChargedSet := false
 		imageLLM := s.llm
-		if normalizePPTXImageQuality(params.ImageQuality) == "premium" {
+		if s.imageLLM != nil {
 			imageLLM = s.imageLLM
 		}
 		fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, content, fallback, requestedStyle, params.EnableImages, params.LocalPreview, PPTXBuildOptions{
-			ImageQuality: params.ImageQuality,
 			CreditBalanceSink: func(balance int) {
 				value := balance
 				hostedCreditBalance = &value

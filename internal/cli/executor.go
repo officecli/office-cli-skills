@@ -36,7 +36,6 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		Style:           job.Style,
 		Audience:        job.Audience,
 		EnableImages:    job.EnableImages,
-		ImageQuality:    job.ImageQuality,
 		ImageRatio:      job.ImageRatio,
 		ReferenceImages: append([]engine.ImageReference(nil), job.ReferenceImages...),
 		LocalPreview:    job.LocalPreview,

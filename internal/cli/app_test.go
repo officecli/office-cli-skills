@@ -1297,28 +1297,37 @@ func TestBuildGenerateJob_NoImagesDisablesImageGeneration(t *testing.T) {
 	}
 }
 
-func TestBuildGenerateJob_PPTXImageQualityDefaultsAndPremium(t *testing.T) {
-	defaultJob, err := BuildGenerateJob([]string{
+func TestBuildGenerateJob_PPTXImageQualityFlagIsAcceptedAndIgnored(t *testing.T) {
+	// --image-quality 已废弃：解析后忽略，任何值都不应导致 error。
+	if _, err := BuildGenerateJob([]string{
 		"pptx",
 		"Enterprise Collaboration Platform Overview",
-	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err != nil {
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err != nil {
 		t.Fatalf("BuildGenerateJob default: %v", err)
 	}
-	if defaultJob.ImageQuality != "standard" {
-		t.Fatalf("default image quality = %q, want standard", defaultJob.ImageQuality)
-	}
 
-	premiumJob, err := BuildGenerateJob([]string{
+	if _, err := BuildGenerateJob([]string{
 		"pptx",
 		"Enterprise Collaboration Platform Overview",
 		"--image-quality", "premium",
-	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err != nil {
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err != nil {
 		t.Fatalf("BuildGenerateJob premium: %v", err)
 	}
-	if premiumJob.ImageQuality != "premium" {
-		t.Fatalf("premium image quality = %q", premiumJob.ImageQuality)
+
+	if _, err := BuildGenerateJob([]string{
+		"pptx",
+		"Enterprise Collaboration Platform Overview",
+		"--image-quality", "standard",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err != nil {
+		t.Fatalf("BuildGenerateJob standard (deprecated): %v", err)
+	}
+
+	if _, err := BuildGenerateJob([]string{
+		"pptx",
+		"Enterprise Collaboration Platform Overview",
+		"--image-quality", "bogus",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err != nil {
+		t.Fatalf("BuildGenerateJob bogus quality should be ignored, got: %v", err)
 	}
 }
 
@@ -1411,7 +1420,6 @@ func TestBuildGenerateJob_IMGRejectsUnsupportedOptions(t *testing.T) {
 		{name: "file", args: []string{"img", "Demo", "--file", "input.xlsx"}, want: "--file is not supported for img generation"},
 		{name: "local preview", args: []string{"img", "Demo", "--local-preview"}, want: "--local-preview is not supported for img generation"},
 		{name: "no images", args: []string{"img", "Demo", "--no-images"}, want: "--no-images is not supported for img generation"},
-		{name: "image quality", args: []string{"img", "Demo", "--image-quality", "premium"}, want: "--image-quality is only supported for pptx generation"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2054,7 +2062,6 @@ func TestExecuteGenerateJob_PPTXPremiumUsesHostedImageClientOnlyForImages(t *tes
 		RuntimeMode:    RuntimeModeExternal,
 		Mode:           "fast",
 		EnableImages:   true,
-		ImageQuality:   "premium",
 		OutputDir:      t.TempDir(),
 		LocalPreview:   true,
 		Style:          "executive",
@@ -2111,13 +2118,12 @@ func TestExecuteGenerateJob_PPTXPremiumMissingHostedConfigDegrades(t *testing.T)
 		RuntimeMode:  RuntimeModeExternal,
 		Mode:         "fast",
 		EnableImages: true,
-		ImageQuality: "premium",
 		OutputDir:    t.TempDir(),
 	}, false, noopProgressController{}, nil)
 	if err != nil {
 		t.Fatalf("executeGenerateJob: %v", err)
 	}
-	if !containsWarning(result.Warnings, "Premium PPT images require account hosted credits") {
+	if !containsWarning(result.Warnings, "PPT images require account hosted credits") {
 		t.Fatalf("warnings = %#v", result.Warnings)
 	}
 	if result.CreditBalance != 0 {

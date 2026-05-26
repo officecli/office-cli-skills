@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -113,6 +116,20 @@ func TestExecuteRenderJobSkipsTextLLMForPPTXTextOnly(t *testing.T) {
 }
 
 func TestExecuteRenderJobUsesImageProviderWithoutTextCalls(t *testing.T) {
+	imageBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9sAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode tiny png: %v", err)
+	}
+	hostedCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/llm/v1/image" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		hostedCalls++
+		_, _ = fmt.Fprintf(w, `{"data":"%s","mime":"image/png","credit_balance":42}`, base64.StdEncoding.EncodeToString(imageBytes))
+	}))
+	defer server.Close()
+
 	app := NewApp(nil, nil, nil)
 	llmClient := &renderOnlyLLMClient{}
 	app.newLLMClient = func(cfg LLMConfig) (GeneratorLLMClient, error) {
@@ -125,7 +142,7 @@ func TestExecuteRenderJobUsesImageProviderWithoutTextCalls(t *testing.T) {
 	cfg := Config{
 		Defaults: DefaultsConfig{OutputDir: t.TempDir(), Publish: false, Mode: "fast"},
 		LLM:      LLMConfig{BaseURL: "https://api.example.com/v1", APIKey: "llm-key", Model: "gpt-4.1"},
-		License:  LicenseConfig{BaseURL: "https://license.example.com/api", Enabled: true, TimeoutSec: 60},
+		License:  LicenseConfig{BaseURL: server.URL, APIKey: "hosted-key", Enabled: true, TimeoutSec: 5},
 		Publish:  disabledPublishConfig(),
 	}
 	job := GenerateJob{
@@ -142,8 +159,11 @@ func TestExecuteRenderJobUsesImageProviderWithoutTextCalls(t *testing.T) {
 	if _, err := app.executeRenderJob(context.Background(), cfg, job, payload, nil); err != nil {
 		t.Fatalf("executeRenderJob: %v", err)
 	}
-	if llmClient.imageCalls == 0 {
-		t.Fatal("expected image generation call")
+	if hostedCalls == 0 {
+		t.Fatal("expected hosted image generation call")
+	}
+	if llmClient.imageCalls != 0 {
+		t.Fatalf("local llm should not be used for images, got %d calls", llmClient.imageCalls)
 	}
 	if llmClient.completeJSON != 0 || llmClient.completeStruct != 0 {
 		t.Fatalf("unexpected text llm calls: json=%d structured=%d", llmClient.completeJSON, llmClient.completeStruct)

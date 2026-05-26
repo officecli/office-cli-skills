@@ -168,12 +168,11 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if imageSupport["config_command"] != "officecli config set-generation" {
 		t.Fatalf("unexpected config_command: %#v", imageSupport["config_command"])
 	}
-	if imageSupport["quality_field"] != "image_quality" {
-		t.Fatalf("unexpected quality_field: %#v", imageSupport["quality_field"])
+	if quality, ok := imageSupport["quality_field"].(string); !ok || !strings.Contains(quality, "deprecated") {
+		t.Fatalf("expected quality_field to be marked deprecated, got: %#v", imageSupport["quality_field"])
 	}
-	qualityValues, ok := imageSupport["quality_values"].([]any)
-	if !ok || len(qualityValues) != 2 || qualityValues[0] != "standard" || qualityValues[1] != "premium" {
-		t.Fatalf("unexpected quality_values: %#v", imageSupport["quality_values"])
+	if _, ok := imageSupport["quality_values"]; ok {
+		t.Fatalf("quality_values should be removed, still present: %#v", imageSupport["quality_values"])
 	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
@@ -554,9 +553,10 @@ func TestAgentBridgeRenderRejectsIMG(t *testing.T) {
 	}
 }
 
-func TestBuildGenerateJobFromRequest_PPTXImageQuality(t *testing.T) {
+func TestBuildGenerateJobFromRequest_PPTXImageQualityIsAcceptedAndIgnored(t *testing.T) {
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
-	job, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+	// image_quality 已废弃：解析后忽略，不应产生 error 也不应进入 job。
+	if _, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
 		Tool: "office.generate",
 		Args: bridgeInvokeArgs{
 			DocumentType: "pptx",
@@ -565,24 +565,20 @@ func TestBuildGenerateJobFromRequest_PPTXImageQuality(t *testing.T) {
 			ImageQuality: "premium",
 			EnableImages: boolPtr(true),
 		},
-	})
-	if err != nil {
-		t.Fatalf("buildGenerateJobFromRequest: %v", err)
-	}
-	if job.ImageQuality != "premium" {
-		t.Fatalf("image quality = %q", job.ImageQuality)
+	}); err != nil {
+		t.Fatalf("buildGenerateJobFromRequest premium (ignored): %v", err)
 	}
 
-	_, err = app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+	// 对非 PPTX 也不再报错。
+	if _, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
 		Tool: "office.generate",
 		Args: bridgeInvokeArgs{
 			DocumentType: "img",
 			Topic:        "Launch Visual",
 			ImageQuality: "premium",
 		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "image_quality is only supported for pptx generation") {
-		t.Fatalf("err = %v", err)
+	}); err != nil {
+		t.Fatalf("buildGenerateJobFromRequest img w/ image_quality should be accepted, got: %v", err)
 	}
 }
 

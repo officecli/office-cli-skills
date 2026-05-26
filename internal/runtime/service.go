@@ -24,16 +24,14 @@ type GenerateParams struct {
 	Style           string
 	Audience        string
 	EnableImages    bool
-	ImageQuality    string
 	ImageRatio      string
 	ReferenceImages []engine.ImageReference
 	LocalPreview    bool
 }
 
 type PPTXBuildOptions struct {
-	ImageQuality       string
-	CreditBalanceSink  func(int)
-	CreditChargedSink  func(int)
+	CreditBalanceSink func(int)
+	CreditChargedSink func(int)
 }
 
 type GeneratedArtifact struct {
@@ -104,7 +102,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypeReport:
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
-		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ImageQuality)
+		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
 	case engine.DocumentTypeIMG:
 		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
 	default:
@@ -283,7 +281,7 @@ func imageExtensionFromMIME(mime string) string {
 	}
 }
 
-func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool, imageQuality string) (*GeneratedArtifact, error) {
+func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool) (*GeneratedArtifact, error) {
 	basePrompt := BuildPPTXPrompt(prompt, target, enableImages)
 	fallback := fallbackDescription(topic, prompt)
 	messages := []engine.LLMMessage{{Role: "user", Content: basePrompt}}
@@ -296,14 +294,13 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX structure output")
 
 	imageLLM := s.llm
-	if normalizePPTXImageQuality(imageQuality) == "premium" {
+	if s.imageLLM != nil {
 		imageLLM = s.imageLLM
 	}
 	var hostedCreditBalance *int
 	hostedCreditsCharged := 0
 	hostedCreditsChargedSet := false
 	buildOptions := PPTXBuildOptions{
-		ImageQuality: imageQuality,
 		CreditBalanceSink: func(balance int) {
 			value := balance
 			hostedCreditBalance = &value
@@ -697,8 +694,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure is empty")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: slides cannot be empty")
 	}
-	imageQuality := normalizePPTXImageQuality(options.ImageQuality)
-	warnings := normalizePPTXPayloadWithOptions(&payload, fallback, requestedStyle, enableImages, imageQuality)
+	warnings := normalizePPTXPayloadWithOptions(&payload, fallback, requestedStyle, enableImages)
 	if !enableImages {
 		for idx := range payload.Slides {
 			payload.Slides[idx].HasImage = false
@@ -728,7 +724,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
 			aspectRatio := officegen.TargetAspectRatioForSlide(payload.Slides[idx])
 			image, err := generateImageWithHeartbeat(ctx, llm, progress, engine.ImageGenerationRequest{
-				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].ImagePrompt, imageQuality),
+				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].ImagePrompt),
 				TargetAspectRatio: aspectRatio,
 			}, progressStepAssemble, imageIndex, imageTotal)
 			if err == nil && image != nil {
@@ -769,7 +765,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			imageIndex++
 			emitProgress(ctx, progress, progressStepAssemble, "running", fmt.Sprintf("Generating image asset (%d/%d)", imageIndex, imageTotal))
 			image, err := generateImageWithHeartbeat(ctx, llm, progress, engine.ImageGenerationRequest{
-				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].Visuals[visualIdx].Prompt, imageQuality),
+				Prompt:            buildPPTXImagePrompt(payload.Slides[idx].Visuals[visualIdx].Prompt),
 				TargetAspectRatio: 16.0 / 9.0,
 			}, progressStepAssemble, imageIndex, imageTotal)
 			if err == nil && image != nil {
@@ -804,11 +800,11 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			}
 		}
 	}
-	warnings = finalizePPTImageResults(&payload, fallback, warnings, firstImageFailure, imageQuality)
-	if imageQuality == "premium" && latestCreditBalance != nil {
+	warnings = finalizePPTImageResults(&payload, fallback, warnings, firstImageFailure)
+	if latestCreditBalance != nil {
 		warnings = upsertWarning(warnings, engine.GenerateIssue{
 			Code:    "INFO_PPT_HOSTED_IMAGE_CREDITS",
-			Message: fmt.Sprintf("Premium PPT images used hosted image generation. %d credits remaining.", *latestCreditBalance),
+			Message: fmt.Sprintf("PPT images used hosted image generation. %d credits remaining.", *latestCreditBalance),
 			Field:   "image_quality",
 		})
 	}
@@ -853,14 +849,13 @@ func DecodeBase64Image(data string) ([]byte, error) {
 }
 
 func normalizePPTXPayload(payload *pptxPayload, fallback, requestedStyle string, enableImages bool) []engine.GenerateIssue {
-	return normalizePPTXPayloadWithOptions(payload, fallback, requestedStyle, enableImages, "standard")
+	return normalizePPTXPayloadWithOptions(payload, fallback, requestedStyle, enableImages)
 }
 
-func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedStyle string, enableImages bool, imageQuality string) []engine.GenerateIssue {
+func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedStyle string, enableImages bool) []engine.GenerateIssue {
 	if payload == nil {
 		return nil
 	}
-	imageQuality = normalizePPTXImageQuality(imageQuality)
 
 	const maxSlides = 10
 	warnings := make([]engine.GenerateIssue, 0, 3)
@@ -896,13 +891,11 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		imageBudget = 0
 		visualBudget = 2
 	}
-	if imageQuality == "premium" {
-		coverImageBudget = 1
-		closingImageBudget = 0
-		imageBudget = 1
-		galleryBudget = 0
-		visualBudget = 1
-	}
+	coverImageBudget = 1
+	closingImageBudget = 0
+	imageBudget = 1
+	galleryBudget = 0
+	visualBudget = 1
 	slidesTrimmed := false
 	imagesAdjusted := false
 	for idx, slide := range payload.Slides {
@@ -954,12 +947,8 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		}
 		if enableImages {
 			slides[0].HasImage = true
-			if imageQuality == "premium" {
-				slides[0].ImagePos = "right"
-				slides[0].Variant = "title-split"
-			} else {
-				slides[0].ImagePos = "background"
-			}
+			slides[0].ImagePos = "right"
+			slides[0].Variant = "title-split"
 			slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(firstNonEmpty(slides[0].ImagePrompt, buildFallbackImagePrompt(slides[0], payload.Title))), 240)
 		} else {
 			slides[0].HasImage = false
@@ -997,7 +986,7 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 			slides = slides[:maxSlides]
 		}
 	}
-	slides = applyCoverImageDefaults(slides, payload.Title, enableImages, imageQuality)
+	slides = applyCoverImageDefaults(slides, payload.Title, enableImages)
 	slides = compactDeckTextDensity(slides, 230)
 	slides = reduceAdjacentVariantRepetition(slides)
 
@@ -1029,7 +1018,7 @@ func hasWarningCode(items []engine.GenerateIssue, code string) bool {
 	return false
 }
 
-func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []engine.GenerateIssue, firstFailure, imageQuality string) []engine.GenerateIssue {
+func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []engine.GenerateIssue, firstFailure string) []engine.GenerateIssue {
 	if payload == nil {
 		return warnings
 	}
@@ -1072,15 +1061,9 @@ func finalizePPTImageResults(payload *pptxPayload, fallback string, warnings []e
 	if failed <= 0 {
 		return removeWarningCode(warnings, "WARN_PPT_IMAGE_DEGRADED")
 	}
-	message := "Some images failed to generate, so the output was automatically downgraded to a text-only version. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name. For a text-only deck, use `--no-images`."
+	message := "PPT images failed to generate through the hosted image route, so the deck was generated without images. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient, or run `officecli login` / purchase hosted credits. For a text-only deck, use `--no-images`."
 	if succeeded > 0 {
-		message = "Some images failed to generate, but successfully generated visuals were kept in the deck. Check whether the generation service supports image endpoints, or run `officecli config set-generation` to configure the image model URL, credential, and model name."
-	}
-	if normalizePPTXImageQuality(imageQuality) == "premium" {
-		message = "Premium PPT images failed to generate through the hosted image route, so the deck was generated without premium images. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient, or run `officecli login` / purchase hosted credits. For a text-only deck, use `--no-images`."
-		if succeeded > 0 {
-			message = "Some premium PPT images failed through the hosted image route, but successfully generated visuals were kept in the deck. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient."
-		}
+		message = "Some PPT images failed through the hosted image route, but successfully generated visuals were kept in the deck. Check that hosted image generation is enabled for the account and that account hosted credits are sufficient."
 	}
 	if firstFailure != "" {
 		message += " First image error: " + firstFailure
@@ -1186,21 +1169,14 @@ func upsertWarning(items []engine.GenerateIssue, warning engine.GenerateIssue) [
 	return append(items, warning)
 }
 
-func applyCoverImageDefaults(slides []officegen.Slide, deckTitle string, enableImages bool, imageQuality string) []officegen.Slide {
+func applyCoverImageDefaults(slides []officegen.Slide, deckTitle string, enableImages bool) []officegen.Slide {
 	if len(slides) == 0 || !enableImages {
 		return slides
 	}
 	slides[0].HasImage = true
-	if normalizePPTXImageQuality(imageQuality) == "premium" {
-		slides[0].ImagePos = "right"
-		if strings.TrimSpace(slides[0].Variant) == "" || strings.Contains(strings.TrimSpace(slides[0].Variant), "center") {
-			slides[0].Variant = "title-split"
-		}
-	} else if strings.TrimSpace(slides[0].ImagePos) == "right" || strings.TrimSpace(slides[0].Variant) == "title-split" {
-		slides[0].ImagePos = "right"
+	slides[0].ImagePos = "right"
+	if strings.TrimSpace(slides[0].Variant) == "" || strings.Contains(strings.TrimSpace(slides[0].Variant), "center") {
 		slides[0].Variant = "title-split"
-	} else {
-		slides[0].ImagePos = "background"
 	}
 	if strings.TrimSpace(slides[0].ImagePrompt) == "" {
 		slides[0].ImagePrompt = fitTextForLayout(strings.TrimSpace(buildFallbackImagePrompt(slides[0], deckTitle)), 240)
@@ -1208,20 +1184,8 @@ func applyCoverImageDefaults(slides []officegen.Slide, deckTitle string, enableI
 	return slides
 }
 
-func normalizePPTXImageQuality(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "premium":
-		return "premium"
-	default:
-		return "standard"
-	}
-}
-
-func buildPPTXImagePrompt(prompt, imageQuality string) string {
+func buildPPTXImagePrompt(prompt string) string {
 	prompt = strings.TrimSpace(prompt)
-	if normalizePPTXImageQuality(imageQuality) != "premium" {
-		return prompt
-	}
 	const noTextConstraint = "no text, no letters, no words, no UI labels, no charts with labels, no typography"
 	lower := strings.ToLower(prompt)
 	if strings.Contains(lower, noTextConstraint) {

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.101 - 2026-05-26
+
+### Changed
+
+- PPT 图片生成废弃 `standard` 档位，premium（hosted image 通道 + 10 credits/张）成为唯一默认行为：
+  - 始终走 `pptxImageClient` 的 hosted 路径（不再回退到 `cfg.LLM` 的本地图模型）
+  - 始终应用紧配额：`coverImageBudget=1, contentImageBudget=1, closingImageBudget=0, galleryBudget=0, visualBudget=1`
+  - 封面固定 `title-split` + 右侧图（不再支持 background 排版）
+  - 图片 prompt 始终追加 `no text, no letters, no words, no UI labels, no charts with labels, no typography` 硬约束
+  - `INFO_PPT_HOSTED_IMAGE_CREDITS`（剩余 credits 提示）随 hosted 计费始终发出
+  - 失败降级文案统一指向 `officecli login` / 购买 hosted credits
+- 对外接口保持向后兼容：`--image-quality` CLI flag 与 agent bridge `image_quality` JSON 字段仍接受任意值，解析后忽略（不再产生 `unsupported image_quality` / `only supported for pptx` 报错）
+- agent capability schema 中 `image_quality` 标注为 deprecated，移除 `quality_values`
+
+### Removed (internal)
+
+- 删除 `ImageQualityStandard` / `ImageQualityPremium` 常量
+- 删除 `GenerateJob.ImageQuality`、`GenerateParams.ImageQuality`、`PPTXBuildOptions.ImageQuality` 字段
+- 删除 `normalizeImageQuality` / `normalizePPTXImageQuality` 工具函数
+
+### Behavior regression note
+
+- 此前依赖本地图模型（`cfg.LLM.ImageBaseURL` / `ImageModel`）生成 PPT 图片但未配置 hosted credits 的用户，本版本起 PPT 图片将不再生成，输出会附带 `WARN_PPT_PREMIUM_IMAGE_DEGRADED` 警告（纯文本版 deck）。需要图片请通过 `officecli login` 并充值 hosted credits，或显式使用 `--no-images` 生成纯文本 deck。
+
 ## 0.2.100 - 2026-05-25
 
 ### Fixed
