@@ -125,12 +125,14 @@ func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "DOCX assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeDOCX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
 }
 
 func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
@@ -148,12 +150,14 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "XLSX assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeXLSX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
 }
 
 func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFilePath string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
@@ -193,12 +197,35 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "Report assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeReport),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
+}
+
+// fillCompletionCredits populates the HostedCreditsCharged and
+// HostedCreditBalance fields on the artifact when the underlying LLM
+// client supports reporting them (i.e. a hosted internal client).
+func fillCompletionCredits(artifact *GeneratedArtifact, llm engine.LLMClient) {
+	type creditReporter interface {
+		LastCompletionCredits() (charged int, balance int, valid bool)
+	}
+	cr, ok := llm.(creditReporter)
+	if !ok {
+		return
+	}
+	charged, balance, valid := cr.LastCompletionCredits()
+	if !valid {
+		return
+	}
+	chargedVal := charged
+	balanceVal := balance
+	artifact.HostedCreditsCharged = &chargedVal
+	artifact.HostedCreditBalance = &balanceVal
 }
 
 func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
