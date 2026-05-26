@@ -4,7 +4,7 @@ import { Code2, FileStack, Sparkles, Workflow as WorkflowIcon } from 'lucide-rea
 export default function VibeOfficing() {
   return (
     <section id="vibeofficing" className="py-24 px-6 md:px-16 max-w-[1440px] mx-auto">
-      <div className="mb-12 max-w-3xl">
+      <div className="mb-12">
         <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-headline uppercase tracking-widest text-primary">
           <Sparkles className="w-3 h-3" />
           A New Paradigm
