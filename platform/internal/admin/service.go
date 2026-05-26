@@ -675,6 +675,18 @@ func (s *Service) UpdateHostedModelPricingConfig(ctx context.Context, id uint64,
 	return updated, nil
 }
 
+func validateHostedPricingRuleRequest(req UpsertHostedPricingRuleRequest) error {
+	profile := strings.ToLower(strings.TrimSpace(req.DocumentProfile))
+	switch profile {
+	case "text", "image":
+		return nil
+	case "":
+		return fmt.Errorf("document_profile is required")
+	default:
+		return fmt.Errorf("unsupported document_profile %q; must be text or image", req.DocumentProfile)
+	}
+}
+
 func (s *Service) CreateHostedPricingRule(ctx context.Context, req UpsertHostedPricingRuleRequest) (*model.HostedPricingRule, error) {
 	if err := validateHostedPricingRuleRequest(req); err != nil {
 		return nil, err
