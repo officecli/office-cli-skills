@@ -4,9 +4,10 @@ import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable 
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Button, Dropdown, Select, Space, Table, Tooltip, Typography } from 'antd'
+import { Button, DatePicker, Dropdown, Select, Space, Table, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import dayjs from 'dayjs'
 import { GripVertical, MoreVertical, RotateCcw, Settings2 } from 'lucide-react'
 import { api } from '../api'
 import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
@@ -92,6 +93,12 @@ function appendValues(params: URLSearchParams, key: string, values: string[]) {
       params.append(key, trimmed)
     }
   }
+}
+
+function dateTimeValue(value: string): dayjs.Dayjs | null {
+  if (!value.trim()) return null
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed : null
 }
 
 const usageColumns: UsageColumn[] = [
@@ -315,10 +322,28 @@ export default function UsageEventsPage() {
             <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.request_id} onChange={(event) => setDraft((current) => ({ ...current, request_id: event.target.value }))} />
           </label>
           <label className="text-sm text-outline">Start time
-            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-15T00:00:00Z" value={draft.start_time} onChange={(event) => setDraft((current) => ({ ...current, start_time: event.target.value }))} />
+            <DatePicker
+              showTime
+              allowClear
+              aria-label="Start time"
+              className="admin-filter-picker mt-2 w-full"
+              format="YYYY-MM-DD HH:mm:ss"
+              placeholder="Select start time"
+              value={dateTimeValue(draft.start_time)}
+              onChange={(value) => setDraft((current) => ({ ...current, start_time: value ? value.toISOString() : '' }))}
+            />
           </label>
           <label className="text-sm text-outline">End time
-            <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-16T00:00:00Z" value={draft.end_time} onChange={(event) => setDraft((current) => ({ ...current, end_time: event.target.value }))} />
+            <DatePicker
+              showTime
+              allowClear
+              aria-label="End time"
+              className="admin-filter-picker mt-2 w-full"
+              format="YYYY-MM-DD HH:mm:ss"
+              placeholder="Select end time"
+              value={dateTimeValue(draft.end_time)}
+              onChange={(value) => setDraft((current) => ({ ...current, end_time: value ? value.toISOString() : '' }))}
+            />
           </label>
           <div className="flex items-end gap-3 md:col-span-5 xl:col-span-11">
             <button type="submit" className="admin-primary-button">Apply filters</button>

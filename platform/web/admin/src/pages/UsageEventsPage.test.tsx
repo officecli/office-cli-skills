@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -75,6 +75,14 @@ describe('admin usage events page', () => {
       expect(params.getAll('action')).toEqual(['generate'])
       expect(params.getAll('action')).not.toContain('status')
     })
+  })
+
+  it('renders start and end time as date-time picker controls', async () => {
+    mockEmpty()
+    renderWithUrl('/usage-events')
+
+    expect(screen.getByPlaceholderText('Select start time')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Select end time')).toBeInTheDocument()
   })
 
   it('serializes multi-select filter changes as repeated query params', () => {
