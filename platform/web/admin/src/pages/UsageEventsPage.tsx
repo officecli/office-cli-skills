@@ -4,7 +4,7 @@ import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable 
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Button, Dropdown, Space, Table, Tooltip, Typography } from 'antd'
+import { Button, Dropdown, Select, Space, Table, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { GripVertical, MoreVertical, RotateCcw, Settings2 } from 'lucide-react'
@@ -13,8 +13,9 @@ import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../co
 import type { AdminPreference, UsageEvent } from '../types'
 
 interface FilterState {
-  mode: string
-  result: string
+  mode: string[]
+  result: string[]
+  action: string[]
   reason_code: string
   fingerprint_hash: string
   api_key_id: string
@@ -42,18 +43,55 @@ interface UsageColumn {
 }
 
 const preferenceKey = 'usage-events-table'
+const modeFilterValues = ['free', 'reward', 'paid', 'hosted']
+const resultFilterValues = ['allowed', 'blocked']
+const actionFilterValues = ['generate', 'status']
+const defaultActionFilterValues = actionFilterValues.filter((value) => value !== 'status')
 
-const defaultFilters: FilterState = {
-  mode: '',
-  result: '',
-  reason_code: '',
-  fingerprint_hash: '',
-  api_key_id: '',
-  user_id: '',
-  client_ip: '',
-  request_id: '',
-  start_time: '',
-  end_time: '',
+const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }))
+const modeOptions = selectOptions(modeFilterValues)
+const resultOptions = selectOptions(resultFilterValues)
+const actionOptions = selectOptions(actionFilterValues)
+
+function defaultFilters(): FilterState {
+  return {
+    mode: [...modeFilterValues],
+    result: [...resultFilterValues],
+    action: [...defaultActionFilterValues],
+    reason_code: '',
+    fingerprint_hash: '',
+    api_key_id: '',
+    user_id: '',
+    client_ip: '',
+    request_id: '',
+    start_time: '',
+    end_time: '',
+  }
+}
+
+export function buildUsageEventParams(filters: FilterState) {
+  const params = new URLSearchParams()
+  appendValues(params, 'mode', filters.mode)
+  appendValues(params, 'result', filters.result)
+  appendValues(params, 'action', filters.action)
+  if (filters.reason_code.trim()) params.set('reason_code', filters.reason_code.trim())
+  if (filters.fingerprint_hash.trim()) params.set('fingerprint_hash', filters.fingerprint_hash.trim())
+  if (filters.api_key_id.trim()) params.set('api_key_id', filters.api_key_id.trim())
+  if (filters.user_id.trim()) params.set('user_id', filters.user_id.trim())
+  if (filters.client_ip.trim()) params.set('client_ip', filters.client_ip.trim())
+  if (filters.request_id.trim()) params.set('request_id', filters.request_id.trim())
+  if (filters.start_time.trim()) params.set('start_time', filters.start_time.trim())
+  if (filters.end_time.trim()) params.set('end_time', filters.end_time.trim())
+  return params
+}
+
+function appendValues(params: URLSearchParams, key: string, values: string[]) {
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (trimmed) {
+      params.append(key, trimmed)
+    }
+  }
 }
 
 const usageColumns: UsageColumn[] = [
@@ -115,18 +153,7 @@ export default function UsageEventsPage() {
   const { data = [] } = useQuery({
     queryKey: ['admin-usage-events', filters],
     queryFn: () => {
-      const params = new URLSearchParams()
-      if (filters.mode) params.set('mode', filters.mode)
-      if (filters.result) params.set('result', filters.result)
-      if (filters.reason_code) params.set('reason_code', filters.reason_code)
-      if (filters.fingerprint_hash) params.set('fingerprint_hash', filters.fingerprint_hash)
-      if (filters.api_key_id) params.set('api_key_id', filters.api_key_id)
-      if (filters.user_id) params.set('user_id', filters.user_id)
-      if (filters.client_ip) params.set('client_ip', filters.client_ip)
-      if (filters.request_id) params.set('request_id', filters.request_id)
-      if (filters.start_time) params.set('start_time', filters.start_time)
-      if (filters.end_time) params.set('end_time', filters.end_time)
-      return api.usageEvents(params)
+      return api.usageEvents(buildUsageEventParams(filters))
     },
   })
 
@@ -232,25 +259,42 @@ export default function UsageEventsPage() {
             })}
           </div>
         ) : null}
-        <form className="admin-code-card admin-surface-panel admin-usage-filter-bar mb-3 grid gap-3 border border-outline-variant/20 p-4 md:grid-cols-5 xl:grid-cols-10" onSubmit={(event: FormEvent) => {
+        <form className="admin-code-card admin-surface-panel admin-usage-filter-bar mb-3 grid gap-3 border border-outline-variant/20 p-4 md:grid-cols-5 xl:grid-cols-11" onSubmit={(event: FormEvent) => {
           event.preventDefault()
           setFilters(draft)
         }}>
           <label className="text-sm text-outline">Mode
-            <select className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.mode} onChange={(event) => setDraft((current) => ({ ...current, mode: event.target.value }))}>
-              <option value="">All modes</option>
-              <option value="free">free</option>
-              <option value="reward">reward</option>
-              <option value="paid">paid</option>
-              <option value="hosted">hosted</option>
-            </select>
+            <Select
+              mode="multiple"
+              aria-label="Mode"
+              className="admin-filter-select mt-2 w-full"
+              value={draft.mode}
+              options={modeOptions}
+              maxTagCount="responsive"
+              onChange={(value) => setDraft((current) => ({ ...current, mode: value }))}
+            />
           </label>
           <label className="text-sm text-outline">Result
-            <select className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.result} onChange={(event) => setDraft((current) => ({ ...current, result: event.target.value }))}>
-              <option value="">All results</option>
-              <option value="allowed">allowed</option>
-              <option value="blocked">blocked</option>
-            </select>
+            <Select
+              mode="multiple"
+              aria-label="Result"
+              className="admin-filter-select mt-2 w-full"
+              value={draft.result}
+              options={resultOptions}
+              maxTagCount="responsive"
+              onChange={(value) => setDraft((current) => ({ ...current, result: value }))}
+            />
+          </label>
+          <label className="text-sm text-outline">Action
+            <Select
+              mode="multiple"
+              aria-label="Action"
+              className="admin-filter-select mt-2 w-full"
+              value={draft.action}
+              options={actionOptions}
+              maxTagCount="responsive"
+              onChange={(value) => setDraft((current) => ({ ...current, action: value }))}
+            />
           </label>
           <label className="text-sm text-outline">Reason code
             <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={draft.reason_code} onChange={(event) => setDraft((current) => ({ ...current, reason_code: event.target.value }))} />
@@ -276,11 +320,12 @@ export default function UsageEventsPage() {
           <label className="text-sm text-outline">End time
             <input className="admin-input mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" placeholder="2026-05-16T00:00:00Z" value={draft.end_time} onChange={(event) => setDraft((current) => ({ ...current, end_time: event.target.value }))} />
           </label>
-          <div className="flex items-end gap-3 md:col-span-5 xl:col-span-10">
+          <div className="flex items-end gap-3 md:col-span-5 xl:col-span-11">
             <button type="submit" className="admin-primary-button">Apply filters</button>
             <button type="button" className="admin-secondary-button" onClick={() => {
-              setDraft(defaultFilters)
-              setFilters(defaultFilters)
+              const next = defaultFilters()
+              setDraft(next)
+              setFilters(next)
             }}>Reset</button>
           </div>
         </form>
@@ -402,7 +447,8 @@ function toPreferencePayload(columns: ColumnPreference[]): AdminPreference {
 
 function filtersFromSearchParams(searchParams: URLSearchParams): FilterState {
   const userID = (searchParams.get('user_id') ?? '').trim()
-  return userID ? { ...defaultFilters, user_id: userID } : defaultFilters
+  const filters = defaultFilters()
+  return userID ? { ...filters, user_id: userID } : filters
 }
 
 function normalizeWidth(width?: number, fallback = 160) {

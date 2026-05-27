@@ -282,6 +282,23 @@ button:disabled,
   padding: 0.45rem 0.75rem !important;
 }
 
+.admin-usage-filter-bar .admin-filter-select {
+  margin-top: 0.25rem !important;
+}
+
+.admin-usage-filter-bar .admin-filter-select .ant-select-selector {
+  min-height: 32px !important;
+  border-radius: 8px !important;
+  border-color: var(--color-outline-variant) !important;
+  background: #11141b !important;
+  color: var(--color-on-surface) !important;
+}
+
+.admin-usage-filter-bar .admin-filter-select .ant-select-selection-item {
+  background: var(--color-surface-container-high) !important;
+  color: var(--color-on-surface) !important;
+}
+
 .admin-usage-table .ant-table {
   font-size: 15px;
 }

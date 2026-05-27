@@ -2,7 +2,7 @@ import { render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import UsageEventsPage from './UsageEventsPage'
+import UsageEventsPage, { buildUsageEventParams } from './UsageEventsPage'
 
 const fetchMock = vi.fn()
 
@@ -23,6 +23,16 @@ function mockEmpty() {
     json: async () => ({ data: [] }),
   }))
   vi.stubGlobal('fetch', fetchMock)
+}
+
+function usageEventURLs() {
+  return fetchMock.mock.calls
+    .map((call) => String(call[0]))
+    .filter((url) => url.startsWith('/api/admin/usage-events'))
+}
+
+function paramsFromUsageURL(url: string) {
+  return new URL(url, 'https://admin.test').searchParams
 }
 
 describe('admin usage events page', () => {
@@ -46,11 +56,46 @@ describe('admin usage events page', () => {
     renderWithUrl('/usage-events')
 
     await waitFor(() => {
-      const usageCalls = fetchMock.mock.calls
-        .map((call) => String(call[0]))
-        .filter((url) => url.startsWith('/api/admin/usage-events'))
+      const usageCalls = usageEventURLs()
       expect(usageCalls.length).toBeGreaterThan(0)
       expect(usageCalls.every((url) => !url.includes('user_id='))).toBe(true)
     })
+  })
+
+  it('queries default multi-select filters with generate action only', async () => {
+    mockEmpty()
+    renderWithUrl('/usage-events')
+
+    await waitFor(() => {
+      const usageCalls = usageEventURLs()
+      expect(usageCalls.length).toBeGreaterThan(0)
+      const params = paramsFromUsageURL(usageCalls[0])
+      expect(params.getAll('mode')).toEqual(['free', 'reward', 'paid', 'hosted'])
+      expect(params.getAll('result')).toEqual(['allowed', 'blocked'])
+      expect(params.getAll('action')).toEqual(['generate'])
+      expect(params.getAll('action')).not.toContain('status')
+    })
+  })
+
+  it('serializes multi-select filter changes as repeated query params', () => {
+    const params = buildUsageEventParams({
+      mode: ['free', 'paid'],
+      result: ['allowed'],
+      action: ['generate', 'status'],
+      reason_code: 'quota_ok',
+      fingerprint_hash: '',
+      api_key_id: '',
+      user_id: '42',
+      client_ip: '',
+      request_id: '',
+      start_time: '',
+      end_time: '',
+    })
+
+    expect(params.getAll('mode')).toEqual(['free', 'paid'])
+    expect(params.getAll('result')).toEqual(['allowed'])
+    expect(params.getAll('action')).toEqual(['generate', 'status'])
+    expect(params.get('reason_code')).toBe('quota_ok')
+    expect(params.get('user_id')).toBe('42')
   })
 })

@@ -137,6 +137,34 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	require.Empty(t, events)
 }
 
+func TestListUsageEventsFiltersByMultiModeResultAndAction(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:usage_multi_filters?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	baseTime := time.Date(2026, 5, 27, 8, 0, 0, 0, time.UTC)
+	events := []model.UsageEvent{
+		{FingerprintHash: "fp-free-generate", Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: baseTime.Add(3 * time.Minute)},
+		{FingerprintHash: "fp-reward-generate", Mode: model.UsageModeReward, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, CreatedAt: baseTime.Add(2 * time.Minute)},
+		{FingerprintHash: "fp-hosted-status", Mode: model.UsageModeHosted, Action: model.UsageActionStatus, Result: model.UsageResultAllowed, CreatedAt: baseTime.Add(time.Minute)},
+		{FingerprintHash: "fp-paid-generate", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: baseTime},
+	}
+	for i := range events {
+		require.NoError(t, store.CreateUsageEvent(context.Background(), &events[i]))
+	}
+
+	matched, err := store.ListUsageEvents(context.Background(), UsageEventFilter{
+		Modes:   []string{"free", "reward", "hosted"},
+		Results: []string{"allowed", "blocked"},
+		Actions: []string{"generate"},
+	})
+	require.NoError(t, err)
+	require.Len(t, matched, 2)
+	require.Equal(t, "fp-free-generate", matched[0].FingerprintHash)
+	require.Equal(t, "fp-reward-generate", matched[1].FingerprintHash)
+}
+
 func TestFingerprintQualityClassifiesAndAggregatesUsageEvents(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:fingerprint_quality?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

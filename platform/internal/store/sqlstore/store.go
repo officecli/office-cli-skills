@@ -30,7 +30,11 @@ type Store struct {
 
 type UsageEventFilter struct {
 	Mode        string
+	Modes       []string
 	Result      string
+	Results     []string
+	Action      string
+	Actions     []string
 	ReasonCode  string
 	Fingerprint string
 	ClientIP    string
@@ -1659,11 +1663,20 @@ func (s *Store) ConsumeRewardGrant(ctx context.Context, userID uint64) (*model.R
 
 func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([]model.UsageEvent, error) {
 	query := s.db.WithContext(ctx).Model(&model.UsageEvent{})
-	if filter.Mode != "" {
+	if values := compactStrings(filter.Modes); len(values) > 0 {
+		query = query.Where("mode IN ?", values)
+	} else if filter.Mode != "" {
 		query = query.Where("mode = ?", filter.Mode)
 	}
-	if filter.Result != "" {
+	if values := compactStrings(filter.Results); len(values) > 0 {
+		query = query.Where("result IN ?", values)
+	} else if filter.Result != "" {
 		query = query.Where("result = ?", filter.Result)
+	}
+	if values := compactStrings(filter.Actions); len(values) > 0 {
+		query = query.Where("action IN ?", values)
+	} else if filter.Action != "" {
+		query = query.Where("action = ?", filter.Action)
 	}
 	if filter.ReasonCode != "" {
 		query = query.Where("reason_code = ?", filter.ReasonCode)
@@ -1692,6 +1705,20 @@ func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([
 	var events []model.UsageEvent
 	err := query.Order("created_at desc").Limit(200).Find(&events).Error
 	return events, err
+}
+
+func compactStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 type fingerprintQualityAggregate struct {

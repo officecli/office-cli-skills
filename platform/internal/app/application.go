@@ -47,8 +47,8 @@ import (
 	"github.com/officecli/officecli/platform/internal/operations"
 	"github.com/officecli/officecli/platform/internal/previewshare"
 	publishsvc "github.com/officecli/officecli/platform/internal/publish"
-	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 	redemptionsvc "github.com/officecli/officecli/platform/internal/redemption"
+	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
@@ -1116,7 +1116,11 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	protected.GET("/usage-events", func(c *gin.Context) {
 		filter := sqlstore.UsageEventFilter{
 			Mode:        c.Query("mode"),
+			Modes:       queryValues(c, "mode"),
 			Result:      c.Query("result"),
+			Results:     queryValues(c, "result"),
+			Action:      c.Query("action"),
+			Actions:     queryValues(c, "action"),
 			ReasonCode:  c.Query("reason_code"),
 			Fingerprint: c.Query("fingerprint_hash"),
 			ClientIP:    c.Query("client_ip"),
@@ -2427,6 +2431,21 @@ func parsePort(addr string) (int, error) {
 		return 0, fmt.Errorf("invalid HTTP_ADDR: %w", err)
 	}
 	return port, nil
+}
+
+func queryValues(c *gin.Context, key string) []string {
+	rawValues := c.QueryArray(key)
+	if len(rawValues) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(rawValues))
+	for _, raw := range rawValues {
+		value := strings.TrimSpace(raw)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func hostPart(addr string) string {
