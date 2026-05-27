@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.103 - 2026-05-27
+
+### Fixed
+
+- Fixed hosted PPTX credit reporting so `credits_charged` now includes both the hosted completion charge and hosted image-generation charges, while `credit_balance` reports the latest post-image balance when image generation returns one.
+- Narrowed the no-Han release gate so localized operational files and the admin web UI no longer block CLI release validation.
+
 ## 0.2.101 - 2026-05-26
 
 ### Changed

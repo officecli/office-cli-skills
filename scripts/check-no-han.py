@@ -13,6 +13,15 @@ EXCLUDED_PARTS = {
     ".git",
 }
 
+EXCLUDED_PATHS = {
+    "AGENTS.md",
+    "CHANGELOG.md",
+}
+
+EXCLUDED_PREFIXES = (
+    "platform/web/admin/",
+)
+
 EXCLUDED_SUFFIXES = {
     ".go",
     ".png",
@@ -64,6 +73,11 @@ def tracked_files() -> list[Path]:
     out: list[Path] = []
     for raw in result.stdout.splitlines():
         path = Path(raw)
+        normalized = path.as_posix()
+        if normalized in EXCLUDED_PATHS:
+            continue
+        if any(normalized.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            continue
         if path.parts and path.parts[0] == "docs":
             continue
         if any(part in EXCLUDED_PARTS for part in path.parts):
