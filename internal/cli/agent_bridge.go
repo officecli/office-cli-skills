@@ -874,16 +874,7 @@ func (s *agentBridgeServer) runRenderTask(ctx context.Context, task *bridgeTask,
 		t.Result = result
 	})
 	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
-	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
-		"status":          result.Status,
-		"document_type":   result.DocumentType,
-		"document_name":   result.DocumentName,
-		"file_path":       result.FilePath,
-		"warnings":        append([]string(nil), result.Warnings...),
-		"result_meta":     buildGenerateBridgeMeta(result),
-		"credits_charged": result.CreditsCharged,
-		"credit_mode":     result.CreditMode,
-	})
+	s.emitEvent(task, bridgeEventTaskCompleted, generateTaskCompletedPayload(result))
 }
 
 func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTask, job GenerateJob, prompter *bridgePrompter) {
@@ -922,7 +913,11 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 		t.CurrentQ = nil
 	})
 	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, result))
-	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
+	s.emitEvent(task, bridgeEventTaskCompleted, generateTaskCompletedPayload(result))
+}
+
+func generateTaskCompletedPayload(result GenerateResult) map[string]any {
+	return map[string]any{
 		"status":          result.Status,
 		"document_type":   result.DocumentType,
 		"document_name":   result.DocumentName,
@@ -930,8 +925,9 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 		"warnings":        append([]string(nil), result.Warnings...),
 		"result_meta":     buildGenerateBridgeMeta(result),
 		"credits_charged": result.CreditsCharged,
+		"credit_balance":  result.CreditBalance,
 		"credit_mode":     result.CreditMode,
-	})
+	}
 }
 
 func (s *agentBridgeServer) runReviewTask(ctx context.Context, task *bridgeTask, job ReviewJob) {

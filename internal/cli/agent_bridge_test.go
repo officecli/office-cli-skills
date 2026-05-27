@@ -929,6 +929,28 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 	}
 }
 
+func TestAgentBridgeTaskCompletedPayloadIncludesHostedCreditBalance(t *testing.T) {
+	payload := generateTaskCompletedPayload(GenerateResult{
+		Status:         "success",
+		FilePath:       "/tmp/demo.pptx",
+		DocumentType:   "pptx",
+		DocumentName:   "demo.pptx",
+		CreditsCharged: 14,
+		CreditBalance:  1100230,
+		CreditMode:     "hosted",
+	})
+
+	if payload["credits_charged"] != 14 {
+		t.Fatalf("credits_charged = %#v, want 14", payload["credits_charged"])
+	}
+	if payload["credit_balance"] != 1100230 {
+		t.Fatalf("credit_balance = %#v, want 1100230", payload["credit_balance"])
+	}
+	if payload["credit_mode"] != "hosted" {
+		t.Fatalf("credit_mode = %#v, want hosted", payload["credit_mode"])
+	}
+}
+
 func TestAgentBridgeTaskStatusIncludesResultMeta(t *testing.T) {
 	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	server.tasks["task-1"] = &bridgeTask{

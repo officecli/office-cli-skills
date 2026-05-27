@@ -318,23 +318,39 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "PPTX content generation failed")
 		return nil, fmt.Errorf("content generation failed: %w", err)
 	}
+	completionCreditsCharged := 0
+	completionCreditsChargedSet := false
+	var completionCreditBalance *int
+	captureCompletionCredits := func() {
+		artifact := &GeneratedArtifact{}
+		fillCompletionCredits(artifact, s.llm)
+		if artifact.HostedCreditsCharged != nil {
+			completionCreditsCharged += *artifact.HostedCreditsCharged
+			completionCreditsChargedSet = true
+		}
+		if artifact.HostedCreditBalance != nil {
+			value := *artifact.HostedCreditBalance
+			completionCreditBalance = &value
+		}
+	}
+	captureCompletionCredits()
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX structure output")
 
 	imageLLM := s.llm
 	if s.imageLLM != nil {
 		imageLLM = s.imageLLM
 	}
-	var hostedCreditBalance *int
-	hostedCreditsCharged := 0
-	hostedCreditsChargedSet := false
+	var imageCreditBalance *int
+	imageCreditsCharged := 0
+	imageCreditsChargedSet := false
 	buildOptions := PPTXBuildOptions{
 		CreditBalanceSink: func(balance int) {
 			value := balance
-			hostedCreditBalance = &value
+			imageCreditBalance = &value
 		},
 		CreditChargedSink: func(charged int) {
-			hostedCreditsCharged += charged
-			hostedCreditsChargedSet = true
+			imageCreditsCharged += charged
+			imageCreditsChargedSet = true
 		},
 	}
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
@@ -348,18 +364,25 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 			emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Structured PPTX repair failed")
 			return nil, fmt.Errorf("content generation failed: %w", err)
 		}
+		captureCompletionCredits()
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX output after structured repair")
-		hostedCreditBalance = nil
-		hostedCreditsCharged = 0
-		hostedCreditsChargedSet = false
+		imageCreditBalance = nil
+		imageCreditsCharged = 0
+		imageCreditsChargedSet = false
 		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 		if err != nil {
 			return nil, err
 		}
 	}
+	var hostedCreditBalance *int
+	if imageCreditBalance != nil {
+		hostedCreditBalance = imageCreditBalance
+	} else if completionCreditBalance != nil {
+		hostedCreditBalance = completionCreditBalance
+	}
 	var hostedCreditsChargedPtr *int
-	if hostedCreditsChargedSet {
-		value := hostedCreditsCharged
+	if completionCreditsChargedSet || imageCreditsChargedSet {
+		value := completionCreditsCharged + imageCreditsCharged
 		hostedCreditsChargedPtr = &value
 	}
 	return &GeneratedArtifact{

@@ -21,6 +21,18 @@ func (fakeGenerator) Generate(_ context.Context, params GenerateParams) (*Genera
 	}, nil
 }
 
+type hostedCreditGenerator struct{}
+
+func (hostedCreditGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName:         params.Topic + ".pptx",
+		DocumentType:         string(params.DocumentType),
+		Bytes:                []byte("pptx-bytes"),
+		HostedCreditBalance:  cliIntPtr(1100230),
+		HostedCreditsCharged: cliIntPtr(14),
+	}, nil
+}
+
 type failingGenerator struct {
 	err error
 }
@@ -101,6 +113,10 @@ func (f *fakeLicenseManager) Consume(_ context.Context, token UsageCommitToken) 
 	return &UsageConsumeResult{AccessMode: LicenseAccessModePaid, Remaining: 2}, nil
 }
 
+func cliIntPtr(value int) *int {
+	return &value
+}
+
 func TestExecutorGenerateAndPublish(t *testing.T) {
 	tmpDir := t.TempDir()
 	executor := NewExecutor(fakeGenerator{}, fakePublisher{}, nil)
@@ -124,6 +140,30 @@ func TestExecutorGenerateAndPublish(t *testing.T) {
 	}
 	if result.AccessURL == "" || result.Password == "" || result.ExpiresAt == "" {
 		t.Fatalf("unexpected publish result: %+v", result)
+	}
+}
+
+func TestExecutorPropagatesHostedCreditArtifactFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(hostedCreditGenerator{}, fakePublisher{}, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "Product Launch",
+		OutputDir:    tmpDir,
+		Publish:      false,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.CreditsCharged != 14 {
+		t.Fatalf("credits charged = %d, want 14", result.CreditsCharged)
+	}
+	if result.CreditBalance != 1100230 {
+		t.Fatalf("credit balance = %d, want 1100230", result.CreditBalance)
+	}
+	if result.AccessMode != string(LicenseAccessModeHosted) || !result.HostedEnabled {
+		t.Fatalf("hosted result metadata = access_mode %q hosted_enabled %v", result.AccessMode, result.HostedEnabled)
 	}
 }
 
