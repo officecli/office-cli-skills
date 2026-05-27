@@ -17,8 +17,9 @@ import (
 )
 
 type fakeAPIKeyStore struct {
-	mu  sync.Mutex
-	key *model.APIKey
+	mu             sync.Mutex
+	key            *model.APIKey
+	hostedAccounts map[uint64]*model.UserHostedCreditAccount
 }
 
 func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey, error) {
@@ -52,6 +53,19 @@ func (f *fakeAPIKeyStore) ConsumePaidByHash(_ context.Context, _ string) (*model
 	}
 	f.key.QuotaUsed++
 	copied := *f.key
+	return &copied, nil
+}
+func (f *fakeAPIKeyStore) GetHostedCreditAccountByUser(_ context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.hostedAccounts == nil {
+		return &model.UserHostedCreditAccount{UserID: userID}, nil
+	}
+	account := f.hostedAccounts[userID]
+	if account == nil {
+		return &model.UserHostedCreditAccount{UserID: userID}, nil
+	}
+	copied := *account
 	return &copied, nil
 }
 
@@ -248,6 +262,10 @@ func resignTestCommitToken(t *testing.T, svc *Service, token *CommitToken) {
 	token.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(svc.proof.privateKey, []byte(commitTokenPayload(*token))))
 }
 
+func testUint64Ptr(v uint64) *uint64 {
+	return &v
+}
+
 // TestAnonymousFingerprintGetsStarterCredits verifies that an anonymous Check
 // auto-grants the per-device starter balance and returns hosted access.
 func TestAnonymousFingerprintGetsStarterCredits(t *testing.T) {
@@ -294,6 +312,50 @@ func TestCheckRespectsExternalRuntimeMode(t *testing.T) {
 	require.True(t, resp.Allowed)
 	require.Equal(t, model.AccessModeFree, resp.AccessMode)
 	require.NotNil(t, resp.CommitToken)
+}
+
+func TestCheckRejectsInvalidRuntimeMode(t *testing.T) {
+	quotas := newFakeFingerprintCreditStore()
+	quotas.accounts["fp-custom"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-custom", CreditBalance: 0, BonusGranted: true}
+	usage := newFakeUsageStore()
+	svc := NewService(&fakeAPIKeyStore{}, quotas, newFakeAnonymousGranter(quotas, 100), usage, newFakeIdemStore(), nil, nil, "salt", time.Hour)
+
+	req := testCheckRequest("fp-custom", "status")
+	req.UserID = 45
+	req.RuntimeMode = "custom"
+	resp, err := svc.Check(context.Background(), req)
+	require.NoError(t, err)
+	require.False(t, resp.Allowed)
+	require.Equal(t, model.AccessModeBlocked, resp.AccessMode)
+	require.Equal(t, "invalid_runtime_mode", resp.ReasonCode)
+	require.Contains(t, resp.Message, "external")
+	require.Contains(t, resp.Message, "hosted")
+	require.Len(t, usage.events, 1)
+	require.Equal(t, model.UsageResultBlocked, usage.events[0].Result)
+	require.NotNil(t, usage.events[0].ReasonCode)
+	require.Equal(t, "invalid_runtime_mode", *usage.events[0].ReasonCode)
+	require.NotNil(t, usage.events[0].RuntimeMode)
+	require.Equal(t, "custom", *usage.events[0].RuntimeMode)
+}
+
+func TestCheckLoggedInHostedUsesAccountCredits(t *testing.T) {
+	store := &fakeAPIKeyStore{hostedAccounts: map[uint64]*model.UserHostedCreditAccount{
+		45: {UserID: 45, CreditBalance: 100},
+	}}
+	quotas := newFakeFingerprintCreditStore()
+	quotas.accounts["fp-migrated"] = &model.FingerprintCreditAccount{FingerprintHash: "fp-migrated", CreditBalance: 0, BonusGranted: true, MigratedToUserID: testUint64Ptr(45)}
+	svc := NewService(store, quotas, newFakeAnonymousGranter(quotas, 100), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
+
+	req := testCheckRequest("fp-migrated", "status")
+	req.UserID = 45
+	req.RuntimeMode = "hosted"
+	resp, err := svc.Check(context.Background(), req)
+	require.NoError(t, err)
+	require.True(t, resp.Allowed)
+	require.Equal(t, model.AccessModeHosted, resp.AccessMode)
+	require.Equal(t, 100, resp.CreditBalance)
+	require.NotNil(t, resp.CommitToken)
+	require.Equal(t, uint64(45), resp.CommitToken.UserID)
 }
 
 func TestCheckPaidAPIKey(t *testing.T) {

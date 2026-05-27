@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/officecli/officecli/engine"
 	licenseprovider "github.com/officecli/officecli/internal/license"
@@ -39,13 +40,42 @@ type RuntimeConfig struct {
 }
 
 func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
-	if cfg.Runtime.Mode != "" {
-		return cfg.Runtime.Mode
+	if mode, ok := normalizeConfiguredRuntimeMode(cfg.Runtime.Mode, hasGenerationConfig(cfg)); ok {
+		return mode
 	}
 	if hasGenerationConfig(cfg) {
 		return RuntimeModeExternal
 	}
 	return RuntimeModeHosted
+}
+
+func normalizeConfiguredRuntimeMode(mode RuntimeMode, hasGeneration bool) (RuntimeMode, bool) {
+	normalized := RuntimeMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	switch normalized {
+	case RuntimeModeExternal, RuntimeModeHosted:
+		return normalized, true
+	case "custom":
+		return RuntimeModeExternal, true
+	case "":
+		return "", false
+	default:
+		if hasGeneration {
+			return RuntimeModeExternal, true
+		}
+		return RuntimeModeHosted, true
+	}
+}
+
+func runtimeModeConfigWarning(mode RuntimeMode) string {
+	normalized := RuntimeMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	switch normalized {
+	case "", RuntimeModeExternal, RuntimeModeHosted:
+		return ""
+	case "custom":
+		return "Warning: config runtime.mode=custom is deprecated and will be treated as external. Run `officecli config set-runtime <external|hosted>` to update the config."
+	default:
+		return "Warning: config runtime.mode=" + strings.TrimSpace(string(mode)) + " is unsupported and will be ignored. Run `officecli config set-runtime <external|hosted>` to update the config."
+	}
 }
 
 type LLMConfig struct {

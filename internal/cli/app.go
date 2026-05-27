@@ -743,6 +743,11 @@ func (a *App) runConfigStatus(cfg Config) error {
 	if _, err := fmt.Fprintf(a.Stdout, "Default runtime mode: %s\n", runtimeModeLabel(cfg.RuntimeModeOrDefault())); err != nil {
 		return err
 	}
+	if warning := runtimeModeConfigWarning(cfg.Runtime.Mode); warning != "" {
+		if _, err := fmt.Fprintln(a.Stdout, warning); err != nil {
+			return err
+		}
+	}
 	if _, err := fmt.Fprintf(a.Stdout, "Default PPT style preset: %s\n", fallbackString(cfg.Defaults.PPTXStylePreset, "tech-contrast")); err != nil {
 		return err
 	}
@@ -1380,7 +1385,7 @@ func (a *App) runLogout(ctx context.Context, cfg Config) error {
 	if _, err := WriteConfig("", cfg, true); err != nil {
 		return err
 	}
-		_, err := fmt.Fprintln(a.Stdout, "Logged out. This CLI is back to anonymous credit mode.")
+	_, err := fmt.Fprintln(a.Stdout, "Logged out. This CLI is back to anonymous credit mode.")
 	return err
 }
 
@@ -1620,6 +1625,11 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 	requestNonce, err := licenseprovider.NewRequestNonce()
 	if err != nil {
 		return nil, err
+	}
+	if mode, ok := normalizeConfiguredRuntimeMode(runtimeMode, false); ok {
+		runtimeMode = mode
+	} else {
+		runtimeMode = RuntimeModeHosted
 	}
 	checkReq := LicenseCheckRequest{
 		FingerprintHash: fingerprintHash,

@@ -2993,6 +2993,25 @@ func TestAppRun_ConfigSetRuntimeRejectsInvalidMode(t *testing.T) {
 	}
 }
 
+func TestAppRun_ConfigStatusWarnsForInvalidRuntimeMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	if _, err := WriteConfig("", Config{Runtime: RuntimeConfig{Mode: RuntimeMode("custom")}}, true); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	if err := app.Run(t.Context(), []string{"config", "status"}); err != nil {
+		t.Fatalf("Run(config status): %v", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "Default runtime mode: external") || !strings.Contains(output, "runtime.mode=custom is deprecated") {
+		t.Fatalf("stdout = %s", output)
+	}
+}
+
 func TestAppRun_ConfigSetGenerationWritesConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "officecli.json")
@@ -3885,6 +3904,46 @@ func TestAppRun_AuthStatusShowsRemainingRewardQuota(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, "Current access mode: reward") || !strings.Contains(output, "Reward quota remaining: 5") {
 		t.Fatalf("stdout = %s", output)
+	}
+}
+
+func TestAppRun_AuthStatusNormalizesInvalidRuntimeMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	t.Setenv("OFFICE_CLI_CONFIG", configPath)
+	if _, err := WriteConfig("", Config{
+		Runtime: RuntimeConfig{Mode: RuntimeMode("custom")},
+		License: LicenseConfig{
+			BaseURL:    "https://platform.officecli.io",
+			Enabled:    true,
+			TimeoutSec: 5,
+		},
+	}, true); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+
+	var checkedRuntime string
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return dynamicLicenseManager{
+			check: func(req LicenseCheckRequest) (*LicenseCheckResult, error) {
+				checkedRuntime = req.RuntimeMode
+				return &LicenseCheckResult{
+					Allowed:     true,
+					AccessMode:  LicenseAccessModeFree,
+					CommitToken: signTestCommitToken(req, LicenseAccessModeFree, UsageCommitToken{}),
+					Message:     "Current mode: external.",
+				}, nil
+			},
+		}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"auth", "status"}); err != nil {
+		t.Fatalf("Run(auth status): %v", err)
+	}
+	if checkedRuntime != string(RuntimeModeExternal) {
+		t.Fatalf("license runtime_mode = %q, want external", checkedRuntime)
 	}
 }
 
