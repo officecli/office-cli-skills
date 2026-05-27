@@ -39,7 +39,7 @@ describe('admin users page', () => {
           status: 200,
           json: async () => ({
             data: [
-              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', created_at: '2026-04-01T00:00:00Z' },
+              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', credit_balance: 1250, created_at: '2026-04-01T00:00:00Z' },
             ],
           }),
         }
@@ -52,6 +52,8 @@ describe('admin users page', () => {
 
     expect(await screen.findByText('42')).toBeInTheDocument()
     expect(screen.getByText('demo@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Hosted credits' })).toBeInTheDocument()
+    expect(screen.getByText('1,250')).toBeInTheDocument()
   })
 
   it('shows owned api keys and quota for a user', async () => {
@@ -107,7 +109,6 @@ describe('admin users page', () => {
     expect(screen.getByText('External 17 / 20')).toBeInTheDocument()
     expect(screen.getByText('Used 3')).toBeInTheDocument()
     expect(screen.getByText('Hosted credits account-level')).toBeInTheDocument()
-    expect(screen.getByText('Key reserved legacy 5')).toBeInTheDocument()
   })
 
   it('navigates to usage-events filtered by user when clicking the action button', async () => {

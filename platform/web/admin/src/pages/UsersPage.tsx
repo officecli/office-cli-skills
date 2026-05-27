@@ -31,8 +31,8 @@ export default function UsersPage() {
       {users.length ? (
         <div className="space-y-6">
           <DataTable
-            headers={['UID', 'User', 'Invite code', 'Status', 'Created', 'Action']}
-            columns="minmax(0,0.5fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr)"
+            headers={['UID', 'User', 'Invite code', 'Hosted credits', 'Status', 'Created', 'Action']}
+            columns="minmax(0,0.5fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,0.9fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.3fr)"
             rows={users.map((user) => [
               <code key={`uid-${user.id}`} className="font-mono text-xs text-white">{user.id}</code>,
               <button
@@ -47,6 +47,7 @@ export default function UsersPage() {
                 <div className="mt-1 break-all text-xs text-outline">{user.email}</div>
               </button>,
               <code key={`invite-${user.id}`} className="font-mono text-xs text-white">{user.invite_code || '—'}</code>,
+              <span key={`credits-${user.id}`} className="font-mono text-sm text-white">{formatNumber(user.credit_balance ?? 0)}</span>,
               <StatusPill key={`status-${user.id}`} value={user.status} />,
               <span key={`created-${user.id}`}>{formatDate(user.created_at)}</span>,
               <div key={`action-${user.id}`} className="flex flex-wrap gap-2">

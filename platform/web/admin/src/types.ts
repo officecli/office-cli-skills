@@ -118,6 +118,7 @@ export interface User {
   name: string
   invite_code?: string
   status: 'active' | 'disabled'
+  credit_balance?: number
   created_at: string
 }
 

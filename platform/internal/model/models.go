@@ -65,17 +65,17 @@ const (
 	HostedCreditGrantSourceSignup           HostedCreditGrantSource = "signup_bonus"
 	HostedCreditGrantSourceInviteActivation HostedCreditGrantSource = "invite_activation_bonus"
 
-	HostedCreditLedgerSourcePurchase                HostedCreditLedgerSource = "purchase"
-	HostedCreditLedgerSourceSignupBonus             HostedCreditLedgerSource = "signup_bonus"
-	HostedCreditLedgerSourceInviteActivationBonus   HostedCreditLedgerSource = "invite_activation_bonus"
-	HostedCreditLedgerSourceDiscordJoinBonus        HostedCreditLedgerSource = "discord_join_bonus"
-	HostedCreditLedgerSourceCharge                  HostedCreditLedgerSource = "charge"
+	HostedCreditLedgerSourcePurchase                 HostedCreditLedgerSource = "purchase"
+	HostedCreditLedgerSourceSignupBonus              HostedCreditLedgerSource = "signup_bonus"
+	HostedCreditLedgerSourceInviteActivationBonus    HostedCreditLedgerSource = "invite_activation_bonus"
+	HostedCreditLedgerSourceDiscordJoinBonus         HostedCreditLedgerSource = "discord_join_bonus"
+	HostedCreditLedgerSourceCharge                   HostedCreditLedgerSource = "charge"
 	HostedCreditLedgerSourceChargeFailedPostUpstream HostedCreditLedgerSource = "charge_failed_post_upstream"
-	HostedCreditLedgerSourceMigration               HostedCreditLedgerSource = "migration"
-	HostedCreditLedgerSourceAnonymousSignupBonus    HostedCreditLedgerSource = "anonymous_signup_bonus"
-	HostedCreditLedgerSourceAnonymousTransferOut    HostedCreditLedgerSource = "anonymous_transfer_out"
-	HostedCreditLedgerSourceAnonymousTransferIn     HostedCreditLedgerSource = "anonymous_transfer_in"
-	HostedCreditLedgerSourceRedemptionCode          HostedCreditLedgerSource = "redemption_code"
+	HostedCreditLedgerSourceMigration                HostedCreditLedgerSource = "migration"
+	HostedCreditLedgerSourceAnonymousSignupBonus     HostedCreditLedgerSource = "anonymous_signup_bonus"
+	HostedCreditLedgerSourceAnonymousTransferOut     HostedCreditLedgerSource = "anonymous_transfer_out"
+	HostedCreditLedgerSourceAnonymousTransferIn      HostedCreditLedgerSource = "anonymous_transfer_in"
+	HostedCreditLedgerSourceRedemptionCode           HostedCreditLedgerSource = "redemption_code"
 
 	PackKindExternalGeneration PackKind = "external_generation"
 	PackKindHostedCredits      PackKind = "hosted_credits"
@@ -89,16 +89,17 @@ const (
 )
 
 type User struct {
-	ID         uint64     `gorm:"primaryKey" json:"id"`
-	GoogleSub  *string    `gorm:"column:google_sub;size:191;uniqueIndex" json:"google_sub,omitempty"`
-	GitHubSub  *string    `gorm:"column:github_sub;size:191;uniqueIndex" json:"github_sub,omitempty"`
-	Email      string     `gorm:"column:email;size:191;uniqueIndex;not null" json:"email"`
-	Name       string     `gorm:"column:name;size:191;not null" json:"name"`
-	InviteCode string     `gorm:"column:invite_code;size:64;uniqueIndex;not null" json:"invite_code"`
-	AvatarURL  *string    `gorm:"column:avatar_url;size:512" json:"avatar_url,omitempty"`
-	Status     UserStatus `gorm:"column:status;size:16;index;not null" json:"status"`
-	CreatedAt  time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	ID            uint64     `gorm:"primaryKey" json:"id"`
+	GoogleSub     *string    `gorm:"column:google_sub;size:191;uniqueIndex" json:"google_sub,omitempty"`
+	GitHubSub     *string    `gorm:"column:github_sub;size:191;uniqueIndex" json:"github_sub,omitempty"`
+	Email         string     `gorm:"column:email;size:191;uniqueIndex;not null" json:"email"`
+	Name          string     `gorm:"column:name;size:191;not null" json:"name"`
+	InviteCode    string     `gorm:"column:invite_code;size:64;uniqueIndex;not null" json:"invite_code"`
+	AvatarURL     *string    `gorm:"column:avatar_url;size:512" json:"avatar_url,omitempty"`
+	Status        UserStatus `gorm:"column:status;size:16;index;not null" json:"status"`
+	CreditBalance int        `gorm:"column:credit_balance;->;-:migration" json:"credit_balance"`
+	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
 
 func (User) TableName() string { return "users" }
@@ -488,18 +489,18 @@ func (c RedemptionCode) RemainingRedemptions() *int {
 }
 
 type RedemptionCodeRedemption struct {
-	ID                   uint64           `gorm:"primaryKey" json:"id"`
-	RedemptionCodeID     uint64           `gorm:"column:redemption_code_id;index;not null" json:"redemption_code_id"`
-	Code                 string           `gorm:"column:code;size:64;index;not null" json:"code"`
-	UserID               uint64           `gorm:"column:user_id;index;not null" json:"user_id"`
-	CreditAmount         int              `gorm:"column:credit_amount;not null" json:"credit_amount"`
-	LedgerEntryID        uint64           `gorm:"column:ledger_entry_id;not null" json:"ledger_entry_id"`
-	Source               RedemptionSource `gorm:"column:source;size:16;index;not null" json:"source"`
-	ClientIP             string           `gorm:"column:client_ip;size:64;not null;default:''" json:"client_ip"`
-	UserAgent            string           `gorm:"column:user_agent;size:512;not null;default:''" json:"user_agent"`
-	IdempotencyKey       string           `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
-	PerUserLimitAtClaim  int              `gorm:"column:per_user_limit_at_claim;not null;default:1" json:"per_user_limit_at_claim"`
-	RedeemedAt           time.Time        `gorm:"column:redeemed_at;index;autoCreateTime" json:"redeemed_at"`
+	ID                  uint64           `gorm:"primaryKey" json:"id"`
+	RedemptionCodeID    uint64           `gorm:"column:redemption_code_id;index;not null" json:"redemption_code_id"`
+	Code                string           `gorm:"column:code;size:64;index;not null" json:"code"`
+	UserID              uint64           `gorm:"column:user_id;index;not null" json:"user_id"`
+	CreditAmount        int              `gorm:"column:credit_amount;not null" json:"credit_amount"`
+	LedgerEntryID       uint64           `gorm:"column:ledger_entry_id;not null" json:"ledger_entry_id"`
+	Source              RedemptionSource `gorm:"column:source;size:16;index;not null" json:"source"`
+	ClientIP            string           `gorm:"column:client_ip;size:64;not null;default:''" json:"client_ip"`
+	UserAgent           string           `gorm:"column:user_agent;size:512;not null;default:''" json:"user_agent"`
+	IdempotencyKey      string           `gorm:"column:idempotency_key;size:191;uniqueIndex;not null" json:"idempotency_key"`
+	PerUserLimitAtClaim int              `gorm:"column:per_user_limit_at_claim;not null;default:1" json:"per_user_limit_at_claim"`
+	RedeemedAt          time.Time        `gorm:"column:redeemed_at;index;autoCreateTime" json:"redeemed_at"`
 }
 
 func (RedemptionCodeRedemption) TableName() string { return "redemption_code_redemptions" }

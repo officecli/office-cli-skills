@@ -2241,10 +2241,10 @@ func (s *Store) SaveGitHubUser(ctx context.Context, githubSub, email, name strin
 
 	sub := githubSub
 	user = model.User{
-		GitHubSub: &sub,
-		Email:     email,
-		Name:      name,
-		AvatarURL: avatarURL,
+		GitHubSub:  &sub,
+		Email:      email,
+		Name:       name,
+		AvatarURL:  avatarURL,
 		InviteCode: buildPendingInviteCode("github:" + githubSub),
 		Status:     model.UserStatusActive,
 	}
@@ -2318,16 +2318,19 @@ func (s *Store) GetUserByID(ctx context.Context, id uint64) (*model.User, error)
 
 func (s *Store) ListUsers(ctx context.Context, query string) ([]model.User, error) {
 	var users []model.User
-	db := s.db.WithContext(ctx).Model(&model.User{})
+	db := s.db.WithContext(ctx).
+		Model(&model.User{}).
+		Select("users.*, COALESCE(user_hosted_credit_accounts.credit_balance, 0) AS credit_balance").
+		Joins("LEFT JOIN user_hosted_credit_accounts ON user_hosted_credit_accounts.user_id = users.id")
 	normalized := strings.TrimSpace(query)
 	if normalized != "" {
 		if id, err := strconv.ParseUint(normalized, 10, 64); err == nil {
-			db = db.Where("id = ?", id)
+			db = db.Where("users.id = ?", id)
 		} else {
-			db = db.Where("email LIKE ?", "%"+normalized+"%")
+			db = db.Where("users.email LIKE ?", "%"+normalized+"%")
 		}
 	}
-	if err := db.Order("created_at desc").Find(&users).Error; err != nil {
+	if err := db.Order("users.created_at desc").Find(&users).Error; err != nil {
 		return nil, err
 	}
 	return users, nil

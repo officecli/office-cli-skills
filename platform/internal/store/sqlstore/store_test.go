@@ -682,7 +682,7 @@ func TestSaveGoogleUserKeepsDisabledStatusForExistingUser(t *testing.T) {
 func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:list_users_filters_by_id_and_email?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserHostedCreditAccount{}))
 
 	users := []model.User{
 		{GoogleSub: model.StringPtr("sub-1"), Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
@@ -692,22 +692,28 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	for i := range users {
 		require.NoError(t, db.Create(&users[i]).Error)
 	}
+	require.NoError(t, db.Create(&model.UserHostedCreditAccount{UserID: users[1].ID, CreditBalance: 1250}).Error)
 
 	store := NewWithDB(db)
 	all, err := store.ListUsers(context.Background(), "")
 	require.NoError(t, err)
 	require.Len(t, all, 3)
+	require.Equal(t, 0, all[0].CreditBalance)
+	require.Equal(t, 1250, all[1].CreditBalance)
 
 	byID, err := store.ListUsers(context.Background(), strconv.FormatUint(users[1].ID, 10))
 	require.NoError(t, err)
 	require.Len(t, byID, 1)
 	require.Equal(t, "beta@example.com", byID[0].Email)
+	require.Equal(t, 1250, byID[0].CreditBalance)
 
 	byEmail, err := store.ListUsers(context.Background(), "example.com")
 	require.NoError(t, err)
 	require.Len(t, byEmail, 2)
 	require.Equal(t, "beta@example.com", byEmail[0].Email)
+	require.Equal(t, 1250, byEmail[0].CreditBalance)
 	require.Equal(t, "alpha@example.com", byEmail[1].Email)
+	require.Equal(t, 0, byEmail[1].CreditBalance)
 }
 
 func TestCountReferralsByInviterUserID(t *testing.T) {
