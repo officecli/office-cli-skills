@@ -619,6 +619,32 @@ func TestGrantExistingUsers100CreditBonusMigrationShape(t *testing.T) {
 	}
 }
 
+func TestBackfillSignupHostedCreditsMigrationShape(t *testing.T) {
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "postgres", "032_backfill_signup_hosted_credits.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	lower := strings.ToLower(string(sqlBytes))
+
+	requiredSubstrings := []string{
+		"signup-hosted-credits:",
+		"'signup_bonus'",
+		"on conflict (user_id) do update",
+		"credit_balance = user_hosted_credit_accounts.credit_balance + excluded.credit_balance",
+		"on conflict (idempotency_key) do nothing",
+		"user_hosted_credit_accounts",
+		"user_hosted_credit_ledger",
+		"from users",
+		"users.status = 'active'",
+		"left join user_hosted_credit_ledger",
+		"is null",
+		"credit_delta",
+		"backfill_signup_hosted_credits_20260528",
+	}
+	for _, needle := range requiredSubstrings {
+		require.Containsf(t, lower, needle, "032 migration must contain %q", needle)
+	}
+}
+
 func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
 	requiredColumns := []string{"flow", "user_code_hash"}
 	migrationPaths := []string{

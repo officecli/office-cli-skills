@@ -16,6 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	"github.com/officecli/officecli/platform/internal/appuser"
 	"github.com/officecli/officecli/platform/internal/clisession"
 	"github.com/officecli/officecli/platform/internal/model"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
@@ -28,9 +29,10 @@ func clisessionTestS256(verifier string) string {
 
 func newTestCLISessionService(t *testing.T) (*clisession.Service, *sqlstore.Store) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:cli_routes?mode=memory&cache=shared"), &gorm.Config{})
+	dbName := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	db, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.CLILoginChallenge{}, &model.CLISession{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.CLILoginChallenge{}, &model.CLISession{}, &model.UserHostedCreditAccount{}, &model.UserHostedCreditLedger{}, &model.FingerprintCreditAccount{}, &model.FingerprintCreditLedger{}))
 	store := sqlstore.NewWithDB(db)
 	return clisession.NewService(store, "https://platform.example.com"), store
 }
@@ -92,4 +94,45 @@ func TestCLILoginVerifyCompletesDeviceChallengeAndPollsCompleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(resp.Token, "ocli_sess_"))
+}
+
+func TestCLILoginExchangeGrantsSignupCreditsBeforeAnonymousMerge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	cliSvc, store := newTestCLISessionService(t)
+	require.NoError(t, store.DB().Create(&model.User{ID: 42, GoogleSub: model.StringPtr("sub"), Email: "dev@example.com", Name: "Dev", InviteCode: "invite-42", Status: model.UserStatusActive}).Error)
+	appSvc := appuser.NewService(store, nil, "", nil)
+	registerCLIRoutes(api, Config{}, &fakeAuthRouteService{}, appSvc, cliSvc)
+
+	start, err := cliSvc.Start(context.Background(), clisession.StartRequest{
+		CodeChallenge:       clisessionTestS256("verifier"),
+		CodeChallengeMethod: "S256",
+	})
+	require.NoError(t, err)
+	_, _, err = cliSvc.Complete(context.Background(), start.ChallengeID, 42)
+	require.NoError(t, err)
+
+	body, err := json.Marshal(map[string]string{
+		"challenge_id":     start.ChallengeID,
+		"code_verifier":    "verifier",
+		"fingerprint_hash": "fp-login",
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/cli/login/exchange", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "ocli_sess_")
+
+	var account model.UserHostedCreditAccount
+	require.NoError(t, store.DB().First(&account, "user_id = ?", 42).Error)
+	require.Equal(t, appuser.SignupHostedCreditBonus, account.CreditBalance)
+
+	var ledger model.UserHostedCreditLedger
+	require.NoError(t, store.DB().First(&ledger, "idempotency_key = ?", "signup-hosted-credits:42").Error)
+	require.Equal(t, model.HostedCreditLedgerSourceSignupBonus, ledger.SourceType)
+	require.Equal(t, appuser.SignupHostedCreditBonus, ledger.CreditDelta)
 }

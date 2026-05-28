@@ -302,7 +302,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerPublishRoutes(api, cfg, publishService)
 	registerImageTemplateRoutes(api, adminSvc)
 	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
-	registerAuthRoutes(api, cfg, authSvc)
+	registerAuthRoutes(api, cfg, authSvc, appSvc)
 	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
 	registerRedemptionUserRoutes(api, redemptionSvc, authSvc, cliSessionSvc)
@@ -866,7 +866,11 @@ func shouldUseVisitorSecureCookie(c *gin.Context, cfg Config) bool {
 	return cfg.AppEnv == "production"
 }
 
-func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService) {
+func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, appSvcs ...*appuser.Service) {
+	var appSvc *appuser.Service
+	if len(appSvcs) > 0 {
+		appSvc = appSvcs[0]
+	}
 	login := func(c *gin.Context) {
 		returnTo := c.Query("return_to")
 		inviteCode := c.Query("invite")
@@ -878,8 +882,12 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 				httpapi.Error(c, http.StatusInternalServerError, "app mock google login is unavailable")
 				return
 			}
-			_, rawCookie, redirectTo, err := mockSvc.MockGoogleLogin(c.Request.Context(), cfg.AppGoogleMockEmail, cfg.AppGoogleMockName, returnTo)
+			user, rawCookie, redirectTo, err := mockSvc.MockGoogleLogin(c.Request.Context(), cfg.AppGoogleMockEmail, cfg.AppGoogleMockName, returnTo)
 			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
 				httpapi.Error(c, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -914,8 +922,11 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 			httpapi.Error(c, http.StatusUnauthorized, err.Error())
 			return
 		}
+		if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 		setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
-		_ = user
 		c.Redirect(http.StatusFound, returnTo)
 	}
 	api.GET("/auth/oauth2/login", login)
@@ -953,8 +964,11 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 				httpapi.Error(c, http.StatusUnauthorized, err.Error())
 				return
 			}
+			if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
 			setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
-			_ = user
 			c.Redirect(http.StatusFound, returnTo)
 		}
 		api.GET("/auth/github/login", githubLogin)
@@ -1065,6 +1079,12 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
+		}
+		if resp != nil && resp.UserID != 0 && appSvc != nil {
+			if err := appSvc.EnsureSignupHostedCredits(c.Request.Context(), resp.UserID); err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
 		}
 		if resp != nil && resp.UserID != 0 && strings.TrimSpace(req.FingerprintHash) != "" && appSvc != nil {
 			// Best-effort: merge anonymous credits from this fingerprint into the
@@ -1653,6 +1673,13 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+}
+
+func ensureSignupHostedCreditsForRoute(ctx context.Context, svc *appuser.Service, user *model.User) error {
+	if svc == nil || user == nil || user.ID == 0 {
+		return nil
+	}
+	return svc.EnsureSignupHostedCredits(ctx, user.ID)
 }
 
 func currentAdminEmail(c *gin.Context, adminSvc adminRouteService) (string, bool) {
