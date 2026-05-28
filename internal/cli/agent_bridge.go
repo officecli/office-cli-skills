@@ -155,27 +155,28 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType    string          `json:"document_type"`
-	Topic           string          `json:"topic"`
-	Prompt          string          `json:"prompt,omitempty"`
-	FilePath        string          `json:"file_path,omitempty"`
-	Payload         json.RawMessage `json:"payload,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	RuntimeMode     string          `json:"runtime_mode,omitempty"`
-	Language        string          `json:"lang,omitempty"`
-	Style           string          `json:"style,omitempty"`
-	Audience        string          `json:"audience,omitempty"`
-	OutputDir       string          `json:"out,omitempty"`
-	Ratio           string          `json:"ratio,omitempty"`
-	Size            string          `json:"size,omitempty"`
-	ReferenceImage  string          `json:"reference_image,omitempty"`
-	ReferenceImages []string        `json:"reference_images,omitempty"`
-	ImageQuality    string          `json:"image_quality,omitempty"`
-	Publish         *bool           `json:"publish,omitempty"`
-	EnableImages    *bool           `json:"enable_images,omitempty"`
-	EnableVisual    *bool           `json:"enable_visual,omitempty"`
-	FailBelow       *int            `json:"fail_below,omitempty"`
-	EmitPreview     *bool           `json:"emit_preview,omitempty"`
+	DocumentType     string          `json:"document_type"`
+	Topic            string          `json:"topic"`
+	Prompt           string          `json:"prompt,omitempty"`
+	FilePath         string          `json:"file_path,omitempty"`
+	Payload          json.RawMessage `json:"payload,omitempty"`
+	Mode             string          `json:"mode,omitempty"`
+	RuntimeMode      string          `json:"runtime_mode,omitempty"`
+	Language         string          `json:"lang,omitempty"`
+	Style            string          `json:"style,omitempty"`
+	Audience         string          `json:"audience,omitempty"`
+	OutputDir        string          `json:"out,omitempty"`
+	Ratio            string          `json:"ratio,omitempty"`
+	Size             string          `json:"size,omitempty"`
+	PromptTemplateID string          `json:"prompt_template_id,omitempty"`
+	ReferenceImage   string          `json:"reference_image,omitempty"`
+	ReferenceImages  []string        `json:"reference_images,omitempty"`
+	ImageQuality     string          `json:"image_quality,omitempty"`
+	Publish          *bool           `json:"publish,omitempty"`
+	EnableImages     *bool           `json:"enable_images,omitempty"`
+	EnableVisual     *bool           `json:"enable_visual,omitempty"`
+	FailBelow        *int            `json:"fail_below,omitempty"`
+	EmitPreview      *bool           `json:"emit_preview,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -304,6 +305,7 @@ Description:
 Supported methods:
   initialize
   capabilities/get
+  image_templates/list
   session/open
   session/close
   task/invoke
@@ -339,6 +341,13 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 		s.writeResult(req.ID, s.initializeResult(ctx))
 	case "capabilities/get":
 		s.writeResult(req.ID, s.initializeResult(ctx).Capabilities)
+	case "image_templates/list":
+		templates, err := s.app.listImagePromptTemplates(ctx, s.cfg)
+		if err != nil {
+			s.writeError(req.ID, -32000, err.Error(), nil)
+			return
+		}
+		s.writeResult(req.ID, templates)
 	case "session/open":
 		session := s.openSession()
 		s.writeResult(req.ID, session)
@@ -425,6 +434,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			"methods": []string{
 				"initialize",
 				"capabilities/get",
+				"image_templates/list",
 				"session/open",
 				"session/close",
 				"task/invoke",
@@ -458,6 +468,11 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"default_publish":   true,
 				"disable_flag":      "--no-publish",
 				"config_command":    "officecli config set-publish",
+				"templates": map[string]any{
+					"supported":    true,
+					"list_method":  "image_templates/list",
+					"invoke_field": "prompt_template_id",
+				},
 				"reference_image": map[string]any{
 					"supported":          true,
 					"max_count":          8,
@@ -510,19 +525,20 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type":    "pptx|docx|xlsx|report|img",
-					"topic":            "string",
-					"prompt":           "string",
-					"file_path":        "string (.xlsx for report)",
-					"mode":             "fast|best",
-					"runtime_mode":     "external|hosted",
-					"ratio":            "square|landscape|portrait (img only)",
-					"size":             "WxH explicit pixels, e.g. 1280x768 (img only)",
-					"reference_image":  "local path or http/https URL (img only)",
-					"reference_images": "array of paths or URLs (img only)",
-					"image_quality":    "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
-					"publish":          "boolean",
-					"emit_preview":     "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
+					"document_type":      "pptx|docx|xlsx|report|img",
+					"topic":              "string",
+					"prompt":             "string",
+					"file_path":          "string (.xlsx for report)",
+					"mode":               "fast|best",
+					"runtime_mode":       "external|hosted",
+					"ratio":              "square|landscape|portrait (img only)",
+					"size":               "WxH explicit pixels, e.g. 1280x768 (img only)",
+					"prompt_template_id": "server-managed image prompt template id (img only)",
+					"reference_image":    "local path or http/https URL (img only)",
+					"reference_images":   "array of paths or URLs (img only)",
+					"image_quality":      "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
+					"publish":            "boolean",
+					"emit_preview":       "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
 				},
 			},
 			{
@@ -586,6 +602,11 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 			"image_generation": map[string]any{
 				"provider_control": "server",
 				"ratio_values":     []string{"square", "landscape", "portrait"},
+				"templates": map[string]any{
+					"supported":    true,
+					"list_method":  "image_templates/list",
+					"invoke_field": "prompt_template_id",
+				},
 				"reference_image": map[string]any{
 					"supported":          true,
 					"max_count":          8,

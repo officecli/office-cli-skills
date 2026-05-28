@@ -8,6 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,6 +45,7 @@ type Service struct {
 	adminAllowlist     map[string]struct{}
 	hostedPricing      HostedPricingManager
 	redemption         *redemption.Service
+	imageTemplateStore imageTemplateObjectStore
 	mockData           bool
 }
 
@@ -64,6 +68,11 @@ type QuotaSources struct {
 
 type HostedPricingManager interface {
 	HostedPricingRules() []model.HostedPricingRule
+}
+
+type imageTemplateObjectStore interface {
+	PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string) error
+	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
 type CookieCodec interface {
@@ -97,6 +106,10 @@ func NewService(store *sqlstore.Store, redis *redisstore.Store, adminPassword st
 		adminAllowlist:     allowlist,
 		hostedPricing:      hostedPricingManager,
 	}
+}
+
+func (s *Service) SetImageTemplateObjectStore(store imageTemplateObjectStore) {
+	s.imageTemplateStore = store
 }
 
 func (s *Service) ResolveSession(raw string) (string, error) {
@@ -752,6 +765,246 @@ func (s *Service) UpdateHostedCreditPack(ctx context.Context, id uint64, req Ups
 	}
 	_ = s.store.CreateAuditLog(ctx, "hosted_pricing.pack.update", "hosted_credit_pack", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
 	return updated, nil
+}
+
+func (s *Service) ListImagePromptTemplates(ctx context.Context, enabledOnly bool, basePath string) ([]ImagePromptTemplateResponse, error) {
+	items, err := s.store.ListImagePromptTemplates(ctx, enabledOnly)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ImagePromptTemplateResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, imagePromptTemplateResponse(item, basePath))
+	}
+	return out, nil
+}
+
+func (s *Service) ListAdminImagePromptTemplates(ctx context.Context, basePath string) ([]AdminImagePromptTemplateResponse, error) {
+	items, err := s.store.ListImagePromptTemplates(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AdminImagePromptTemplateResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, AdminImagePromptTemplateResponse{
+			ImagePromptTemplateResponse: imagePromptTemplateResponse(item, basePath),
+			PromptPreset:                item.PromptPreset,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) CreateImagePromptTemplate(ctx context.Context, req UpsertImagePromptTemplateRequest) (*AdminImagePromptTemplateResponse, error) {
+	item, err := imagePromptTemplateFromRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.CreateImagePromptTemplate(ctx, &item); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.create", "image_prompt_template", fmt.Sprintf("%d", item.ID), sqlstore.JSONString(item))
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(item, ""), PromptPreset: item.PromptPreset}
+	return &resp, nil
+}
+
+func (s *Service) UpdateImagePromptTemplate(ctx context.Context, id uint64, req UpsertImagePromptTemplateRequest) (*AdminImagePromptTemplateResponse, error) {
+	item, err := imagePromptTemplateFromRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := s.store.UpdateImagePromptTemplate(ctx, id, map[string]any{
+		"slug":          item.Slug,
+		"title":         item.Title,
+		"description":   item.Description,
+		"prompt_preset": item.PromptPreset,
+		"sort_order":    item.SortOrder,
+		"enabled":       item.Enabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.update", "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	return &resp, nil
+}
+
+func (s *Service) SetImagePromptTemplateEnabled(ctx context.Context, id uint64, enabled bool) (*AdminImagePromptTemplateResponse, error) {
+	updated, err := s.store.UpdateImagePromptTemplate(ctx, id, map[string]any{"enabled": enabled})
+	if err != nil {
+		return nil, err
+	}
+	action := "image_template.disable"
+	if enabled {
+		action = "image_template.enable"
+	}
+	_ = s.store.CreateAuditLog(ctx, action, "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	return &resp, nil
+}
+
+func (s *Service) DeleteImagePromptTemplate(ctx context.Context, id uint64) error {
+	if err := s.store.DeleteImagePromptTemplate(ctx, id); err != nil {
+		return err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.delete", "image_prompt_template", fmt.Sprintf("%d", id), "{}")
+	return nil
+}
+
+func (s *Service) UploadImagePromptTemplateThumbnail(ctx context.Context, id uint64, fileName, contentType string, reader io.Reader, size int64) (*AdminImagePromptTemplateResponse, error) {
+	if s.imageTemplateStore == nil {
+		return nil, fmt.Errorf("image template object store unavailable")
+	}
+	if reader == nil || size <= 0 {
+		return nil, fmt.Errorf("thumbnail file is required")
+	}
+	contentType = normalizeImageTemplateContentType(fileName, contentType)
+	if !allowedImageTemplateContentType(contentType) {
+		return nil, fmt.Errorf("thumbnail must be png, jpg, jpeg, or webp")
+	}
+	if _, err := s.store.GetImagePromptTemplate(ctx, id); err != nil {
+		return nil, err
+	}
+	ext := strings.ToLower(filepath.Ext(fileName))
+	if ext == "" {
+		exts, _ := mime.ExtensionsByType(contentType)
+		if len(exts) > 0 {
+			ext = exts[0]
+		}
+	}
+	key := fmt.Sprintf("image-templates/%d/thumbnail/%d%s", id, time.Now().UnixNano(), ext)
+	if err := s.imageTemplateStore.PutObject(ctx, key, reader, size, contentType); err != nil {
+		return nil, err
+	}
+	updated, err := s.store.UpdateImagePromptTemplate(ctx, id, map[string]any{
+		"thumbnail_storage_key":  key,
+		"thumbnail_content_type": contentType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.thumbnail.upload", "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	return &resp, nil
+}
+
+func (s *Service) ReadImagePromptTemplateThumbnail(ctx context.Context, id uint64) (io.ReadCloser, string, error) {
+	if s.imageTemplateStore == nil {
+		return nil, "", fmt.Errorf("image template object store unavailable")
+	}
+	item, err := s.store.GetImagePromptTemplate(ctx, id)
+	if err != nil {
+		return nil, "", err
+	}
+	if strings.TrimSpace(item.ThumbnailStorageKey) == "" {
+		return nil, "", fmt.Errorf("thumbnail not found")
+	}
+	body, err := s.imageTemplateStore.GetObject(ctx, item.ThumbnailStorageKey)
+	if err != nil {
+		return nil, "", err
+	}
+	contentType := strings.TrimSpace(item.ThumbnailContentType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	return body, contentType, nil
+}
+
+func (s *Service) ComposeImagePromptTemplate(ctx context.Context, id uint64, userPrompt string) (*ComposeImagePromptTemplateResponse, error) {
+	item, err := s.store.GetImagePromptTemplate(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !item.Enabled {
+		return nil, fmt.Errorf("image template is disabled")
+	}
+	prompt := composeImagePrompt(item.PromptPreset, userPrompt)
+	if prompt == "" {
+		return nil, fmt.Errorf("image template prompt is empty")
+	}
+	return &ComposeImagePromptTemplateResponse{Prompt: prompt}, nil
+}
+
+func imagePromptTemplateFromRequest(req UpsertImagePromptTemplateRequest) (model.ImagePromptTemplate, error) {
+	item := model.ImagePromptTemplate{
+		Slug:         strings.TrimSpace(req.Slug),
+		Title:        strings.TrimSpace(req.Title),
+		Description:  strings.TrimSpace(req.Description),
+		PromptPreset: strings.TrimSpace(req.PromptPreset),
+		SortOrder:    req.SortOrder,
+		Enabled:      req.Enabled,
+	}
+	if item.Slug == "" {
+		return item, fmt.Errorf("slug is required")
+	}
+	if item.Title == "" {
+		return item, fmt.Errorf("title is required")
+	}
+	if item.PromptPreset == "" {
+		return item, fmt.Errorf("prompt_preset is required")
+	}
+	return item, nil
+}
+
+func imagePromptTemplateResponse(item model.ImagePromptTemplate, basePath string) ImagePromptTemplateResponse {
+	thumbnailURL := ""
+	if strings.TrimSpace(item.ThumbnailStorageKey) != "" {
+		prefix := strings.TrimRight(strings.TrimSpace(basePath), "/")
+		if prefix == "" {
+			prefix = "/api/image-templates"
+		}
+		thumbnailURL = fmt.Sprintf("%s/%d/thumbnail", prefix, item.ID)
+	}
+	return ImagePromptTemplateResponse{
+		ID:           item.ID,
+		Slug:         item.Slug,
+		Title:        item.Title,
+		Description:  item.Description,
+		ThumbnailURL: thumbnailURL,
+		SortOrder:    item.SortOrder,
+		Enabled:      item.Enabled,
+		CreatedAt:    formatOptionalTime(item.CreatedAt),
+		UpdatedAt:    formatOptionalTime(item.UpdatedAt),
+	}
+}
+
+func composeImagePrompt(preset, userPrompt string) string {
+	preset = strings.TrimSpace(preset)
+	userPrompt = strings.TrimSpace(userPrompt)
+	switch {
+	case preset == "":
+		return userPrompt
+	case userPrompt == "":
+		return preset
+	default:
+		return preset + "\n\nUser prompt:\n" + userPrompt
+	}
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.Format(time.RFC3339)
+}
+
+func normalizeImageTemplateContentType(fileName, contentType string) string {
+	contentType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if contentType != "" && contentType != "application/octet-stream" {
+		return contentType
+	}
+	if guessed := mime.TypeByExtension(strings.ToLower(filepath.Ext(fileName))); guessed != "" {
+		return strings.ToLower(strings.TrimSpace(strings.Split(guessed, ";")[0]))
+	}
+	return contentType
+}
+
+func allowedImageTemplateContentType(contentType string) bool {
+	switch strings.ToLower(strings.TrimSpace(contentType)) {
+	case "image/png", "image/jpeg", "image/webp":
+		return true
+	default:
+		return false
+	}
 }
 
 func hostedModelPricingConfigFromRequest(req UpsertHostedModelPricingConfigRequest, creditsPerUSD int) model.HostedModelPricingConfig {

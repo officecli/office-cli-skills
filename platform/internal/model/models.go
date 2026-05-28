@@ -613,6 +613,22 @@ type HostedModelPricingConfig struct {
 
 func (HostedModelPricingConfig) TableName() string { return "hosted_model_pricing_configs" }
 
+type ImagePromptTemplate struct {
+	ID                   uint64    `gorm:"primaryKey" json:"id"`
+	Slug                 string    `gorm:"column:slug;size:128;uniqueIndex;not null" json:"slug"`
+	Title                string    `gorm:"column:title;size:128;not null" json:"title"`
+	Description          string    `gorm:"column:description;size:512;not null;default:''" json:"description"`
+	PromptPreset         string    `gorm:"column:prompt_preset;type:text;not null" json:"prompt_preset,omitempty"`
+	ThumbnailStorageKey  string    `gorm:"column:thumbnail_storage_key;size:512;not null;default:''" json:"thumbnail_storage_key,omitempty"`
+	ThumbnailContentType string    `gorm:"column:thumbnail_content_type;size:128;not null;default:''" json:"thumbnail_content_type,omitempty"`
+	SortOrder            int       `gorm:"column:sort_order;index;not null;default:0" json:"sort_order"`
+	Enabled              bool      `gorm:"column:enabled;index;not null" json:"enabled"`
+	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt            time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (ImagePromptTemplate) TableName() string { return "image_prompt_templates" }
+
 type HostedPricingRule struct {
 	ID                         uint64    `gorm:"primaryKey" json:"id,omitempty"`
 	DocumentProfile            string    `gorm:"column:document_profile;size:64;index;not null" json:"document_profile"`

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.104 - 2026-05-28
+
+### Added
+
+- Added server-managed standalone image prompt templates: platform/admin can create, edit, enable/disable, delete, and upload thumbnails for templates; public clients can list enabled templates, fetch thumbnails, and compose a selected template with a user prompt.
+- Extended `officecli agent-bridge` with `image_templates/list` and `office.generate` `prompt_template_id` support so OfficeDex can show live template cards and submit only the selected server template id.
+
+
 ## 0.2.103 - 2026-05-27
 
 ### Fixed

@@ -1620,3 +1620,80 @@ func TestAgentBridgeCancelAcceptsLegacyAndRejectsGarbage(t *testing.T) {
 		t.Fatalf("bridge exited with error: %v", err)
 	}
 }
+
+func TestBuildGenerateJobFromRequestCarriesPromptTemplateID(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	req := bridgeInvokeParams{
+		Tool: bridgeToolOfficeGenerate,
+		Args: bridgeInvokeArgs{
+			DocumentType:     "img",
+			Topic:            "poster",
+			Prompt:           "with a red bicycle",
+			PromptTemplateID: "template-liblib-style",
+		},
+	}
+	job, err := app.buildGenerateJobFromRequest(Config{}, req)
+	if err != nil {
+		t.Fatalf("buildGenerateJobFromRequest: %v", err)
+	}
+	if job.PromptTemplateID != "template-liblib-style" {
+		t.Fatalf("PromptTemplateID = %q", job.PromptTemplateID)
+	}
+}
+
+func TestListImagePromptTemplatesFetchesPlatformData(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/image-templates" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":7,"slug":"poster","title":"Poster","description":"Poster style","thumbnail_url":"/api/image-templates/7/thumbnail","sort_order":10,"enabled":true}]}`)
+	}))
+	defer server.Close()
+
+	items, err := app.listImagePromptTemplates(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL}})
+	if err != nil {
+		t.Fatalf("listImagePromptTemplates: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != 7 || items[0].Slug != "poster" || items[0].ThumbnailURL != server.URL+"/api/image-templates/7/thumbnail" {
+		t.Fatalf("unexpected templates: %#v", items)
+	}
+}
+
+func TestApplyImagePromptTemplateComposesPrompt(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/image-templates/7/compose" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		var req struct {
+			Prompt string `json:"prompt"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.Prompt != "red bicycle" {
+			t.Fatalf("prompt = %q", req.Prompt)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"prompt":"preset prompt\n\nUser prompt:\nred bicycle"}}`)
+	}))
+	defer server.Close()
+
+	job, err := app.applyImagePromptTemplate(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL}}, GenerateJob{
+		DocumentType:     engine.DocumentTypeIMG,
+		Prompt:           "red bicycle",
+		OriginalPrompt:   "red bicycle",
+		PromptTemplateID: "7",
+	})
+	if err != nil {
+		t.Fatalf("applyImagePromptTemplate: %v", err)
+	}
+	if job.Prompt != "preset prompt\n\nUser prompt:\nred bicycle" {
+		t.Fatalf("Prompt = %q", job.Prompt)
+	}
+	if job.OriginalPrompt != "red bicycle" {
+		t.Fatalf("OriginalPrompt = %q", job.OriginalPrompt)
+	}
+}

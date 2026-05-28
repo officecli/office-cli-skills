@@ -211,6 +211,7 @@ func New() (*Application, error) {
 	}, lic)
 	adminProvider := newAdminOAuthProvider(cfg)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	adminSvc.SetImageTemplateObjectStore(previewObjects)
 	adminSvc.UseMockData(cfg.AdminMockDataEnabled && cfg.AppEnv == "development")
 	redemptionSvc := redemptionsvc.NewService(dbStore)
 	adminSvc.SetRedemptionService(redemptionSvc)
@@ -299,6 +300,7 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
 	registerHostedLLMRoutes(api, hostedSvc)
 	registerPublishRoutes(api, cfg, publishService)
+	registerImageTemplateRoutes(api, adminSvc)
 	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
 	registerAuthRoutes(api, cfg, authSvc)
 	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
@@ -421,6 +423,183 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			return
 		}
 		c.JSON(http.StatusOK, result)
+	})
+}
+
+func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service) {
+	if adminSvc == nil {
+		return
+	}
+
+	const maxThumbnailBytes = 10 << 20
+
+	parseID := func(c *gin.Context) (uint64, bool) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			httpapi.Error(c, http.StatusBadRequest, "invalid image template id")
+			return 0, false
+		}
+		return id, true
+	}
+	writeTemplateError := func(c *gin.Context, err error) {
+		status := http.StatusBadRequest
+		errMsg := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(errMsg, "not found"), strings.Contains(errMsg, "record not found"):
+			status = http.StatusNotFound
+		case strings.Contains(errMsg, "too large"):
+			status = http.StatusRequestEntityTooLarge
+		case strings.Contains(errMsg, "unavailable"):
+			status = http.StatusServiceUnavailable
+		}
+		httpapi.Error(c, status, err.Error())
+	}
+
+	api.GET("/image-templates", func(c *gin.Context) {
+		data, err := adminSvc.ListImagePromptTemplates(c.Request.Context(), true, "/api/image-templates")
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	api.GET("/image-templates/:id/thumbnail", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		body, contentType, err := adminSvc.ReadImagePromptTemplateThumbnail(c.Request.Context(), id)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		defer body.Close()
+		c.Header("Cache-Control", "public, max-age=300")
+		c.DataFromReader(http.StatusOK, -1, contentType, body, nil)
+	})
+	api.POST("/image-templates/:id/compose", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var req admin.ComposeImagePromptTemplateRequest
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		data, err := adminSvc.ComposeImagePromptTemplate(c.Request.Context(), id, req.Prompt)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+
+	protected := api.Group("/admin/image-templates")
+	protected.Use(httpapi.RequireAdmin(adminSvc.ResolveSession, "cop_admin_session"))
+	protected.GET("", func(c *gin.Context) {
+		data, err := adminSvc.ListAdminImagePromptTemplates(c.Request.Context(), "/api/image-templates")
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("", func(c *gin.Context) {
+		var req admin.UpsertImagePromptTemplateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateImagePromptTemplate(c.Request.Context(), req)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/:id", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var req admin.UpsertImagePromptTemplateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateImagePromptTemplate(c.Request.Context(), id, req)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/:id/enable", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		data, err := adminSvc.SetImagePromptTemplateEnabled(c.Request.Context(), id, true)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/:id/disable", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		data, err := adminSvc.SetImagePromptTemplateEnabled(c.Request.Context(), id, false)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.DELETE("/:id", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		if err := adminSvc.DeleteImagePromptTemplate(c.Request.Context(), id); err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
+	})
+	protected.POST("/:id/thumbnail", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxThumbnailBytes+1<<20)
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "file is required")
+			return
+		}
+		defer file.Close()
+		if header.Size > maxThumbnailBytes {
+			httpapi.Error(c, http.StatusRequestEntityTooLarge, "thumbnail is too large")
+			return
+		}
+		data, err := adminSvc.UploadImagePromptTemplateThumbnail(
+			c.Request.Context(),
+			id,
+			filepath.Base(header.Filename),
+			header.Header.Get("Content-Type"),
+			file,
+			header.Size,
+		)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
 	})
 }
 

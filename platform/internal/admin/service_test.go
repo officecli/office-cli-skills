@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -20,6 +22,31 @@ type fakeCodec struct{}
 
 func (fakeCodec) Encode(v string) (string, error) { return v, nil }
 func (fakeCodec) Decode(v string) (string, error) { return v, nil }
+
+type fakeImageTemplateObjectStore struct {
+	objects      map[string][]byte
+	contentTypes map[string]string
+}
+
+func (f *fakeImageTemplateObjectStore) PutObject(_ context.Context, key string, reader io.Reader, _ int64, contentType string) error {
+	if f.objects == nil {
+		f.objects = map[string][]byte{}
+	}
+	if f.contentTypes == nil {
+		f.contentTypes = map[string]string{}
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	f.objects[key] = data
+	f.contentTypes[key] = contentType
+	return nil
+}
+
+func (f *fakeImageTemplateObjectStore) GetObject(_ context.Context, key string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(f.objects[key])), nil
+}
 
 type memoryRedis struct{ data map[string]any }
 
@@ -373,6 +400,70 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	var auditCount int64
 	require.NoError(t, db.Model(&model.AdminAuditLog{}).Count(&auditCount).Error)
 	require.Equal(t, int64(5), auditCount)
+}
+
+func TestImagePromptTemplatesServiceCRUDThumbnailAndCompose(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_service?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+	objectStore := &fakeImageTemplateObjectStore{}
+	svc.SetImageTemplateObjectStore(objectStore)
+
+	created, err := svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug:         "poster",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "cinematic poster style",
+		SortOrder:    10,
+		Enabled:      true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "poster", created.Slug)
+	require.Equal(t, "cinematic poster style", created.PromptPreset)
+
+	publicItems, err := svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 1)
+	require.Empty(t, publicItems[0].ThumbnailURL)
+
+	composed, err := svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
+	require.NoError(t, err)
+	require.Contains(t, composed.Prompt, "cinematic poster style")
+	require.Contains(t, composed.Prompt, "red bicycle")
+
+	withThumbnail, err := svc.UploadImagePromptTemplateThumbnail(context.Background(), created.ID, "thumb.png", "application/octet-stream", bytes.NewReader([]byte("png")), 3)
+	require.NoError(t, err)
+	require.Contains(t, withThumbnail.ThumbnailURL, "/thumbnail")
+	require.Len(t, objectStore.objects, 1)
+	var storageKey string
+	for key := range objectStore.objects {
+		storageKey = key
+	}
+	require.Equal(t, "image/png", objectStore.contentTypes[storageKey])
+
+	publicItems, err = svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 1)
+	require.Contains(t, publicItems[0].ThumbnailURL, "/api/image-templates/")
+	require.Contains(t, publicItems[0].ThumbnailURL, "/thumbnail")
+
+	body, contentType, err := svc.ReadImagePromptTemplateThumbnail(context.Background(), created.ID)
+	require.NoError(t, err)
+	defer body.Close()
+	require.Equal(t, "image/png", contentType)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("png"), data)
+
+	disabled, err := svc.SetImagePromptTemplateEnabled(context.Background(), created.ID, false)
+	require.NoError(t, err)
+	require.False(t, disabled.Enabled)
+	_, err = svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "disabled")
 }
 
 func ptrInt64(value int64) *int64 {

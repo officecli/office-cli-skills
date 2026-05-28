@@ -1487,6 +1487,39 @@ func (s *Store) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, v
 	return &config, nil
 }
 
+func (s *Store) ListImagePromptTemplates(ctx context.Context, enabledOnly bool) ([]model.ImagePromptTemplate, error) {
+	query := s.db.WithContext(ctx).Model(&model.ImagePromptTemplate{})
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
+	}
+	var items []model.ImagePromptTemplate
+	err := query.Order("sort_order asc, id asc").Find(&items).Error
+	return items, err
+}
+
+func (s *Store) GetImagePromptTemplate(ctx context.Context, id uint64) (*model.ImagePromptTemplate, error) {
+	var item model.ImagePromptTemplate
+	if err := s.db.WithContext(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Store) CreateImagePromptTemplate(ctx context.Context, item *model.ImagePromptTemplate) error {
+	return s.db.WithContext(ctx).Create(item).Error
+}
+
+func (s *Store) UpdateImagePromptTemplate(ctx context.Context, id uint64, values map[string]any) (*model.ImagePromptTemplate, error) {
+	if err := s.db.WithContext(ctx).Model(&model.ImagePromptTemplate{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	return s.GetImagePromptTemplate(ctx, id)
+}
+
+func (s *Store) DeleteImagePromptTemplate(ctx context.Context, id uint64) error {
+	return s.db.WithContext(ctx).Delete(&model.ImagePromptTemplate{}, id).Error
+}
+
 func (s *Store) ensureDefaultHostedModelPricingConfigs(ctx context.Context) error {
 	defaults := []model.HostedModelPricingConfig{
 		{

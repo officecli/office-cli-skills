@@ -112,6 +112,7 @@ type GenerateJob struct {
 	EnableImages          bool
 	ImageRatio            string
 	ImageSize             string
+	PromptTemplateID      string
 	ReferenceImageSources []string
 	ReferenceImages       []engine.ImageReference
 	LocalPreview          bool
@@ -148,6 +149,16 @@ type GenerateResult struct {
 	ConfigPath             string   `json:"config_path,omitempty"`
 	LicenseEnabled         bool     `json:"license_enabled"`
 	PublishedSkippedReason string   `json:"published_skipped_reason,omitempty"`
+}
+
+type ImagePromptTemplate struct {
+	ID           uint64 `json:"id"`
+	Slug         string `json:"slug"`
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	SortOrder    int    `json:"sort_order"`
+	Enabled      bool   `json:"enabled"`
 }
 
 type ReviewJob struct {

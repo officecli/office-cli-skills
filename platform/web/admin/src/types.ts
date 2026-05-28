@@ -228,6 +228,19 @@ export interface HostedBillingConfig {
   packs: HostedCreditPack[]
 }
 
+export interface ImagePromptTemplate {
+  id?: number
+  slug: string
+  title: string
+  description: string
+  prompt_preset: string
+  thumbnail_url?: string
+  sort_order: number
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
 export interface RewardGrant {
   id: number
   user_id: number

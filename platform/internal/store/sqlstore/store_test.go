@@ -1109,3 +1109,24 @@ func TestListUserHostedCreditLedgerFiltersZeroDeltaNoise(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, len(all), "include_zero_delta=true should return all rows")
 }
+
+func TestImagePromptTemplatesListFiltersEnabledAndOrders(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_templates?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}))
+	store := NewWithDB(db)
+
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "disabled", Title: "Disabled", PromptPreset: "disabled prompt", SortOrder: 1, Enabled: false}))
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "second", Title: "Second", PromptPreset: "second prompt", SortOrder: 20, Enabled: true}))
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "first", Title: "First", PromptPreset: "first prompt", SortOrder: 10, Enabled: true}))
+
+	items, err := store.ListImagePromptTemplates(context.Background(), true)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, "first", items[0].Slug)
+	require.Equal(t, "second", items[1].Slug)
+
+	all, err := store.ListImagePromptTemplates(context.Background(), false)
+	require.NoError(t, err)
+	require.Len(t, all, 3)
+}

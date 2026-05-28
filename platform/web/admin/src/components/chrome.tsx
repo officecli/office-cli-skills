@@ -1,4 +1,4 @@
-import { Activity, BookOpen, CreditCard, Funnel, Gift, KeyRound, Layers3, LogOut, ReceiptText, ShieldCheck, TerminalSquare, Ticket, Users, SlidersHorizontal } from 'lucide-react'
+import { Activity, BookOpen, CreditCard, Funnel, Gift, Image, KeyRound, Layers3, LogOut, ReceiptText, ShieldCheck, TerminalSquare, Ticket, Users, SlidersHorizontal } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Button, Layout, Space, Tag, Typography } from 'antd'
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/operations/funnel', label: 'Operations / Funnel', icon: Funnel },
   { to: '/growth', label: 'Growth', icon: Gift },
   { to: '/hosted-pricing', label: 'Hosted Pricing', icon: SlidersHorizontal },
+  { to: '/image-templates', label: 'Image Templates', icon: Image },
   { to: '/api-keys', label: 'API Keys', icon: KeyRound },
   { to: '/users', label: 'Users', icon: Users },
   { to: '/orders', label: 'Orders', icon: CreditCard },
