@@ -428,6 +428,7 @@ func TestImagePromptTemplatesServiceCRUDThumbnailAndCompose(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, publicItems, 1)
 	require.Empty(t, publicItems[0].ThumbnailURL)
+	require.Equal(t, "cinematic poster style", publicItems[0].PromptPreset)
 
 	composed, err := svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
 	require.NoError(t, err)
@@ -449,6 +450,7 @@ func TestImagePromptTemplatesServiceCRUDThumbnailAndCompose(t *testing.T) {
 	require.Len(t, publicItems, 1)
 	require.Contains(t, publicItems[0].ThumbnailURL, "/api/image-templates/")
 	require.Contains(t, publicItems[0].ThumbnailURL, "/thumbnail")
+	require.Equal(t, "cinematic poster style", publicItems[0].PromptPreset)
 
 	body, contentType, err := svc.ReadImagePromptTemplateThumbnail(context.Background(), created.ID)
 	require.NoError(t, err)

@@ -1648,7 +1648,7 @@ func TestListImagePromptTemplatesFetchesPlatformData(t *testing.T) {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"data":[{"id":7,"slug":"poster","title":"Poster","description":"Poster style","thumbnail_url":"/api/image-templates/7/thumbnail","sort_order":10,"enabled":true}]}`)
+		_, _ = io.WriteString(w, `{"data":[{"id":7,"slug":"poster","title":"Poster","description":"Poster style","prompt_preset":"cinematic preset","thumbnail_url":"/api/image-templates/7/thumbnail","sort_order":10,"enabled":true}]}`)
 	}))
 	defer server.Close()
 
@@ -1658,6 +1658,9 @@ func TestListImagePromptTemplatesFetchesPlatformData(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ID != 7 || items[0].Slug != "poster" || items[0].ThumbnailURL != server.URL+"/api/image-templates/7/thumbnail" {
 		t.Fatalf("unexpected templates: %#v", items)
+	}
+	if items[0].PromptPreset != "cinematic preset" {
+		t.Fatalf("PromptPreset = %q", items[0].PromptPreset)
 	}
 }
 

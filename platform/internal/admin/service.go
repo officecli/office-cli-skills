@@ -788,7 +788,6 @@ func (s *Service) ListAdminImagePromptTemplates(ctx context.Context, basePath st
 	for _, item := range items {
 		out = append(out, AdminImagePromptTemplateResponse{
 			ImagePromptTemplateResponse: imagePromptTemplateResponse(item, basePath),
-			PromptPreset:                item.PromptPreset,
 		})
 	}
 	return out, nil
@@ -803,7 +802,7 @@ func (s *Service) CreateImagePromptTemplate(ctx context.Context, req UpsertImage
 		return nil, err
 	}
 	_ = s.store.CreateAuditLog(ctx, "image_template.create", "image_prompt_template", fmt.Sprintf("%d", item.ID), sqlstore.JSONString(item))
-	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(item, ""), PromptPreset: item.PromptPreset}
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(item, "")}
 	return &resp, nil
 }
 
@@ -824,7 +823,7 @@ func (s *Service) UpdateImagePromptTemplate(ctx context.Context, id uint64, req 
 		return nil, err
 	}
 	_ = s.store.CreateAuditLog(ctx, "image_template.update", "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
-	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, "")}
 	return &resp, nil
 }
 
@@ -838,7 +837,7 @@ func (s *Service) SetImagePromptTemplateEnabled(ctx context.Context, id uint64, 
 		action = "image_template.enable"
 	}
 	_ = s.store.CreateAuditLog(ctx, action, "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
-	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, "")}
 	return &resp, nil
 }
 
@@ -883,7 +882,7 @@ func (s *Service) UploadImagePromptTemplateThumbnail(ctx context.Context, id uin
 		return nil, err
 	}
 	_ = s.store.CreateAuditLog(ctx, "image_template.thumbnail.upload", "image_prompt_template", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
-	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, ""), PromptPreset: updated.PromptPreset}
+	resp := AdminImagePromptTemplateResponse{ImagePromptTemplateResponse: imagePromptTemplateResponse(*updated, "")}
 	return &resp, nil
 }
 
@@ -959,6 +958,7 @@ func imagePromptTemplateResponse(item model.ImagePromptTemplate, basePath string
 		Slug:         item.Slug,
 		Title:        item.Title,
 		Description:  item.Description,
+		PromptPreset: item.PromptPreset,
 		ThumbnailURL: thumbnailURL,
 		SortOrder:    item.SortOrder,
 		Enabled:      item.Enabled,

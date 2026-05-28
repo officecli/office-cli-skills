@@ -88,7 +88,7 @@ func TestImageTemplatePublicRoutesListThumbnailAndCompose(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/image-templates", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	require.NotContains(t, rec.Body.String(), "prompt_preset")
+	require.Contains(t, rec.Body.String(), `"prompt_preset":"cinematic poster preset"`)
 	require.Contains(t, rec.Body.String(), "Poster")
 	require.NotContains(t, rec.Body.String(), "Disabled")
 	require.Contains(t, rec.Body.String(), "/api/image-templates/")

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.105 - 2026-05-28
+
+### Changed
+
+- Exposed image template prompt presets in the public template list so clients can insert template text for user editing instead of hiding full template composition behind a selected template id.
+- Kept server-side template composition available for older clients while allowing OfficeDex to submit only the final edited prompt.
+
 ## 0.2.104 - 2026-05-28
 
 ### Added

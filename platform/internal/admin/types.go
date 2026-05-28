@@ -138,6 +138,7 @@ type ImagePromptTemplateResponse struct {
 	Slug         string `json:"slug"`
 	Title        string `json:"title"`
 	Description  string `json:"description"`
+	PromptPreset string `json:"prompt_preset,omitempty"`
 	ThumbnailURL string `json:"thumbnail_url,omitempty"`
 	SortOrder    int    `json:"sort_order"`
 	Enabled      bool   `json:"enabled"`
@@ -147,7 +148,6 @@ type ImagePromptTemplateResponse struct {
 
 type AdminImagePromptTemplateResponse struct {
 	ImagePromptTemplateResponse
-	PromptPreset string `json:"prompt_preset"`
 }
 
 type UpsertImagePromptTemplateRequest struct {
