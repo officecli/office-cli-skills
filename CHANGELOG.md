@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.106 - 2026-05-29
+
+### Added
+
+- Added structured fill-in slots to image prompt templates: platform/admin can define per-template slots (key, label, example, default value, help text, required, multiline), persisted as an additive nullable JSON column; public and admin template responses serialize slots, and `officecli agent-bridge` `image_templates/list` passes them through to clients. The legacy `prompt_template_id` server-side composition path is unchanged and ignores slots.
+
+### Changed
+
+- Moved the signup hosted-credit grant into login completion paths so app and CLI users receive the account-level bonus without depending on overview access; overview remains a fallback, with a replay-safe backfill migration for active users missing the signup ledger.
+
 ## 0.2.105 - 2026-05-28
 
 ### Changed
