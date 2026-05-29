@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/internal/httpclient"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/httpclient"
 )
 
 type Config struct {
@@ -704,6 +704,18 @@ type internalClient struct {
 	imageAccess                  *InternalImageAccess
 	accountHostedFingerprintHash string
 	client                       *http.Client
+
+	lastCreditsCharged int
+	lastCreditBalance  int
+	lastCreditsValid   bool
+}
+
+// LastCompletionCredits returns the credits charged and balance from the most
+// recent non-image completion (CompleteText / CompleteJSON / CompleteStructured).
+// The boolean indicates whether the values are valid (i.e. the caller actually
+// performed a completion through a hosted internal client that returned credit fields).
+func (c *internalClient) LastCompletionCredits() (charged int, balance int, valid bool) {
+	return c.lastCreditsCharged, c.lastCreditBalance, c.lastCreditsValid
 }
 
 func (c *internalClient) hostedFingerprintHash() string {
@@ -820,7 +832,9 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 		return "", err
 	}
 	var resp struct {
-		Content string `json:"content"`
+		Content        string `json:"content"`
+		CreditBalance  *int   `json:"credit_balance,omitempty"`
+		CreditsCharged *int   `json:"credits_charged,omitempty"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return "", llmInvalidJSONResponseError(body, err)
@@ -828,6 +842,13 @@ func (c *internalClient) complete(ctx context.Context, kind string, messages []e
 	if resp.Content == "" {
 		return "", fmt.Errorf("internal completion response is empty")
 	}
+	if resp.CreditsCharged != nil {
+		c.lastCreditsCharged = *resp.CreditsCharged
+	}
+	if resp.CreditBalance != nil {
+		c.lastCreditBalance = *resp.CreditBalance
+	}
+	c.lastCreditsValid = resp.CreditsCharged != nil || resp.CreditBalance != nil
 	return resp.Content, nil
 }
 

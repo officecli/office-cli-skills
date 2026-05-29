@@ -17,7 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 func TestBuildTUIGenerateJobDefaultsNaturalLanguageToPPTX(t *testing.T) {

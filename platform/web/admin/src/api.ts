@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreditLedgerEntry, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreditLedgerEntry, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, ImagePromptTemplate, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -15,6 +15,25 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+  })
+
+  if (response.status === 401) {
+    throw new Error('UNAUTHORIZED')
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: response.statusText }))
+    throw new ApiError(payload.error || response.statusText, response.status)
+  }
+
+  const payload = (await response.json()) as Envelope<T>
+  return payload.data
+}
+
+async function upload<T>(url: string, form: FormData): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
   })
 
   if (response.status === 401) {
@@ -62,6 +81,17 @@ export const api = {
   updateHostedPricingRule: (id: number, payload: HostedPricingRule) => request<HostedPricingRule>(`/api/admin/hosted-pricing-rules/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   createHostedCreditPack: (payload: HostedCreditPack) => request<HostedCreditPack>('/api/admin/hosted-credit-packs', { method: 'POST', body: JSON.stringify(payload) }),
   updateHostedCreditPack: (id: number, payload: HostedCreditPack) => request<HostedCreditPack>(`/api/admin/hosted-credit-packs/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  imageTemplates: () => request<ImagePromptTemplate[]>('/api/admin/image-templates'),
+  createImageTemplate: (payload: ImagePromptTemplate) => request<ImagePromptTemplate>('/api/admin/image-templates', { method: 'POST', body: JSON.stringify(payload) }),
+  updateImageTemplate: (id: number, payload: ImagePromptTemplate) => request<ImagePromptTemplate>(`/api/admin/image-templates/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  enableImageTemplate: (id: number) => request<ImagePromptTemplate>(`/api/admin/image-templates/${id}/enable`, { method: 'POST' }),
+  disableImageTemplate: (id: number) => request<ImagePromptTemplate>(`/api/admin/image-templates/${id}/disable`, { method: 'POST' }),
+  deleteImageTemplate: (id: number) => request<{ success: boolean }>(`/api/admin/image-templates/${id}`, { method: 'DELETE' }),
+  uploadImageTemplateThumbnail: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return upload<ImagePromptTemplate>(`/api/admin/image-templates/${id}/thumbnail`, form)
+  },
   listRedemptionCodes: (params: URLSearchParams) => request<RedemptionCodeListResponse>(`/api/admin/redemption-codes?${params.toString()}`),
   getRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}`),
   createRedemptionCode: (payload: CreateRedemptionCodeRequest) => request<RedemptionCode>('/api/admin/redemption-codes', { method: 'POST', body: JSON.stringify(payload) }),

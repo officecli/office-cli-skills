@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,10 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/admin"
-	"github.com/officecli/officecli-internal/platform/internal/auth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/admin"
+	"github.com/officecli/officecli/platform/internal/appuser"
+	"github.com/officecli/officecli/platform/internal/auth"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeAuthRouteService struct {
@@ -347,6 +349,50 @@ func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T)
 	if !strings.Contains(cookie, "Domain=officecli.io") {
 		t.Fatalf("Set-Cookie = %q", cookie)
 	}
+}
+
+func TestRegisterAuthRoutesCallbackGrantsSignupCreditsBeforeSettingCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	authSvc := &fakeAuthRouteService{
+		handleUser:     &model.User{ID: 42, Email: "dev@example.com", Status: model.UserStatusActive},
+		handleCookie:   "encoded-app-cookie",
+		handleReturnTo: "/app",
+	}
+	store := &overviewRouteStore{user: &model.User{ID: 42, InviteCode: "invite-42"}}
+	appSvc := appuser.NewService(store, nil, "", nil)
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth2/callback?code=abc&state=state", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Contains(t, rec.Header().Get("Set-Cookie"), "cop_app_session=encoded-app-cookie")
+	require.Equal(t, appuser.SignupHostedCreditBonus, store.hostedAccount.CreditBalance)
+	require.NotNil(t, store.hostedLedgers["signup-hosted-credits:42"])
+}
+
+func TestRegisterAuthRoutesCallbackRejectsWhenSignupCreditsFail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	authSvc := &fakeAuthRouteService{
+		handleUser:     &model.User{ID: 42, Email: "dev@example.com", Status: model.UserStatusActive},
+		handleCookie:   "encoded-app-cookie",
+		handleReturnTo: "/app",
+	}
+	store := &overviewRouteStore{grantUserErr: errors.New("credit store unavailable")}
+	appSvc := appuser.NewService(store, nil, "", nil)
+	registerAuthRoutes(api, Config{AppEnv: "production", AppSessionTTL: time.Hour}, authSvc, appSvc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oauth2/callback?code=abc&state=state", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.NotContains(t, rec.Header().Get("Set-Cookie"), "cop_app_session=")
 }
 
 func TestRegisterAuthRoutesLogoutClearsCookieWithSameSiteLax(t *testing.T) {

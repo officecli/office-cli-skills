@@ -1,7 +1,10 @@
 package admin
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -10,16 +13,41 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/model"
+	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeCodec struct{}
 
 func (fakeCodec) Encode(v string) (string, error) { return v, nil }
 func (fakeCodec) Decode(v string) (string, error) { return v, nil }
+
+type fakeImageTemplateObjectStore struct {
+	objects      map[string][]byte
+	contentTypes map[string]string
+}
+
+func (f *fakeImageTemplateObjectStore) PutObject(_ context.Context, key string, reader io.Reader, _ int64, contentType string) error {
+	if f.objects == nil {
+		f.objects = map[string][]byte{}
+	}
+	if f.contentTypes == nil {
+		f.contentTypes = map[string]string{}
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	f.objects[key] = data
+	f.contentTypes[key] = contentType
+	return nil
+}
+
+func (f *fakeImageTemplateObjectStore) GetObject(_ context.Context, key string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(f.objects[key])), nil
+}
 
 type memoryRedis struct{ data map[string]any }
 
@@ -375,8 +403,184 @@ func TestHostedPricingSettingsRulesAndPacksAreEditable(t *testing.T) {
 	require.Equal(t, int64(5), auditCount)
 }
 
+func TestImagePromptTemplatesServiceCRUDThumbnailAndCompose(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_service?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+	objectStore := &fakeImageTemplateObjectStore{}
+	svc.SetImageTemplateObjectStore(objectStore)
+
+	created, err := svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug:         "poster",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "cinematic poster style",
+		SortOrder:    10,
+		Enabled:      true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "poster", created.Slug)
+	require.Equal(t, "cinematic poster style", created.PromptPreset)
+
+	publicItems, err := svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 1)
+	require.Empty(t, publicItems[0].ThumbnailURL)
+	require.Equal(t, "cinematic poster style", publicItems[0].PromptPreset)
+
+	composed, err := svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
+	require.NoError(t, err)
+	require.Contains(t, composed.Prompt, "cinematic poster style")
+	require.Contains(t, composed.Prompt, "red bicycle")
+
+	withThumbnail, err := svc.UploadImagePromptTemplateThumbnail(context.Background(), created.ID, "thumb.png", "application/octet-stream", bytes.NewReader([]byte("png")), 3)
+	require.NoError(t, err)
+	require.Contains(t, withThumbnail.ThumbnailURL, "/thumbnail")
+	require.Len(t, objectStore.objects, 1)
+	var storageKey string
+	for key := range objectStore.objects {
+		storageKey = key
+	}
+	require.Equal(t, "image/png", objectStore.contentTypes[storageKey])
+
+	publicItems, err = svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 1)
+	require.Contains(t, publicItems[0].ThumbnailURL, "/api/image-templates/")
+	require.Contains(t, publicItems[0].ThumbnailURL, "/thumbnail")
+	require.Equal(t, "cinematic poster style", publicItems[0].PromptPreset)
+
+	body, contentType, err := svc.ReadImagePromptTemplateThumbnail(context.Background(), created.ID)
+	require.NoError(t, err)
+	defer body.Close()
+	require.Equal(t, "image/png", contentType)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, []byte("png"), data)
+
+	disabled, err := svc.SetImagePromptTemplateEnabled(context.Background(), created.ID, false)
+	require.NoError(t, err)
+	require.False(t, disabled.Enabled)
+	_, err = svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "disabled")
+}
+
 func ptrInt64(value int64) *int64 {
 	return &value
+}
+
+func TestImagePromptTemplateSlotsRoundTripListAndValidation(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_slots?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+
+	slots := []ImagePromptSlot{
+		{Key: "product", Label: "Product", Example: "running shoes", DefaultValue: "a product", Required: true},
+		{Key: "mood", Label: "Mood", Multiline: true},
+	}
+	created, err := svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug:         "poster-slots",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "A {{product}} poster, mood: {{mood}}",
+		SortOrder:    10,
+		Enabled:      true,
+		Slots:        slots,
+	})
+	require.NoError(t, err)
+	require.Len(t, created.Slots, 2)
+	require.Equal(t, "product", created.Slots[0].Key)
+	require.True(t, created.Slots[0].Required)
+	require.True(t, created.Slots[1].Multiline)
+
+	// Admin round-trip: reload via list and confirm slots survive persistence.
+	adminItems, err := svc.ListAdminImagePromptTemplates(context.Background(), "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, adminItems, 1)
+	require.Len(t, adminItems[0].Slots, 2)
+	require.Equal(t, "mood", adminItems[0].Slots[1].Key)
+
+	publicItems, err := svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 1)
+	require.Len(t, publicItems[0].Slots, 2)
+
+	// Legacy concat path must ignore slots entirely — markers stay literal,
+	// no slot substitution happens server-side (frontend-only assembly).
+	composed, err := svc.ComposeImagePromptTemplate(context.Background(), created.ID, "red bicycle")
+	require.NoError(t, err)
+	require.Contains(t, composed.Prompt, "{{product}}")
+	require.Contains(t, composed.Prompt, "{{mood}}")
+	require.Contains(t, composed.Prompt, "red bicycle")
+
+	// Updating with empty slots rolls the template back to legacy behavior.
+	updated, err := svc.UpdateImagePromptTemplate(context.Background(), created.ID, UpsertImagePromptTemplateRequest{
+		Slug:         "poster-slots",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "A {{product}} poster, mood: {{mood}}",
+		SortOrder:    10,
+		Enabled:      true,
+	})
+	require.NoError(t, err)
+	require.Empty(t, updated.Slots)
+
+	// Validation: invalid key shape and duplicate keys are rejected.
+	_, err = svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug: "bad-key", Title: "Bad", PromptPreset: "x", Enabled: true,
+		Slots: []ImagePromptSlot{{Key: "Bad-Key", Label: "Bad"}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "^[a-z0-9_]+$")
+
+	_, err = svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug: "dup-key", Title: "Dup", PromptPreset: "x", Enabled: true,
+		Slots: []ImagePromptSlot{{Key: "a", Label: "A"}, {Key: "a", Label: "A2"}},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "duplicated")
+}
+
+func TestImagePromptTemplateOldShapeWithoutSlots(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_old_shape?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+
+	// An old client payload carries no "slots" field at all; it must decode and persist fine.
+	var req UpsertImagePromptTemplateRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"slug":"legacy","title":"Legacy","prompt_preset":"plain preset","sort_order":1,"enabled":true}`), &req))
+	require.Nil(t, req.Slots)
+
+	created, err := svc.CreateImagePromptTemplate(context.Background(), req)
+	require.NoError(t, err)
+	require.Empty(t, created.Slots)
+
+	items, err := svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Empty(t, items[0].Slots)
+}
+
+func TestParseImagePromptSlotsLegacyShapes(t *testing.T) {
+	// A row predating the slots column reads back as "" → no slots, no panic.
+	require.Nil(t, parseImagePromptSlots(""))
+	require.Nil(t, parseImagePromptSlots("[]"))
+	require.Nil(t, parseImagePromptSlots("not json"))
+
+	slots := parseImagePromptSlots(`[{"key":"product","label":"Product","required":true}]`)
+	require.Len(t, slots, 1)
+	require.Equal(t, "product", slots[0].Key)
+	require.True(t, slots[0].Required)
 }
 
 func TestUpdateUserDisablesOwnedAPIKeysWhenUserIsDisabled(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 type ModifyPromptInput struct {

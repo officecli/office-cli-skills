@@ -9,7 +9,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 func newIssueReportTestStore(t *testing.T, name string) *Store {

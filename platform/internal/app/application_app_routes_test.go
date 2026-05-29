@@ -11,12 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/appuser"
-	"github.com/officecli/officecli-internal/platform/internal/auth"
-	"github.com/officecli/officecli-internal/platform/internal/discordoauth"
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/appuser"
+	"github.com/officecli/officecli/platform/internal/auth"
+	"github.com/officecli/officecli/platform/internal/discordoauth"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 type overviewRouteStore struct {
@@ -29,6 +29,7 @@ type overviewRouteStore struct {
 	creditGrants  map[string]*model.HostedCreditGrant
 	hostedLedgers map[string]*model.UserHostedCreditLedger
 	hostedAccount *model.UserHostedCreditAccount
+	grantUserErr  error
 }
 
 func (s *overviewRouteStore) CountUserAPIKeys(_ context.Context, _ uint64) (int64, error) {
@@ -108,6 +109,9 @@ func (s *overviewRouteStore) GetHostedCreditAccountByUser(_ context.Context, use
 }
 
 func (s *overviewRouteStore) GrantHostedCreditsToUser(_ context.Context, userID uint64, source model.HostedCreditLedgerSource, idempotencyKey string, creditAmount int, reason string, metadataJSON string) (*model.UserHostedCreditLedger, *model.UserHostedCreditAccount, bool, error) {
+	if s.grantUserErr != nil {
+		return nil, nil, false, s.grantUserErr
+	}
 	if s.hostedLedgers == nil {
 		s.hostedLedgers = map[string]*model.UserHostedCreditLedger{}
 	}

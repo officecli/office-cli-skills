@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 var mockBaseTime = time.Date(2026, 5, 17, 9, 30, 0, 0, time.UTC)
@@ -63,10 +63,10 @@ func mockOverview() *model.OverviewStats {
 
 func mockUsers(query string) []model.User {
 	users := []model.User{
-		{ID: 101, GoogleSub: model.StringPtr("mock-google-101"), Email: "ava.chen@example.com", Name: "Ava Chen", InviteCode: "AVA2026", Status: model.UserStatusActive, CreatedAt: mockBaseTime.Add(-72 * time.Hour), UpdatedAt: mockBaseTime.Add(-2 * time.Hour)},
-		{ID: 102, GoogleSub: model.StringPtr("mock-google-102"), Email: "ops.disabled@example.com", Name: "Disabled Operator", InviteCode: "OPSLOCK", Status: model.UserStatusDisabled, CreatedAt: mockBaseTime.Add(-48 * time.Hour), UpdatedAt: mockBaseTime.Add(-4 * time.Hour)},
-		{ID: 103, GoogleSub: model.StringPtr("mock-google-103"), Email: "nora.patel@example.com", Name: "Nora Patel", InviteCode: "NORA100", Status: model.UserStatusActive, CreatedAt: mockBaseTime.Add(-24 * time.Hour), UpdatedAt: mockBaseTime.Add(-30 * time.Minute)},
-		{ID: 104, GoogleSub: model.StringPtr("mock-google-104"), Email: "long.email.operator+regional-review@example.co", Name: "Regional Review Owner", InviteCode: "REGION-LONG", Status: model.UserStatusActive, CreatedAt: mockBaseTime.Add(-12 * time.Hour), UpdatedAt: mockBaseTime.Add(-15 * time.Minute)},
+		{ID: 101, GoogleSub: model.StringPtr("mock-google-101"), Email: "ava.chen@example.com", Name: "Ava Chen", InviteCode: "AVA2026", Status: model.UserStatusActive, CreditBalance: 1380, CreatedAt: mockBaseTime.Add(-72 * time.Hour), UpdatedAt: mockBaseTime.Add(-2 * time.Hour)},
+		{ID: 102, GoogleSub: model.StringPtr("mock-google-102"), Email: "ops.disabled@example.com", Name: "Disabled Operator", InviteCode: "OPSLOCK", Status: model.UserStatusDisabled, CreditBalance: 0, CreatedAt: mockBaseTime.Add(-48 * time.Hour), UpdatedAt: mockBaseTime.Add(-4 * time.Hour)},
+		{ID: 103, GoogleSub: model.StringPtr("mock-google-103"), Email: "nora.patel@example.com", Name: "Nora Patel", InviteCode: "NORA100", Status: model.UserStatusActive, CreditBalance: 640, CreatedAt: mockBaseTime.Add(-24 * time.Hour), UpdatedAt: mockBaseTime.Add(-30 * time.Minute)},
+		{ID: 104, GoogleSub: model.StringPtr("mock-google-104"), Email: "long.email.operator+regional-review@example.co", Name: "Regional Review Owner", InviteCode: "REGION-LONG", Status: model.UserStatusActive, CreditBalance: 90, CreatedAt: mockBaseTime.Add(-12 * time.Hour), UpdatedAt: mockBaseTime.Add(-15 * time.Minute)},
 	}
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {

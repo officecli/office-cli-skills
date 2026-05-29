@@ -3,12 +3,13 @@ package cli
 import (
 	"context"
 	"io"
+	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
-	licenseprovider "github.com/officecli/officecli-internal/internal/license"
-	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
-	reviewprovider "github.com/officecli/officecli-internal/internal/review"
-	"github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/engine"
+	licenseprovider "github.com/officecli/officecli/internal/license"
+	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli/internal/review"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 type Config struct {
@@ -39,13 +40,42 @@ type RuntimeConfig struct {
 }
 
 func (cfg Config) RuntimeModeOrDefault() RuntimeMode {
-	if cfg.Runtime.Mode != "" {
-		return cfg.Runtime.Mode
+	if mode, ok := normalizeConfiguredRuntimeMode(cfg.Runtime.Mode, hasGenerationConfig(cfg)); ok {
+		return mode
 	}
 	if hasGenerationConfig(cfg) {
 		return RuntimeModeExternal
 	}
 	return RuntimeModeHosted
+}
+
+func normalizeConfiguredRuntimeMode(mode RuntimeMode, hasGeneration bool) (RuntimeMode, bool) {
+	normalized := RuntimeMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	switch normalized {
+	case RuntimeModeExternal, RuntimeModeHosted:
+		return normalized, true
+	case "custom":
+		return RuntimeModeExternal, true
+	case "":
+		return "", false
+	default:
+		if hasGeneration {
+			return RuntimeModeExternal, true
+		}
+		return RuntimeModeHosted, true
+	}
+}
+
+func runtimeModeConfigWarning(mode RuntimeMode) string {
+	normalized := RuntimeMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	switch normalized {
+	case "", RuntimeModeExternal, RuntimeModeHosted:
+		return ""
+	case "custom":
+		return "Warning: config runtime.mode=custom is deprecated and will be treated as external. Run `officecli config set-runtime <external|hosted>` to update the config."
+	default:
+		return "Warning: config runtime.mode=" + strings.TrimSpace(string(mode)) + " is unsupported and will be ignored. Run `officecli config set-runtime <external|hosted>` to update the config."
+	}
 }
 
 type LLMConfig struct {
@@ -82,6 +112,7 @@ type GenerateJob struct {
 	EnableImages          bool
 	ImageRatio            string
 	ImageSize             string
+	PromptTemplateID      string
 	ReferenceImageSources []string
 	ReferenceImages       []engine.ImageReference
 	LocalPreview          bool
@@ -118,6 +149,28 @@ type GenerateResult struct {
 	ConfigPath             string   `json:"config_path,omitempty"`
 	LicenseEnabled         bool     `json:"license_enabled"`
 	PublishedSkippedReason string   `json:"published_skipped_reason,omitempty"`
+}
+
+type ImagePromptSlot struct {
+	Key          string `json:"key"`
+	Label        string `json:"label"`
+	Example      string `json:"example,omitempty"`
+	DefaultValue string `json:"default_value,omitempty"`
+	HelpText     string `json:"help_text,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	Multiline    bool   `json:"multiline,omitempty"`
+}
+
+type ImagePromptTemplate struct {
+	ID           uint64            `json:"id"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset"`
+	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
 }
 
 type ReviewJob struct {

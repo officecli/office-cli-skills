@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
+	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
 )
 
 type APIKeyStore interface {
@@ -115,6 +115,9 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 	if req.Action != string(model.UsageActionGenerate) && req.Action != string(model.UsageActionStatus) {
 		return nil, ErrInvalidAction
 	}
+	if invalidRuntimeMode(req.RuntimeMode) {
+		return s.checkInvalidRuntimeMode(ctx, req)
+	}
 	if isExternalRuntime(req.RuntimeMode) {
 		return s.checkExternalFree(ctx, req)
 	}
@@ -130,6 +133,22 @@ func (s *Service) Check(ctx context.Context, req CheckRequest) (*CheckResponse, 
 		return rewardResp, nil
 	}
 	return s.checkAnonymousHosted(ctx, req)
+}
+
+func (s *Service) checkInvalidRuntimeMode(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
+	response := &CheckResponse{
+		Allowed:             false,
+		AccessMode:          model.AccessModeBlocked,
+		AllowedModes:        []string{"external", "hosted"},
+		SelectedRuntimeMode: strings.TrimSpace(req.RuntimeMode),
+		ReasonCode:          "invalid_runtime_mode",
+		Message:             "runtime_mode must be external or hosted; run `officecli config set-runtime <external|hosted>` to update the client config.",
+	}
+	if err := s.usage.Create(ctx, buildUsageEvent(req, model.UsageModeHosted, response, nil)); err != nil {
+		return nil, err
+	}
+	response.QuotaSnapshot = &QuotaSnapshot{}
+	return response, nil
 }
 
 func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*CheckResponse, error) {
@@ -816,6 +835,15 @@ func commitTokenRuntimeMode(token *CommitToken) string {
 
 func isExternalRuntime(runtimeMode string) bool {
 	return strings.EqualFold(strings.TrimSpace(runtimeMode), "external")
+}
+
+func invalidRuntimeMode(runtimeMode string) bool {
+	switch strings.ToLower(strings.TrimSpace(runtimeMode)) {
+	case "", "external", "hosted":
+		return false
+	default:
+		return true
+	}
 }
 
 func hashAPIKey(apiKey, salt string) string {

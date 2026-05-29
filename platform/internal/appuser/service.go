@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type Store interface {
@@ -230,7 +230,7 @@ func (s *Service) Overview(ctx context.Context, userID uint64) (*Overview, error
 	if s.mockData {
 		return mockOverview(), nil
 	}
-	if err := s.ensureSignupHostedCredits(ctx, userID); err != nil {
+	if err := s.EnsureSignupHostedCredits(ctx, userID); err != nil {
 		return nil, err
 	}
 	count, err := s.store.CountUserAPIKeys(ctx, userID)
@@ -357,7 +357,7 @@ func (s *Service) createAPIKeyWithoutSignupGrant(ctx context.Context, userID uin
 	return &CreateAPIKeyResponse{PlaintextKey: plain, Key: newAPIKeyView(*key)}, nil
 }
 
-func (s *Service) ensureSignupHostedCredits(ctx context.Context, userID uint64) error {
+func (s *Service) EnsureSignupHostedCredits(ctx context.Context, userID uint64) error {
 	_, _, _, err := s.grantSignupHostedCreditsToUser(ctx, userID)
 	return err
 }

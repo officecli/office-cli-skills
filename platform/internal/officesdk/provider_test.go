@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/previewshare"
+	"github.com/officecli/officecli/platform/internal/previewshare"
 )
 
 type fakeDownloadObjectStore struct {

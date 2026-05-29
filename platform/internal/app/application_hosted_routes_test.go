@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gotomicro/ego/server/egin"
 
-	"github.com/officecli/officecli-internal/platform/internal/hostedllm"
+	"github.com/officecli/officecli/platform/internal/hostedllm"
 )
 
 func TestRegisterRoutesWithHostedMountsLLMImageRoute(t *testing.T) {

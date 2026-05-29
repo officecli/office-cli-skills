@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/redemption"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/redemption"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 // SetRedemptionService wires in the redemption-code business service. It is

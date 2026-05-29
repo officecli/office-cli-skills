@@ -13,8 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/operations"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/operations"
 )
 
 type operationalEventRouteStore struct {

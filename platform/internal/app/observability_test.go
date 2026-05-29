@@ -14,10 +14,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/officecli/officecli-internal/platform/internal/admin"
-	"github.com/officecli/officecli-internal/platform/internal/httpapi"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/admin"
+	"github.com/officecli/officecli/platform/internal/httpapi"
+	"github.com/officecli/officecli/platform/internal/model"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type fakeAuthRouteFailureService struct{}

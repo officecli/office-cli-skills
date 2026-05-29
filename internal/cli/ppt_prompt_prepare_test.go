@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
 )
 
 type promptPrepLLMClient struct {

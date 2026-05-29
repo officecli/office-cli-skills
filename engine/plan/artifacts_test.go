@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 func TestAnswerExecutionPlanQuestion_DOCXBuildsBlueprintAndExecutionPrompt(t *testing.T) {

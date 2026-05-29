@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 var mockBaseTime = time.Date(2026, 5, 17, 9, 30, 0, 0, time.UTC)

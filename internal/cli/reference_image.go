@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 const maxReferenceImageBytes = 10 << 20

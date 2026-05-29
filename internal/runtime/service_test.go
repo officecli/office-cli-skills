@@ -15,10 +15,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
-	"github.com/officecli/officecli-internal/pkg/officegen"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
+	"github.com/officecli/officecli/pkg/officegen"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 type fakeLLMClient struct {
@@ -29,6 +29,9 @@ type fakeLLMClient struct {
 	structuredResponse  string
 	structuredCallCount int
 	lastStructuredReq   engine.StructuredCompletionRequest
+	completionCharged   int
+	completionBalance   int
+	completionValid     bool
 	imageResult         *engine.ImageGenerationResult
 	imageResults        []*engine.ImageGenerationResult
 	imageErr            error
@@ -57,6 +60,10 @@ func (f *fakeLLMClient) CompleteStructured(_ context.Context, req engine.Structu
 	f.structuredCallCount++
 	f.lastStructuredReq = req
 	return f.structuredResponse, nil
+}
+
+func (f *fakeLLMClient) LastCompletionCredits() (charged int, balance int, valid bool) {
+	return f.completionCharged, f.completionBalance, f.completionValid
 }
 
 func (f *fakeLLMClient) GenerateImage(_ context.Context, req engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
@@ -407,6 +414,75 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Enterprise Collabo") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
+	}
+}
+
+func TestServiceGeneratePPTXCombinesCompletionAndImageHostedCredits(t *testing.T) {
+	llm := &fakeLLMClient{
+		jsonResponse: `{
+			"title":"Product Launch",
+			"slides":[
+				{"title":"Product Launch","layout":"title","subtitle":"Go-to-market overview","isTitle":true,"hasImage":true,"imagePrompt":"A polished product launch visual","imagePos":"background"}
+			]
+		}`,
+		completionCharged: 4,
+		completionBalance: 1100240,
+		completionValid:   true,
+		imageResult:       &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png", CreditBalance: intPtr(1100230), CreditsCharged: intPtr(10)},
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypePPTX,
+		Prompt:       "Explain the launch plan",
+		Topic:        "Product Launch",
+		EnableImages: true,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if doc.HostedCreditsCharged == nil || *doc.HostedCreditsCharged != 14 {
+		t.Fatalf("hosted credits charged = %#v, want 14", doc.HostedCreditsCharged)
+	}
+	if doc.HostedCreditBalance == nil || *doc.HostedCreditBalance != 1100230 {
+		t.Fatalf("hosted credit balance = %#v, want 1100230", doc.HostedCreditBalance)
+	}
+	if llm.imageCalls != 1 {
+		t.Fatalf("image calls = %d, want 1", llm.imageCalls)
+	}
+}
+
+func TestServiceGeneratePPTXReportsCompletionHostedCreditsWithoutImages(t *testing.T) {
+	llm := &fakeLLMClient{
+		jsonResponse: `{
+			"title":"Product Launch",
+			"slides":[
+				{"title":"Product Launch","layout":"title","subtitle":"Go-to-market overview","isTitle":true}
+			]
+		}`,
+		completionCharged: 4,
+		completionBalance: 1100240,
+		completionValid:   true,
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypePPTX,
+		Prompt:       "Explain the launch plan",
+		Topic:        "Product Launch",
+		EnableImages: false,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if doc.HostedCreditsCharged == nil || *doc.HostedCreditsCharged != 4 {
+		t.Fatalf("hosted credits charged = %#v, want 4", doc.HostedCreditsCharged)
+	}
+	if doc.HostedCreditBalance == nil || *doc.HostedCreditBalance != 1100240 {
+		t.Fatalf("hosted credit balance = %#v, want 1100240", doc.HostedCreditBalance)
+	}
+	if llm.imageCalls != 0 {
+		t.Fatalf("image calls = %d, want 0", llm.imageCalls)
 	}
 }
 

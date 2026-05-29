@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.106 - 2026-05-29
+
+### Added
+
+- Added structured fill-in slots to image prompt templates: platform/admin can define per-template slots (key, label, example, default value, help text, required, multiline), persisted as an additive nullable JSON column; public and admin template responses serialize slots, and `officecli agent-bridge` `image_templates/list` passes them through to clients. The legacy `prompt_template_id` server-side composition path is unchanged and ignores slots.
+
+### Changed
+
+- Moved the signup hosted-credit grant into login completion paths so app and CLI users receive the account-level bonus without depending on overview access; overview remains a fallback, with a replay-safe backfill migration for active users missing the signup ledger.
+
+## 0.2.105 - 2026-05-28
+
+### Changed
+
+- Exposed image template prompt presets in the public template list so clients can insert template text for user editing instead of hiding full template composition behind a selected template id.
+- Kept server-side template composition available for older clients while allowing OfficeDex to submit only the final edited prompt.
+
+## 0.2.104 - 2026-05-28
+
+### Added
+
+- Added server-managed standalone image prompt templates: platform/admin can create, edit, enable/disable, delete, and upload thumbnails for templates; public clients can list enabled templates, fetch thumbnails, and compose a selected template with a user prompt.
+- Extended `officecli agent-bridge` with `image_templates/list` and `office.generate` `prompt_template_id` support so OfficeDex can show live template cards and submit only the selected server template id.
+
+
+## 0.2.103 - 2026-05-27
+
+### Fixed
+
+- Fixed hosted PPTX credit reporting so `credits_charged` now includes both the hosted completion charge and hosted image-generation charges, while `credit_balance` reports the latest post-image balance when image generation returns one.
+- Narrowed the no-Han release gate so localized operational files and the admin web UI no longer block CLI release validation.
+
 ## 0.2.101 - 2026-05-26
 
 ### Changed

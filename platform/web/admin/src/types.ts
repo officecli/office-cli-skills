@@ -118,6 +118,7 @@ export interface User {
   name: string
   invite_code?: string
   status: 'active' | 'disabled'
+  credit_balance?: number
   created_at: string
 }
 
@@ -225,6 +226,19 @@ export interface HostedBillingConfig {
   model_configs: HostedModelPricingConfig[]
   rules: HostedPricingRule[]
   packs: HostedCreditPack[]
+}
+
+export interface ImagePromptTemplate {
+  id?: number
+  slug: string
+  title: string
+  description: string
+  prompt_preset: string
+  thumbnail_url?: string
+  sort_order: number
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface RewardGrant {

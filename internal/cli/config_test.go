@@ -98,3 +98,45 @@ func TestLoadConfigNormalProfileKeepsProductionDefaults(t *testing.T) {
 		t.Fatalf("publish base url = %q", cfg.Publish.BaseURL)
 	}
 }
+
+func TestRuntimeModeOrDefaultMapsLegacyCustomToExternalWithGenerationConfig(t *testing.T) {
+	cfg := Config{
+		Runtime: RuntimeConfig{Mode: RuntimeMode("custom")},
+		LLM: LLMConfig{
+			BaseURL: "https://llm.example.com/v1",
+			APIKey:  "sk-test",
+			Model:   "gpt-4.1",
+		},
+	}
+
+	if got := cfg.RuntimeModeOrDefault(); got != RuntimeModeExternal {
+		t.Fatalf("RuntimeModeOrDefault() = %q, want external", got)
+	}
+}
+
+func TestRuntimeModeOrDefaultMapsLegacyCustomToExternalWithoutGenerationConfig(t *testing.T) {
+	cfg := Config{Runtime: RuntimeConfig{Mode: RuntimeMode("custom")}}
+
+	if got := cfg.RuntimeModeOrDefault(); got != RuntimeModeExternal {
+		t.Fatalf("RuntimeModeOrDefault() = %q, want external", got)
+	}
+}
+
+func TestRuntimeModeOrDefaultFallsBackForUnknownMode(t *testing.T) {
+	withGeneration := Config{
+		Runtime: RuntimeConfig{Mode: RuntimeMode("weird")},
+		LLM: LLMConfig{
+			BaseURL: "https://llm.example.com/v1",
+			APIKey:  "sk-test",
+			Model:   "gpt-4.1",
+		},
+	}
+	if got := withGeneration.RuntimeModeOrDefault(); got != RuntimeModeExternal {
+		t.Fatalf("RuntimeModeOrDefault(with generation) = %q, want external", got)
+	}
+
+	withoutGeneration := Config{Runtime: RuntimeConfig{Mode: RuntimeMode("weird")}}
+	if got := withoutGeneration.RuntimeModeOrDefault(); got != RuntimeModeHosted {
+		t.Fatalf("RuntimeModeOrDefault(without generation) = %q, want hosted", got)
+	}
+}

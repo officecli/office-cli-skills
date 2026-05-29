@@ -19,9 +19,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/officecli/officecli-internal/platform/internal/billing"
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/billing"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 type Store struct {
@@ -30,7 +30,11 @@ type Store struct {
 
 type UsageEventFilter struct {
 	Mode        string
+	Modes       []string
 	Result      string
+	Results     []string
+	Action      string
+	Actions     []string
 	ReasonCode  string
 	Fingerprint string
 	ClientIP    string
@@ -870,8 +874,8 @@ func (s *Store) ChargeHostedCreditsByUser(ctx context.Context, userID uint64, re
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var account *model.UserHostedCreditAccount
@@ -931,8 +935,8 @@ func (s *Store) ChargeHostedCreditsByFingerprint(ctx context.Context, fingerprin
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var account *model.FingerprintCreditAccount
@@ -991,8 +995,8 @@ func (s *Store) ChargeAPIKeyCredits(ctx context.Context, apiKeyID uint64, reques
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
-	if credits < 0 {
-		return nil, fmt.Errorf("credits must be non-negative")
+	if credits < 1 {
+		return nil, fmt.Errorf("credits must be positive")
 	}
 	idempotencyKey := "charge:" + requestID
 	var resultKey model.APIKey
@@ -1483,6 +1487,39 @@ func (s *Store) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, v
 	return &config, nil
 }
 
+func (s *Store) ListImagePromptTemplates(ctx context.Context, enabledOnly bool) ([]model.ImagePromptTemplate, error) {
+	query := s.db.WithContext(ctx).Model(&model.ImagePromptTemplate{})
+	if enabledOnly {
+		query = query.Where("enabled = ?", true)
+	}
+	var items []model.ImagePromptTemplate
+	err := query.Order("sort_order asc, id asc").Find(&items).Error
+	return items, err
+}
+
+func (s *Store) GetImagePromptTemplate(ctx context.Context, id uint64) (*model.ImagePromptTemplate, error) {
+	var item model.ImagePromptTemplate
+	if err := s.db.WithContext(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Store) CreateImagePromptTemplate(ctx context.Context, item *model.ImagePromptTemplate) error {
+	return s.db.WithContext(ctx).Create(item).Error
+}
+
+func (s *Store) UpdateImagePromptTemplate(ctx context.Context, id uint64, values map[string]any) (*model.ImagePromptTemplate, error) {
+	if err := s.db.WithContext(ctx).Model(&model.ImagePromptTemplate{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	return s.GetImagePromptTemplate(ctx, id)
+}
+
+func (s *Store) DeleteImagePromptTemplate(ctx context.Context, id uint64) error {
+	return s.db.WithContext(ctx).Delete(&model.ImagePromptTemplate{}, id).Error
+}
+
 func (s *Store) ensureDefaultHostedModelPricingConfigs(ctx context.Context) error {
 	defaults := []model.HostedModelPricingConfig{
 		{
@@ -1659,11 +1696,20 @@ func (s *Store) ConsumeRewardGrant(ctx context.Context, userID uint64) (*model.R
 
 func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([]model.UsageEvent, error) {
 	query := s.db.WithContext(ctx).Model(&model.UsageEvent{})
-	if filter.Mode != "" {
+	if values := compactStrings(filter.Modes); len(values) > 0 {
+		query = query.Where("mode IN ?", values)
+	} else if filter.Mode != "" {
 		query = query.Where("mode = ?", filter.Mode)
 	}
-	if filter.Result != "" {
+	if values := compactStrings(filter.Results); len(values) > 0 {
+		query = query.Where("result IN ?", values)
+	} else if filter.Result != "" {
 		query = query.Where("result = ?", filter.Result)
+	}
+	if values := compactStrings(filter.Actions); len(values) > 0 {
+		query = query.Where("action IN ?", values)
+	} else if filter.Action != "" {
+		query = query.Where("action = ?", filter.Action)
 	}
 	if filter.ReasonCode != "" {
 		query = query.Where("reason_code = ?", filter.ReasonCode)
@@ -1692,6 +1738,20 @@ func (s *Store) ListUsageEvents(ctx context.Context, filter UsageEventFilter) ([
 	var events []model.UsageEvent
 	err := query.Order("created_at desc").Limit(200).Find(&events).Error
 	return events, err
+}
+
+func compactStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 type fingerprintQualityAggregate struct {
@@ -2241,10 +2301,10 @@ func (s *Store) SaveGitHubUser(ctx context.Context, githubSub, email, name strin
 
 	sub := githubSub
 	user = model.User{
-		GitHubSub: &sub,
-		Email:     email,
-		Name:      name,
-		AvatarURL: avatarURL,
+		GitHubSub:  &sub,
+		Email:      email,
+		Name:       name,
+		AvatarURL:  avatarURL,
 		InviteCode: buildPendingInviteCode("github:" + githubSub),
 		Status:     model.UserStatusActive,
 	}
@@ -2318,16 +2378,19 @@ func (s *Store) GetUserByID(ctx context.Context, id uint64) (*model.User, error)
 
 func (s *Store) ListUsers(ctx context.Context, query string) ([]model.User, error) {
 	var users []model.User
-	db := s.db.WithContext(ctx).Model(&model.User{})
+	db := s.db.WithContext(ctx).
+		Model(&model.User{}).
+		Select("users.*, COALESCE(user_hosted_credit_accounts.credit_balance, 0) AS credit_balance").
+		Joins("LEFT JOIN user_hosted_credit_accounts ON user_hosted_credit_accounts.user_id = users.id")
 	normalized := strings.TrimSpace(query)
 	if normalized != "" {
 		if id, err := strconv.ParseUint(normalized, 10, 64); err == nil {
-			db = db.Where("id = ?", id)
+			db = db.Where("users.id = ?", id)
 		} else {
-			db = db.Where("email LIKE ?", "%"+normalized+"%")
+			db = db.Where("users.email LIKE ?", "%"+normalized+"%")
 		}
 	}
-	if err := db.Order("created_at desc").Find(&users).Error; err != nil {
+	if err := db.Order("users.created_at desc").Find(&users).Error; err != nil {
 		return nil, err
 	}
 	return users, nil

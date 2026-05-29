@@ -15,7 +15,7 @@ GOOS="$(go env GOOS)"
 GOARCH="$(go env GOARCH)"
 CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" go build \
   -buildvcs=false \
-  -ldflags "-s -w -X github.com/officecli/officecli-internal/internal/cli.Version=${VERSION_LABEL} -X github.com/officecli/officecli-internal/internal/cli.Commit=${COMMIT} -X github.com/officecli/officecli-internal/internal/cli.BuildDate=${BUILD_DATE}" \
+  -ldflags "-s -w -X github.com/officecli/officecli/internal/cli.Version=${VERSION_LABEL} -X github.com/officecli/officecli/internal/cli.Commit=${COMMIT} -X github.com/officecli/officecli/internal/cli.BuildDate=${BUILD_DATE}" \
   -o "${DIST_DIR}/officecli" \
   "${ROOT_DIR}/cmd/officecli"
 

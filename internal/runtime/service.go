@@ -9,10 +9,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
-	"github.com/officecli/officecli-internal/internal/runtime/modify"
-	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
+	"github.com/officecli/officecli/internal/runtime/modify"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 type GenerateParams struct {
@@ -127,12 +127,14 @@ func (s *Service) generateDOCX(ctx context.Context, prompt, topic string, target
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "DOCX assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeDOCX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
 }
 
 func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
@@ -150,12 +152,14 @@ func (s *Service) generateXLSX(ctx context.Context, prompt, topic string, target
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "XLSX assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeXLSX),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
 }
 
 func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFilePath string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
@@ -195,12 +199,35 @@ func (s *Service) generateReport(ctx context.Context, prompt, topic, sourceFileP
 		return nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "Report assembly completed")
-	return &GeneratedArtifact{
+	artifact := &GeneratedArtifact{
 		DocumentName: fileName,
 		DocumentType: string(engine.DocumentTypeReport),
 		Bytes:        fileBytes,
 		Warnings:     convertIssues(meta),
-	}, nil
+	}
+	fillCompletionCredits(artifact, s.llm)
+	return artifact, nil
+}
+
+// fillCompletionCredits populates the HostedCreditsCharged and
+// HostedCreditBalance fields on the artifact when the underlying LLM
+// client supports reporting them (i.e. a hosted internal client).
+func fillCompletionCredits(artifact *GeneratedArtifact, llm engine.LLMClient) {
+	type creditReporter interface {
+		LastCompletionCredits() (charged int, balance int, valid bool)
+	}
+	cr, ok := llm.(creditReporter)
+	if !ok {
+		return
+	}
+	charged, balance, valid := cr.LastCompletionCredits()
+	if !valid {
+		return
+	}
+	chargedVal := charged
+	balanceVal := balance
+	artifact.HostedCreditsCharged = &chargedVal
+	artifact.HostedCreditBalance = &balanceVal
 }
 
 func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, ratio string, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
@@ -293,23 +320,39 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "PPTX content generation failed")
 		return nil, fmt.Errorf("content generation failed: %w", err)
 	}
+	completionCreditsCharged := 0
+	completionCreditsChargedSet := false
+	var completionCreditBalance *int
+	captureCompletionCredits := func() {
+		artifact := &GeneratedArtifact{}
+		fillCompletionCredits(artifact, s.llm)
+		if artifact.HostedCreditsCharged != nil {
+			completionCreditsCharged += *artifact.HostedCreditsCharged
+			completionCreditsChargedSet = true
+		}
+		if artifact.HostedCreditBalance != nil {
+			value := *artifact.HostedCreditBalance
+			completionCreditBalance = &value
+		}
+	}
+	captureCompletionCredits()
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX structure output")
 
 	imageLLM := s.llm
 	if s.imageLLM != nil {
 		imageLLM = s.imageLLM
 	}
-	var hostedCreditBalance *int
-	hostedCreditsCharged := 0
-	hostedCreditsChargedSet := false
+	var imageCreditBalance *int
+	imageCreditsCharged := 0
+	imageCreditsChargedSet := false
 	buildOptions := PPTXBuildOptions{
 		CreditBalanceSink: func(balance int) {
 			value := balance
-			hostedCreditBalance = &value
+			imageCreditBalance = &value
 		},
 		CreditChargedSink: func(charged int) {
-			hostedCreditsCharged += charged
-			hostedCreditsChargedSet = true
+			imageCreditsCharged += charged
+			imageCreditsChargedSet = true
 		},
 	}
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
@@ -323,18 +366,25 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 			emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Structured PPTX repair failed")
 			return nil, fmt.Errorf("content generation failed: %w", err)
 		}
+		captureCompletionCredits()
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "Received PPTX output after structured repair")
-		hostedCreditBalance = nil
-		hostedCreditsCharged = 0
-		hostedCreditsChargedSet = false
+		imageCreditBalance = nil
+		imageCreditsCharged = 0
+		imageCreditsChargedSet = false
 		fileBytes, fileName, warnings, previewHTML, previewJSON, err = BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 		if err != nil {
 			return nil, err
 		}
 	}
+	var hostedCreditBalance *int
+	if imageCreditBalance != nil {
+		hostedCreditBalance = imageCreditBalance
+	} else if completionCreditBalance != nil {
+		hostedCreditBalance = completionCreditBalance
+	}
 	var hostedCreditsChargedPtr *int
-	if hostedCreditsChargedSet {
-		value := hostedCreditsCharged
+	if completionCreditsChargedSet || imageCreditsChargedSet {
+		value := completionCreditsCharged + imageCreditsCharged
 		hostedCreditsChargedPtr = &value
 	}
 	return &GeneratedArtifact{

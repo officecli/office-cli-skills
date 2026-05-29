@@ -66,6 +66,11 @@
         "format": "WxH",
         "invoke_field": "size",
         "supported": true
+      },
+      "templates": {
+        "invoke_field": "prompt_template_id",
+        "list_method": "image_templates/list",
+        "supported": true
       }
     },
     "image_support": {

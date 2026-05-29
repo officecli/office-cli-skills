@@ -29,28 +29,28 @@ import (
 	sdkoffice "github.com/officesdk/go-sdk/officesdk"
 	"golang.org/x/time/rate"
 
-	"github.com/officecli/officecli-internal/platform/internal/admin"
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	"github.com/officecli/officecli-internal/platform/internal/appuser"
-	"github.com/officecli/officecli-internal/platform/internal/auth"
-	"github.com/officecli/officecli-internal/platform/internal/billing"
-	"github.com/officecli/officecli-internal/platform/internal/clisession"
-	"github.com/officecli/officecli-internal/platform/internal/discordoauth"
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/hostedllm"
-	"github.com/officecli/officecli-internal/platform/internal/httpapi"
-	"github.com/officecli/officecli-internal/platform/internal/issuereports"
-	licensesvc "github.com/officecli/officecli-internal/platform/internal/license"
-	"github.com/officecli/officecli-internal/platform/internal/model"
-	"github.com/officecli/officecli-internal/platform/internal/objectstore"
-	"github.com/officecli/officecli-internal/platform/internal/officesdk"
-	"github.com/officecli/officecli-internal/platform/internal/operations"
-	"github.com/officecli/officecli-internal/platform/internal/previewshare"
-	publishsvc "github.com/officecli/officecli-internal/platform/internal/publish"
-	rewardsvc "github.com/officecli/officecli-internal/platform/internal/reward"
-	redemptionsvc "github.com/officecli/officecli-internal/platform/internal/redemption"
-	redisstore "github.com/officecli/officecli-internal/platform/internal/store/redis"
-	sqlstore "github.com/officecli/officecli-internal/platform/internal/store/sqlstore"
+	"github.com/officecli/officecli/platform/internal/admin"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	"github.com/officecli/officecli/platform/internal/appuser"
+	"github.com/officecli/officecli/platform/internal/auth"
+	"github.com/officecli/officecli/platform/internal/billing"
+	"github.com/officecli/officecli/platform/internal/clisession"
+	"github.com/officecli/officecli/platform/internal/discordoauth"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/hostedllm"
+	"github.com/officecli/officecli/platform/internal/httpapi"
+	"github.com/officecli/officecli/platform/internal/issuereports"
+	licensesvc "github.com/officecli/officecli/platform/internal/license"
+	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/objectstore"
+	"github.com/officecli/officecli/platform/internal/officesdk"
+	"github.com/officecli/officecli/platform/internal/operations"
+	"github.com/officecli/officecli/platform/internal/previewshare"
+	publishsvc "github.com/officecli/officecli/platform/internal/publish"
+	redemptionsvc "github.com/officecli/officecli/platform/internal/redemption"
+	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
+	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type Application struct{ ego *ego.Ego }
@@ -211,6 +211,7 @@ func New() (*Application, error) {
 	}, lic)
 	adminProvider := newAdminOAuthProvider(cfg)
 	adminSvc := admin.NewService(dbStore, redisRepo, cfg.AdminPassword, cfg.AdminSessionTTL, "cop_admin_session", admin.NewSecureCookieCodec(cfg.SessionSecret), cfg.APIKeyHashSalt, apiKeyCipher, adminProvider, cfg.AdminGoogleAllowlist, hostedLLMSvc)
+	adminSvc.SetImageTemplateObjectStore(previewObjects)
 	adminSvc.UseMockData(cfg.AdminMockDataEnabled && cfg.AppEnv == "development")
 	redemptionSvc := redemptionsvc.NewService(dbStore)
 	adminSvc.SetRedemptionService(redemptionSvc)
@@ -299,8 +300,9 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
 	registerHostedLLMRoutes(api, hostedSvc)
 	registerPublishRoutes(api, cfg, publishService)
+	registerImageTemplateRoutes(api, adminSvc)
 	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
-	registerAuthRoutes(api, cfg, authSvc)
+	registerAuthRoutes(api, cfg, authSvc, appSvc)
 	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
 	registerAdminRoutes(api, cfg, adminSvc)
 	registerRedemptionUserRoutes(api, redemptionSvc, authSvc, cliSessionSvc)
@@ -421,6 +423,183 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 			return
 		}
 		c.JSON(http.StatusOK, result)
+	})
+}
+
+func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service) {
+	if adminSvc == nil {
+		return
+	}
+
+	const maxThumbnailBytes = 10 << 20
+
+	parseID := func(c *gin.Context) (uint64, bool) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			httpapi.Error(c, http.StatusBadRequest, "invalid image template id")
+			return 0, false
+		}
+		return id, true
+	}
+	writeTemplateError := func(c *gin.Context, err error) {
+		status := http.StatusBadRequest
+		errMsg := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(errMsg, "not found"), strings.Contains(errMsg, "record not found"):
+			status = http.StatusNotFound
+		case strings.Contains(errMsg, "too large"):
+			status = http.StatusRequestEntityTooLarge
+		case strings.Contains(errMsg, "unavailable"):
+			status = http.StatusServiceUnavailable
+		}
+		httpapi.Error(c, status, err.Error())
+	}
+
+	api.GET("/image-templates", func(c *gin.Context) {
+		data, err := adminSvc.ListImagePromptTemplates(c.Request.Context(), true, "/api/image-templates")
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	api.GET("/image-templates/:id/thumbnail", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		body, contentType, err := adminSvc.ReadImagePromptTemplateThumbnail(c.Request.Context(), id)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		defer body.Close()
+		c.Header("Cache-Control", "public, max-age=300")
+		c.DataFromReader(http.StatusOK, -1, contentType, body, nil)
+	})
+	api.POST("/image-templates/:id/compose", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var req admin.ComposeImagePromptTemplateRequest
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		data, err := adminSvc.ComposeImagePromptTemplate(c.Request.Context(), id, req.Prompt)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+
+	protected := api.Group("/admin/image-templates")
+	protected.Use(httpapi.RequireAdmin(adminSvc.ResolveSession, "cop_admin_session"))
+	protected.GET("", func(c *gin.Context) {
+		data, err := adminSvc.ListAdminImagePromptTemplates(c.Request.Context(), "/api/image-templates")
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("", func(c *gin.Context) {
+		var req admin.UpsertImagePromptTemplateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateImagePromptTemplate(c.Request.Context(), req)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.PATCH("/:id", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var req admin.UpsertImagePromptTemplateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.UpdateImagePromptTemplate(c.Request.Context(), id, req)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/:id/enable", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		data, err := adminSvc.SetImagePromptTemplateEnabled(c.Request.Context(), id, true)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/:id/disable", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		data, err := adminSvc.SetImagePromptTemplateEnabled(c.Request.Context(), id, false)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.DELETE("/:id", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		if err := adminSvc.DeleteImagePromptTemplate(c.Request.Context(), id); err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
+	})
+	protected.POST("/:id/thumbnail", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxThumbnailBytes+1<<20)
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, "file is required")
+			return
+		}
+		defer file.Close()
+		if header.Size > maxThumbnailBytes {
+			httpapi.Error(c, http.StatusRequestEntityTooLarge, "thumbnail is too large")
+			return
+		}
+		data, err := adminSvc.UploadImagePromptTemplateThumbnail(
+			c.Request.Context(),
+			id,
+			filepath.Base(header.Filename),
+			header.Header.Get("Content-Type"),
+			file,
+			header.Size,
+		)
+		if err != nil {
+			writeTemplateError(c, err)
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
 	})
 }
 
@@ -687,7 +866,11 @@ func shouldUseVisitorSecureCookie(c *gin.Context, cfg Config) bool {
 	return cfg.AppEnv == "production"
 }
 
-func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService) {
+func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, appSvcs ...*appuser.Service) {
+	var appSvc *appuser.Service
+	if len(appSvcs) > 0 {
+		appSvc = appSvcs[0]
+	}
 	login := func(c *gin.Context) {
 		returnTo := c.Query("return_to")
 		inviteCode := c.Query("invite")
@@ -699,8 +882,12 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 				httpapi.Error(c, http.StatusInternalServerError, "app mock google login is unavailable")
 				return
 			}
-			_, rawCookie, redirectTo, err := mockSvc.MockGoogleLogin(c.Request.Context(), cfg.AppGoogleMockEmail, cfg.AppGoogleMockName, returnTo)
+			user, rawCookie, redirectTo, err := mockSvc.MockGoogleLogin(c.Request.Context(), cfg.AppGoogleMockEmail, cfg.AppGoogleMockName, returnTo)
 			if err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
 				httpapi.Error(c, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -735,8 +922,11 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 			httpapi.Error(c, http.StatusUnauthorized, err.Error())
 			return
 		}
+		if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 		setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
-		_ = user
 		c.Redirect(http.StatusFound, returnTo)
 	}
 	api.GET("/auth/oauth2/login", login)
@@ -774,8 +964,11 @@ func registerAuthRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServi
 				httpapi.Error(c, http.StatusUnauthorized, err.Error())
 				return
 			}
+			if err := ensureSignupHostedCreditsForRoute(c.Request.Context(), appSvc, user); err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
 			setSessionCookie(c, cfg, "cop_app_session", rawCookie, cfg.AppSessionTTL)
-			_ = user
 			c.Redirect(http.StatusFound, returnTo)
 		}
 		api.GET("/auth/github/login", githubLogin)
@@ -886,6 +1079,12 @@ func registerCLIRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteServic
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
+		}
+		if resp != nil && resp.UserID != 0 && appSvc != nil {
+			if err := appSvc.EnsureSignupHostedCredits(c.Request.Context(), resp.UserID); err != nil {
+				httpapi.Error(c, http.StatusInternalServerError, err.Error())
+				return
+			}
 		}
 		if resp != nil && resp.UserID != 0 && strings.TrimSpace(req.FingerprintHash) != "" && appSvc != nil {
 			// Best-effort: merge anonymous credits from this fingerprint into the
@@ -1116,7 +1315,11 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 	protected.GET("/usage-events", func(c *gin.Context) {
 		filter := sqlstore.UsageEventFilter{
 			Mode:        c.Query("mode"),
+			Modes:       queryValues(c, "mode"),
 			Result:      c.Query("result"),
+			Results:     queryValues(c, "result"),
+			Action:      c.Query("action"),
+			Actions:     queryValues(c, "action"),
 			ReasonCode:  c.Query("reason_code"),
 			Fingerprint: c.Query("fingerprint_hash"),
 			ClientIP:    c.Query("client_ip"),
@@ -1470,6 +1673,13 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 		}
 		httpapi.JSON(c, http.StatusOK, data)
 	})
+}
+
+func ensureSignupHostedCreditsForRoute(ctx context.Context, svc *appuser.Service, user *model.User) error {
+	if svc == nil || user == nil || user.ID == 0 {
+		return nil
+	}
+	return svc.EnsureSignupHostedCredits(ctx, user.ID)
 }
 
 func currentAdminEmail(c *gin.Context, adminSvc adminRouteService) (string, bool) {
@@ -2427,6 +2637,21 @@ func parsePort(addr string) (int, error) {
 		return 0, fmt.Errorf("invalid HTTP_ADDR: %w", err)
 	}
 	return port, nil
+}
+
+func queryValues(c *gin.Context, key string) []string {
+	rawValues := c.QueryArray(key)
+	if len(rawValues) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(rawValues))
+	for _, raw := range rawValues {
+		value := strings.TrimSpace(raw)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func hostPart(addr string) string {

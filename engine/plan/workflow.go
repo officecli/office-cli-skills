@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
 )
 
 const planSessionTTL = 24 * time.Hour

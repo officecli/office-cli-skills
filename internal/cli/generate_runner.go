@@ -3,13 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
-	publishprovider "github.com/officecli/officecli-internal/internal/providers/publish"
-	"github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
+	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJob, isTTY bool, progress progressController, prompter Prompter) (GenerateResult, error) {
@@ -113,6 +114,11 @@ func (a *App) executeExternalImageJob(ctx context.Context, cfg Config, job Gener
 		job.RuntimeMode = RuntimeModeExternal
 	}
 	job.Mode = "fast"
+	var err error
+	job, err = a.applyImagePromptTemplate(ctx, cfg, job)
+	if err != nil {
+		return GenerateResult{}, err
+	}
 
 	licenseCheck, err := a.runLicenseCheck(ctx, cfg.License, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
 	if err != nil {
@@ -178,6 +184,11 @@ func (a *App) executeHostedImageJob(ctx context.Context, cfg Config, job Generat
 		job.RuntimeMode = RuntimeModeExternal
 	}
 	job.Mode = "fast"
+	var err error
+	job, err = a.applyImagePromptTemplate(ctx, cfg, job)
+	if err != nil {
+		return GenerateResult{}, err
+	}
 
 	licenseCheck, err := a.runLicenseCheck(ctx, licenseCfg, job.RuntimeMode, string(job.DocumentType), "generate", "Checking image generation access", progress)
 	if err != nil {
@@ -215,6 +226,49 @@ func publishConfigForLicense(publishCfg publishprovider.Config, licenseCfg Licen
 		publishCfg.APIKey = strings.TrimSpace(licenseCfg.APIKey)
 	}
 	return publishCfg
+}
+
+func (a *App) applyImagePromptTemplate(ctx context.Context, cfg Config, job GenerateJob) (GenerateJob, error) {
+	templateID := strings.TrimSpace(job.PromptTemplateID)
+	if templateID == "" {
+		return job, nil
+	}
+	if job.DocumentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("prompt_template_id is only supported for img generation")
+	}
+	var resp struct {
+		Prompt string `json:"prompt"`
+	}
+	path := "/api/image-templates/" + templateID + "/compose"
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, path, map[string]any{
+		"prompt": job.Prompt,
+	}, "", &resp); err != nil {
+		return GenerateJob{}, fmt.Errorf("compose image prompt template %q: %w", templateID, err)
+	}
+	prompt := strings.TrimSpace(resp.Prompt)
+	if prompt == "" {
+		return GenerateJob{}, fmt.Errorf("compose image prompt template %q returned empty prompt", templateID)
+	}
+	job.Prompt = prompt
+	return job, nil
+}
+
+func (a *App) listImagePromptTemplates(ctx context.Context, cfg Config) ([]ImagePromptTemplate, error) {
+	var templates []ImagePromptTemplate
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodGet, "/api/image-templates", nil, "", &templates); err != nil {
+		return nil, err
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(cfg.License.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = strings.TrimRight(strings.TrimSpace(defaultInitConfig().License.BaseURL), "/")
+	}
+	for i := range templates {
+		thumbnailURL := strings.TrimSpace(templates[i].ThumbnailURL)
+		if strings.HasPrefix(thumbnailURL, "/") && baseURL != "" {
+			templates[i].ThumbnailURL = baseURL + thumbnailURL
+		}
+	}
+	return templates, nil
 }
 
 func publishUsesLicensePlatform(publishCfg publishprovider.Config, licenseCfg LicenseConfig) bool {
@@ -367,6 +421,10 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 			return GenerateJob{}, err
 		}
 	}
+	promptTemplateID := strings.TrimSpace(req.Args.PromptTemplateID)
+	if promptTemplateID != "" && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("prompt_template_id is only supported for img generation")
+	}
 
 	localPreview := req.Args.EmitPreview != nil && *req.Args.EmitPreview
 
@@ -385,6 +443,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		EnableImages:          enableImages,
 		ImageRatio:            imageRatio,
 		ImageSize:             imageSize,
+		PromptTemplateID:      promptTemplateID,
 		ReferenceImageSources: referenceImageList,
 		LocalPreview:          localPreview,
 		OutputDir:             outputDir,

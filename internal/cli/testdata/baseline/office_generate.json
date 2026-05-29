@@ -6,6 +6,7 @@
     "image_quality": "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
     "mode": "fast|best",
     "prompt": "string",
+    "prompt_template_id": "server-managed image prompt template id (img only)",
     "publish": "boolean",
     "ratio": "square|landscape|portrait (img only)",
     "reference_image": "local path or http/https URL (img only)",

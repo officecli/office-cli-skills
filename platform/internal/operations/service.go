@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 const (

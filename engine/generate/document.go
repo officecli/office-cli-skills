@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 type DOCXTarget = PromptTarget

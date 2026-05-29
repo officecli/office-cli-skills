@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine"
+	"github.com/officecli/officecli/engine"
 )
 
 type renderOnlyLLMClient struct {

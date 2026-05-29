@@ -16,7 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	sdkoffice "github.com/officesdk/go-sdk/officesdk"
 
-	"github.com/officecli/officecli-internal/platform/internal/previewshare"
+	"github.com/officecli/officecli/platform/internal/previewshare"
 )
 
 type fileObjectStore interface {

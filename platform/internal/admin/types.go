@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 type LoginRequest struct {
@@ -131,6 +131,52 @@ type HostedBillingConfig struct {
 	ModelConfigs []model.HostedModelPricingConfig `json:"model_configs"`
 	Rules        []model.HostedPricingRule        `json:"rules"`
 	Packs        []model.HostedCreditPack         `json:"packs"`
+}
+
+type ImagePromptSlot struct {
+	Key          string `json:"key"`
+	Label        string `json:"label"`
+	Example      string `json:"example,omitempty"`
+	DefaultValue string `json:"default_value,omitempty"`
+	HelpText     string `json:"help_text,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	Multiline    bool   `json:"multiline,omitempty"`
+}
+
+type ImagePromptTemplateResponse struct {
+	ID           uint64            `json:"id"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset,omitempty"`
+	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
+	CreatedAt    string            `json:"created_at,omitempty"`
+	UpdatedAt    string            `json:"updated_at,omitempty"`
+}
+
+type AdminImagePromptTemplateResponse struct {
+	ImagePromptTemplateResponse
+}
+
+type UpsertImagePromptTemplateRequest struct {
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
+}
+
+type ComposeImagePromptTemplateRequest struct {
+	Prompt string `json:"prompt"`
+}
+
+type ComposeImagePromptTemplateResponse struct {
+	Prompt string `json:"prompt"`
 }
 
 type CreateAPIKeyResponse struct {

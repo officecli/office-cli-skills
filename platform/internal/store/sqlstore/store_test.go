@@ -15,8 +15,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 func strPtr(value string) *string { return &value }
@@ -135,6 +135,34 @@ func TestUsageEventAuditFieldsAndFilters(t *testing.T) {
 	events, err = store.ListUsageEvents(context.Background(), UsageEventFilter{ClientIP: "192.0.2"})
 	require.NoError(t, err)
 	require.Empty(t, events)
+}
+
+func TestListUsageEventsFiltersByMultiModeResultAndAction(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:usage_multi_filters?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	baseTime := time.Date(2026, 5, 27, 8, 0, 0, 0, time.UTC)
+	events := []model.UsageEvent{
+		{FingerprintHash: "fp-free-generate", Mode: model.UsageModeFree, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: baseTime.Add(3 * time.Minute)},
+		{FingerprintHash: "fp-reward-generate", Mode: model.UsageModeReward, Action: model.UsageActionGenerate, Result: model.UsageResultBlocked, CreatedAt: baseTime.Add(2 * time.Minute)},
+		{FingerprintHash: "fp-hosted-status", Mode: model.UsageModeHosted, Action: model.UsageActionStatus, Result: model.UsageResultAllowed, CreatedAt: baseTime.Add(time.Minute)},
+		{FingerprintHash: "fp-paid-generate", Mode: model.UsageModePaid, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: baseTime},
+	}
+	for i := range events {
+		require.NoError(t, store.CreateUsageEvent(context.Background(), &events[i]))
+	}
+
+	matched, err := store.ListUsageEvents(context.Background(), UsageEventFilter{
+		Modes:   []string{"free", "reward", "hosted"},
+		Results: []string{"allowed", "blocked"},
+		Actions: []string{"generate"},
+	})
+	require.NoError(t, err)
+	require.Len(t, matched, 2)
+	require.Equal(t, "fp-free-generate", matched[0].FingerprintHash)
+	require.Equal(t, "fp-reward-generate", matched[1].FingerprintHash)
 }
 
 func TestFingerprintQualityClassifiesAndAggregatesUsageEvents(t *testing.T) {
@@ -591,6 +619,32 @@ func TestGrantExistingUsers100CreditBonusMigrationShape(t *testing.T) {
 	}
 }
 
+func TestBackfillSignupHostedCreditsMigrationShape(t *testing.T) {
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "postgres", "032_backfill_signup_hosted_credits.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	lower := strings.ToLower(string(sqlBytes))
+
+	requiredSubstrings := []string{
+		"signup-hosted-credits:",
+		"'signup_bonus'",
+		"on conflict (user_id) do update",
+		"credit_balance = user_hosted_credit_accounts.credit_balance + excluded.credit_balance",
+		"on conflict (idempotency_key) do nothing",
+		"user_hosted_credit_accounts",
+		"user_hosted_credit_ledger",
+		"from users",
+		"users.status = 'active'",
+		"left join user_hosted_credit_ledger",
+		"is null",
+		"credit_delta",
+		"backfill_signup_hosted_credits_20260528",
+	}
+	for _, needle := range requiredSubstrings {
+		require.Containsf(t, lower, needle, "032 migration must contain %q", needle)
+	}
+}
+
 func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
 	requiredColumns := []string{"flow", "user_code_hash"}
 	migrationPaths := []string{
@@ -682,7 +736,7 @@ func TestSaveGoogleUserKeepsDisabledStatusForExistingUser(t *testing.T) {
 func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:list_users_filters_by_id_and_email?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserHostedCreditAccount{}))
 
 	users := []model.User{
 		{GoogleSub: model.StringPtr("sub-1"), Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
@@ -692,22 +746,28 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	for i := range users {
 		require.NoError(t, db.Create(&users[i]).Error)
 	}
+	require.NoError(t, db.Create(&model.UserHostedCreditAccount{UserID: users[1].ID, CreditBalance: 1250}).Error)
 
 	store := NewWithDB(db)
 	all, err := store.ListUsers(context.Background(), "")
 	require.NoError(t, err)
 	require.Len(t, all, 3)
+	require.Equal(t, 0, all[0].CreditBalance)
+	require.Equal(t, 1250, all[1].CreditBalance)
 
 	byID, err := store.ListUsers(context.Background(), strconv.FormatUint(users[1].ID, 10))
 	require.NoError(t, err)
 	require.Len(t, byID, 1)
 	require.Equal(t, "beta@example.com", byID[0].Email)
+	require.Equal(t, 1250, byID[0].CreditBalance)
 
 	byEmail, err := store.ListUsers(context.Background(), "example.com")
 	require.NoError(t, err)
 	require.Len(t, byEmail, 2)
 	require.Equal(t, "beta@example.com", byEmail[0].Email)
+	require.Equal(t, 1250, byEmail[0].CreditBalance)
 	require.Equal(t, "alpha@example.com", byEmail[1].Email)
+	require.Equal(t, 0, byEmail[1].CreditBalance)
 }
 
 func TestCountReferralsByInviterUserID(t *testing.T) {
@@ -1074,4 +1134,25 @@ func TestListUserHostedCreditLedgerFiltersZeroDeltaNoise(t *testing.T) {
 	all, err := store.ListUserHostedCreditLedger(ctx, userID, true)
 	require.NoError(t, err)
 	require.Equal(t, 4, len(all), "include_zero_delta=true should return all rows")
+}
+
+func TestImagePromptTemplatesListFiltersEnabledAndOrders(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_templates?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}))
+	store := NewWithDB(db)
+
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "disabled", Title: "Disabled", PromptPreset: "disabled prompt", SortOrder: 1, Enabled: false}))
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "second", Title: "Second", PromptPreset: "second prompt", SortOrder: 20, Enabled: true}))
+	require.NoError(t, store.CreateImagePromptTemplate(context.Background(), &model.ImagePromptTemplate{Slug: "first", Title: "First", PromptPreset: "first prompt", SortOrder: 10, Enabled: true}))
+
+	items, err := store.ListImagePromptTemplates(context.Background(), true)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, "first", items[0].Slug)
+	require.Equal(t, "second", items[1].Slug)
+
+	all, err := store.ListImagePromptTemplates(context.Background(), false)
+	require.NoError(t, err)
+	require.Len(t, all, 3)
 }

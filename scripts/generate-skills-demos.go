@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
-	generateengine "github.com/officecli/officecli-internal/engine/generate"
-	appruntime "github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/engine"
+	generateengine "github.com/officecli/officecli/engine/generate"
+	appruntime "github.com/officecli/officecli/internal/runtime"
 )
 
 const verifiedAt = "2026-05-14T00:00:00Z"

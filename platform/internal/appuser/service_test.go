@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/officecli/officecli-internal/platform/internal/apikey"
-	growthsvc "github.com/officecli/officecli-internal/platform/internal/growth"
-	"github.com/officecli/officecli-internal/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/apikey"
+	growthsvc "github.com/officecli/officecli/platform/internal/growth"
+	"github.com/officecli/officecli/platform/internal/model"
 )
 
 type fakeStore struct {
@@ -334,6 +334,27 @@ func TestOverviewGrantsSignupHostedCreditsToUserWithoutCreatingAPIKey(t *testing
 	require.NotNil(t, ledger)
 	require.Equal(t, model.HostedCreditLedgerSourceSignupBonus, ledger.SourceType)
 	require.Equal(t, SignupHostedCreditBonus, ledger.CreditDelta)
+}
+
+func TestEnsureSignupHostedCreditsIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{}
+	svc := NewService(store, fakeBilling{}, "salt", testAPIKeyCipher(t))
+
+	require.NoError(t, svc.EnsureSignupHostedCredits(context.Background(), 42))
+	require.NoError(t, svc.EnsureSignupHostedCredits(context.Background(), 42))
+
+	account, err := store.GetHostedCreditAccountByUser(context.Background(), 42)
+	require.NoError(t, err)
+	require.Equal(t, SignupHostedCreditBonus, account.CreditBalance)
+	require.Len(t, store.hostedLedgers, 1)
+
+	ledger := store.hostedLedgers["signup-hosted-credits:42"]
+	require.NotNil(t, ledger)
+	require.Equal(t, model.HostedCreditLedgerSourceSignupBonus, ledger.SourceType)
+	require.Equal(t, SignupHostedCreditBonus, ledger.CreditDelta)
+	require.Equal(t, "new user signup hosted credits", ledger.Reason)
 }
 
 func TestListAPIKeysReturnsCustomerSafeView(t *testing.T) {

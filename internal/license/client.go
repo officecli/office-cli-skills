@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/officecli/officecli-internal/internal/httpclient"
+	"github.com/officecli/officecli/internal/httpclient"
 )
 
 type Service struct {
