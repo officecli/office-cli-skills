@@ -1,0 +1,16 @@
+[
+  {
+    "ops": [
+      {
+        "op_type": "replace_slide_title",
+        "target": {
+          "slide": 1
+        },
+        "payload": {
+          "new_title": "Fixture PPTX Path B Title"
+        }
+      }
+    ],
+    "__needs_rewrite": []
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "replace_slide_title",
+        "payload": {
+          "new_title": "Q3 Revenue"
+        },
+        "target": {
+          "slide": 2
+        }
+      }
+    ]
+  }
+]

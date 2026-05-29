@@ -1,8 +1,6 @@
 package review
 
 import (
-	"archive/zip"
-	"bytes"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -237,12 +235,12 @@ func extractSlideNumber(path string) int {
 }
 
 func extractPPTXFontFamilies(deck []byte) ([]string, error) {
-	reader, err := zip.NewReader(bytes.NewReader(deck), int64(len(deck)))
+	files, err := ooxmledit.ZipEntries(deck)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open pptx: %w", err)
 	}
 	families := map[string]struct{}{}
-	for _, file := range reader.File {
+	for _, file := range files {
 		if !strings.HasPrefix(file.Name, "ppt/") {
 			continue
 		}

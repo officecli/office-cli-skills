@@ -1,0 +1,25 @@
+[
+  {
+    "__needs_rewrite": [
+      "docx:section:intro"
+    ],
+    "ops": []
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_docx_document",
+        "payload": {
+          "paragraphs": [
+            "Board-ready summary",
+            "Delivery remains on track with measured risk."
+          ]
+        },
+        "target": {
+          "paragraph": 0
+        }
+      }
+    ]
+  }
+]

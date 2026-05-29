@@ -1,0 +1,22 @@
+[
+  {
+    "ops": [
+      {
+        "op_type": "update_xlsx_cells",
+        "target": {
+          "sheet": "Sheet1",
+          "worksheet_index": 1
+        },
+        "payload": {
+          "cell_updates": [
+            {
+              "cell": "B2",
+              "value": "Fixture XLSX Path B Value"
+            }
+          ]
+        }
+      }
+    ],
+    "__needs_rewrite": []
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "ops": [
+      {
+        "op_type": "replace_docx_paragraph",
+        "target": {
+          "paragraph": 1
+        },
+        "payload": {
+          "new_text": "Fixture DOCX Path B Paragraph"
+        }
+      }
+    ],
+    "__needs_rewrite": []
+  }
+]

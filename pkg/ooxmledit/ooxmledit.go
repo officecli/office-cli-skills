@@ -62,13 +62,13 @@ func ExtractContentXML(ooxmlBytes []byte, fileType FileType) (map[string]string,
 		return nil, fmt.Errorf("unsupported file type: %s", fileType)
 	}
 
-	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
+	files, err := ZipEntries(ooxmlBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open OOXML zip: %w", err)
+		return nil, err
 	}
 
 	result := make(map[string]string)
-	for _, f := range reader.File {
+	for _, f := range files {
 		if isContentFile(f.Name, patterns) {
 			content, err := readZipFile(f)
 			if err != nil {
@@ -88,15 +88,15 @@ func ExtractContentXML(ooxmlBytes []byte, fileType FileType) (map[string]string,
 // ReplaceContentXML swaps the specified XML files in an OOXML ZIP payload while
 // preserving all other files such as styles, themes, and media.
 func ReplaceContentXML(ooxmlBytes []byte, modifiedXMLs map[string]string) ([]byte, error) {
-	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
+	files, err := ZipEntries(ooxmlBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open original OOXML zip: %w", err)
+		return nil, err
 	}
 
 	var buf bytes.Buffer
 	writer := zip.NewWriter(&buf)
 
-	for _, f := range reader.File {
+	for _, f := range files {
 		if modifiedContent, ok := modifiedXMLs[f.Name]; ok {
 			// Replace with modified content.
 			newFile, err := writer.CreateHeader(&zip.FileHeader{
@@ -280,12 +280,12 @@ func FormatSingleSlideForPrompt(path string, xmlContent string) string {
 
 // ExtractThemeXML extracts ppt/theme/theme1.xml from PPTX ZIP bytes.
 func ExtractThemeXML(ooxmlBytes []byte) (string, error) {
-	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
+	files, err := ZipEntries(ooxmlBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to open OOXML zip: %w", err)
+		return "", err
 	}
 
-	for _, f := range reader.File {
+	for _, f := range files {
 		if f.Name == "ppt/theme/theme1.xml" {
 			content, err := readZipFile(f)
 			if err != nil {
@@ -302,12 +302,12 @@ var slideNumRegex = regexp.MustCompile(`slide(\d+)\.xml$`)
 
 // MaxSlideNum returns the highest slide index in a PPTX file.
 func MaxSlideNum(ooxmlBytes []byte) (int, error) {
-	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
+	files, err := ZipEntries(ooxmlBytes)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open OOXML zip: %w", err)
+		return 0, err
 	}
 	maxNum := 0
-	for _, f := range reader.File {
+	for _, f := range files {
 		if m := slideNumRegex.FindStringSubmatch(f.Name); m != nil {
 			n := 0
 			fmt.Sscanf(m[1], "%d", &n)
@@ -329,9 +329,9 @@ func MaxSlideNum(ooxmlBytes []byte) (int, error) {
 // and ppt/_rels/presentation.xml.rels. New slide layout references are copied
 // from the last existing slide rels payload.
 func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, addSlideXMLs []string, removeSlidePaths []string) ([]byte, error) {
-	reader, err := zip.NewReader(bytes.NewReader(ooxmlBytes), int64(len(ooxmlBytes)))
+	files, err := ZipEntries(ooxmlBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open OOXML zip: %w", err)
+		return nil, err
 	}
 
 	removeSet := make(map[string]bool)
@@ -343,7 +343,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 	// Find the highest existing slide index and the final slide rels payload.
 	maxSlideNum := 0
 	var lastSlideRelsContent string
-	for _, f := range reader.File {
+	for _, f := range files {
 		if m := slideNumRegex.FindStringSubmatch(f.Name); m != nil {
 			n := 0
 			fmt.Sscanf(m[1], "%d", &n)
@@ -354,7 +354,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 	}
 	// Read the rels file for the highest-numbered slide.
 	lastSlideRelsPath := fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", maxSlideNum)
-	for _, f := range reader.File {
+	for _, f := range files {
 		if f.Name == lastSlideRelsPath {
 			lastSlideRelsContent, _ = readZipFile(f)
 			break
@@ -369,7 +369,7 @@ func ReplaceAndResizeSlides(ooxmlBytes []byte, modifiedXMLs map[string]string, a
 	var presentationFile *zip.File
 	var presentationRelsFile *zip.File
 
-	for _, f := range reader.File {
+	for _, f := range files {
 		if removeSet[f.Name] {
 			continue
 		}

@@ -1,0 +1,18 @@
+{
+  "input_schema": {
+    "document_type": "pptx|docx|xlsx|report|img",
+    "emit_preview": "boolean - emit \u003cbasename\u003e.preview.html sidecar next to the artifact for pptx|docx|xlsx",
+    "file_path": "string (.xlsx for report)",
+    "image_quality": "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
+    "mode": "fast|best",
+    "prompt": "string",
+    "publish": "boolean",
+    "ratio": "square|landscape|portrait (img only)",
+    "reference_image": "local path or http/https URL (img only)",
+    "reference_images": "array of paths or URLs (img only)",
+    "runtime_mode": "external|hosted",
+    "size": "WxH explicit pixels, e.g. 1280x768 (img only)",
+    "topic": "string"
+  },
+  "name": "office.generate"
+}

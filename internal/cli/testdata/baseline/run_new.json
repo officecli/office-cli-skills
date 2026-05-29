@@ -1,0 +1,686 @@
+{
+  "docx": {
+    "agent_render_supported": true,
+    "image_support": {
+      "default_enabled": false
+    },
+    "payload_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "heading": {
+                "type": "string"
+              },
+              "level": {
+                "type": "integer"
+              },
+              "paragraphs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "heading",
+              "level",
+              "paragraphs"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "sections"
+      ],
+      "type": "object"
+    },
+    "preferred_tool": "office.render",
+    "prepare_required": false
+  },
+  "img": {
+    "agent_render_supported": false,
+    "image_generation": {
+      "provider_control": "server",
+      "ratio_values": [
+        "square",
+        "landscape",
+        "portrait"
+      ],
+      "reference_image": {
+        "input": "local path or http/https URL; use reference_images array for multiple",
+        "invoke_field": "reference_image",
+        "invoke_field_array": "reference_images",
+        "max_count": 8,
+        "supported": true
+      },
+      "size": {
+        "format": "WxH",
+        "invoke_field": "size",
+        "supported": true
+      }
+    },
+    "image_support": {
+      "default_enabled": true
+    },
+    "preferred_tool": "office.generate",
+    "prepare_required": false,
+    "publish_support": {
+      "config_command": "officecli config set-publish",
+      "default_publish": true,
+      "disable_flag": "--no-publish",
+      "publish_supported": true
+    }
+  },
+  "pptx": {
+    "agent_render_supported": true,
+    "image_support": {
+      "config_command": "officecli config set-generation",
+      "config_fields": [
+        "image_base_url",
+        "image_api_key",
+        "image_model"
+      ],
+      "default_enabled": true,
+      "disable_flag": "--no-images",
+      "invoke_field": "enable_images",
+      "notes": [
+        "PPT images always use the hosted image route via account hosted credits; the legacy image_quality / --image-quality field is accepted for backward compat and ignored.",
+        "If hosted credits are not configured, the deck is generated without images and a WARN_PPT_PREMIUM_IMAGE_DEGRADED warning is emitted.",
+        "If you only want a text-only deck, disable images explicitly."
+      ],
+      "quality_field": "image_quality (deprecated; accepted and ignored)"
+    },
+    "payload_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "slides": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bgColor": {
+                "type": "string"
+              },
+              "bgColor2": {
+                "type": "string"
+              },
+              "chart": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "categories": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "values": {
+                        "items": {
+                          "type": "number"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "type",
+                      "categories",
+                      "values"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "content": {
+                "type": "string"
+              },
+              "hasImage": {
+                "type": "boolean"
+              },
+              "imagePos": {
+                "enum": [
+                  "",
+                  "right",
+                  "left",
+                  "background",
+                  "center",
+                  "top",
+                  "bottom",
+                  "diagonal"
+                ],
+                "type": "string"
+              },
+              "imagePrompt": {
+                "type": "string"
+              },
+              "isTitle": {
+                "type": "boolean"
+              },
+              "layout": {
+                "type": "string"
+              },
+              "metrics": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value",
+                    "note"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "narrativeRole": {
+                "type": "string"
+              },
+              "points": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "sectionIndex": {
+                "type": "integer"
+              },
+              "sectionTitle": {
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "heading": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "heading",
+                    "detail"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "source": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string"
+              },
+              "visuals": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "caption": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "prompt",
+                    "caption"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "title",
+              "content",
+              "isTitle",
+              "layout",
+              "variant",
+              "narrativeRole",
+              "sectionIndex",
+              "sectionTitle",
+              "subtitle",
+              "points",
+              "sections",
+              "chart",
+              "metrics",
+              "source",
+              "bgColor",
+              "bgColor2",
+              "hasImage",
+              "imagePrompt",
+              "imagePos",
+              "visuals"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "stylePreset": {
+          "type": "string"
+        },
+        "theme": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "accentColor": {
+                  "type": "string"
+                },
+                "backgroundType": {
+                  "type": "string"
+                },
+                "bgColor1": {
+                  "type": "string"
+                },
+                "bgColor2": {
+                  "type": "string"
+                },
+                "eaFontFamily": {
+                  "type": "string"
+                },
+                "fontFamily": {
+                  "type": "string"
+                },
+                "highlightColor": {
+                  "type": "string"
+                },
+                "primaryColor": {
+                  "type": "string"
+                },
+                "textColor": {
+                  "type": "string"
+                },
+                "titleTextColor": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "primaryColor",
+                "accentColor",
+                "highlightColor",
+                "backgroundType",
+                "bgColor1",
+                "bgColor2",
+                "textColor",
+                "titleTextColor",
+                "fontFamily",
+                "eaFontFamily"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "stylePreset",
+        "theme",
+        "slides"
+      ],
+      "type": "object"
+    },
+    "preferred_tool": "office.render",
+    "prepare_required": false
+  },
+  "report": {
+    "agent_render_supported": true,
+    "image_support": {
+      "default_enabled": false
+    },
+    "payload_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "appendixTables": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "headers": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "rows": {
+                "items": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "headers",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "audience": {
+          "type": "string"
+        },
+        "findings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kpis": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "change": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "language": {
+          "type": "string"
+        },
+        "sections": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "charts": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "categories": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "notes": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "series": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "values": {
+                            "items": {
+                              "type": "number"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "values"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "series"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "narrative": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "table": {
+                "additionalProperties": false,
+                "properties": {
+                  "headers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "rows": {
+                    "items": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "type": "array"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "headers",
+                  "rows"
+                ],
+                "type": "object"
+              },
+              "takeaways": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "theme": {
+          "additionalProperties": false,
+          "properties": {
+            "accentColor": {
+              "type": "string"
+            },
+            "accentSoft": {
+              "type": "string"
+            },
+            "background": {
+              "type": "string"
+            },
+            "borderColor": {
+              "type": "string"
+            },
+            "mutedColor": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "surfaceColor": {
+              "type": "string"
+            },
+            "textColor": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "sections"
+      ],
+      "type": "object"
+    },
+    "preferred_tool": "office.render",
+    "prepare_required": true,
+    "source_file": {
+      "accepted_extensions": [
+        ".xlsx"
+      ],
+      "invoke_field": "file_path",
+      "notes": [
+        "Call office.prepare first for report generation so the agent receives workbook_summary and base_report_json.",
+        "The workbook data is the source of truth for charts, tables, and findings."
+      ],
+      "required": true
+    }
+  },
+  "xlsx": {
+    "agent_render_supported": true,
+    "image_support": {
+      "default_enabled": false
+    },
+    "payload_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "sheets": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "headers": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "name": {
+                "type": "string"
+              },
+              "rows": {
+                "items": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "headers",
+              "rows"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "sheets"
+      ],
+      "type": "object"
+    },
+    "preferred_tool": "office.render",
+    "prepare_required": false
+  }
+}

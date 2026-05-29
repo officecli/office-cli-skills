@@ -1,0 +1,16 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "append_docx_paragraph",
+        "payload": {
+          "new_text": "Conclusion: proceed with launch readiness."
+        },
+        "target": {
+          "paragraph": 3
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,36 @@
+[
+  {
+    "__needs_rewrite": [
+      "sheet:1"
+    ],
+    "ops": []
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_xlsx_sheet",
+        "payload": {
+          "rows": [
+            [
+              "Metric",
+              "Value"
+            ],
+            [
+              "Gross Margin",
+              "61%"
+            ],
+            [
+              "EBITDA",
+              "42"
+            ]
+          ]
+        },
+        "target": {
+          "sheet": "Sheet1",
+          "worksheet_index": 1
+        }
+      }
+    ]
+  }
+]

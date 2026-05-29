@@ -1,0 +1,48 @@
+name: Modify CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  modify:
+    name: Build and verify modify runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build all packages
+        run: go build ./...
+
+      - name: Test modify surfaces
+        run: go test ./engine/edit/... ./internal/runtime/modify/... ./internal/cli/... ./pkg/ooxmledit/... -count=1
+
+      - name: V11 import-direction assertion
+        shell: bash
+        run: |
+          set -o pipefail
+          out=$(go list -deps ./internal/runtime/modify | grep -E "^github.com/.+/internal/runtime$" || true)
+          test -z "$out"
+
+      - name: V11 synthetic violation self-test
+        run: go test -tags v11_self_test ./internal/runtime/modify -run TestV11FailsOnSyntheticViolation -count=1
+
+      - name: V12 zip-walk lint
+        shell: bash
+        run: |
+          set -o pipefail
+          out=$(grep -rn "zip.NewReader" --include="*.go" . | grep -v "_test.go" | grep -v "pkg/ooxmledit/zip_entries.go" || true)
+          test -z "$out"
+
+      - name: Modify fidelity check
+        run: bash scripts/modify_fidelity_check.sh

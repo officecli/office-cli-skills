@@ -1,0 +1,25 @@
+[
+  {
+    "__needs_rewrite": [
+      "docx:section:summary"
+    ],
+    "ops": []
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_docx_document",
+        "payload": {
+          "paragraphs": [
+            "Condensed summary",
+            "Next action is executive review."
+          ]
+        },
+        "target": {
+          "paragraph": 0
+        }
+      }
+    ]
+  }
+]

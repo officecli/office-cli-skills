@@ -1,0 +1,14 @@
+{
+  "input_schema": {
+    "document_type": "pptx|docx|xlsx|report",
+    "emit_preview": "boolean - emit \u003cbasename\u003e.preview.html sidecar next to the artifact for pptx|docx|xlsx",
+    "enable_images": "boolean",
+    "image_quality": "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
+    "out": "string",
+    "payload": "object",
+    "publish": "boolean",
+    "runtime_mode": "external|hosted",
+    "topic": "string"
+  },
+  "name": "office.render"
+}

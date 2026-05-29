@@ -261,6 +261,15 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 			return err
 		}
 		return a.runNew(ctx, cfg, args[1:])
+	case "modify":
+		if err := a.officeTaskPreflight(ctx, args[0], args[1:]); err != nil {
+			return err
+		}
+		cfg, err := LoadConfig("")
+		if err != nil {
+			return err
+		}
+		return a.runModify(ctx, cfg, args[1:])
 	case "score":
 		cfg, err := LoadConfig("")
 		if err != nil {
@@ -297,7 +306,7 @@ func (a *App) runCommand(ctx context.Context, args []string) error {
 
 func isKnownCommand(value string) bool {
 	switch strings.TrimSpace(value) {
-	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "score", "review", "upgrade", "agent-bridge", "doctor", "redeem":
+	case "login", "logout", "whoami", "set-key", "config", "auth", "new", "modify", "score", "review", "upgrade", "agent-bridge", "doctor", "redeem":
 		return true
 	default:
 		return false

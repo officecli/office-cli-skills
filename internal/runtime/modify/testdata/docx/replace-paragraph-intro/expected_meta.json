@@ -1,0 +1,11 @@
+{
+  "ops_applied": 1,
+  "ops_failed": 0,
+  "router_path": "B",
+  "masked_regions": [
+    {
+      "entry": "word/document.xml",
+      "reason": "prompt targets a paragraph in the document body"
+    }
+  ]
+}

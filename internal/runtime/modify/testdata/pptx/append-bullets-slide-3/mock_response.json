@@ -1,0 +1,19 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "append_slide_bullets",
+        "payload": {
+          "new_bullets": [
+            "Action: expand partners",
+            "Risk: FX volatility"
+          ]
+        },
+        "target": {
+          "slide": 3
+        }
+      }
+    ]
+  }
+]

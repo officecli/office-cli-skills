@@ -1,0 +1,16 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "replace_docx_paragraph",
+        "payload": {
+          "new_text": "Milestones moved to green with no open blockers."
+        },
+        "target": {
+          "paragraph": 3
+        }
+      }
+    ]
+  }
+]

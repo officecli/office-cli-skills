@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -59,6 +61,7 @@ func IsValidTaskID(id string) bool {
 
 const (
 	bridgeToolOfficeGenerate = "office.generate"
+	bridgeToolOfficeModify   = "office.modify"
 	bridgeToolOfficePrepare  = "office.prepare"
 	bridgeToolOfficeRender   = "office.render"
 	bridgeToolOfficeReview   = "office.review"
@@ -156,8 +159,10 @@ type bridgeInvokeParams struct {
 
 type bridgeInvokeArgs struct {
 	DocumentType    string          `json:"document_type"`
+	Format          string          `json:"format,omitempty"`
 	Topic           string          `json:"topic"`
 	Prompt          string          `json:"prompt,omitempty"`
+	SourceFile      string          `json:"source_file,omitempty"`
 	FilePath        string          `json:"file_path,omitempty"`
 	Payload         json.RawMessage `json:"payload,omitempty"`
 	Mode            string          `json:"mode,omitempty"`
@@ -187,6 +192,14 @@ type bridgePrepareResult struct {
 	FieldNotes      []string        `json:"field_notes,omitempty"`
 	WorkbookSummary string          `json:"workbook_summary,omitempty"`
 	BaseReportJSON  json.RawMessage `json:"base_report_json,omitempty"`
+}
+
+type bridgeModifyResult struct {
+	Status       string         `json:"status"`
+	DocumentType string         `json:"document_type"`
+	OutputFile   string         `json:"output_file"`
+	Warnings     []string       `json:"warnings,omitempty"`
+	ResultMeta   map[string]any `json:"result_meta"`
 }
 
 type bridgeRespondParams struct {
@@ -449,6 +462,11 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"report": s.documentGenerationCapability(engine.DocumentTypeReport),
 				"img":    s.documentGenerationCapability(engine.DocumentTypeIMG),
 			},
+			"document_modification": map[string]any{
+				"pptx": s.documentModificationCapability(engine.DocumentTypePPTX),
+				"docx": s.documentModificationCapability(engine.DocumentTypeDOCX),
+				"xlsx": s.documentModificationCapability(engine.DocumentTypeXLSX),
+			},
 			"image_generation": map[string]any{
 				"provider_control":  "server",
 				"preferred_tool":    bridgeToolOfficeGenerate,
@@ -523,6 +541,17 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"image_quality":    "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
 					"publish":          "boolean",
 					"emit_preview":     "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
+				},
+			},
+			{
+				"name": bridgeToolOfficeModify,
+				"input_schema": map[string]any{
+					"source_file": "string (.pptx|.docx|.xlsx)",
+					"prompt":      "string",
+					"format":      "pptx|docx|xlsx",
+					"lang":        "string",
+					"style":       "string",
+					"out":         "string",
 				},
 			},
 			{
@@ -657,6 +686,83 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 	return capability
 }
 
+func (s *agentBridgeServer) documentModificationCapability(documentType engine.DocumentType) map[string]any {
+	extension := "." + string(documentType)
+	payloadSchema := map[string]any{
+		"type":     "object",
+		"required": []string{"source_file", "prompt"},
+		"properties": map[string]any{
+			"source_file": map[string]any{
+				"type":                "string",
+				"accepted_extensions": []string{extension},
+			},
+			"prompt": map[string]any{
+				"type": "string",
+			},
+			"format": map[string]any{
+				"type": "string",
+				"enum": []string{string(documentType)},
+			},
+			"out": map[string]any{
+				"type":        "string",
+				"description": "Output directory for the modified file.",
+			},
+			"lang": map[string]any{
+				"type": "string",
+			},
+			"style": map[string]any{
+				"type": "string",
+			},
+		},
+	}
+	switch documentType {
+	case engine.DocumentTypeDOCX:
+		payloadSchema["op_aliases"] = map[string]string{
+			"replace_paragraph_by_preview": "replace_docx_paragraph",
+			"rewrite_section":              "rewrite_docx_document",
+		}
+	case engine.DocumentTypeXLSX:
+		payloadSchema["op_aliases"] = map[string]string{
+			"append_rows":   "append_xlsx_summary",
+			"rewrite_sheet": "rewrite_xlsx_sheet",
+			"update_cells":  "update_xlsx_cells",
+		}
+	}
+
+	capability := map[string]any{
+		"accepted_extensions":    []string{extension},
+		"preferred_tool":         bridgeToolOfficeModify,
+		"agent_modify_supported": true,
+		"router_policy":          "sentinel-upgrade",
+		"attention_whitelist":    documentModificationAttentionWhitelist(),
+		"payload_schema":         payloadSchema,
+	}
+	switch documentType {
+	case engine.DocumentTypePPTX:
+		capability["limitations"] = []map[string]string{
+			{
+				"unsupported":          "SmartArt",
+				"suggested_workaround": "Convert SmartArt to editable text or shapes before requesting modification.",
+			},
+		}
+	case engine.DocumentTypeDOCX:
+		capability["limitations"] = []string{"Minimal DOCX text modification support in v1."}
+	case engine.DocumentTypeXLSX:
+		capability["limitations"] = []string{"Formulas may not survive sheet rewrites."}
+	}
+	return capability
+}
+
+func documentModificationAttentionWhitelist() []string {
+	return []string{
+		"truncated_preview",
+		"target_outside_preview",
+		"sentinel_truncated_max_targets",
+		"sentinel_dropped_max_depth",
+		"partial_failure",
+	}
+}
+
 func (s *agentBridgeServer) openSession() *bridgeSession {
 	session := &bridgeSession{
 		ID:        s.nextID("session"),
@@ -774,6 +880,21 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		})
 		go s.runGenerateTask(runCtx, task, job, prompter)
 		return task, nil
+	case bridgeToolOfficeModify:
+		modifyParams, err := s.buildModifyParamsFromRequest(params)
+		if err != nil {
+			s.mu.Lock()
+			delete(s.tasks, task.ID)
+			s.mu.Unlock()
+			return nil, err
+		}
+		s.emitEvent(task, bridgeEventTaskStarted, map[string]any{
+			"tool":          task.Tool,
+			"document_type": modifyParams.DocumentType,
+			"source_file":   modifyParams.SourceFilePath,
+		})
+		go s.runModifyTask(runCtx, task, modifyParams)
+		return task, nil
 	case bridgeToolOfficeReview, bridgeToolOfficeScore:
 		job, err := s.app.buildReviewJobFromRequest(params)
 		if err != nil {
@@ -797,6 +918,60 @@ func (s *agentBridgeServer) invokeTask(ctx context.Context, rpcID json.RawMessag
 		s.mu.Unlock()
 		return nil, fmt.Errorf("unsupported tool: %s", params.Tool)
 	}
+}
+
+func (s *agentBridgeServer) buildModifyParamsFromRequest(req bridgeInvokeParams) (runtime.ModifyParams, error) {
+	sourceFile := strings.TrimSpace(req.Args.SourceFile)
+	if sourceFile == "" {
+		sourceFile = strings.TrimSpace(req.Args.FilePath)
+	}
+	if sourceFile == "" {
+		return runtime.ModifyParams{}, fmt.Errorf("source_file is required")
+	}
+
+	prompt := strings.TrimSpace(req.Args.Prompt)
+	if prompt == "" {
+		return runtime.ModifyParams{}, fmt.Errorf("prompt is required")
+	}
+
+	format := strings.TrimSpace(req.Args.Format)
+	if format == "" {
+		format = strings.TrimSpace(req.Args.DocumentType)
+	}
+	if format == "" {
+		format = strings.TrimPrefix(strings.ToLower(filepath.Ext(sourceFile)), ".")
+	}
+	documentType, err := parseDocumentType(format)
+	if err != nil {
+		return runtime.ModifyParams{}, err
+	}
+	switch documentType {
+	case engine.DocumentTypePPTX, engine.DocumentTypeDOCX, engine.DocumentTypeXLSX:
+	default:
+		return runtime.ModifyParams{}, fmt.Errorf("office.modify supports pptx, docx, and xlsx; got %s", documentType)
+	}
+
+	outputDir := strings.TrimSpace(req.Args.OutputDir)
+	if outputDir == "" {
+		outputDir = strings.TrimSpace(s.cfg.Defaults.OutputDir)
+	}
+	if outputDir == "" {
+		outputDir = filepath.Dir(sourceFile)
+		if outputDir == "" || outputDir == "." {
+			outputDir, _ = os.Getwd()
+		}
+	}
+	ext := filepath.Ext(sourceFile)
+	outputPath := filepath.Join(outputDir, strings.TrimSuffix(filepath.Base(sourceFile), ext)+".modified"+ext)
+
+	return runtime.ModifyParams{
+		SourceFilePath: sourceFile,
+		DocumentType:   documentType,
+		Prompt:         prompt,
+		Language:       strings.TrimSpace(req.Args.Language),
+		Style:          strings.TrimSpace(req.Args.Style),
+		OutputPath:     outputPath,
+	}, nil
 }
 
 func (s *agentBridgeServer) runPrepareTask(ctx context.Context, task *bridgeTask, params runtime.PrepareParams) {
@@ -842,6 +1017,92 @@ func (s *agentBridgeServer) runPrepareTask(ctx context.Context, task *bridgeTask
 		"document_type":    bridgeResult.DocumentType,
 		"preferred_tool":   bridgeResult.PreferredTool,
 		"prepare_required": bridgeResult.PrepareRequired,
+	})
+}
+
+func (s *agentBridgeServer) runModifyTask(ctx context.Context, task *bridgeTask, params runtime.ModifyParams) {
+	progress := &bridgeProgressEmitter{server: s, task: task}
+	if missing := missingLLMConfig(s.cfg); missing != "" {
+		err := fmt.Errorf("generation service is not fully configured: missing %s. Run `officecli config set-generation` to finish setup", missing)
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, classifyBridgeError(err))
+		return
+	}
+
+	llmClient, err := s.app.newLLMClient(s.cfg.LLM)
+	if err != nil {
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, classifyBridgeError(err))
+		return
+	}
+
+	service := runtime.NewService(llmClient, progress)
+	result, err := service.Modify(ctx, params, progress)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			s.updateTask(task.ID, func(t *bridgeTask) {
+				t.Status = "cancelled"
+				t.UpdatedAt = time.Now().UTC()
+				t.LastError = context.Canceled.Error()
+			})
+			s.emitEvent(task, bridgeEventTaskCancelled, map[string]any{"reason": "cancelled"})
+			return
+		}
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, classifyBridgeError(err))
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Dir(params.OutputPath), 0o755); err != nil {
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, classifyBridgeError(err))
+		return
+	}
+	if err := os.WriteFile(params.OutputPath, result.Bytes, 0o644); err != nil {
+		s.updateTask(task.ID, func(t *bridgeTask) {
+			t.Status = "failed"
+			t.UpdatedAt = time.Now().UTC()
+			t.LastError = err.Error()
+		})
+		s.emitEvent(task, bridgeEventTaskFailed, classifyBridgeError(err))
+		return
+	}
+
+	bridgeResult := bridgeModifyResult{
+		Status:       "completed",
+		DocumentType: string(params.DocumentType),
+		OutputFile:   params.OutputPath,
+		Warnings:     append([]string(nil), result.ResultMeta.Warnings...),
+		ResultMeta:   buildModifyBridgeMeta(result.ResultMeta),
+	}
+	s.updateTask(task.ID, func(t *bridgeTask) {
+		t.Status = "completed"
+		t.UpdatedAt = time.Now().UTC()
+		t.Result = bridgeResult
+	})
+	s.emitEvent(task, bridgeEventTaskOutput, s.outputPayload(task.OutputFmt, bridgeResult))
+	s.emitEvent(task, bridgeEventTaskCompleted, map[string]any{
+		"status":        bridgeResult.Status,
+		"document_type": bridgeResult.DocumentType,
+		"output_file":   bridgeResult.OutputFile,
+		"warnings":      append([]string(nil), bridgeResult.Warnings...),
+		"result_meta":   bridgeResult.ResultMeta,
 	})
 }
 
@@ -1078,6 +1339,16 @@ func (s *agentBridgeServer) outputPayload(outputFormat string, result any) map[s
 			}
 		}
 		return payload
+	case bridgeModifyResult:
+		return map[string]any{
+			"format":        outputFormat,
+			"status":        typed.Status,
+			"output_file":   typed.OutputFile,
+			"document_type": typed.DocumentType,
+			"warnings":      append([]string(nil), typed.Warnings...),
+			"result_meta":   typed.ResultMeta,
+			"result":        typed,
+		}
 	case ReviewResult:
 		return map[string]any{
 			"format":          outputFormat,
@@ -1099,8 +1370,24 @@ func buildBridgeResultMeta(result any) map[string]any {
 	switch typed := result.(type) {
 	case GenerateResult:
 		return buildGenerateBridgeMeta(typed)
+	case bridgeModifyResult:
+		return typed.ResultMeta
 	default:
 		return nil
+	}
+}
+
+func buildModifyBridgeMeta(meta runtime.ModifyResultMeta) map[string]any {
+	return map[string]any{
+		"modify": map[string]any{
+			"router_path":        meta.RouterPath,
+			"ops_applied":        meta.OpsApplied,
+			"ops_failed":         meta.OpsFailed,
+			"llm_calls":          meta.LLMCalls,
+			"fidelity":           map[string]any{"preserved": append([]string(nil), meta.Fidelity.Preserved...), "dropped": append([]string(nil), meta.Fidelity.Dropped...)},
+			"warnings":           append([]string(nil), meta.Warnings...),
+			"attention_required": meta.AttentionRequired,
+		},
 	}
 }
 

@@ -1,0 +1,11 @@
+{
+  "ops_applied": 1,
+  "ops_failed": 0,
+  "router_path": "B",
+  "masked_regions": [
+    {
+      "entry": "ppt/slides/slide2.xml",
+      "reason": "prompt targets slide 2 title"
+    }
+  ]
+}

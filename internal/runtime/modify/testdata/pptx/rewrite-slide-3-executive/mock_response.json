@@ -1,0 +1,22 @@
+[
+  {
+    "__needs_rewrite": [
+      "slide:3"
+    ],
+    "ops": []
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_entire_slide",
+        "payload": {
+          "new_slide_xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?\u003e\n\u003cp:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"\u003e\n  \u003cp:cSld\u003e\n    \u003cp:spTree\u003e\n      \u003cp:sp\u003e\n        \u003cp:txBody\u003e\n          \u003ca:p\u003e\u003ca:r\u003e\u003ca:t\u003eExecutive Rewrite Complete\u003c/a:t\u003e\u003c/a:r\u003e\u003c/a:p\u003e\n        \u003c/p:txBody\u003e\n      \u003c/p:sp\u003e\n    \u003c/p:spTree\u003e\n  \u003c/p:cSld\u003e\n\u003c/p:sld\u003e"
+        },
+        "target": {
+          "slide": 3
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "ops": [],
+    "__needs_rewrite": [
+      "docx:section:intro"
+    ]
+  },
+  {
+    "ops": [
+      {
+        "op_type": "replace_docx_paragraph",
+        "target": {
+          "paragraph": 1
+        },
+        "payload": {
+          "new_text": "Fixture DOCX Path C Paragraph"
+        }
+      }
+    ],
+    "__needs_rewrite": []
+  }
+]

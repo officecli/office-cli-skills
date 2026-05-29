@@ -1,0 +1,15 @@
+{
+  "ops_applied": 1,
+  "ops_failed": 0,
+  "router_path": "B",
+  "masked_regions": [
+    {
+      "entry": "xl/worksheets/sheet1.xml",
+      "reason": "prompt targets Sheet1 cell A5"
+    },
+    {
+      "entry": "xl/sharedStrings.xml",
+      "reason": "cell text values are stored in the shared string table"
+    }
+  ]
+}

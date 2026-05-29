@@ -1,0 +1,12 @@
+{
+  "input_schema": {
+    "audience": "string",
+    "document_type": "pptx|docx|xlsx|report",
+    "file_path": "string (.xlsx for report)",
+    "lang": "string",
+    "prompt": "string",
+    "style": "string",
+    "topic": "string"
+  },
+  "name": "office.prepare"
+}

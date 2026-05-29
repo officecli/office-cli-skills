@@ -14,6 +14,38 @@ import (
 	"github.com/officecli/officecli-internal/engine"
 )
 
+type deterministicMockLLMClient struct {
+	jsonResponse string
+}
+
+func (c deterministicMockLLMClient) CompleteText(context.Context, []engine.LLMMessage) (string, error) {
+	return c.jsonResponse, nil
+}
+
+func (c deterministicMockLLMClient) CompleteJSON(context.Context, []engine.LLMMessage) (string, error) {
+	return c.jsonResponse, nil
+}
+
+func (c deterministicMockLLMClient) CompleteStructured(context.Context, engine.StructuredCompletionRequest) (string, error) {
+	return c.jsonResponse, nil
+}
+
+func (deterministicMockLLMClient) GenerateImage(context.Context, engine.ImageGenerationRequest) (*engine.ImageGenerationResult, error) {
+	return &engine.ImageGenerationResult{Data: []byte("mock-image"), MIME: "image/png"}, nil
+}
+
+func TestDeterministicMockLLMClientImplementsLLMClient(t *testing.T) {
+	var client engine.LLMClient = deterministicMockLLMClient{jsonResponse: `{"ops":[],"__needs_rewrite":[]}`}
+
+	got, err := client.CompleteJSON(context.Background(), []engine.LLMMessage{{Role: "user", Content: "modify"}})
+	if err != nil {
+		t.Fatalf("CompleteJSON: %v", err)
+	}
+	if got != `{"ops":[],"__needs_rewrite":[]}` {
+		t.Fatalf("unexpected deterministic response: %s", got)
+	}
+}
+
 func TestNewProvider_OpenAICompatible(t *testing.T) {
 	cfg := Config{
 		Provider:   "openai",

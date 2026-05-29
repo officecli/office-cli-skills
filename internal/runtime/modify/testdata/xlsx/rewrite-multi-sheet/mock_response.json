@@ -1,0 +1,57 @@
+[
+  {
+    "__needs_rewrite": [
+      "sheet:1",
+      "sheet:2"
+    ],
+    "ops": []
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_xlsx_sheet",
+        "payload": {
+          "rows": [
+            [
+              "Plan",
+              "Value"
+            ],
+            [
+              "Revenue",
+              "500"
+            ]
+          ]
+        },
+        "target": {
+          "sheet": "Sheet1",
+          "worksheet_index": 1
+        }
+      }
+    ]
+  },
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "rewrite_xlsx_sheet",
+        "payload": {
+          "rows": [
+            [
+              "Metric",
+              "Value"
+            ],
+            [
+              "Renewal ARR",
+              "88"
+            ]
+          ]
+        },
+        "target": {
+          "sheet": "Sheet2",
+          "worksheet_index": 2
+        }
+      }
+    ]
+  }
+]

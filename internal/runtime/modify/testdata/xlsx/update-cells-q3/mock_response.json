@@ -1,0 +1,22 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "update_xlsx_cells",
+        "payload": {
+          "cell_updates": [
+            {
+              "cell": "D2",
+              "value": "150"
+            }
+          ]
+        },
+        "target": {
+          "sheet": "Sheet1",
+          "worksheet_index": 1
+        }
+      }
+    ]
+  }
+]

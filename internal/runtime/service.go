@@ -11,6 +11,7 @@ import (
 
 	"github.com/officecli/officecli-internal/engine"
 	generateengine "github.com/officecli/officecli-internal/engine/generate"
+	"github.com/officecli/officecli-internal/internal/runtime/modify"
 	"github.com/officecli/officecli-internal/pkg/officegen"
 )
 
@@ -54,10 +55,11 @@ type Service struct {
 	llm      engine.LLMClient
 	imageLLM engine.LLMClient
 	progress engine.ProgressEmitter
+	modifier *modify.Modifier
 }
 
 func NewService(llm engine.LLMClient, progress any) *Service {
-	service := &Service{llm: llm}
+	service := &Service{llm: llm, modifier: modify.New(llm)}
 	if emitter, ok := progress.(engine.ProgressEmitter); ok {
 		service.progress = emitter
 	}

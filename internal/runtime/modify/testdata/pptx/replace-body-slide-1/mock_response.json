@@ -1,0 +1,16 @@
+[
+  {
+    "__needs_rewrite": [],
+    "ops": [
+      {
+        "op_type": "replace_body_paragraph",
+        "payload": {
+          "new_paragraph": "Executive dashboard refreshed"
+        },
+        "target": {
+          "slide": 1
+        }
+      }
+    ]
+  }
+]
