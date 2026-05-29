@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 func seedDOCXPath(t *testing.T) string {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine/nonppt"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine/nonppt"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 type fixtureCase struct {

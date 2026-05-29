@@ -3,8 +3,8 @@ package runtime
 import (
 	"context"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/internal/runtime/modify"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime/modify"
 )
 
 type ModifyParams = modify.Params

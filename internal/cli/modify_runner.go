@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/officecli/officecli-internal/internal/runtime"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 type ModifyResult struct {

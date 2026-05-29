@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 type untouchedExpectedMeta struct {

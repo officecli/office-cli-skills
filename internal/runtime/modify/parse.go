@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/engine/edit"
-	"github.com/officecli/officecli-internal/engine/nonppt"
-	"github.com/officecli/officecli-internal/engine/ppt"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/engine/edit"
+	"github.com/officecli/officecli/engine/nonppt"
+	"github.com/officecli/officecli/engine/ppt"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 func callLLM(ctx context.Context, llm engine.LLMClient, prompt string) (string, error) {

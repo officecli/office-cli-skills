@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/engine/edit"
-	"github.com/officecli/officecli-internal/engine/nonppt"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/engine/edit"
+	"github.com/officecli/officecli/engine/nonppt"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 func (m *Modifier) modifyDOCX(ctx context.Context, p Params, srcBytes []byte, progress engine.ProgressEmitter) (*Result, error) {

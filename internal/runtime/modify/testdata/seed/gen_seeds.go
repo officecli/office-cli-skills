@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/officecli/officecli-internal/pkg/officegen"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 func main() {

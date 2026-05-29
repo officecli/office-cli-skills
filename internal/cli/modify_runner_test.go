@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 type modifyFakeLLMClient struct {

@@ -22,7 +22,7 @@ func TestV11FailsOnSyntheticViolation(t *testing.T) {
 
 	const syntheticSource = `package modify
 
-import _ "github.com/officecli/officecli-internal/internal/runtime"
+import _ "github.com/officecli/officecli/internal/runtime"
 `
 	if err := os.WriteFile(syntheticPath, []byte(syntheticSource), 0o644); err != nil {
 		t.Fatalf("write synthetic violation: %v", err)

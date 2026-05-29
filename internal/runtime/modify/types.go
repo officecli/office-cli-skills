@@ -1,6 +1,6 @@
 package modify
 
-import "github.com/officecli/officecli-internal/engine"
+import "github.com/officecli/officecli/engine"
 
 const (
 	DefaultMaxNeedsRewrite = 3

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/officecli/officecli-internal/engine/nonppt"
-	"github.com/officecli/officecli-internal/engine/ppt"
-	"github.com/officecli/officecli-internal/pkg/ooxmledit"
+	"github.com/officecli/officecli/engine/nonppt"
+	"github.com/officecli/officecli/engine/ppt"
+	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
 func TestParseEditResponseBasic(t *testing.T) {
