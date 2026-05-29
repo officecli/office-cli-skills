@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.107 - 2026-05-29
+
+### Added
+
+- 文档修改能力 `officecli modify <file> --prompt "..."`：基于已存在的 pptx/docx/xlsx 文件 + prompt 增量编辑（解压 OOXML → LLM 编辑 → 重新打包）。
+  - 混合编辑契约：默认走 Path B（结构化编辑操作列表），LLM 输出 `__needs_rewrite` 哨兵时按命中区域升级到 Path C（局部 XML 重写）；单次修改 LLM 调用数硬约束 ≤ 5。
+  - agent-bridge 新增 `office.modify` 工具与 `document_modification` capability（`router_policy=sentinel-upgrade`、`attention_whitelist`、按格式 `limitations`）。
+  - 保真：非文本元素（图片/图表/嵌入对象/自定义样式/SmartArt）按未压缩 payload 的 SHA-256 清单比对，丢失项在 `result_meta.modify.fidelity.dropped` 显式上报；未指名区域零回归 diff 校验（gate G3）。
+  - 30 个测试 fixture（每格式 10 个，含 Path-C 场景）+ oracle/untouched/fidelity 三道 CI gate。
+  - CI workflow `modify-ci.yml` 含 V11（import 方向）与 V12（zip-walk 收敛到单一入口）断言。
+
 ## 0.2.106 - 2026-05-29
 
 ### Added
