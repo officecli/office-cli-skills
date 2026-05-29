@@ -621,6 +621,7 @@ type ImagePromptTemplate struct {
 	PromptPreset         string    `gorm:"column:prompt_preset;type:text;not null" json:"prompt_preset,omitempty"`
 	ThumbnailStorageKey  string    `gorm:"column:thumbnail_storage_key;size:512;not null;default:''" json:"thumbnail_storage_key,omitempty"`
 	ThumbnailContentType string    `gorm:"column:thumbnail_content_type;size:128;not null;default:''" json:"thumbnail_content_type,omitempty"`
+	SlotsJSON            string    `gorm:"column:slots;type:json;not null;default:'[]'" json:"slots,omitempty"`
 	SortOrder            int       `gorm:"column:sort_order;index;not null;default:0" json:"sort_order"`
 	Enabled              bool      `gorm:"column:enabled;index;not null" json:"enabled"`
 	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`

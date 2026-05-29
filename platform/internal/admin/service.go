@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -816,6 +818,7 @@ func (s *Service) UpdateImagePromptTemplate(ctx context.Context, id uint64, req 
 		"title":         item.Title,
 		"description":   item.Description,
 		"prompt_preset": item.PromptPreset,
+		"slots":         item.SlotsJSON,
 		"sort_order":    item.SortOrder,
 		"enabled":       item.Enabled,
 	})
@@ -941,6 +944,15 @@ func imagePromptTemplateFromRequest(req UpsertImagePromptTemplateRequest) (model
 	if item.PromptPreset == "" {
 		return item, fmt.Errorf("prompt_preset is required")
 	}
+	if err := validateImagePromptSlots(req.Slots); err != nil {
+		return item, err
+	}
+	slotsJSON, err := marshalImagePromptSlots(req.Slots)
+	if err != nil {
+		return item, err
+	}
+	item.SlotsJSON = slotsJSON
+	warnImagePromptSlotMarkerMismatch(item.PromptPreset, req.Slots)
 	return item, nil
 }
 
@@ -962,9 +974,88 @@ func imagePromptTemplateResponse(item model.ImagePromptTemplate, basePath string
 		ThumbnailURL: thumbnailURL,
 		SortOrder:    item.SortOrder,
 		Enabled:      item.Enabled,
+		Slots:        parseImagePromptSlots(item.SlotsJSON),
 		CreatedAt:    formatOptionalTime(item.CreatedAt),
 		UpdatedAt:    formatOptionalTime(item.UpdatedAt),
 	}
+}
+
+var (
+	slotKeyPattern    = regexp.MustCompile(`^[a-z0-9_]+$`)
+	slotMarkerPattern = regexp.MustCompile(`\{\{(\w+)\}\}`)
+)
+
+// validateImagePromptSlots enforces the application-layer slot contract:
+// non-empty unique keys matching ^[a-z0-9_]+$, and a non-empty label.
+func validateImagePromptSlots(slots []ImagePromptSlot) error {
+	seen := make(map[string]struct{}, len(slots))
+	for i := range slots {
+		key := strings.TrimSpace(slots[i].Key)
+		if key == "" {
+			return fmt.Errorf("slot[%d]: key is required", i)
+		}
+		if !slotKeyPattern.MatchString(key) {
+			return fmt.Errorf("slot key %q must match ^[a-z0-9_]+$", key)
+		}
+		if _, dup := seen[key]; dup {
+			return fmt.Errorf("slot key %q is duplicated", key)
+		}
+		seen[key] = struct{}{}
+		if strings.TrimSpace(slots[i].Label) == "" {
+			return fmt.Errorf("slot %q: label is required", key)
+		}
+	}
+	return nil
+}
+
+// warnImagePromptSlotMarkerMismatch logs (never blocks) when preset markers and
+// slot keys drift out of sync, so admins notice orphan markers or unused slots.
+func warnImagePromptSlotMarkerMismatch(preset string, slots []ImagePromptSlot) {
+	slotKeys := make(map[string]struct{}, len(slots))
+	for i := range slots {
+		slotKeys[strings.TrimSpace(slots[i].Key)] = struct{}{}
+	}
+	markers := make(map[string]struct{})
+	for _, match := range slotMarkerPattern.FindAllStringSubmatch(preset, -1) {
+		markers[match[1]] = struct{}{}
+	}
+	for key := range slotKeys {
+		if _, ok := markers[key]; !ok {
+			log.Printf("admin: image prompt template slot %q has no matching {{%s}} marker in preset", key, key)
+		}
+	}
+	for marker := range markers {
+		if _, ok := slotKeys[marker]; !ok {
+			log.Printf("admin: image prompt template preset marker {{%s}} has no matching slot", marker)
+		}
+	}
+}
+
+func marshalImagePromptSlots(slots []ImagePromptSlot) (string, error) {
+	if len(slots) == 0 {
+		return "[]", nil
+	}
+	data, err := json.Marshal(slots)
+	if err != nil {
+		return "", fmt.Errorf("marshal slots: %w", err)
+	}
+	return string(data), nil
+}
+
+func parseImagePromptSlots(raw string) []ImagePromptSlot {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var slots []ImagePromptSlot
+	if err := json.Unmarshal([]byte(raw), &slots); err != nil {
+		log.Printf("admin: decode image prompt template slots: %v", err)
+		return nil
+	}
+	if len(slots) == 0 {
+		return nil
+	}
+	return slots
 }
 
 func composeImagePrompt(preset, userPrompt string) string {

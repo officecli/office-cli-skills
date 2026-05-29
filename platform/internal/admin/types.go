@@ -133,17 +133,28 @@ type HostedBillingConfig struct {
 	Packs        []model.HostedCreditPack         `json:"packs"`
 }
 
+type ImagePromptSlot struct {
+	Key          string `json:"key"`
+	Label        string `json:"label"`
+	Example      string `json:"example,omitempty"`
+	DefaultValue string `json:"default_value,omitempty"`
+	HelpText     string `json:"help_text,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	Multiline    bool   `json:"multiline,omitempty"`
+}
+
 type ImagePromptTemplateResponse struct {
-	ID           uint64 `json:"id"`
-	Slug         string `json:"slug"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	PromptPreset string `json:"prompt_preset,omitempty"`
-	ThumbnailURL string `json:"thumbnail_url,omitempty"`
-	SortOrder    int    `json:"sort_order"`
-	Enabled      bool   `json:"enabled"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	UpdatedAt    string `json:"updated_at,omitempty"`
+	ID           uint64            `json:"id"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset,omitempty"`
+	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
+	CreatedAt    string            `json:"created_at,omitempty"`
+	UpdatedAt    string            `json:"updated_at,omitempty"`
 }
 
 type AdminImagePromptTemplateResponse struct {
@@ -151,12 +162,13 @@ type AdminImagePromptTemplateResponse struct {
 }
 
 type UpsertImagePromptTemplateRequest struct {
-	Slug         string `json:"slug"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	PromptPreset string `json:"prompt_preset"`
-	SortOrder    int    `json:"sort_order"`
-	Enabled      bool   `json:"enabled"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
 }
 
 type ComposeImagePromptTemplateRequest struct {

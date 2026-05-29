@@ -119,3 +119,49 @@ func TestImageTemplatePublicRoutesListThumbnailAndCompose(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 	require.Contains(t, rec.Body.String(), "disabled")
 }
+
+func TestImageTemplatePublicRouteSerializesSlots(t *testing.T) {
+	router, svc := testImageTemplateRouter(t)
+
+	_, err := svc.CreateImagePromptTemplate(context.Background(), admin.UpsertImagePromptTemplateRequest{
+		Slug:         "poster-slots",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "A {{product}} poster",
+		SortOrder:    10,
+		Enabled:      true,
+		Slots: []admin.ImagePromptSlot{
+			{Key: "product", Label: "Product", Example: "running shoes", DefaultValue: "a product", Required: true, Multiline: true},
+		},
+	})
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/image-templates", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var envelope struct {
+		Data []admin.ImagePromptTemplateResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &envelope))
+
+	var slotted *admin.ImagePromptTemplateResponse
+	for i := range envelope.Data {
+		if envelope.Data[i].Slug == "poster-slots" {
+			slotted = &envelope.Data[i]
+			break
+		}
+	}
+	require.NotNil(t, slotted, "poster-slots template must be present")
+	require.Len(t, slotted.Slots, 1)
+	require.Equal(t, "product", slotted.Slots[0].Key)
+	require.Equal(t, "a product", slotted.Slots[0].DefaultValue)
+	require.True(t, slotted.Slots[0].Required)
+	require.True(t, slotted.Slots[0].Multiline)
+
+	// snake_case wire shape (must align with officedex bridge mapping).
+	body := rec.Body.String()
+	require.Contains(t, body, `"slots":[`)
+	require.Contains(t, body, `"default_value":"a product"`)
+}

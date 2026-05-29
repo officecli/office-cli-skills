@@ -151,15 +151,26 @@ type GenerateResult struct {
 	PublishedSkippedReason string   `json:"published_skipped_reason,omitempty"`
 }
 
+type ImagePromptSlot struct {
+	Key          string `json:"key"`
+	Label        string `json:"label"`
+	Example      string `json:"example,omitempty"`
+	DefaultValue string `json:"default_value,omitempty"`
+	HelpText     string `json:"help_text,omitempty"`
+	Required     bool   `json:"required,omitempty"`
+	Multiline    bool   `json:"multiline,omitempty"`
+}
+
 type ImagePromptTemplate struct {
-	ID           uint64 `json:"id"`
-	Slug         string `json:"slug"`
-	Title        string `json:"title"`
-	Description  string `json:"description"`
-	PromptPreset string `json:"prompt_preset"`
-	ThumbnailURL string `json:"thumbnail_url,omitempty"`
-	SortOrder    int    `json:"sort_order"`
-	Enabled      bool   `json:"enabled"`
+	ID           uint64            `json:"id"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	PromptPreset string            `json:"prompt_preset"`
+	ThumbnailURL string            `json:"thumbnail_url,omitempty"`
+	SortOrder    int               `json:"sort_order"`
+	Enabled      bool              `json:"enabled"`
+	Slots        []ImagePromptSlot `json:"slots,omitempty"`
 }
 
 type ReviewJob struct {

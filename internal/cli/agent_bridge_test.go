@@ -1700,3 +1700,42 @@ func TestApplyImagePromptTemplateComposesPrompt(t *testing.T) {
 		t.Fatalf("OriginalPrompt = %q", job.OriginalPrompt)
 	}
 }
+
+func TestListImagePromptTemplatesDecodesSlots(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[{"id":7,"slug":"poster","title":"Poster","description":"Poster style","prompt_preset":"A {{product}} poster","thumbnail_url":"/api/image-templates/7/thumbnail","sort_order":10,"enabled":true,"slots":[{"key":"product","label":"Product","example":"running shoes","default_value":"a product","required":true,"multiline":true}]}]}`)
+	}))
+	defer server.Close()
+
+	items, err := app.listImagePromptTemplates(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL}})
+	if err != nil {
+		t.Fatalf("listImagePromptTemplates: %v", err)
+	}
+	if len(items) != 1 || len(items[0].Slots) != 1 {
+		t.Fatalf("unexpected templates: %#v", items)
+	}
+	slot := items[0].Slots[0]
+	if slot.Key != "product" || slot.Label != "Product" || slot.DefaultValue != "a product" || !slot.Required || !slot.Multiline {
+		t.Fatalf("unexpected slot: %#v", slot)
+	}
+}
+
+func TestListImagePromptTemplatesOldShapeNoSlots(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Old server payload with no "slots" key must still decode.
+		_, _ = io.WriteString(w, `{"data":[{"id":7,"slug":"poster","title":"Poster","description":"Poster style","prompt_preset":"cinematic preset","sort_order":10,"enabled":true}]}`)
+	}))
+	defer server.Close()
+
+	items, err := app.listImagePromptTemplates(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL}})
+	if err != nil {
+		t.Fatalf("listImagePromptTemplates: %v", err)
+	}
+	if len(items) != 1 || len(items[0].Slots) != 0 {
+		t.Fatalf("expected one template with no slots: %#v", items)
+	}
+}
