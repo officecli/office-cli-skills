@@ -158,30 +158,35 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType     string          `json:"document_type"`
-	Format           string          `json:"format,omitempty"`
-	Topic            string          `json:"topic"`
-	Prompt           string          `json:"prompt,omitempty"`
-	SourceFile       string          `json:"source_file,omitempty"`
-	FilePath         string          `json:"file_path,omitempty"`
-	Payload          json.RawMessage `json:"payload,omitempty"`
-	Mode             string          `json:"mode,omitempty"`
-	RuntimeMode      string          `json:"runtime_mode,omitempty"`
-	Language         string          `json:"lang,omitempty"`
-	Style            string          `json:"style,omitempty"`
-	Audience         string          `json:"audience,omitempty"`
-	OutputDir        string          `json:"out,omitempty"`
-	Ratio            string          `json:"ratio,omitempty"`
-	Size             string          `json:"size,omitempty"`
-	PromptTemplateID string          `json:"prompt_template_id,omitempty"`
-	ReferenceImage   string          `json:"reference_image,omitempty"`
-	ReferenceImages  []string        `json:"reference_images,omitempty"`
-	ImageQuality     string          `json:"image_quality,omitempty"`
-	Publish          *bool           `json:"publish,omitempty"`
-	EnableImages     *bool           `json:"enable_images,omitempty"`
-	EnableVisual     *bool           `json:"enable_visual,omitempty"`
-	FailBelow        *int            `json:"fail_below,omitempty"`
-	EmitPreview      *bool           `json:"emit_preview,omitempty"`
+	DocumentType         string          `json:"document_type"`
+	Format               string          `json:"format,omitempty"`
+	Topic                string          `json:"topic"`
+	Prompt               string          `json:"prompt,omitempty"`
+	SourceFile           string          `json:"source_file,omitempty"`
+	FilePath             string          `json:"file_path,omitempty"`
+	Payload              json.RawMessage `json:"payload,omitempty"`
+	Mode                 string          `json:"mode,omitempty"`
+	RuntimeMode          string          `json:"runtime_mode,omitempty"`
+	Language             string          `json:"lang,omitempty"`
+	Style                string          `json:"style,omitempty"`
+	Audience             string          `json:"audience,omitempty"`
+	OutputDir            string          `json:"out,omitempty"`
+	Ratio                string          `json:"ratio,omitempty"`
+	Size                 string          `json:"size,omitempty"`
+	PromptTemplateID     string          `json:"prompt_template_id,omitempty"`
+	ReferenceImage       string          `json:"reference_image,omitempty"`
+	ReferenceImages      []string        `json:"reference_images,omitempty"`
+	ReferenceRoot        string          `json:"reference_root,omitempty"`
+	ReferencePPTX        string          `json:"reference_pptx,omitempty"`
+	ReferencePPTXSources []string        `json:"reference_pptxs,omitempty"`
+	PPTXBackend          string          `json:"pptx_backend,omitempty"`
+	ImageQuality         string          `json:"image_quality,omitempty"`
+	Publish              *bool           `json:"publish,omitempty"`
+	EnableImages         *bool           `json:"enable_images,omitempty"`
+	EnableReferenceScan  *bool           `json:"enable_reference_scan,omitempty"`
+	EnableVisual         *bool           `json:"enable_visual,omitempty"`
+	FailBelow            *int            `json:"fail_below,omitempty"`
+	EmitPreview          *bool           `json:"emit_preview,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -543,20 +548,25 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type":      "pptx|docx|xlsx|report|img",
-					"topic":              "string",
-					"prompt":             "string",
-					"file_path":          "string (.xlsx for report)",
-					"mode":               "fast|best",
-					"runtime_mode":       "external|hosted",
-					"ratio":              "square|landscape|portrait (img only)",
-					"size":               "WxH explicit pixels, e.g. 1280x768 (img only)",
-					"prompt_template_id": "server-managed image prompt template id (img only)",
-					"reference_image":    "local path or http/https URL (img only)",
-					"reference_images":   "array of paths or URLs (img only)",
-					"image_quality":      "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
-					"publish":            "boolean",
-					"emit_preview":       "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
+					"document_type":         "pptx|docx|xlsx|report|img",
+					"topic":                 "string",
+					"prompt":                "string",
+					"file_path":             "string (.xlsx for report)",
+					"mode":                  "fast|best",
+					"runtime_mode":          "external|hosted",
+					"ratio":                 "square|landscape|portrait (img only)",
+					"size":                  "WxH explicit pixels, e.g. 1280x768 (img only)",
+					"prompt_template_id":    "server-managed image prompt template id (img only)",
+					"reference_image":       "local path or http/https URL (img only)",
+					"reference_images":      "array of paths or URLs (img only)",
+					"enable_reference_scan": "boolean (pptx only) - default true; false disables automatic recursive PPTX style scanning",
+					"reference_root":        "directory root for recursive PPTX reference style scanning (pptx only)",
+					"reference_pptx":        "explicit reference PPTX path (pptx only)",
+					"reference_pptxs":       "array of explicit reference PPTX paths (pptx only)",
+					"pptx_backend":          "officegen|artifact-experimental (pptx only) - default officegen",
+					"image_quality":         "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
+					"publish":               "boolean",
+					"emit_preview":          "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
 				},
 			},
 			{
@@ -675,6 +685,34 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 	}
 	switch documentType {
 	case engine.DocumentTypePPTX:
+		capability["reference_style"] = map[string]any{
+			"supported":              true,
+			"invoke_tool":            bridgeToolOfficeGenerate,
+			"default_recursive_scan": true,
+			"enable_field":           "enable_reference_scan",
+			"root_field":             "reference_root",
+			"explicit_field":         "reference_pptx",
+			"explicit_field_array":   "reference_pptxs",
+			"disable_flag":           "--no-reference-scan",
+			"root_flag":              "--reference-root",
+			"explicit_flag":          "--reference-pptx",
+			"notes": []string{
+				"Reference style learning is available through office.generate and `officecli new pptx`; office.render consumes an already prepared payload and rejects reference scan fields.",
+				"PPTX generation recursively scans the invocation working directory by default and summarizes all discovered .pptx files into a compact editable-style profile.",
+				"Use enable_reference_scan=false to disable automatic scanning; explicit reference_pptx/reference_pptxs paths can still be supplied.",
+				"The style profile is used as intent only; raw PPTX XML, images, and arbitrary low-level style fields are not copied into the prompt.",
+			},
+		}
+		capability["pptx_backends"] = map[string]any{
+			"supported":    true,
+			"default":      runtime.PPTXBackendOfficegen,
+			"invoke_field": "pptx_backend",
+			"values":       []string{runtime.PPTXBackendOfficegen, runtime.PPTXBackendArtifactExperimental},
+			"experimental": runtime.PPTXBackendArtifactExperimental,
+			"failure_mode": "hard failure when artifact-experimental is explicitly requested and the local Node/artifact-tool worker is unavailable",
+			"render_tool":  bridgeToolOfficeGenerate,
+			"render_notes": "office.render rejects pptx_backend; use office.generate for reference-aware generation with experimental backend selection.",
+		}
 		capability["image_support"] = map[string]any{
 			"default_enabled": true,
 			"disable_flag":    "--no-images",
@@ -1424,9 +1462,19 @@ func buildGenerateBridgeMeta(result GenerateResult) map[string]any {
 		imageSupport["reason"] = "image_generation_degraded"
 		imageSupport["message"] = "The PPT output was downgraded to a text-only version. Check the image model URL, API key, and model name, or use --no-images."
 	}
-	return map[string]any{
+	meta := map[string]any{
 		"image_support": imageSupport,
 	}
+	if result.ReferenceStyle != nil {
+		meta["reference_style"] = result.ReferenceStyle
+	}
+	if result.PPTXReview != nil {
+		meta["pptx_review"] = result.PPTXReview
+	}
+	if strings.TrimSpace(result.PPTXBackend) != "" {
+		meta["pptx_backend"] = strings.TrimSpace(result.PPTXBackend)
+	}
+	return meta
 }
 
 func hasPPTImageGuidanceWarning(warnings []string) bool {

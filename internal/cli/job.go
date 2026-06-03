@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 type boolValue struct {
@@ -49,6 +50,8 @@ func (b *boolValue) IsBoolFlag() bool { return true }
 type stringList struct {
 	values []string
 }
+
+const maxExplicitReferencePPTXBytes = 100 << 20
 
 func (s *stringList) String() string {
 	if s == nil {
@@ -91,6 +94,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var sourceFile string
 	var ratio string
 	var referenceImages stringList
+	var referenceRoot string
+	var referencePPTXs stringList
+	var pptxBackend string
 	var imageSize string
 	var imageQuality string
 	var jsonOutput bool
@@ -99,6 +105,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var publishFlag boolValue
 	var noPublishFlag boolValue
 	var noImagesFlag boolValue
+	var noReferenceScanFlag boolValue
 
 	fs.StringVar(&prompt, "prompt", "", "")
 	fs.StringVar(&promptFile, "prompt-file", "", "")
@@ -111,6 +118,9 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&sourceFile, "file", "", "")
 	fs.StringVar(&ratio, "ratio", "", "")
 	fs.Var(&referenceImages, "reference-image", "")
+	fs.StringVar(&referenceRoot, "reference-root", "", "")
+	fs.Var(&referencePPTXs, "reference-pptx", "")
+	fs.StringVar(&pptxBackend, "pptx-backend", "", "")
 	fs.StringVar(&imageSize, "size", "", "")
 	fs.StringVar(&imageQuality, "image-quality", "", "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
@@ -119,6 +129,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.Var(&publishFlag, "publish", "")
 	fs.Var(&noPublishFlag, "no-publish", "")
 	fs.Var(&noImagesFlag, "no-images", "")
+	fs.Var(&noReferenceScanFlag, "no-reference-scan", "")
 
 	normalizedArgs := normalizeFlagArgs(args)
 	if err := fs.Parse(normalizedArgs); err != nil {
@@ -236,6 +247,34 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img generation")
 	}
+	referenceRoot = strings.TrimSpace(referenceRoot)
+	referencePPTXList := referencePPTXs.Slice()
+	if referenceRoot != "" && documentType != engine.DocumentTypePPTX {
+		return GenerateJob{}, fmt.Errorf("--reference-root is only supported for pptx generation")
+	}
+	if len(referencePPTXList) > 0 && documentType != engine.DocumentTypePPTX {
+		return GenerateJob{}, fmt.Errorf("--reference-pptx is only supported for pptx generation")
+	}
+	if noReferenceScanFlag.set && documentType != engine.DocumentTypePPTX {
+		return GenerateJob{}, fmt.Errorf("--no-reference-scan is only supported for pptx generation")
+	}
+	if documentType == engine.DocumentTypePPTX {
+		if err := validateExplicitReferencePPTXFiles(referencePPTXList); err != nil {
+			return GenerateJob{}, err
+		}
+	}
+	pptxBackend = strings.TrimSpace(pptxBackend)
+	if pptxBackend != "" && documentType != engine.DocumentTypePPTX {
+		return GenerateJob{}, fmt.Errorf("--pptx-backend is only supported for pptx generation")
+	}
+	finalPPTXBackend := ""
+	if documentType == engine.DocumentTypePPTX {
+		var err error
+		finalPPTXBackend, err = runtime.NormalizePPTXBackend(pptxBackend)
+		if err != nil {
+			return GenerateJob{}, err
+		}
+	}
 	finalImageSize := strings.TrimSpace(imageSize)
 	if finalImageSize != "" && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("--size is only supported for img generation")
@@ -260,6 +299,20 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	styleSpecified := finalStyle != ""
 	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
 		finalStyle = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
+	}
+	referenceScanEnabled := false
+	finalReferenceRoot := referenceRoot
+	if documentType == engine.DocumentTypePPTX {
+		referenceScanEnabled = true
+		if noReferenceScanFlag.set && noReferenceScanFlag.value {
+			referenceScanEnabled = false
+		}
+		if finalReferenceRoot == "" {
+			finalReferenceRoot = strings.TrimSpace(src.CWD)
+		}
+		if finalReferenceRoot == "" {
+			finalReferenceRoot, _ = os.Getwd()
+		}
 	}
 	var warnings []engine.GenerateIssue
 	if documentType == engine.DocumentTypeIMG {
@@ -299,6 +352,10 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		ImageRatio:            imageRatio,
 		ImageSize:             finalImageSize,
 		ReferenceImageSources: referenceImageList,
+		ReferenceScanEnabled:  referenceScanEnabled,
+		ReferenceScanRoot:     finalReferenceRoot,
+		ReferencePPTXSources:  referencePPTXList,
+		PPTXBackend:           finalPPTXBackend,
 		LocalPreview:          localPreview,
 		OutputDir:             finalOutputDir,
 		Publish:               publishEnabled,
@@ -308,6 +365,32 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}, nil
 }
 
+func validateExplicitReferencePPTXFiles(sources []string) error {
+	for _, source := range sources {
+		path := strings.TrimSpace(source)
+		if path == "" {
+			continue
+		}
+		if !strings.EqualFold(filepath.Ext(path), ".pptx") {
+			return fmt.Errorf("reference pptx must point to a .pptx file: %s", path)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("reference pptx does not exist: %s", path)
+			}
+			return fmt.Errorf("read reference pptx metadata: %w", err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("reference pptx must point to a file: %s", path)
+		}
+		if info.Size() > maxExplicitReferencePPTXBytes {
+			return fmt.Errorf("reference pptx exceeds %d bytes: %s", maxExplicitReferencePPTXBytes, path)
+		}
+	}
+	return nil
+}
+
 func normalizeFlagArgs(args []string) []string {
 	flags := make([]string, 0, len(args))
 	positionals := make([]string, 0, len(args))
@@ -315,7 +398,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--size", "--image-quality", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--reference-root", "--reference-pptx", "--pptx-backend", "--size", "--image-quality", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -323,7 +406,7 @@ func normalizeFlagArgs(args []string) []string {
 				continue
 			}
 			i++
-		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview", "--debug":
+		case "--json", "--publish", "--no-publish", "--no-images", "--no-reference-scan", "--no-visual", "--local-preview", "--debug":
 			flags = append(flags, current)
 			i++
 		default:
@@ -338,12 +421,16 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--file=") ||
 				strings.HasPrefix(current, "--ratio=") ||
 				strings.HasPrefix(current, "--reference-image=") ||
+				strings.HasPrefix(current, "--reference-root=") ||
+				strings.HasPrefix(current, "--reference-pptx=") ||
+				strings.HasPrefix(current, "--pptx-backend=") ||
 				strings.HasPrefix(current, "--size=") ||
 				strings.HasPrefix(current, "--image-quality=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
 				strings.HasPrefix(current, "--no-images=") ||
+				strings.HasPrefix(current, "--no-reference-scan=") ||
 				strings.HasPrefix(current, "--no-visual=") ||
 				strings.HasPrefix(current, "--local-preview=") ||
 				strings.HasPrefix(current, "--debug=") {

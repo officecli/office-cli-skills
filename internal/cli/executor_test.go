@@ -8,6 +8,8 @@ import (
 
 	"github.com/officecli/officecli/engine"
 	licenseprovider "github.com/officecli/officecli/internal/license"
+	"github.com/officecli/officecli/internal/runtime"
+	"github.com/officecli/officecli/pkg/officegen"
 )
 
 type fakeGenerator struct{}
@@ -50,6 +52,36 @@ func (previewGenerator) Generate(_ context.Context, params GenerateParams) (*Gen
 		Bytes:        []byte("pptx-bytes"),
 		PreviewHTML:  []byte("<html>preview</html>"),
 		PreviewJSON:  []byte(`{"title":"preview"}`),
+	}, nil
+}
+
+type referencePPTXGenerator struct{}
+
+func (referencePPTXGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	bytes, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{
+		{Title: params.Topic, Subtitle: "Reference-aware deck", Layout: "title", IsTitle: true},
+		{Title: "What changes", Layout: "content", Points: []string{"Reference style profile", "Editable text"}},
+	}, officegen.PPTXOptions{Title: params.Topic, Creator: "test", StylePreset: officegen.StylePresetEditorialLight})
+	if err != nil {
+		return nil, err
+	}
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + ".pptx",
+		DocumentType: string(params.DocumentType),
+		Bytes:        bytes,
+		ReferenceStyle: &runtime.ReferenceStyleMetadata{
+			Enabled:         true,
+			Root:            params.ReferenceScanRoot,
+			DiscoveredCount: 2,
+			ParsedCount:     1,
+			FailedCount:     1,
+			DuplicateCount:  0,
+			SourceBuckets:   map[string]int{"other": 1, "tmp": 1},
+			StyleBrief: &runtime.PPTXReferenceStyleBrief{
+				StylePresetHint: officegen.StylePresetEditorialLight,
+				LayoutRhythm:    "sections-grid",
+			},
+		},
 	}, nil
 }
 
@@ -201,6 +233,35 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 		if strings.Contains(name, ".tmp-") || strings.HasSuffix(name, ".tmp") {
 			t.Fatalf("orphan temp file remains: %s", name)
 		}
+	}
+}
+
+func TestExecutorAddsReferenceStyleAndStructuralReviewMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(referencePPTXGenerator{}, nil, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType:         engine.DocumentTypePPTX,
+		Topic:                "Reference Metadata Deck",
+		OutputDir:            tmpDir,
+		Publish:              false,
+		ReferenceScanEnabled: true,
+		ReferenceScanRoot:    tmpDir,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.ReferenceStyle == nil {
+		t.Fatalf("missing reference style metadata: %+v", result)
+	}
+	if result.ReferenceStyle.DiscoveredCount != 2 || result.ReferenceStyle.ParsedCount != 1 || result.ReferenceStyle.FailedCount != 1 {
+		t.Fatalf("reference style metadata = %#v", result.ReferenceStyle)
+	}
+	if result.PPTXReview == nil {
+		t.Fatalf("missing pptx review metadata: %+v", result)
+	}
+	if result.PPTXReview.StructureScore < 70 {
+		t.Fatalf("structure score = %d, want >= 70 (%#v)", result.PPTXReview.StructureScore, result.PPTXReview)
 	}
 }
 

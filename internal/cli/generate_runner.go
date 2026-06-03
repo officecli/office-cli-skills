@@ -412,6 +412,14 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("reference_image is only supported for img generation")
 	}
+	referenceScanEnabled, referenceScanRoot, referencePPTXList, err := pptxReferenceOptionsFromBridgeArgs(documentType, req.Args)
+	if err != nil {
+		return GenerateJob{}, err
+	}
+	pptxBackend, err := pptxBackendFromBridgeArgs(documentType, req.Args)
+	if err != nil {
+		return GenerateJob{}, err
+	}
 	imageSize := strings.TrimSpace(req.Args.Size)
 	if imageSize != "" && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("size is only supported for img generation")
@@ -445,10 +453,61 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		ImageSize:             imageSize,
 		PromptTemplateID:      promptTemplateID,
 		ReferenceImageSources: referenceImageList,
+		ReferenceScanEnabled:  referenceScanEnabled,
+		ReferenceScanRoot:     referenceScanRoot,
+		ReferencePPTXSources:  referencePPTXList,
+		PPTXBackend:           pptxBackend,
 		LocalPreview:          localPreview,
 		OutputDir:             outputDir,
 		Publish:               publish,
 		JSONOutput:            true,
 		Warnings:              warnings,
 	}, nil
+}
+
+func pptxBackendFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (string, error) {
+	backend := strings.TrimSpace(args.PPTXBackend)
+	if backend != "" && documentType != engine.DocumentTypePPTX {
+		return "", fmt.Errorf("pptx_backend is only supported for pptx generation")
+	}
+	if documentType != engine.DocumentTypePPTX {
+		return "", nil
+	}
+	return runtime.NormalizePPTXBackend(backend)
+}
+
+func pptxReferenceOptionsFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (bool, string, []string, error) {
+	referenceRoot := strings.TrimSpace(args.ReferenceRoot)
+	referencePPTXList := make([]string, 0, len(args.ReferencePPTXSources)+1)
+	if legacy := strings.TrimSpace(args.ReferencePPTX); legacy != "" {
+		referencePPTXList = append(referencePPTXList, legacy)
+	}
+	for _, src := range args.ReferencePPTXSources {
+		if v := strings.TrimSpace(src); v != "" {
+			referencePPTXList = append(referencePPTXList, v)
+		}
+	}
+	if referenceRoot != "" && documentType != engine.DocumentTypePPTX {
+		return false, "", nil, fmt.Errorf("reference_root is only supported for pptx generation")
+	}
+	if len(referencePPTXList) > 0 && documentType != engine.DocumentTypePPTX {
+		return false, "", nil, fmt.Errorf("reference_pptx is only supported for pptx generation")
+	}
+	if args.EnableReferenceScan != nil && documentType != engine.DocumentTypePPTX {
+		return false, "", nil, fmt.Errorf("enable_reference_scan is only supported for pptx generation")
+	}
+	if documentType != engine.DocumentTypePPTX {
+		return false, "", nil, nil
+	}
+	if err := validateExplicitReferencePPTXFiles(referencePPTXList); err != nil {
+		return false, "", nil, err
+	}
+	referenceScanEnabled := true
+	if args.EnableReferenceScan != nil {
+		referenceScanEnabled = *args.EnableReferenceScan
+	}
+	if referenceRoot == "" {
+		referenceRoot = "."
+	}
+	return referenceScanEnabled, referenceRoot, referencePPTXList, nil
 }

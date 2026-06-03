@@ -29,6 +29,7 @@ type fakeLLMClient struct {
 	structuredResponse  string
 	structuredCallCount int
 	lastStructuredReq   engine.StructuredCompletionRequest
+	lastJSONMsgs        []engine.LLMMessage
 	completionCharged   int
 	completionBalance   int
 	completionValid     bool
@@ -44,7 +45,8 @@ func (f fakeLLMClient) CompleteText(_ context.Context, _ []engine.LLMMessage) (s
 	return f.textResponse, nil
 }
 
-func (f *fakeLLMClient) CompleteJSON(_ context.Context, _ []engine.LLMMessage) (string, error) {
+func (f *fakeLLMClient) CompleteJSON(_ context.Context, msgs []engine.LLMMessage) (string, error) {
+	f.lastJSONMsgs = append([]engine.LLMMessage(nil), msgs...)
 	if len(f.jsonResponses) > 0 {
 		idx := f.jsonCallCount
 		if idx >= len(f.jsonResponses) {
@@ -414,6 +416,147 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 	}
 	if !strings.Contains(contentXMLs["ppt/slides/slide1.xml"], "Enterprise Collabo") {
 		t.Fatalf("slide xml = %q", contentXMLs["ppt/slides/slide1.xml"])
+	}
+}
+
+func TestServiceGeneratePPTXInjectsReferenceStyleProfile(t *testing.T) {
+	root := t.TempDir()
+	writeRuntimeReferenceDeck(t, filepath.Join(root, "brand.pptx"), "Brand Reference", "Georgia")
+	llm := &fakeLLMClient{
+		jsonResponse: `{
+			"title":"Reference Guided Deck",
+			"slides":[
+				{"title":"Reference Guided Deck","layout":"title","subtitle":"Style-aware overview","isTitle":true},
+				{"title":"Reuse Pattern","layout":"content","points":["Use reference rhythm","Keep content editable"]}
+			]
+		}`,
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType:         engine.DocumentTypePPTX,
+		Prompt:               "Create a concise product update deck",
+		Topic:                "Reference Guided Deck",
+		Mode:                 "fast",
+		ReferenceScanEnabled: true,
+		ReferenceScanRoot:    root,
+		ReferencePPTXSources: nil,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if len(llm.lastJSONMsgs) != 1 {
+		t.Fatalf("CompleteJSON messages = %d, want 1", len(llm.lastJSONMsgs))
+	}
+	prompt := llm.lastJSONMsgs[0].Content
+	for _, needle := range []string{
+		"Reference style profile",
+		"Discovered PPTX files: 1",
+		"Parsed PPTX files: 1",
+		"Georgia",
+		"Use these as style intent only",
+	} {
+		if !strings.Contains(prompt, needle) {
+			t.Fatalf("prompt missing %q:\n%s", needle, prompt)
+		}
+	}
+	if strings.Contains(prompt, "<p:sld") || strings.Contains(prompt, "<a:theme") {
+		t.Fatalf("reference prompt should not include raw PPTX XML:\n%s", prompt)
+	}
+	if doc.ReferenceStyle == nil || doc.ReferenceStyle.ParsedCount != 1 || doc.ReferenceStyle.DiscoveredCount != 1 {
+		t.Fatalf("reference style metadata = %#v", doc.ReferenceStyle)
+	}
+}
+
+func TestServiceGeneratePPTXReferenceStyleBriefMapsRendererPreset(t *testing.T) {
+	root := t.TempDir()
+	writeRuntimeReferenceDeck(t, filepath.Join(root, "training.pptx"), "Training Reference", "Aptos")
+	llm := &fakeLLMClient{
+		structuredResponse: `{
+			"stylePresetHint":"training-manual",
+			"paletteIntent":"quiet instructional palette",
+			"typographyIntent":"clear training hierarchy",
+			"layoutRhythm":"step-by-step sections",
+			"imageTreatment":"minimal diagrams",
+			"doNotCopy":["source wording"],
+			"rendererConstraints":["keep editable text"]
+		}`,
+		jsonResponse: `{
+			"title":"Reference Guided Training",
+			"slides":[
+				{"title":"Reference Guided Training","layout":"title","subtitle":"Style-aware overview","isTitle":true},
+				{"title":"Reuse Pattern","layout":"content","points":["Use reference rhythm","Keep content editable"]}
+			]
+		}`,
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType:         engine.DocumentTypePPTX,
+		Prompt:               "Create a concise training deck",
+		Topic:                "Reference Guided Training",
+		Mode:                 "fast",
+		ReferenceScanEnabled: true,
+		ReferenceScanRoot:    root,
+		LocalPreview:         true,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if llm.structuredCallCount != 1 {
+		t.Fatalf("structured calls = %d, want 1", llm.structuredCallCount)
+	}
+	if llm.lastStructuredReq.Schema.Name != "pptx_reference_style_brief" {
+		t.Fatalf("schema name = %q", llm.lastStructuredReq.Schema.Name)
+	}
+	if !strings.Contains(llm.lastJSONMsgs[0].Content, "PPTX reference style brief") ||
+		!strings.Contains(llm.lastJSONMsgs[0].Content, "training-manual") {
+		t.Fatalf("prompt did not include style brief:\n%s", llm.lastJSONMsgs[0].Content)
+	}
+	if doc.ReferenceStyle == nil || doc.ReferenceStyle.StyleBrief == nil {
+		t.Fatalf("reference style metadata missing brief: %#v", doc.ReferenceStyle)
+	}
+	var preview struct {
+		StylePreset string `json:"stylePreset"`
+	}
+	if err := json.Unmarshal(doc.PreviewJSON, &preview); err != nil {
+		t.Fatalf("parse preview json: %v\n%s", err, string(doc.PreviewJSON))
+	}
+	if preview.StylePreset != officegen.StylePresetTrainingManual {
+		t.Fatalf("preview stylePreset = %q, want %q", preview.StylePreset, officegen.StylePresetTrainingManual)
+	}
+}
+
+func writeRuntimeReferenceDeck(t *testing.T, path, title, font string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir reference deck: %v", err)
+	}
+	data, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{{
+		Title:   title,
+		Content: "Reference content",
+		Layout:  "content",
+		Points:  []string{"Reusable rhythm", "Editable foreground text"},
+	}}, officegen.PPTXOptions{
+		Title:   title,
+		Creator: "test",
+		Theme: &officegen.SlideTheme{
+			PrimaryColor:   "123456",
+			AccentColor:    "ABCDEF",
+			BackgroundType: "solid",
+			BgColor1:       "FFFFFF",
+			BgColor2:       "FFFFFF",
+			TextColor:      "111111",
+			TitleTextColor: "222222",
+			FontFamily:     font,
+			EAFontFamily:   "Noto Sans CJK SC",
+		},
+	})
+	if err != nil {
+		t.Fatalf("generate reference deck: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write reference deck: %v", err)
 	}
 }
 
@@ -1158,6 +1301,176 @@ func TestBuildPPTXFromJSON_AcceptsSemanticPayload(t *testing.T) {
 	}
 	if !strings.Contains(string(previewJSON), `"layout": "closing"`) {
 		t.Fatalf("semantic action or closing role should map to closing layout:\n%s", string(previewJSON))
+	}
+}
+
+func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) {
+	original := runPPTXArtifactWorker
+	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
+		t.Fatal("artifact worker should not run for default officegen backend")
+		return nil, nil
+	}
+	defer func() { runPPTXArtifactWorker = original }()
+
+	content := `{
+		"title":"Default Backend Demo",
+		"slides":[
+			{"title":"Default Backend Demo","layout":"title","subtitle":"Officegen remains default","isTitle":true},
+			{"title":"Body","layout":"content","points":["Default path","No worker"]}
+		]
+	}`
+	fileBytes, fileName, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Default Backend Demo", "", false, false, PPTXBuildOptions{})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if len(fileBytes) == 0 || fileName == "" {
+		t.Fatalf("empty output: bytes=%d fileName=%q", len(fileBytes), fileName)
+	}
+}
+
+func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesWorker(t *testing.T) {
+	original := runPPTXArtifactWorker
+	workerCalled := false
+	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
+		workerCalled = true
+		if req.StylePreset != officegen.StylePresetTrainingManual {
+			t.Fatalf("StylePreset = %q, want %q", req.StylePreset, officegen.StylePresetTrainingManual)
+		}
+		if len(req.Slides) < 2 {
+			t.Fatalf("Slides = %d, want normalized deck with at least 2 slides", len(req.Slides))
+		}
+		if req.StyleBrief == nil || req.StyleBrief.StylePresetHint != officegen.StylePresetTrainingManual {
+			t.Fatalf("StyleBrief = %#v", req.StyleBrief)
+		}
+		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
+			Title:       req.Title,
+			Creator:     "test",
+			Theme:       req.Theme,
+			StylePreset: req.StylePreset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(req.OutputPPTX, data, 0o644); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(req.InspectPath, []byte(`{"editableItems":[{"kind":"text"}]}`), 0o644); err != nil {
+			return nil, err
+		}
+		return &pptxArtifactWorkerOutput{
+			OutputPPTX:     req.OutputPPTX,
+			InspectPath:    req.InspectPath,
+			EditableItems:  1,
+			ArtifactToolOK: true,
+			Warnings:       []string{"fake worker warning"},
+		}, nil
+	}
+	defer func() { runPPTXArtifactWorker = original }()
+
+	content := `{
+		"title":"Artifact Backend Demo",
+		"stylePreset":"training-manual",
+		"slides":[
+			{"title":"Artifact Backend Demo","layout":"title","subtitle":"Worker route","isTitle":true},
+			{"title":"Body","layout":"content","points":["Editable text","Worker output"]}
+		]
+	}`
+	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Demo", officegen.StylePresetTrainingManual, false, true, PPTXBuildOptions{
+		Backend: PPTXBackendArtifactExperimental,
+		ReferenceBrief: &PPTXReferenceStyleBrief{
+			StylePresetHint: officegen.StylePresetTrainingManual,
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if !workerCalled {
+		t.Fatal("artifact worker was not called")
+	}
+	if len(fileBytes) == 0 || !strings.HasSuffix(fileName, ".pptx") {
+		t.Fatalf("output = bytes %d, file %q", len(fileBytes), fileName)
+	}
+	if len(previewHTML) == 0 || len(previewJSON) == 0 {
+		t.Fatal("expected local preview sidecars for artifact backend")
+	}
+	if !containsIssueCode(warnings, "WARN_PPTX_ARTIFACT_WORKER") {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFails(t *testing.T) {
+	original := runPPTXArtifactWorker
+	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
+		return nil, errors.New("node missing")
+	}
+	defer func() { runPPTXArtifactWorker = original }()
+
+	content := `{
+		"title":"Artifact Backend Failure",
+		"slides":[
+			{"title":"Artifact Backend Failure","layout":"title","subtitle":"Worker route","isTitle":true},
+			{"title":"Body","layout":"content","points":["Editable text"]}
+		]
+	}`
+	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Failure", "", false, false, PPTXBuildOptions{
+		Backend: PPTXBackendArtifactExperimental,
+	})
+	if err == nil || !strings.Contains(err.Error(), "artifact experimental backend failed") || !strings.Contains(err.Error(), "node missing") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPPTXArtifactWorkerIntegrationOptIn(t *testing.T) {
+	if os.Getenv("OFFICECLI_RUN_ARTIFACT_WORKER_TEST") != "1" {
+		t.Skip("set OFFICECLI_RUN_ARTIFACT_WORKER_TEST=1 to run the local artifact-tool worker integration test")
+	}
+	content := `{
+		"title":"Artifact Worker Integration",
+		"slides":[
+			{"title":"Artifact Worker Integration","layout":"title","subtitle":"Two-slide smoke","isTitle":true},
+			{"title":"Native Objects","layout":"chart","points":["Editable title","Editable body"],"chart":{"type":"bar","title":"Quarterly signal","categories":["Q1","Q2"],"values":[12,18]}}
+		]
+	}`
+	fileBytes, fileName, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Worker Integration", "", false, false, PPTXBuildOptions{
+		Backend: PPTXBackendArtifactExperimental,
+	})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if len(fileBytes) == 0 || !strings.HasSuffix(fileName, ".pptx") {
+		t.Fatalf("output = bytes %d, file %q", len(fileBytes), fileName)
+	}
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/", ".xml", "Artifact Worker Integration") {
+		t.Fatal("exported pptx does not contain expected editable text")
+	}
+}
+
+func TestParsePPTXPayload_MapsReferenceSemanticStyleIntentToRendererControls(t *testing.T) {
+	content := `{
+		"title":"Reference Intent Demo",
+		"referenceStyleSummary":"Use compact card rhythm from local references.",
+		"slides":[
+			{"role":"cover","headline":"Reference Intent Demo","takeaway":"Safe style intent only"},
+			{"role":"summary","headline":"Reference Rhythm","takeaway":"Use cards and an editable image plate.","styleIntent":"section card rhythm","density":"compact","visualTreatment":"image-right","blocks":[{"type":"sections","sections":[
+				{"heading":"Signal","detail":"Profile informs layout rhythm."},
+				{"heading":"Guardrail","detail":"Renderer still owns visual tokens."}
+			]}]}
+		]
+	}`
+
+	payload, err := parsePPTXPayload(content, "Reference Intent Demo", "", true)
+	if err != nil {
+		t.Fatalf("parsePPTXPayload: %v", err)
+	}
+	if len(payload.Slides) < 2 {
+		t.Fatalf("slides = %d", len(payload.Slides))
+	}
+	slide := payload.Slides[1]
+	if slide.Variant != "sections-grid" {
+		t.Fatalf("variant = %q, want sections-grid", slide.Variant)
+	}
+	if !slide.HasImage || slide.ImagePos != "right" || strings.TrimSpace(slide.ImagePrompt) == "" {
+		t.Fatalf("visual treatment was not mapped to renderer image controls: %+v", slide)
 	}
 }
 

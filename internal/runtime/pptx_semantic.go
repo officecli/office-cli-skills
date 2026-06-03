@@ -10,24 +10,28 @@ import (
 )
 
 type semanticPPTXDeck struct {
-	Title       string                   `json:"title"`
-	Subtitle    string                   `json:"subtitle,omitempty"`
-	StylePreset string                   `json:"stylePreset,omitempty"`
-	Theme       *officegen.DocumentTheme `json:"theme,omitempty"`
-	Slides      []semanticPPTXSlide      `json:"slides"`
+	Title                 string                   `json:"title"`
+	Subtitle              string                   `json:"subtitle,omitempty"`
+	StylePreset           string                   `json:"stylePreset,omitempty"`
+	ReferenceStyleSummary string                   `json:"referenceStyleSummary,omitempty"`
+	Theme                 *officegen.DocumentTheme `json:"theme,omitempty"`
+	Slides                []semanticPPTXSlide      `json:"slides"`
 }
 
 type semanticPPTXSlide struct {
-	Role     string              `json:"role,omitempty"`
-	Layout   string              `json:"layout,omitempty"`
-	Variant  string              `json:"variant,omitempty"`
-	Headline string              `json:"headline"`
-	Takeaway string              `json:"takeaway,omitempty"`
-	Blocks   []semanticPPTXBlock `json:"blocks,omitempty"`
-	Visual   *semanticPPTXVisual `json:"visual,omitempty"`
-	Source   string              `json:"source,omitempty"`
-	BgColor  string              `json:"bgColor,omitempty"`
-	BgColor2 string              `json:"bgColor2,omitempty"`
+	Role            string              `json:"role,omitempty"`
+	Layout          string              `json:"layout,omitempty"`
+	Variant         string              `json:"variant,omitempty"`
+	Headline        string              `json:"headline"`
+	Takeaway        string              `json:"takeaway,omitempty"`
+	StyleIntent     string              `json:"styleIntent,omitempty"`
+	Density         string              `json:"density,omitempty"`
+	VisualTreatment string              `json:"visualTreatment,omitempty"`
+	Blocks          []semanticPPTXBlock `json:"blocks,omitempty"`
+	Visual          *semanticPPTXVisual `json:"visual,omitempty"`
+	Source          string              `json:"source,omitempty"`
+	BgColor         string              `json:"bgColor,omitempty"`
+	BgColor2        string              `json:"bgColor2,omitempty"`
 }
 
 type semanticPPTXBlock struct {
@@ -163,10 +167,43 @@ func convertSemanticSlide(deck semanticPPTXDeck, slide semanticPPTXSlide, idx in
 			result.ImagePos = strings.TrimSpace(slide.Visual.Position)
 		}
 	}
+	applySemanticReferenceStyleIntent(&result, slide, enableImages)
 	if result.Layout == "closing" && len(result.Sections) == 0 && len(result.Points) > 0 {
 		result = normalizeActionSlide(result)
 	}
 	return result
+}
+
+func applySemanticReferenceStyleIntent(result *officegen.Slide, slide semanticPPTXSlide, enableImages bool) {
+	if result == nil {
+		return
+	}
+	intent := strings.ToLower(strings.TrimSpace(slide.StyleIntent + " " + slide.Density))
+	if result.Variant == "" && len(result.Sections) > 0 {
+		switch {
+		case strings.Contains(intent, "card") || strings.Contains(intent, "section") || strings.Contains(intent, "compact") || strings.Contains(intent, "dense"):
+			result.Variant = "sections-grid"
+		}
+	}
+	if !enableImages || result.HasImage || len(result.Visuals) > 0 {
+		return
+	}
+	treatment := strings.ToLower(strings.TrimSpace(slide.VisualTreatment))
+	if treatment == "" || !strings.Contains(treatment, "image") {
+		return
+	}
+	result.HasImage = true
+	result.ImagePos = firstNonEmpty(extractSemanticImagePosition(treatment), "right")
+	result.ImagePrompt = buildFallbackImagePrompt(*result, result.Title)
+}
+
+func extractSemanticImagePosition(treatment string) string {
+	for _, pos := range []string{"right", "left", "background", "center", "top", "bottom", "diagonal"} {
+		if strings.Contains(treatment, pos) {
+			return pos
+		}
+	}
+	return ""
 }
 
 func applySemanticBlock(slide *officegen.Slide, block semanticPPTXBlock) {

@@ -404,10 +404,10 @@ func firstNewDocumentTypeArg(args []string) string {
 			continue
 		}
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--reference-root", "--reference-pptx", "--pptx-backend", "--fail-below":
 			i++
 			continue
-		case "--json", "--publish", "--no-publish", "--no-images", "--no-visual", "--local-preview", "--debug":
+		case "--json", "--publish", "--no-publish", "--no-images", "--no-reference-scan", "--no-visual", "--local-preview", "--debug":
 			continue
 		}
 		if strings.HasPrefix(current, "--") {

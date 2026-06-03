@@ -45,6 +45,14 @@ It is intended for developer self-testing, QA regression, integration sign-off, 
 - `CLI-NEW-017`: `new img --ratio square|landscape|portrait` maps to supported image ratios and rejects unsupported values
 - `CLI-NEW-018`: `new img --reference-image <path-or-url>` accepts one local or remote reference image and rejects unsupported document types, unsupported image types, empty files, oversized files, failed URL downloads, and repeated reference-image flags
 - `CLI-NEW-019`: `new img` rejects `--mode best`, `--file`, `--local-preview`, and `--no-images`; `--no-publish` keeps output local-only
+- `CLI-NEW-020`: `new pptx` recursively scans `.pptx` files from the invocation working directory by default and injects only a compact reference style profile into the PPTX prompt
+- `CLI-NEW-021`: `new pptx --no-reference-scan`, `--reference-root <dir>`, and repeated `--reference-pptx <path>` control PPTX reference style learning; the same options are rejected for non-PPTX document types
+- `CLI-NEW-022`: explicit `--reference-pptx` inputs reject missing files, non-`.pptx` files, directories, and oversized files before runtime generation starts
+- `CLI-NEW-023`: reference-enabled PPTX generation returns safe `reference_style` metadata and `pptx_review` structural score metadata without exposing raw source XML
+- `CLI-NEW-024`: semantic PPTX payloads may use `referenceStyleSummary`, `styleIntent`, `density`, and `visualTreatment`; these map only to existing renderer controls such as `stylePreset`, `layout`, `variant`, and image position
+- `CLI-NEW-025`: `new pptx --pptx-backend artifact-experimental` explicitly selects the local artifact worker backend; default remains `officegen`, invalid backend values fail, and non-PPTX document types reject the option
+- `CLI-NEW-026`: `office.generate` accepts `pptx_backend` only for PPTX and includes `pptx_backend` in result metadata; `office.render` rejects `pptx_backend`
+- `CLI-NEW-027`: when `OFFICECLI_RUN_ARTIFACT_WORKER_TEST=1` and local Node/artifact-tool dependencies are available, the artifact worker exports a PPTX with editable text plus preview/inspect sidecars; missing worker dependencies hard-fail instead of falling back
 - `CLI-REVIEW-001`: structural review succeeds for a valid local deck
 - `CLI-REVIEW-002`: `--no-visual` skips LibreOffice-driven visual review
 

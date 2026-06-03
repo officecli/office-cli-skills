@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/officecli/officecli/engine"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 )
 
 type Executor struct {
@@ -27,18 +28,22 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 	}
 	emitProgress(ctx, e.progress, progressStepGenerate, "running", "Generating document content")
 	artifact, err := e.generator.Generate(ctx, GenerateParams{
-		DocumentType:    job.DocumentType,
-		Topic:           job.Topic,
-		Prompt:          job.Prompt,
-		SourceFilePath:  job.SourceFilePath,
-		Mode:            job.Mode,
-		Language:        job.Language,
-		Style:           job.Style,
-		Audience:        job.Audience,
-		EnableImages:    job.EnableImages,
-		ImageRatio:      job.ImageRatio,
-		ReferenceImages: append([]engine.ImageReference(nil), job.ReferenceImages...),
-		LocalPreview:    job.LocalPreview,
+		DocumentType:         job.DocumentType,
+		Topic:                job.Topic,
+		Prompt:               job.Prompt,
+		SourceFilePath:       job.SourceFilePath,
+		Mode:                 job.Mode,
+		Language:             job.Language,
+		Style:                job.Style,
+		Audience:             job.Audience,
+		EnableImages:         job.EnableImages,
+		ImageRatio:           job.ImageRatio,
+		ReferenceImages:      append([]engine.ImageReference(nil), job.ReferenceImages...),
+		ReferenceScanEnabled: job.ReferenceScanEnabled,
+		ReferenceScanRoot:    job.ReferenceScanRoot,
+		ReferencePPTXSources: append([]string(nil), job.ReferencePPTXSources...),
+		PPTXBackend:          job.PPTXBackend,
+		LocalPreview:         job.LocalPreview,
 	})
 	if err != nil {
 		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")
@@ -63,13 +68,15 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	allWarnings := append([]engine.GenerateIssue(nil), job.Warnings...)
 	allWarnings = append(allWarnings, artifact.Warnings...)
 	result := GenerateResult{
-		Status:       "success",
-		FilePath:     filePath,
-		DocumentType: string(job.DocumentType),
-		DocumentName: artifact.DocumentName,
-		RuntimeMode:  resultRuntimeMode(job, job.LicenseCheck),
-		Warnings:     warningMessages(allWarnings),
-		CreditMode:   inferCreditMode(job),
+		Status:         "success",
+		FilePath:       filePath,
+		DocumentType:   string(job.DocumentType),
+		DocumentName:   artifact.DocumentName,
+		RuntimeMode:    resultRuntimeMode(job, job.LicenseCheck),
+		Warnings:       warningMessages(allWarnings),
+		CreditMode:     inferCreditMode(job),
+		ReferenceStyle: artifact.ReferenceStyle,
+		PPTXBackend:    resultPPTXBackend(artifact, job),
 	}
 	if artifact.HostedCreditsCharged != nil {
 		result.CreditsCharged = *artifact.HostedCreditsCharged
@@ -176,6 +183,18 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	}
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file write completed")
 
+	if shouldRunPPTXReferenceStructuralReview(job, artifact) {
+		reviewMeta, err := runPPTXStructuralReview(ctx, filePath)
+		if err != nil {
+			result.Warnings = append(result.Warnings, "PPTX structural review was skipped: "+err.Error())
+		} else {
+			result.PPTXReview = reviewMeta
+			if reviewMeta.StructureScore < 70 {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("PPTX structural review score is %d, below the recommended threshold 70.", reviewMeta.StructureScore))
+			}
+		}
+	}
+
 	if job.Publish {
 		if e.publisher == nil {
 			result.Warnings = append(result.Warnings, "Publishing is not configured, so online preview publishing was skipped.")
@@ -201,6 +220,38 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	}
 	emitProgress(ctx, e.progress, progressStepFinalize, "completed", "Document generated")
 	return result, nil
+}
+
+func shouldRunPPTXReferenceStructuralReview(job GenerateJob, artifact *GeneratedArtifact) bool {
+	if artifact == nil || job.DocumentType != engine.DocumentTypePPTX {
+		return false
+	}
+	return job.ReferenceScanEnabled || len(job.ReferencePPTXSources) > 0 || artifact.ReferenceStyle != nil
+}
+
+func resultPPTXBackend(artifact *GeneratedArtifact, job GenerateJob) string {
+	if artifact != nil && strings.TrimSpace(artifact.PPTXBackend) != "" {
+		return strings.TrimSpace(artifact.PPTXBackend)
+	}
+	return strings.TrimSpace(job.PPTXBackend)
+}
+
+func runPPTXStructuralReview(ctx context.Context, filePath string) (*PPTXReviewMetadata, error) {
+	result, err := reviewprovider.NewService(nil, nil, nil).Review(ctx, reviewprovider.Request{
+		FilePath:     filePath,
+		DocumentType: string(engine.DocumentTypePPTX),
+		EnableVisual: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &PPTXReviewMetadata{
+		Status:         result.Status,
+		OverallScore:   result.OverallScore,
+		StructureScore: result.StructureScore,
+		Summary:        result.Summary,
+		Warnings:       append([]string(nil), result.Warnings...),
+	}, nil
 }
 
 func publishFailureWarning(err error) string {

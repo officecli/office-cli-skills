@@ -130,6 +130,9 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 	if style == "" && documentType == engine.DocumentTypePPTX {
 		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
+	if err := rejectRenderReferenceOptions(req.Args); err != nil {
+		return GenerateJob{}, nil, err
+	}
 
 	localPreview := req.Args.EmitPreview != nil && *req.Args.EmitPreview
 
@@ -151,4 +154,20 @@ func (a *App) buildRenderJobFromRequest(cfg Config, req bridgeInvokeParams) (Gen
 		Publish:        publish,
 		JSONOutput:     true,
 	}, req.Args.Payload, nil
+}
+
+func rejectRenderReferenceOptions(args bridgeInvokeArgs) error {
+	if strings.TrimSpace(args.ReferenceRoot) != "" {
+		return fmt.Errorf("reference_root is only supported for office.generate")
+	}
+	if strings.TrimSpace(args.ReferencePPTX) != "" || len(args.ReferencePPTXSources) > 0 {
+		return fmt.Errorf("reference_pptx is only supported for office.generate")
+	}
+	if args.EnableReferenceScan != nil {
+		return fmt.Errorf("enable_reference_scan is only supported for office.generate")
+	}
+	if strings.TrimSpace(args.PPTXBackend) != "" {
+		return fmt.Errorf("pptx_backend is only supported for office.generate")
+	}
+	return nil
 }

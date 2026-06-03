@@ -174,6 +174,25 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if _, ok := imageSupport["quality_values"]; ok {
 		t.Fatalf("quality_values should be removed, still present: %#v", imageSupport["quality_values"])
 	}
+	referenceStyle, ok := pptxCaps["reference_style"].(map[string]any)
+	if !ok {
+		t.Fatalf("pptx reference_style capability missing: %#v", pptxCaps)
+	}
+	if referenceStyle["default_recursive_scan"] != true ||
+		referenceStyle["invoke_tool"] != "office.generate" ||
+		referenceStyle["root_field"] != "reference_root" ||
+		referenceStyle["enable_field"] != "enable_reference_scan" ||
+		referenceStyle["explicit_field"] != "reference_pptx" ||
+		referenceStyle["explicit_field_array"] != "reference_pptxs" {
+		t.Fatalf("unexpected reference_style capability: %#v", referenceStyle)
+	}
+	backends, ok := pptxCaps["pptx_backends"].(map[string]any)
+	if !ok {
+		t.Fatalf("pptx_backends capability missing: %#v", pptxCaps)
+	}
+	if backends["default"] != runtime.PPTXBackendOfficegen || backends["experimental"] != runtime.PPTXBackendArtifactExperimental {
+		t.Fatalf("unexpected pptx_backends capability: %#v", backends)
+	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
 	sessionMsg := readRPC(t, outReader)
@@ -276,6 +295,16 @@ func TestAgentBridgeCapabilitiesGetIncludesPPTImageSupport(t *testing.T) {
 	}
 	if pptxCaps["preferred_tool"] != "office.render" {
 		t.Fatalf("unexpected preferred_tool: %#v", pptxCaps["preferred_tool"])
+	}
+	referenceStyle, ok := pptxCaps["reference_style"].(map[string]any)
+	if !ok {
+		t.Fatalf("reference_style missing: %#v", pptxCaps)
+	}
+	if referenceStyle["invoke_tool"] != "office.generate" {
+		t.Fatalf("reference_style should be generate-only, got: %#v", referenceStyle)
+	}
+	if _, ok := pptxCaps["pptx_backends"].(map[string]any); !ok {
+		t.Fatalf("pptx_backends missing: %#v", pptxCaps)
 	}
 	if _, ok := pptxCaps["payload_schema"].(map[string]any); !ok {
 		t.Fatalf("payload_schema missing: %#v", pptxCaps)
@@ -903,6 +932,18 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 		DocumentType: "pptx",
 		DocumentName: "demo.pptx",
 		Warnings:     []string{"Image generation failed, and the PPT output was downgraded to a text-only version."},
+		ReferenceStyle: &runtime.ReferenceStyleMetadata{
+			Enabled:         true,
+			DiscoveredCount: 2,
+			ParsedCount:     1,
+			FailedCount:     1,
+		},
+		PPTXReview: &PPTXReviewMetadata{
+			Status:         "good",
+			OverallScore:   82,
+			StructureScore: 82,
+		},
+		PPTXBackend: runtime.PPTXBackendArtifactExperimental,
 	})
 
 	for _, key := range []string{"format", "status", "file_path", "document_type", "document_name", "warnings", "result", "result_meta"} {
@@ -926,6 +967,15 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 	}
 	if imageSupport["attention_required"] != true {
 		t.Fatalf("unexpected attention_required: %#v", imageSupport["attention_required"])
+	}
+	if _, ok := meta["reference_style"].(*runtime.ReferenceStyleMetadata); !ok {
+		t.Fatalf("reference_style missing from result_meta: %#v", meta)
+	}
+	if _, ok := meta["pptx_review"].(*PPTXReviewMetadata); !ok {
+		t.Fatalf("pptx_review missing from result_meta: %#v", meta)
+	}
+	if meta["pptx_backend"] != runtime.PPTXBackendArtifactExperimental {
+		t.Fatalf("pptx_backend missing from result_meta: %#v", meta)
 	}
 }
 

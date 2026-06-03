@@ -481,14 +481,20 @@ Common options:
   --audience <value>      Set the audience
   --out <dir>             Set the output directory
   --file <path>           Provide the input workbook file (report only)
+  --reference-root <dir>  Override the PPTX reference scan root (pptx only)
+  --reference-pptx <path> Add an explicit PPTX reference deck (pptx only, repeatable)
+  --pptx-backend <value>  Select PPTX backend: officegen or artifact-experimental
   --local-preview         Generate local HTML/JSON preview sidecars
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
+  --no-reference-scan     Disable automatic recursive PPTX reference scanning
   --no-images             Generate a text-only PPTX
   --json                  Output JSON
 
 Copy-paste examples:
   officecli new pptx "Q3 Business Review" --prompt "Create a six-slide executive deck for a SaaS quarterly business review. Cover growth, retention, risks, and next-quarter actions."
+  officecli new pptx "Brand Reuse Deck" --reference-root ./brand-assets --reference-pptx ./templates/company.pptx --prompt "Create a concise customer update deck."
+  officecli new pptx "Artifact Worker Smoke" --pptx-backend artifact-experimental --no-images --prompt "Create a concise two-slide editable deck."
   officecli new docx "Product Launch Brief" --prompt "Write a concise launch brief with audience, positioning, timeline, risks, and next steps."
   officecli new xlsx "Sales Pipeline" --prompt "Create a sales pipeline workbook with stages, owners, deal values, probability, and next action columns."
   officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
@@ -496,6 +502,9 @@ Copy-paste examples:
 Description:
   - Hosted credits are the default when no local generation config exists; every new device starts with 100 free credits.
   - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
+  - PPTX recursively scans reference .pptx files from the current directory by default; use ` + "`--no-reference-scan`" + ` to disable it.
+  - PPTX uses the officegen backend by default; artifact-experimental is explicit opt-in and hard-fails when its local Node/artifact-tool worker is unavailable.
+  - PPTX ` + "`--json`" + ` output may include safe reference_style metadata and structural pptx_review scoring.
   - report requires --file <xlsx-path> and creates an HTML report from workbook data.
   - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.
 `

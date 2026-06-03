@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -12,27 +13,79 @@ import (
 	"github.com/officecli/officecli/engine"
 	generateengine "github.com/officecli/officecli/engine/generate"
 	"github.com/officecli/officecli/internal/runtime/modify"
+	"github.com/officecli/officecli/internal/runtime/pptxref"
 	"github.com/officecli/officecli/pkg/officegen"
 )
 
+const (
+	PPTXBackendOfficegen            = "officegen"
+	PPTXBackendArtifactExperimental = "artifact-experimental"
+)
+
 type GenerateParams struct {
-	DocumentType    engine.DocumentType
-	Topic           string
-	Prompt          string
-	SourceFilePath  string
-	Mode            string
-	Language        string
-	Style           string
-	Audience        string
-	EnableImages    bool
-	ImageRatio      string
-	ReferenceImages []engine.ImageReference
-	LocalPreview    bool
+	DocumentType         engine.DocumentType
+	Topic                string
+	Prompt               string
+	SourceFilePath       string
+	Mode                 string
+	Language             string
+	Style                string
+	Audience             string
+	EnableImages         bool
+	ImageRatio           string
+	ReferenceImages      []engine.ImageReference
+	ReferenceScanEnabled bool
+	ReferenceScanRoot    string
+	ReferencePPTXSources []string
+	PPTXBackend          string
+	LocalPreview         bool
+}
+
+func NormalizePPTXBackend(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return PPTXBackendOfficegen, nil
+	}
+	switch value {
+	case PPTXBackendOfficegen, PPTXBackendArtifactExperimental:
+		return value, nil
+	default:
+		return "", fmt.Errorf("unsupported pptx backend: %s", value)
+	}
+}
+
+type PPTXReferenceStyleBrief struct {
+	StylePresetHint     string   `json:"stylePresetHint,omitempty"`
+	PaletteIntent       string   `json:"paletteIntent,omitempty"`
+	TypographyIntent    string   `json:"typographyIntent,omitempty"`
+	LayoutRhythm        string   `json:"layoutRhythm,omitempty"`
+	ImageTreatment      string   `json:"imageTreatment,omitempty"`
+	DoNotCopy           []string `json:"doNotCopy,omitempty"`
+	RendererConstraints []string `json:"rendererConstraints,omitempty"`
+}
+
+type ReferenceStyleMetadata struct {
+	Enabled             bool                     `json:"enabled"`
+	Root                string                   `json:"root,omitempty"`
+	DiscoveredCount     int                      `json:"discovered_count"`
+	ParsedCount         int                      `json:"parsed_count"`
+	FailedCount         int                      `json:"failed_count"`
+	DuplicateCount      int                      `json:"duplicate_count"`
+	SourceBuckets       map[string]int           `json:"source_buckets,omitempty"`
+	AggregateSlideCount int                      `json:"aggregate_slide_count,omitempty"`
+	FontFamilies        []string                 `json:"font_families,omitempty"`
+	ThemeColors         []string                 `json:"theme_colors,omitempty"`
+	LayoutSignals       map[string]int           `json:"layout_signals,omitempty"`
+	Limitations         []string                 `json:"limitations,omitempty"`
+	StyleBrief          *PPTXReferenceStyleBrief `json:"style_brief,omitempty"`
 }
 
 type PPTXBuildOptions struct {
 	CreditBalanceSink func(int)
 	CreditChargedSink func(int)
+	Backend           string
+	ReferenceProfile  *pptxref.ReferenceStyleProfile
+	ReferenceBrief    *PPTXReferenceStyleBrief
 }
 
 type GeneratedArtifact struct {
@@ -45,6 +98,8 @@ type GeneratedArtifact struct {
 	PreviewJSON          []byte
 	HostedCreditBalance  *int
 	HostedCreditsCharged *int
+	ReferenceStyle       *ReferenceStyleMetadata
+	PPTXBackend          string
 	AccessMode           string
 	Remaining            int
 	RewardRemaining      int
@@ -104,7 +159,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypeReport:
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
-		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview)
+		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ReferenceScanEnabled, params.ReferenceScanRoot, params.ReferencePPTXSources, params.PPTXBackend)
 	case engine.DocumentTypeIMG:
 		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
 	default:
@@ -310,8 +365,18 @@ func imageExtensionFromMIME(mime string) string {
 	}
 }
 
-func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview bool) (*GeneratedArtifact, error) {
-	basePrompt := BuildPPTXPrompt(prompt, target, enableImages)
+func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview, referenceScanEnabled bool, referenceScanRoot string, referencePPTXSources []string, pptxBackend string) (*GeneratedArtifact, error) {
+	backend, err := NormalizePPTXBackend(pptxBackend)
+	if err != nil {
+		return nil, err
+	}
+	referenceProfile, referenceWarnings := buildPPTXReferenceProfile(referenceScanRoot, referencePPTXSources, referenceScanEnabled)
+	referenceBrief, briefWarnings := s.buildPPTXReferenceStyleBrief(ctx, referenceProfile, prompt, target)
+	referenceWarnings = append(referenceWarnings, briefWarnings...)
+	if strings.TrimSpace(target.Style) == "" && referenceBrief != nil && strings.TrimSpace(referenceBrief.StylePresetHint) != "" {
+		target.Style = officegen.NormalizeStylePreset(referenceBrief.StylePresetHint)
+	}
+	basePrompt := BuildPPTXPromptWithReferenceBrief(prompt, target, enableImages, referenceProfile, referenceBrief)
 	fallback := fallbackDescription(topic, prompt)
 	messages := []engine.LLMMessage{{Role: "user", Content: basePrompt}}
 	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting PPTX content from the LLM")
@@ -355,6 +420,9 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 			imageCreditsChargedSet = true
 		},
 	}
+	buildOptions.Backend = backend
+	buildOptions.ReferenceProfile = referenceProfile
+	buildOptions.ReferenceBrief = referenceBrief
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 	if err != nil {
 		if !shouldRetryPPTXAssembly(err) {
@@ -391,12 +459,223 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		DocumentName:         fileName,
 		DocumentType:         string(engine.DocumentTypePPTX),
 		Bytes:                fileBytes,
-		Warnings:             append(convertIssues(meta), warnings...),
+		Warnings:             append(append(convertIssues(meta), referenceWarnings...), warnings...),
 		PreviewHTML:          previewHTML,
 		PreviewJSON:          previewJSON,
 		HostedCreditBalance:  hostedCreditBalance,
 		HostedCreditsCharged: hostedCreditsChargedPtr,
+		ReferenceStyle:       referenceStyleMetadata(referenceProfile, referenceBrief, referenceScanEnabled || len(referencePPTXSources) > 0),
+		PPTXBackend:          backend,
 	}, nil
+}
+
+func buildPPTXReferenceProfile(root string, explicit []string, scanRoot bool) (*pptxref.ReferenceStyleProfile, []engine.GenerateIssue) {
+	if !scanRoot && len(explicit) == 0 {
+		return nil, nil
+	}
+	profile, err := pptxref.BuildProfileWithOptions(root, explicit, scanRoot)
+	if err != nil {
+		return nil, []engine.GenerateIssue{{
+			Code:    "WARN_PPTX_REFERENCE_SCAN_FAILED",
+			Message: "PPTX reference style scan failed: " + err.Error(),
+			Field:   "reference_scan",
+		}}
+	}
+	if profile == nil {
+		return nil, nil
+	}
+	var warnings []engine.GenerateIssue
+	if profile.FailedCount > 0 {
+		warnings = append(warnings, engine.GenerateIssue{
+			Code:    "WARN_PPTX_REFERENCE_PARTIAL",
+			Message: fmt.Sprintf("%d reference PPTX files could not be parsed and were skipped.", profile.FailedCount),
+			Field:   "reference_scan",
+		})
+	}
+	if profile.ParsedCount == 0 {
+		return nil, warnings
+	}
+	return profile, warnings
+}
+
+func (s *Service) buildPPTXReferenceStyleBrief(ctx context.Context, profile *pptxref.ReferenceStyleProfile, prompt string, target generateengine.PromptTarget) (*PPTXReferenceStyleBrief, []engine.GenerateIssue) {
+	if profile == nil || profile.ParsedCount == 0 {
+		return nil, nil
+	}
+	fallback := deterministicPPTXReferenceStyleBrief(profile)
+	if s == nil || s.llm == nil {
+		return fallback, nil
+	}
+	response, err := s.llm.CompleteStructured(ctx, buildPPTXReferenceStyleBriefRequest(profile, prompt, target))
+	if err != nil {
+		return fallback, []engine.GenerateIssue{{
+			Code:    "WARN_PPTX_REFERENCE_STYLE_BRIEF_FALLBACK",
+			Message: "PPTX reference style brief generation failed, so OfficeCLI used deterministic reference style signals instead: " + err.Error(),
+			Field:   "reference_style",
+		}}
+	}
+	var brief PPTXReferenceStyleBrief
+	if err := json.Unmarshal([]byte(generateengine.ExtractJSON(response)), &brief); err != nil {
+		return fallback, []engine.GenerateIssue{{
+			Code:    "WARN_PPTX_REFERENCE_STYLE_BRIEF_FALLBACK",
+			Message: "PPTX reference style brief response was not valid JSON, so OfficeCLI used deterministic reference style signals instead.",
+			Field:   "reference_style",
+		}}
+	}
+	brief = normalizePPTXReferenceStyleBrief(brief, fallback)
+	return &brief, nil
+}
+
+func buildPPTXReferenceStyleBriefRequest(profile *pptxref.ReferenceStyleProfile, prompt string, target generateengine.PromptTarget) engine.StructuredCompletionRequest {
+	return engine.StructuredCompletionRequest{
+		Messages: []engine.LLMMessage{{
+			Role:    "user",
+			Content: BuildPPTXReferenceStylePrompt(profile, prompt, target),
+		}},
+		Schema: engine.StructuredSchema{
+			Name:        "pptx_reference_style_brief",
+			Description: "Summarize PPTX reference style signals into safe renderer intent fields.",
+			JSONSchema: []byte(`{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stylePresetHint": { "type": "string" },
+    "paletteIntent": { "type": "string" },
+    "typographyIntent": { "type": "string" },
+    "layoutRhythm": { "type": "string" },
+    "imageTreatment": { "type": "string" },
+    "doNotCopy": { "type": "array", "items": { "type": "string" } },
+    "rendererConstraints": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["stylePresetHint", "paletteIntent", "typographyIntent", "layoutRhythm", "imageTreatment", "doNotCopy", "rendererConstraints"]
+}`),
+			Strict: true,
+		},
+	}
+}
+
+func BuildPPTXReferenceStylePrompt(profile *pptxref.ReferenceStyleProfile, userPrompt string, target generateengine.PromptTarget) string {
+	return fmt.Sprintf(`Summarize the PPTX reference style profile into compact renderer intent.
+
+User request:
+%s
+
+Target:
+%s
+%s
+
+Return JSON only. Use only these safe style presets for stylePresetHint when possible: executive-dark, editorial-light, explainer-voxel-light, tech-contrast, training-manual.
+Do not copy source slide wording. Do not output raw XML, arbitrary fonts, absolute coordinates, or low-level colors. Treat palette and typography as intent only.
+`, strings.TrimSpace(userPrompt), generateengine.FormatDocumentPromptTarget(target), formatPPTXReferenceStylePrompt(profile))
+}
+
+func deterministicPPTXReferenceStyleBrief(profile *pptxref.ReferenceStyleProfile) *PPTXReferenceStyleBrief {
+	if profile == nil || profile.ParsedCount == 0 {
+		return nil
+	}
+	preset := officegen.StylePresetEditorialLight
+	switch {
+	case profile.LayoutSignals["dashboard"] > 0 || profile.LayoutSignals["chart"] > 0:
+		preset = officegen.StylePresetTechContrast
+	case profile.LayoutSignals["bullets"] > profile.LayoutSignals["sections"]:
+		preset = officegen.StylePresetTrainingManual
+	case hasSerifReferenceFont(profile.FontFamilies):
+		preset = officegen.StylePresetEditorialLight
+	}
+	layout := "balanced editable sections"
+	if len(profile.LayoutSignals) > 0 {
+		layout = formatIntMap(profile.LayoutSignals)
+	}
+	return &PPTXReferenceStyleBrief{
+		StylePresetHint:  preset,
+		PaletteIntent:    compactIntent("Use recurring reference palette colors as broad contrast and mood intent", profile.ThemeColors, 6),
+		TypographyIntent: compactIntent("Prefer recurring reference font families only when renderer constraints allow", profile.FontFamilies, 6),
+		LayoutRhythm:     layout,
+		ImageTreatment:   "keep images as optional text-free art plates with editable foreground content",
+		DoNotCopy: []string{
+			"raw XML",
+			"source slide wording wholesale",
+			"source deck images",
+		},
+		RendererConstraints: []string{
+			"renderer owns theme, font, color, contrast, and geometry",
+			"all important text remains editable",
+			"charts remain native editable objects when used",
+		},
+	}
+}
+
+func normalizePPTXReferenceStyleBrief(brief PPTXReferenceStyleBrief, fallback *PPTXReferenceStyleBrief) PPTXReferenceStyleBrief {
+	if fallback == nil {
+		fallback = &PPTXReferenceStyleBrief{}
+	}
+	brief.StylePresetHint = officegen.NormalizeStylePreset(firstNonEmpty(brief.StylePresetHint, fallback.StylePresetHint))
+	brief.PaletteIntent = firstNonEmpty(strings.TrimSpace(brief.PaletteIntent), fallback.PaletteIntent)
+	brief.TypographyIntent = firstNonEmpty(strings.TrimSpace(brief.TypographyIntent), fallback.TypographyIntent)
+	brief.LayoutRhythm = firstNonEmpty(strings.TrimSpace(brief.LayoutRhythm), fallback.LayoutRhythm)
+	brief.ImageTreatment = firstNonEmpty(strings.TrimSpace(brief.ImageTreatment), fallback.ImageTreatment)
+	if len(brief.DoNotCopy) == 0 {
+		brief.DoNotCopy = append([]string(nil), fallback.DoNotCopy...)
+	}
+	if len(brief.RendererConstraints) == 0 {
+		brief.RendererConstraints = append([]string(nil), fallback.RendererConstraints...)
+	}
+	return brief
+}
+
+func referenceStyleMetadata(profile *pptxref.ReferenceStyleProfile, brief *PPTXReferenceStyleBrief, enabled bool) *ReferenceStyleMetadata {
+	if profile == nil && !enabled {
+		return nil
+	}
+	meta := &ReferenceStyleMetadata{Enabled: enabled}
+	if profile != nil {
+		meta.Root = profile.Root
+		meta.DiscoveredCount = profile.DiscoveredCount
+		meta.ParsedCount = profile.ParsedCount
+		meta.FailedCount = profile.FailedCount
+		meta.DuplicateCount = profile.DuplicateCount
+		meta.SourceBuckets = copyIntMap(profile.SourceBuckets)
+		meta.AggregateSlideCount = profile.AggregateSlideCount
+		meta.FontFamilies = append([]string(nil), profile.FontFamilies...)
+		meta.ThemeColors = append([]string(nil), profile.ThemeColors...)
+		meta.LayoutSignals = copyIntMap(profile.LayoutSignals)
+		meta.Limitations = append([]string(nil), profile.Limitations...)
+	}
+	if brief != nil {
+		copyBrief := *brief
+		copyBrief.DoNotCopy = append([]string(nil), brief.DoNotCopy...)
+		copyBrief.RendererConstraints = append([]string(nil), brief.RendererConstraints...)
+		meta.StyleBrief = &copyBrief
+	}
+	return meta
+}
+
+func copyIntMap(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func hasSerifReferenceFont(fonts []string) bool {
+	for _, font := range fonts {
+		lower := strings.ToLower(font)
+		if strings.Contains(lower, "serif") || strings.Contains(lower, "georgia") || strings.Contains(lower, "times") {
+			return true
+		}
+	}
+	return false
+}
+
+func compactIntent(prefix string, values []string, limit int) string {
+	if len(values) == 0 {
+		return prefix + "."
+	}
+	return prefix + ": " + strings.Join(limitStrings(values, limit), ", ") + "."
 }
 
 func shouldRetryPPTXAssembly(err error) bool {
@@ -631,6 +910,14 @@ const pptxStructuredSchema = `{
 }`
 
 func BuildPPTXPrompt(description string, target generateengine.PromptTarget, enableImages bool) string {
+	return BuildPPTXPromptWithReference(description, target, enableImages, nil)
+}
+
+func BuildPPTXPromptWithReference(description string, target generateengine.PromptTarget, enableImages bool, referenceProfile *pptxref.ReferenceStyleProfile) string {
+	return BuildPPTXPromptWithReferenceBrief(description, target, enableImages, referenceProfile, nil)
+}
+
+func BuildPPTXPromptWithReferenceBrief(description string, target generateengine.PromptTarget, enableImages bool, referenceProfile *pptxref.ReferenceStyleProfile, referenceBrief *PPTXReferenceStyleBrief) string {
 	archetype := detectPPTXArchetype(description, "")
 	presetHint := suggestStylePreset(target.Style, archetype, description)
 	slideExample := `    {
@@ -674,9 +961,13 @@ func BuildPPTXPrompt(description string, target generateengine.PromptTarget, ena
 - On image slides, keep only 1-2 short points so text remains secondary to the visual.`
 	}
 	outlineRules := buildArchetypePromptRules(archetype)
+	referenceRules := formatPPTXReferenceStylePrompt(referenceProfile)
+	referenceBriefRules := formatPPTXReferenceStyleBrief(referenceBrief)
 	return fmt.Sprintf(`Generate a JSON structure for a PPT presentation based on the following request.
 
 Request: %s
+%s
+%s
 %s
 
 Return JSON only. Do not add any extra commentary:
@@ -727,7 +1018,113 @@ Requirements:
 - For game, hobby, culture, science, education, or general explainer topics, the closing slide should end on a takeaway, who-it-suits summary, or how-to-start guidance, and must not sound like owners, milestones, rollout, or validation criteria.
 - Wording should fit the audience and style. Prefer quantified, conclusion-first language for business topics, and plain, vivid, example-led language for explainer topics. Avoid vague slogans.
 	%s
-	%s`, description, generateengine.FormatDocumentPromptTarget(target), presetHint, slideExample, imageRules, outlineRules)
+	%s`, description, generateengine.FormatDocumentPromptTarget(target), referenceRules, referenceBriefRules, presetHint, slideExample, imageRules, outlineRules)
+}
+
+func formatPPTXReferenceStyleBrief(brief *PPTXReferenceStyleBrief) string {
+	if brief == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nPPTX reference style brief:\n")
+	if strings.TrimSpace(brief.StylePresetHint) != "" {
+		b.WriteString("- stylePresetHint: " + strings.TrimSpace(brief.StylePresetHint) + "\n")
+	}
+	if strings.TrimSpace(brief.PaletteIntent) != "" {
+		b.WriteString("- paletteIntent: " + strings.TrimSpace(brief.PaletteIntent) + "\n")
+	}
+	if strings.TrimSpace(brief.TypographyIntent) != "" {
+		b.WriteString("- typographyIntent: " + strings.TrimSpace(brief.TypographyIntent) + "\n")
+	}
+	if strings.TrimSpace(brief.LayoutRhythm) != "" {
+		b.WriteString("- layoutRhythm: " + strings.TrimSpace(brief.LayoutRhythm) + "\n")
+	}
+	if strings.TrimSpace(brief.ImageTreatment) != "" {
+		b.WriteString("- imageTreatment: " + strings.TrimSpace(brief.ImageTreatment) + "\n")
+	}
+	if len(brief.DoNotCopy) > 0 {
+		b.WriteString("- doNotCopy: " + strings.Join(limitStrings(brief.DoNotCopy, 6), ", ") + "\n")
+	}
+	if len(brief.RendererConstraints) > 0 {
+		b.WriteString("- rendererConstraints: " + strings.Join(limitStrings(brief.RendererConstraints, 6), ", ") + "\n")
+	}
+	b.WriteString("- Apply the brief through semantic choices only: stylePreset, layout, variant, role, visual.kind, and visual.position. Do not output low-level style fields.\n")
+	return b.String()
+}
+
+func formatPPTXReferenceStylePrompt(profile *pptxref.ReferenceStyleProfile) string {
+	if profile == nil || profile.ParsedCount == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nReference style profile:\n")
+	b.WriteString(fmt.Sprintf("- Discovered PPTX files: %d\n", profile.DiscoveredCount))
+	b.WriteString(fmt.Sprintf("- Parsed PPTX files: %d\n", profile.ParsedCount))
+	if profile.FailedCount > 0 {
+		b.WriteString(fmt.Sprintf("- Failed PPTX files: %d\n", profile.FailedCount))
+	}
+	if profile.DuplicateCount > 0 {
+		b.WriteString(fmt.Sprintf("- Duplicate PPTX entries ignored: %d\n", profile.DuplicateCount))
+	}
+	if len(profile.SourceBuckets) > 0 {
+		b.WriteString("- Source buckets: " + formatIntMap(profile.SourceBuckets) + "\n")
+	}
+	b.WriteString(fmt.Sprintf("- Aggregate slides: %d\n", profile.AggregateSlideCount))
+	if len(profile.FontFamilies) > 0 {
+		b.WriteString("- Recurring font families: " + strings.Join(limitStrings(profile.FontFamilies, 8), ", ") + "\n")
+	}
+	if len(profile.ThemeColors) > 0 {
+		b.WriteString("- Recurring theme colors: " + strings.Join(limitStrings(profile.ThemeColors, 10), ", ") + "\n")
+	}
+	if len(profile.LayoutSignals) > 0 {
+		b.WriteString("- Layout signals: " + formatIntMap(profile.LayoutSignals) + "\n")
+	}
+	if profile.DensitySignals.AverageCharsPerSlide > 0 || profile.DensitySignals.MaxCharsPerSlide > 0 {
+		b.WriteString(fmt.Sprintf("- Density signals: averageCharsPerSlide=%d, maxCharsPerSlide=%d\n", profile.DensitySignals.AverageCharsPerSlide, profile.DensitySignals.MaxCharsPerSlide))
+	}
+	if len(profile.RepresentativeSlideTextSummaries) > 0 {
+		b.WriteString("- Representative slide text summaries:\n")
+		for _, summary := range limitStrings(profile.RepresentativeSlideTextSummaries, 4) {
+			b.WriteString("  - " + summary + "\n")
+		}
+	}
+	if len(profile.ReuseGuidance) > 0 {
+		b.WriteString("- Reuse guidance:\n")
+		for _, guidance := range limitStrings(profile.ReuseGuidance, 4) {
+			b.WriteString("  - " + guidance + "\n")
+		}
+	}
+	if len(profile.Limitations) > 0 {
+		b.WriteString("- Limitations:\n")
+		for _, limitation := range limitStrings(profile.Limitations, 4) {
+			b.WriteString("  - " + limitation + "\n")
+		}
+	}
+	b.WriteString("- Use these as style intent only. Do not copy source slide wording wholesale, do not expose raw XML, and do not output theme, bgColor, font, text color, shape color, absolute coordinates, or arbitrary XML fields.\n")
+	return b.String()
+}
+
+func formatIntMap(values map[string]int) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", key, values[key]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func limitStrings(values []string, limit int) []string {
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
 }
 
 func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
@@ -735,6 +1132,10 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 }
 
 func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool, options PPTXBuildOptions) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
+	backend, err := NormalizePPTXBackend(options.Backend)
+	if err != nil {
+		return nil, "", nil, nil, nil, err
+	}
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Parsing the PPTX structure and preparing assets")
 	payloadPtr, err := parsePPTXPayload(content, fallback, requestedStyle, enableImages)
 	if err != nil {
@@ -755,6 +1156,24 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			payload.Slides[idx].ImageMIME = ""
 			payload.Slides[idx].Visuals = nil
 		}
+	}
+	if backend == PPTXBackendArtifactExperimental {
+		for idx := range payload.Slides {
+			payload.Slides[idx].ImageData = nil
+			payload.Slides[idx].ImageMIME = ""
+			for visualIdx := range payload.Slides[idx].Visuals {
+				payload.Slides[idx].Visuals[visualIdx].ImageData = nil
+				payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
+			}
+		}
+		fileBytes, fileName, workerWarnings, previewHTML, previewJSON, err := buildPPTXWithArtifactWorker(ctx, progress, payload, fallback, localPreview, options)
+		if err != nil {
+			emitProgress(ctx, progress, progressStepAssemble, "failed", "Artifact experimental PPTX assembly failed")
+			return nil, "", nil, nil, nil, err
+		}
+		warnings = append(warnings, workerWarnings...)
+		emitProgress(ctx, progress, progressStepAssemble, "completed", "Artifact experimental PPTX assembly completed")
+		return fileBytes, fileName, warnings, previewHTML, previewJSON, nil
 	}
 	imageTotal := 0
 	for idx := range payload.Slides {

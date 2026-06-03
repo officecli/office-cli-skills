@@ -115,6 +115,10 @@ type GenerateJob struct {
 	PromptTemplateID      string
 	ReferenceImageSources []string
 	ReferenceImages       []engine.ImageReference
+	ReferenceScanEnabled  bool
+	ReferenceScanRoot     string
+	ReferencePPTXSources  []string
+	PPTXBackend           string
 	LocalPreview          bool
 	OutputDir             string
 	Publish               bool
@@ -125,30 +129,41 @@ type GenerateJob struct {
 }
 
 type GenerateResult struct {
-	Status                 string   `json:"status"`
-	FilePath               string   `json:"file_path"`
-	DocumentType           string   `json:"document_type"`
-	DocumentName           string   `json:"document_name"`
-	Published              bool     `json:"published"`
-	AccessURL              string   `json:"access_url,omitempty"`
-	Password               string   `json:"password,omitempty"`
-	ExpiresAt              string   `json:"expires_at,omitempty"`
-	Warnings               []string `json:"warnings,omitempty"`
-	LocalPreviewPath       string   `json:"local_preview_path,omitempty"`
-	LocalPreviewDataPath   string   `json:"local_preview_data_path,omitempty"`
-	AccessMode             string   `json:"access_mode,omitempty"`
-	RuntimeMode            string   `json:"runtime_mode,omitempty"`
-	AllowedModes           []string `json:"allowed_modes,omitempty"`
-	HostedEnabled          bool     `json:"hosted_enabled,omitempty"`
-	CreditBalance          int      `json:"credit_balance,omitempty"`
-	CreditsCharged         int      `json:"credits_charged"`
-	CreditMode             string   `json:"credit_mode,omitempty"`
-	RewardRemaining        int      `json:"reward_remaining,omitempty"`
-	PaidQuotaRemaining     int      `json:"paid_quota_remaining,omitempty"`
-	Remaining              int      `json:"remaining,omitempty"`
-	ConfigPath             string   `json:"config_path,omitempty"`
-	LicenseEnabled         bool     `json:"license_enabled"`
-	PublishedSkippedReason string   `json:"published_skipped_reason,omitempty"`
+	Status                 string                          `json:"status"`
+	FilePath               string                          `json:"file_path"`
+	DocumentType           string                          `json:"document_type"`
+	DocumentName           string                          `json:"document_name"`
+	Published              bool                            `json:"published"`
+	AccessURL              string                          `json:"access_url,omitempty"`
+	Password               string                          `json:"password,omitempty"`
+	ExpiresAt              string                          `json:"expires_at,omitempty"`
+	Warnings               []string                        `json:"warnings,omitempty"`
+	LocalPreviewPath       string                          `json:"local_preview_path,omitempty"`
+	LocalPreviewDataPath   string                          `json:"local_preview_data_path,omitempty"`
+	AccessMode             string                          `json:"access_mode,omitempty"`
+	RuntimeMode            string                          `json:"runtime_mode,omitempty"`
+	AllowedModes           []string                        `json:"allowed_modes,omitempty"`
+	HostedEnabled          bool                            `json:"hosted_enabled,omitempty"`
+	CreditBalance          int                             `json:"credit_balance,omitempty"`
+	CreditsCharged         int                             `json:"credits_charged"`
+	CreditMode             string                          `json:"credit_mode,omitempty"`
+	RewardRemaining        int                             `json:"reward_remaining,omitempty"`
+	PaidQuotaRemaining     int                             `json:"paid_quota_remaining,omitempty"`
+	Remaining              int                             `json:"remaining,omitempty"`
+	ConfigPath             string                          `json:"config_path,omitempty"`
+	LicenseEnabled         bool                            `json:"license_enabled"`
+	PublishedSkippedReason string                          `json:"published_skipped_reason,omitempty"`
+	ReferenceStyle         *runtime.ReferenceStyleMetadata `json:"reference_style,omitempty"`
+	PPTXReview             *PPTXReviewMetadata             `json:"pptx_review,omitempty"`
+	PPTXBackend            string                          `json:"pptx_backend,omitempty"`
+}
+
+type PPTXReviewMetadata struct {
+	Status         string   `json:"status"`
+	OverallScore   int      `json:"overall_score"`
+	StructureScore int      `json:"structure_score"`
+	Summary        string   `json:"summary,omitempty"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 type ImagePromptSlot struct {
