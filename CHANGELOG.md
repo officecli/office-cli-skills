@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.108 - 2026-06-03
+
+### Added
+
+- Added reference-aware PPTX generation: `officecli new pptx` and `office.generate` can scan nearby `.pptx` files, accept explicit `--reference-pptx` decks, and pass a compact reference style profile into generation.
+- Added explicit PPTX backend selection with `--pptx-backend officegen|artifact-experimental`; the experimental artifact worker path is opt-in and hard-fails when local worker dependencies are unavailable.
+
+### Changed
+
+- Extended agent-bridge PPTX capabilities with `reference_style`, `pptx_backends`, and output metadata for reference style summaries and PPTX review signals.
+
 ## 0.2.107 - 2026-05-29
 
 ### Added

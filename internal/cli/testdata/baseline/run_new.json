@@ -372,8 +372,39 @@
       ],
       "type": "object"
     },
+    "pptx_backends": {
+      "default": "officegen",
+      "experimental": "artifact-experimental",
+      "failure_mode": "hard failure when artifact-experimental is explicitly requested and the local Node/artifact-tool worker is unavailable",
+      "invoke_field": "pptx_backend",
+      "render_notes": "office.render rejects pptx_backend; use office.generate for reference-aware generation with experimental backend selection.",
+      "render_tool": "office.generate",
+      "supported": true,
+      "values": [
+        "officegen",
+        "artifact-experimental"
+      ]
+    },
     "preferred_tool": "office.render",
-    "prepare_required": false
+    "prepare_required": false,
+    "reference_style": {
+      "default_recursive_scan": true,
+      "disable_flag": "--no-reference-scan",
+      "enable_field": "enable_reference_scan",
+      "explicit_field": "reference_pptx",
+      "explicit_field_array": "reference_pptxs",
+      "explicit_flag": "--reference-pptx",
+      "invoke_tool": "office.generate",
+      "notes": [
+        "Reference style learning is available through office.generate and `officecli new pptx`; office.render consumes an already prepared payload and rejects reference scan fields.",
+        "PPTX generation recursively scans the invocation working directory by default and summarizes all discovered .pptx files into a compact editable-style profile.",
+        "Use enable_reference_scan=false to disable automatic scanning; explicit reference_pptx/reference_pptxs paths can still be supplied.",
+        "The style profile is used as intent only; raw PPTX XML, images, and arbitrary low-level style fields are not copied into the prompt."
+      ],
+      "root_field": "reference_root",
+      "root_flag": "--reference-root",
+      "supported": true
+    }
   },
   "report": {
     "agent_render_supported": true,
