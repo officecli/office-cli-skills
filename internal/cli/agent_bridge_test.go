@@ -1714,6 +1714,103 @@ func TestListImagePromptTemplatesFetchesPlatformData(t *testing.T) {
 	}
 }
 
+func TestListImagePromptTemplatesUsesCLISessionForPrivateTemplates(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/cli/image-templates" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ocli_sess_private" {
+			t.Fatalf("authorization = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"public":[{"id":7,"visibility":"platform_public","slug":"poster","title":"Poster","description":"Poster style","prompt_preset":"cinematic preset","thumbnail_url":"/api/image-templates/7/thumbnail","sort_order":10,"enabled":true}],"private":[{"id":9,"owner_user_id":42,"visibility":"user_private","slug":"my-poster","title":"My Poster","description":"Mine","prompt_preset":"private preset","sort_order":0,"enabled":true}]}}`)
+	}))
+	defer server.Close()
+
+	items, err := app.listImagePromptTemplates(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL, SessionToken: "ocli_sess_private"}})
+	if err != nil {
+		t.Fatalf("listImagePromptTemplates: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("templates = %#v", items)
+	}
+	if items[0].Visibility != "platform_public" || items[1].Visibility != "user_private" || items[1].OwnerUserID != 42 {
+		t.Fatalf("unexpected template scopes: %#v", items)
+	}
+	if items[0].ThumbnailURL != server.URL+"/api/image-templates/7/thumbnail" {
+		t.Fatalf("thumbnail url = %q", items[0].ThumbnailURL)
+	}
+}
+
+func TestCreateUserImagePromptTemplateUsesCLISession(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/cli/image-templates" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ocli_sess_private" {
+			t.Fatalf("authorization = %q", got)
+		}
+		var req CreateUserImagePromptTemplateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.SourceTemplateID != 7 || req.Slug != "my-poster" || req.Title != "My Poster" {
+			t.Fatalf("unexpected create request: %#v", req)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"id":9,"owner_user_id":42,"visibility":"user_private","slug":"my-poster","title":"My Poster","description":"Mine","prompt_preset":"private preset","sort_order":0,"enabled":true}}`)
+	}))
+	defer server.Close()
+
+	item, err := app.createUserImagePromptTemplate(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL, SessionToken: "ocli_sess_private"}}, CreateUserImagePromptTemplateRequest{
+		SourceTemplateID: 7,
+		Slug:             "my-poster",
+		Title:            "My Poster",
+	})
+	if err != nil {
+		t.Fatalf("createUserImagePromptTemplate: %v", err)
+	}
+	if item.ID != 9 || item.Visibility != "user_private" || item.OwnerUserID != 42 {
+		t.Fatalf("unexpected template: %#v", item)
+	}
+}
+
+func TestCreateImageTemplatePublishRequestUsesCLISessionAndRequestID(t *testing.T) {
+	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/cli/image-template-publish-requests" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ocli_sess_private" {
+			t.Fatalf("authorization = %q", got)
+		}
+		var req CreateImageTemplatePublishRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if req.PrivateTemplateID != 9 || req.RequestID != "req-img-1" || req.SubmitterNote != "please review" {
+			t.Fatalf("unexpected publish request: %#v", req)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":{"id":31,"private_template_id":9,"requester_user_id":42,"provenance_id":11,"status":"pending","submitter_note":"please review"}}`)
+	}))
+	defer server.Close()
+
+	item, err := app.createImageTemplatePublishRequest(context.Background(), Config{License: LicenseConfig{BaseURL: server.URL, SessionToken: "ocli_sess_private"}}, CreateImageTemplatePublishRequest{
+		PrivateTemplateID: 9,
+		RequestID:         "req-img-1",
+		SubmitterNote:     "please review",
+	})
+	if err != nil {
+		t.Fatalf("createImageTemplatePublishRequest: %v", err)
+	}
+	if item.ID != 31 || item.Status != "pending" || item.ProvenanceID != 11 {
+		t.Fatalf("unexpected publish request response: %#v", item)
+	}
+}
+
 func TestApplyImagePromptTemplateComposesPrompt(t *testing.T) {
 	app := NewApp(io.Discard, io.Discard, strings.NewReader(""))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

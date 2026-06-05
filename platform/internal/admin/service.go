@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -800,6 +801,7 @@ func (s *Service) CreateImagePromptTemplate(ctx context.Context, req UpsertImage
 	if err != nil {
 		return nil, err
 	}
+	item.Visibility = "platform_public"
 	if err := s.store.CreateImagePromptTemplate(ctx, &item); err != nil {
 		return nil, err
 	}
@@ -850,6 +852,269 @@ func (s *Service) DeleteImagePromptTemplate(ctx context.Context, id uint64) erro
 	}
 	_ = s.store.CreateAuditLog(ctx, "image_template.delete", "image_prompt_template", fmt.Sprintf("%d", id), "{}")
 	return nil
+}
+
+func (s *Service) ListUserImagePromptTemplates(ctx context.Context, userID uint64, basePath string) (*UserImagePromptTemplatesResponse, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	publicItems, err := s.ListImagePromptTemplates(ctx, true, basePath)
+	if err != nil {
+		return nil, err
+	}
+	privateItems, err := s.store.ListUserPrivateImagePromptTemplates(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	privateResponses := make([]ImagePromptTemplateResponse, 0, len(privateItems))
+	for _, item := range privateItems {
+		privateResponses = append(privateResponses, imagePromptTemplateResponse(item, basePath))
+	}
+	return &UserImagePromptTemplatesResponse{Public: publicItems, Private: privateResponses}, nil
+}
+
+func (s *Service) CreateUserImagePromptTemplate(ctx context.Context, userID uint64, req CreateUserImagePromptTemplateRequest) (*ImagePromptTemplateResponse, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	var source *model.ImagePromptTemplate
+	if req.SourceTemplateID != 0 {
+		item, err := s.store.GetImagePromptTemplate(ctx, req.SourceTemplateID)
+		if err != nil {
+			return nil, err
+		}
+		if !canUserCopyImagePromptTemplate(userID, *item) {
+			return nil, fmt.Errorf("source template is not available to user")
+		}
+		source = item
+	}
+	promptPreset := strings.TrimSpace(req.PromptPreset)
+	slots := req.Slots
+	if source != nil {
+		if promptPreset == "" {
+			promptPreset = source.PromptPreset
+		}
+		if slots == nil {
+			slots = parseImagePromptSlots(source.SlotsJSON)
+		}
+	}
+	item := model.ImagePromptTemplate{
+		OwnerUserID:      &userID,
+		Visibility:       "user_private",
+		Slug:             strings.TrimSpace(req.Slug),
+		Title:            strings.TrimSpace(req.Title),
+		Description:      strings.TrimSpace(req.Description),
+		PromptPreset:     promptPreset,
+		SortOrder:        req.SortOrder,
+		Enabled:          true,
+		SourceTemplateID: sourceTemplateIDPtr(source),
+	}
+	if item.Slug == "" {
+		return nil, fmt.Errorf("slug is required")
+	}
+	if item.Title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	if item.PromptPreset == "" {
+		return nil, fmt.Errorf("prompt_preset is required")
+	}
+	if err := validateImagePromptSlots(slots); err != nil {
+		return nil, err
+	}
+	slotsJSON, err := marshalImagePromptSlots(slots)
+	if err != nil {
+		return nil, err
+	}
+	item.SlotsJSON = slotsJSON
+	warnImagePromptSlotMarkerMismatch(item.PromptPreset, slots)
+	if err := s.store.CreateImagePromptTemplate(ctx, &item); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.private.create", "image_prompt_template", fmt.Sprintf("%d", item.ID), sqlstore.JSONString(item))
+	resp := imagePromptTemplateResponse(item, "")
+	return &resp, nil
+}
+
+func (s *Service) RecordImageGenerationProvenance(ctx context.Context, req RecordImageGenerationProvenanceRequest) (*ImageGenerationProvenanceResponse, error) {
+	if s.imageTemplateStore == nil {
+		return nil, fmt.Errorf("image template object store unavailable")
+	}
+	if req.UserID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	requestID := strings.TrimSpace(req.RequestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		return nil, fmt.Errorf("prompt is required")
+	}
+	if req.Image == nil {
+		return nil, fmt.Errorf("image is required")
+	}
+	contentType := normalizeImageTemplateContentType(req.ImageName, req.ContentType)
+	if !allowedImageTemplateContentType(contentType) {
+		return nil, fmt.Errorf("image must be png, jpg, jpeg, or webp")
+	}
+	data, err := io.ReadAll(req.Image)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("image is required")
+	}
+	ext := strings.ToLower(filepath.Ext(req.ImageName))
+	if ext == "" {
+		exts, _ := mime.ExtensionsByType(contentType)
+		if len(exts) > 0 {
+			ext = exts[0]
+		}
+	}
+	imageHash := sha256.Sum256(data)
+	promptHash := sha256.Sum256([]byte(prompt))
+	key := fmt.Sprintf("image-generations/%d/%s/%d%s", req.UserID, safeImageTemplateObjectKeyPart(requestID), time.Now().UnixNano(), ext)
+	if err := s.imageTemplateStore.PutObject(ctx, key, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
+		return nil, err
+	}
+	item := model.ImageGenerationProvenance{
+		RequestID:         requestID,
+		UserID:            req.UserID,
+		Prompt:            prompt,
+		PromptSHA256:      hex.EncodeToString(promptHash[:]),
+		ImageSHA256:       hex.EncodeToString(imageHash[:]),
+		ImageStorageKey:   key,
+		ImageContentType:  contentType,
+		ImageOriginalName: strings.TrimSpace(req.ImageName),
+	}
+	if req.SourceTemplateID != 0 {
+		item.SourceTemplateID = &req.SourceTemplateID
+	}
+	if err := s.store.CreateImageGenerationProvenance(ctx, &item); err != nil {
+		return nil, err
+	}
+	resp := imageGenerationProvenanceResponse(item)
+	return &resp, nil
+}
+
+func (s *Service) CreateImageTemplatePublishRequest(ctx context.Context, userID uint64, req CreateImageTemplatePublishRequest) (*ImageTemplatePublishRequestResponse, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	privateTemplate, err := s.store.GetImagePromptTemplate(ctx, req.PrivateTemplateID)
+	if err != nil {
+		return nil, err
+	}
+	if !isUserPrivateImageTemplateForUser(*privateTemplate, userID) {
+		return nil, fmt.Errorf("private template does not belong to user")
+	}
+	provenance, err := s.resolveImageGenerationProvenance(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if provenance.UserID != userID {
+		return nil, fmt.Errorf("generation task does not belong to user")
+	}
+	if hashPrompt(privateTemplate.PromptPreset) != provenance.PromptSHA256 {
+		return nil, fmt.Errorf("generated prompt does not match private template")
+	}
+	item := model.ImageTemplatePublishRequest{
+		PrivateTemplateID: privateTemplate.ID,
+		RequesterUserID:   userID,
+		GenerationID:      provenance.ID,
+		Status:            "pending",
+		SubmitterNote:     strings.TrimSpace(req.SubmitterNote),
+	}
+	if err := s.store.CreateImageTemplatePublishRequest(ctx, &item); err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.publish_request.create", "image_template_publish_request", fmt.Sprintf("%d", item.ID), sqlstore.JSONString(item))
+	resp := imageTemplatePublishRequestResponse(item)
+	return &resp, nil
+}
+
+func (s *Service) resolveImageGenerationProvenance(ctx context.Context, req CreateImageTemplatePublishRequest) (*model.ImageGenerationProvenance, error) {
+	if req.ProvenanceID != 0 {
+		return s.store.GetImageGenerationProvenance(ctx, req.ProvenanceID)
+	}
+	requestID := strings.TrimSpace(req.RequestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("provenance_id or request_id is required")
+	}
+	return s.store.GetImageGenerationProvenanceByRequestID(ctx, requestID)
+}
+
+func (s *Service) ListImageTemplatePublishRequests(ctx context.Context, status string) ([]ImageTemplatePublishRequestResponse, error) {
+	items, err := s.store.ListImageTemplatePublishRequests(ctx, strings.TrimSpace(status))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ImageTemplatePublishRequestResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, imageTemplatePublishRequestResponse(item))
+	}
+	return out, nil
+}
+
+func (s *Service) ReviewImageTemplatePublishRequest(ctx context.Context, adminEmail string, id uint64, req ReviewImageTemplatePublishRequest) (*ImageTemplatePublishRequestResponse, error) {
+	request, err := s.store.GetImageTemplatePublishRequest(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if request.Status != "pending" {
+		return nil, fmt.Errorf("publish request is already reviewed")
+	}
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	now := time.Now().UTC()
+	values := map[string]any{
+		"admin_notes": strings.TrimSpace(req.AdminNotes),
+		"reviewed_by": strings.TrimSpace(adminEmail),
+		"reviewed_at": &now,
+	}
+	switch action {
+	case "approve":
+		privateTemplate, err := s.store.GetImagePromptTemplate(ctx, request.PrivateTemplateID)
+		if err != nil {
+			return nil, err
+		}
+		provenance, err := s.store.GetImageGenerationProvenance(ctx, request.GenerationID)
+		if err != nil {
+			return nil, err
+		}
+		if provenance.UserID != request.RequesterUserID || hashPrompt(privateTemplate.PromptPreset) != provenance.PromptSHA256 {
+			return nil, fmt.Errorf("publish request provenance no longer matches private template")
+		}
+		publicTemplate := model.ImagePromptTemplate{
+			Visibility:           "platform_public",
+			SourceTemplateID:     &privateTemplate.ID,
+			GenerationID:         &provenance.ID,
+			Slug:                 publicTemplateSlug(privateTemplate.Slug, request.ID),
+			Title:                privateTemplate.Title,
+			Description:          privateTemplate.Description,
+			PromptPreset:         privateTemplate.PromptPreset,
+			ThumbnailStorageKey:  provenance.ImageStorageKey,
+			ThumbnailContentType: provenance.ImageContentType,
+			SlotsJSON:            privateTemplate.SlotsJSON,
+			SortOrder:            privateTemplate.SortOrder,
+			Enabled:              true,
+		}
+		if err := s.store.CreateImagePromptTemplate(ctx, &publicTemplate); err != nil {
+			return nil, err
+		}
+		values["status"] = "approved"
+		values["public_template_id"] = publicTemplate.ID
+	case "reject":
+		values["status"] = "rejected"
+	default:
+		return nil, fmt.Errorf("unsupported review action")
+	}
+	updated, err := s.store.UpdateImageTemplatePublishRequest(ctx, id, values)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.CreateAuditLog(ctx, "image_template.publish_request."+stringValue(values["status"]), "image_template_publish_request", fmt.Sprintf("%d", id), sqlstore.JSONString(updated))
+	resp := imageTemplatePublishRequestResponse(*updated)
+	return &resp, nil
 }
 
 func (s *Service) UploadImagePromptTemplateThumbnail(ctx context.Context, id uint64, fileName, contentType string, reader io.Reader, size int64) (*AdminImagePromptTemplateResponse, error) {
@@ -965,8 +1230,18 @@ func imagePromptTemplateResponse(item model.ImagePromptTemplate, basePath string
 		}
 		thumbnailURL = fmt.Sprintf("%s/%d/thumbnail", prefix, item.ID)
 	}
+	ownerUserID := uint64(0)
+	if item.OwnerUserID != nil {
+		ownerUserID = *item.OwnerUserID
+	}
+	visibility := strings.TrimSpace(item.Visibility)
+	if visibility == "" {
+		visibility = "platform_public"
+	}
 	return ImagePromptTemplateResponse{
 		ID:           item.ID,
+		OwnerUserID:  ownerUserID,
+		Visibility:   visibility,
 		Slug:         item.Slug,
 		Title:        item.Title,
 		Description:  item.Description,
@@ -978,6 +1253,100 @@ func imagePromptTemplateResponse(item model.ImagePromptTemplate, basePath string
 		CreatedAt:    formatOptionalTime(item.CreatedAt),
 		UpdatedAt:    formatOptionalTime(item.UpdatedAt),
 	}
+}
+
+func imageGenerationProvenanceResponse(item model.ImageGenerationProvenance) ImageGenerationProvenanceResponse {
+	return ImageGenerationProvenanceResponse{
+		ID:               item.ID,
+		RequestID:        item.RequestID,
+		UserID:           item.UserID,
+		PromptSHA256:     item.PromptSHA256,
+		ImageSHA256:      item.ImageSHA256,
+		ImageContentType: item.ImageContentType,
+		CreatedAt:        formatOptionalTime(item.CreatedAt),
+	}
+}
+
+func imageTemplatePublishRequestResponse(item model.ImageTemplatePublishRequest) ImageTemplatePublishRequestResponse {
+	publicTemplateID := uint64(0)
+	if item.PublicTemplateID != nil {
+		publicTemplateID = *item.PublicTemplateID
+	}
+	reviewedAt := ""
+	if item.ReviewedAt != nil {
+		reviewedAt = item.ReviewedAt.Format(time.RFC3339)
+	}
+	return ImageTemplatePublishRequestResponse{
+		ID:                item.ID,
+		PrivateTemplateID: item.PrivateTemplateID,
+		RequesterUserID:   item.RequesterUserID,
+		ProvenanceID:      item.GenerationID,
+		Status:            item.Status,
+		SubmitterNote:     item.SubmitterNote,
+		AdminNotes:        item.AdminNotes,
+		ReviewedBy:        item.ReviewedBy,
+		PublicTemplateID:  publicTemplateID,
+		ReviewedAt:        reviewedAt,
+		CreatedAt:         formatOptionalTime(item.CreatedAt),
+		UpdatedAt:         formatOptionalTime(item.UpdatedAt),
+	}
+}
+
+func canUserCopyImagePromptTemplate(userID uint64, item model.ImagePromptTemplate) bool {
+	visibility := strings.TrimSpace(item.Visibility)
+	if visibility == "" || visibility == "platform_public" {
+		return item.Enabled
+	}
+	return isUserPrivateImageTemplateForUser(item, userID)
+}
+
+func isUserPrivateImageTemplateForUser(item model.ImagePromptTemplate, userID uint64) bool {
+	return strings.TrimSpace(item.Visibility) == "user_private" && item.OwnerUserID != nil && *item.OwnerUserID == userID
+}
+
+func sourceTemplateIDPtr(source *model.ImagePromptTemplate) *uint64 {
+	if source == nil {
+		return nil
+	}
+	id := source.ID
+	return &id
+}
+
+func hashPrompt(prompt string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(prompt)))
+	return hex.EncodeToString(sum[:])
+}
+
+func safeImageTemplateObjectKeyPart(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "request"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
+}
+
+func publicTemplateSlug(privateSlug string, requestID uint64) string {
+	slug := strings.TrimSpace(privateSlug)
+	if slug == "" {
+		slug = "image-template"
+	}
+	return fmt.Sprintf("%s-public-%d", slug, requestID)
+}
+
+func stringValue(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
 }
 
 var (

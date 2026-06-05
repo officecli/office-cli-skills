@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ImageUp, Save, Trash2 } from 'lucide-react'
+import { CheckCircle2, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { EmptyState, Panel, SectionHeading, StatusPill } from '../components/ui'
 import type { ImagePromptTemplate } from '../types'
@@ -30,10 +30,14 @@ function normalizeTemplate(template: ImagePromptTemplate): ImagePromptTemplate {
 export default function ImageTemplatesPage() {
   const queryClient = useQueryClient()
   const { data: templates = [], isLoading } = useQuery({ queryKey: ['admin-image-templates'], queryFn: api.imageTemplates })
+  const { data: publishRequests = [], isLoading: publishRequestsLoading } = useQuery({ queryKey: ['admin-image-template-publish-requests'], queryFn: api.imageTemplatePublishRequests })
   const [draft, setDraft] = useState<ImagePromptTemplate>(blankTemplate)
   const [editDrafts, setEditDrafts] = useState<Record<number, ImagePromptTemplate>>({})
   const [error, setError] = useState('')
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-image-templates'] })
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-image-templates'] })
+    queryClient.invalidateQueries({ queryKey: ['admin-image-template-publish-requests'] })
+  }
 
   const sortedTemplates = useMemo(() => [...templates].sort((a, b) => (a.sort_order - b.sort_order) || String(a.title).localeCompare(String(b.title))), [templates])
 
@@ -69,6 +73,11 @@ export default function ImageTemplatesPage() {
     onSuccess: invalidate,
     onError: (err) => setError(errorMessage(err, 'Failed to upload thumbnail.')),
   })
+  const review = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: 'approve' | 'reject' }) => api.reviewImageTemplatePublishRequest(id, { action }),
+    onSuccess: invalidate,
+    onError: (err) => setError(errorMessage(err, 'Failed to review publish request.')),
+  })
 
   function submitCreate(event: FormEvent) {
     event.preventDefault()
@@ -102,6 +111,27 @@ export default function ImageTemplatesPage() {
           <TextArea label="Prompt preset" className="md:col-span-2" value={draft.prompt_preset} onChange={(value) => setDraft({ ...draft, prompt_preset: value })} placeholder="Preset prompt appended by the server before the user's prompt." required />
           <button type="submit" className="admin-primary-button self-end" disabled={create.isPending}>Create template</button>
         </form>
+      </Panel>
+
+      <Panel>
+        <SectionHeading eyebrow="Community publishing" title="Publish requests" body="Approve private templates only when the attached image generation task proves the prompt and generated image match." />
+        {publishRequestsLoading ? <div className="text-sm text-outline">Loading publish requests...</div> : publishRequests.length ? (
+          <div className="grid gap-3">
+            {publishRequests.map((request) => (
+              <div key={request.id} className="admin-card-muted flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-white">Request #{request.id} · private template #{request.private_template_id}</div>
+                  <div className="mt-1 text-xs text-outline">User #{request.requester_user_id} · generation #{request.provenance_id} · {request.status}</div>
+                  {request.submitter_note ? <div className="mt-2 text-sm text-outline-variant">{request.submitter_note}</div> : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="admin-primary-button inline-flex items-center gap-2" disabled={review.isPending} onClick={() => review.mutate({ id: request.id, action: 'approve' })}><CheckCircle2 size={14} /> Approve</button>
+                  <button type="button" className="admin-secondary-button inline-flex items-center gap-2 text-red-200" disabled={review.isPending} onClick={() => review.mutate({ id: request.id, action: 'reject' })}><XCircle size={14} /> Reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <EmptyState title="No pending requests" body="User-submitted private templates awaiting review will appear here." />}
       </Panel>
 
       <Panel>

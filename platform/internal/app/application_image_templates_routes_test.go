@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/officecli/officecli/platform/internal/admin"
+	"github.com/officecli/officecli/platform/internal/auth"
 	"github.com/officecli/officecli/platform/internal/model"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
@@ -164,4 +165,48 @@ func TestImageTemplatePublicRouteSerializesSlots(t *testing.T) {
 	body := rec.Body.String()
 	require.Contains(t, body, `"slots":[`)
 	require.Contains(t, body, `"default_value":"a product"`)
+}
+
+func TestImageTemplateUserRoutesCopyPublicTemplateIntoPrivateLibrary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_user_routes?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.ImageGenerationProvenance{}, &model.ImageTemplatePublishRequest{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	svc := admin.NewService(store, nil, "secret", time.Hour, "cookie", testRouteCodec{}, "salt", nil, nil, nil)
+	svc.SetImageTemplateObjectStore(&routeImageTemplateObjectStore{})
+	authSvc := auth.NewService(nil, nil, overviewSessionStore{payload: auth.SessionPayload{SessionID: "session-1", UserID: 42}}, "cop_app_session", time.Hour, testRouteCodec{}, nil, nil)
+
+	public, err := svc.CreateImagePromptTemplate(context.Background(), admin.UpsertImagePromptTemplateRequest{
+		Slug:         "poster",
+		Title:        "Poster",
+		Description:  "Poster template",
+		PromptPreset: "A {{product}} poster",
+		SortOrder:    10,
+		Enabled:      true,
+		Slots:        []admin.ImagePromptSlot{{Key: "product", Label: "Product", Required: true}},
+	})
+	require.NoError(t, err)
+
+	router := gin.New()
+	registerImageTemplateRoutes(router.Group("/api"), svc, authSvc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/app/image-templates", bytes.NewReader([]byte(fmt.Sprintf(`{"source_template_id":%d,"slug":"my-poster","title":"My Poster"}`, public.ID))))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "session-1"})
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"visibility":"user_private"`)
+	require.Contains(t, rec.Body.String(), `"owner_user_id":42`)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/app/image-templates", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_app_session", Value: "session-1"})
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), `"public":[`)
+	require.Contains(t, rec.Body.String(), `"private":[`)
+	require.Contains(t, rec.Body.String(), `"title":"My Poster"`)
+	require.Contains(t, rec.Body.String(), `"prompt_preset":"A {{product}} poster"`)
 }

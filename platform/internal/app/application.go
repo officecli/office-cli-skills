@@ -298,9 +298,10 @@ func registerRoutesWithHosted(r *egin.Component, cfg Config, lic *licensesvc.Ser
 	api.Use(siteCORSMiddleware(cfg))
 
 	registerLicenseRoutesWithConfig(api, cfg, lic, cliSessionSvc)
-	registerHostedLLMRoutes(api, hostedSvc)
+	registerHostedLLMRoutes(api, hostedSvc, adminSvc)
 	registerPublishRoutes(api, cfg, publishService)
-	registerImageTemplateRoutes(api, adminSvc)
+	registerImageTemplateRoutes(api, adminSvc, authSvc)
+	registerCLIImageTemplateRoutes(api, adminSvc, cliSessionSvc)
 	registerOperationsRoutes(api, cfg, authSvc, operationsSvc)
 	registerAuthRoutes(api, cfg, authSvc, appSvc)
 	registerCLIRoutes(api, cfg, authSvc, appSvc, cliSessionSvc)
@@ -426,7 +427,7 @@ func registerPublishRoutes(api *gin.RouterGroup, cfg Config, publisher publishRo
 	})
 }
 
-func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service) {
+func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service, authSvcs ...*auth.Service) {
 	if adminSvc == nil {
 		return
 	}
@@ -496,12 +497,86 @@ func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service) 
 		httpapi.JSON(c, http.StatusOK, data)
 	})
 
+	if len(authSvcs) > 0 && authSvcs[0] != nil {
+		authSvc := authSvcs[0]
+		resolver := func(cookieValue string) (uint64, string, error) {
+			payload, err := authSvc.ResolveSession(cookieValue)
+			if err != nil || payload == nil {
+				return 0, "", err
+			}
+			return payload.UserID, payload.SessionID, nil
+		}
+		userTemplates := api.Group("/app/image-templates")
+		userTemplates.Use(httpapi.RequireAppUser(resolver, "cop_app_session"))
+		userTemplates.GET("", func(c *gin.Context) {
+			data, err := adminSvc.ListUserImagePromptTemplates(c.Request.Context(), currentUserID(c), "/api/image-templates")
+			if err != nil {
+				writeTemplateError(c, err)
+				return
+			}
+			httpapi.JSON(c, http.StatusOK, data)
+		})
+		userTemplates.POST("", func(c *gin.Context) {
+			var req admin.CreateUserImagePromptTemplateRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				httpapi.Error(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			data, err := adminSvc.CreateUserImagePromptTemplate(c.Request.Context(), currentUserID(c), req)
+			if err != nil {
+				writeTemplateError(c, err)
+				return
+			}
+			httpapi.JSON(c, http.StatusOK, data)
+		})
+		publishRequests := api.Group("/app/image-template-publish-requests")
+		publishRequests.Use(httpapi.RequireAppUser(resolver, "cop_app_session"))
+		publishRequests.POST("", func(c *gin.Context) {
+			var req admin.CreateImageTemplatePublishRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				httpapi.Error(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			data, err := adminSvc.CreateImageTemplatePublishRequest(c.Request.Context(), currentUserID(c), req)
+			if err != nil {
+				writeTemplateError(c, err)
+				return
+			}
+			httpapi.JSON(c, http.StatusOK, data)
+		})
+	}
+
 	protected := api.Group("/admin/image-templates")
 	protected.Use(httpapi.RequireAdmin(adminSvc.ResolveSession, "cop_admin_session"))
 	protected.GET("", func(c *gin.Context) {
 		data, err := adminSvc.ListAdminImagePromptTemplates(c.Request.Context(), "/api/image-templates")
 		if err != nil {
 			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.GET("/publish-requests", func(c *gin.Context) {
+		data, err := adminSvc.ListImageTemplatePublishRequests(c.Request.Context(), c.Query("status"))
+		if err != nil {
+			httpapi.Error(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.POST("/publish-requests/:id/review", func(c *gin.Context) {
+		id, ok := parseID(c)
+		if !ok {
+			return
+		}
+		var req admin.ReviewImageTemplatePublishRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.ReviewImageTemplatePublishRequest(c.Request.Context(), "admin", id, req)
+		if err != nil {
+			writeTemplateError(c, err)
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, data)
@@ -603,6 +678,66 @@ func registerImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service) 
 	})
 }
 
+func registerCLIImageTemplateRoutes(api *gin.RouterGroup, adminSvc *admin.Service, cliSvc *clisession.Service) {
+	if adminSvc == nil || cliSvc == nil {
+		return
+	}
+	resolve := func(c *gin.Context) (*clisession.SessionResponse, bool) {
+		session, err := cliSvc.Session(c.Request.Context(), bearerToken(c.GetHeader("Authorization")))
+		if err != nil || session == nil || session.UserID == 0 {
+			httpapi.Error(c, http.StatusUnauthorized, "invalid cli session")
+			return nil, false
+		}
+		return session, true
+	}
+	api.GET("/cli/image-templates", func(c *gin.Context) {
+		session, ok := resolve(c)
+		if !ok {
+			return
+		}
+		data, err := adminSvc.ListUserImagePromptTemplates(c.Request.Context(), session.UserID, "/api/image-templates")
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	api.POST("/cli/image-templates", func(c *gin.Context) {
+		session, ok := resolve(c)
+		if !ok {
+			return
+		}
+		var req admin.CreateUserImagePromptTemplateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateUserImagePromptTemplate(c.Request.Context(), session.UserID, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+	api.POST("/cli/image-template-publish-requests", func(c *gin.Context) {
+		session, ok := resolve(c)
+		if !ok {
+			return
+		}
+		var req admin.CreateImageTemplatePublishRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, err := adminSvc.CreateImageTemplatePublishRequest(c.Request.Context(), session.UserID, req)
+		if err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, data)
+	})
+}
+
 func registerLicenseRoutesWithConfig(api *gin.RouterGroup, cfg Config, lic *licensesvc.Service, cliSvc *clisession.Service) {
 	licenseRatePerMinute := cfg.LicenseRateLimitPerMinute
 	if licenseRatePerMinute <= 0 {
@@ -683,9 +818,13 @@ func usageAuditContext(c *gin.Context) model.UsageAuditContext {
 	}
 }
 
-func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service) {
+func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service, adminSvcs ...*admin.Service) {
 	if hostedSvc == nil {
 		return
+	}
+	var adminSvc *admin.Service
+	if len(adminSvcs) > 0 {
+		adminSvc = adminSvcs[0]
 	}
 	llmAPI := api.Group("/llm/v1")
 	llmAPI.POST("/text", func(c *gin.Context) {
@@ -750,9 +889,21 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service)
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
+		if adminSvc != nil && resp.UserID != 0 && len(resp.Data) > 0 {
+			_, _ = adminSvc.RecordImageGenerationProvenance(c.Request.Context(), admin.RecordImageGenerationProvenanceRequest{
+				RequestID:   resp.RequestID,
+				UserID:      resp.UserID,
+				Prompt:      req.Prompt,
+				ImageName:   "generated-image.png",
+				ContentType: resp.MIME,
+				Image:       bytes.NewReader(resp.Data),
+				ImageSize:   int64(len(resp.Data)),
+			})
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"data":                 base64.StdEncoding.EncodeToString(resp.Data),
 			"mime":                 resp.MIME,
+			"request_id":           resp.RequestID,
 			"credit_balance":       resp.CreditBalance,
 			"credits_charged":      resp.CreditsCharged,
 			"access_mode":          resp.AccessMode,

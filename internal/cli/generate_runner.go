@@ -254,10 +254,51 @@ func (a *App) applyImagePromptTemplate(ctx context.Context, cfg Config, job Gene
 }
 
 func (a *App) listImagePromptTemplates(ctx context.Context, cfg Config) ([]ImagePromptTemplate, error) {
+	if strings.TrimSpace(cfg.License.SessionToken) != "" {
+		var grouped struct {
+			Public  []ImagePromptTemplate `json:"public"`
+			Private []ImagePromptTemplate `json:"private"`
+		}
+		if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodGet, "/api/cli/image-templates", nil, cfg.License.SessionToken, &grouped); err == nil {
+			templates := append([]ImagePromptTemplate{}, grouped.Public...)
+			templates = append(templates, grouped.Private...)
+			absolutizeImageTemplateThumbnailURLs(templates, cfg)
+			return templates, nil
+		}
+	}
 	var templates []ImagePromptTemplate
 	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodGet, "/api/image-templates", nil, "", &templates); err != nil {
 		return nil, err
 	}
+	absolutizeImageTemplateThumbnailURLs(templates, cfg)
+	return templates, nil
+}
+
+func (a *App) createUserImagePromptTemplate(ctx context.Context, cfg Config, req CreateUserImagePromptTemplateRequest) (*ImagePromptTemplate, error) {
+	if strings.TrimSpace(cfg.License.SessionToken) == "" {
+		return nil, fmt.Errorf("login is required to create private image templates")
+	}
+	var template ImagePromptTemplate
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/image-templates", req, cfg.License.SessionToken, &template); err != nil {
+		return nil, err
+	}
+	templates := []ImagePromptTemplate{template}
+	absolutizeImageTemplateThumbnailURLs(templates, cfg)
+	return &templates[0], nil
+}
+
+func (a *App) createImageTemplatePublishRequest(ctx context.Context, cfg Config, req CreateImageTemplatePublishRequest) (*ImageTemplatePublishRequest, error) {
+	if strings.TrimSpace(cfg.License.SessionToken) == "" {
+		return nil, fmt.Errorf("login is required to publish private image templates")
+	}
+	var publishRequest ImageTemplatePublishRequest
+	if err := a.platformJSON(ctx, cfg.License.BaseURL, http.MethodPost, "/api/cli/image-template-publish-requests", req, cfg.License.SessionToken, &publishRequest); err != nil {
+		return nil, err
+	}
+	return &publishRequest, nil
+}
+
+func absolutizeImageTemplateThumbnailURLs(templates []ImagePromptTemplate, cfg Config) {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.License.BaseURL), "/")
 	if baseURL == "" {
 		baseURL = strings.TrimRight(strings.TrimSpace(defaultInitConfig().License.BaseURL), "/")
@@ -268,7 +309,6 @@ func (a *App) listImagePromptTemplates(ctx context.Context, cfg Config) ([]Image
 			templates[i].ThumbnailURL = baseURL + thumbnailURL
 		}
 	}
-	return templates, nil
 }
 
 func publishUsesLicensePlatform(publishCfg publishprovider.Config, licenseCfg LicenseConfig) bool {

@@ -144,6 +144,8 @@ type ImageReference struct {
 type ImageResponse struct {
 	Data               []byte
 	MIME               string
+	RequestID          string
+	UserID             uint64
 	CreditBalance      int
 	CreditsCharged     int
 	AccessMode         model.AccessMode
@@ -555,6 +557,8 @@ func (s *Service) generateImageChargeOnly(ctx context.Context, subject *hostedSu
 	return &ImageResponse{
 		Data:           data,
 		MIME:           "image/png",
+		RequestID:      req.RequestID,
+		UserID:         subject.UserID,
 		CreditBalance:  balance,
 		CreditsCharged: pricing.ChargeCredits,
 	}, nil
@@ -623,6 +627,7 @@ func (s *Service) generateQuotaImage(ctx context.Context, bearer string, req Ima
 	return &ImageResponse{
 		Data:               data,
 		MIME:               "image/png",
+		RequestID:          req.RequestID,
 		AccessMode:         consumeResp.AccessMode,
 		Remaining:          consumeResp.Remaining,
 		RewardRemaining:    consumeResp.RewardRemaining,
@@ -1587,10 +1592,10 @@ func (s *Service) handleDecodeFailureChargeOnly(ctx context.Context, subject *ho
 	}
 	pricing := s.priceUsage(ctx, modelName, usage, isImage)
 	meta := map[string]any{
-		"reason":              "decode_failure",
-		"upstream_request_id": requestID,
-		"pricing_rule_id":     pricing.RuleID,
-		"decode_error":        cause.Error(),
+		"reason":               "decode_failure",
+		"upstream_request_id":  requestID,
+		"pricing_rule_id":      pricing.RuleID,
+		"decode_error":         cause.Error(),
 		"upstream_http_status": 200,
 	}
 	if writeErr := s.writeChargeFailedForSubject(ctx, subject, requestID, pricing.ChargeCredits, meta); writeErr != nil {

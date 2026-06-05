@@ -230,6 +230,8 @@ export interface HostedBillingConfig {
 
 export interface ImagePromptTemplate {
   id?: number
+  owner_user_id?: number
+  visibility?: string
   slug: string
   title: string
   description: string
@@ -237,6 +239,21 @@ export interface ImagePromptTemplate {
   thumbnail_url?: string
   sort_order: number
   enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ImageTemplatePublishRequest {
+  id: number
+  private_template_id: number
+  requester_user_id: number
+  provenance_id: number
+  status: string
+  submitter_note?: string
+  admin_notes?: string
+  reviewed_by?: string
+  public_template_id?: number
+  reviewed_at?: string
   created_at?: string
   updated_at?: string
 }

@@ -615,6 +615,10 @@ func (HostedModelPricingConfig) TableName() string { return "hosted_model_pricin
 
 type ImagePromptTemplate struct {
 	ID                   uint64    `gorm:"primaryKey" json:"id"`
+	OwnerUserID          *uint64   `gorm:"column:owner_user_id;index" json:"owner_user_id,omitempty"`
+	Visibility           string    `gorm:"column:visibility;size:32;index;not null;default:'platform_public'" json:"visibility"`
+	SourceTemplateID     *uint64   `gorm:"column:source_template_id;index" json:"source_template_id,omitempty"`
+	GenerationID         *uint64   `gorm:"column:generation_id;index" json:"generation_id,omitempty"`
 	Slug                 string    `gorm:"column:slug;size:128;uniqueIndex;not null" json:"slug"`
 	Title                string    `gorm:"column:title;size:128;not null" json:"title"`
 	Description          string    `gorm:"column:description;size:512;not null;default:''" json:"description"`
@@ -629,6 +633,41 @@ type ImagePromptTemplate struct {
 }
 
 func (ImagePromptTemplate) TableName() string { return "image_prompt_templates" }
+
+type ImageGenerationProvenance struct {
+	ID                   uint64    `gorm:"primaryKey" json:"id"`
+	RequestID            string    `gorm:"column:request_id;size:128;uniqueIndex;not null" json:"request_id"`
+	UserID               uint64    `gorm:"column:user_id;index;not null" json:"user_id"`
+	Prompt               string    `gorm:"column:prompt;type:text;not null" json:"prompt"`
+	PromptSHA256         string    `gorm:"column:prompt_sha256;size:64;index;not null" json:"prompt_sha256"`
+	ImageSHA256          string    `gorm:"column:image_sha256;size:64;index;not null" json:"image_sha256"`
+	ImageStorageKey      string    `gorm:"column:image_storage_key;size:512;not null" json:"image_storage_key"`
+	ImageContentType     string    `gorm:"column:image_content_type;size:128;not null;default:''" json:"image_content_type"`
+	ImageOriginalName    string    `gorm:"column:image_original_name;size:191;not null;default:''" json:"image_original_name"`
+	SourceTemplateID     *uint64   `gorm:"column:source_template_id;index" json:"source_template_id,omitempty"`
+	SourceTemplatePrompt string    `gorm:"column:source_template_prompt;type:text;not null;default:''" json:"source_template_prompt,omitempty"`
+	CreatedAt            time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt            time.Time `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (ImageGenerationProvenance) TableName() string { return "image_generation_provenance" }
+
+type ImageTemplatePublishRequest struct {
+	ID                uint64     `gorm:"primaryKey" json:"id"`
+	PrivateTemplateID uint64     `gorm:"column:private_template_id;index;not null" json:"private_template_id"`
+	RequesterUserID   uint64     `gorm:"column:requester_user_id;index;not null" json:"requester_user_id"`
+	GenerationID      uint64     `gorm:"column:generation_id;index;not null" json:"generation_id"`
+	Status            string     `gorm:"column:status;size:32;index;not null;default:'pending'" json:"status"`
+	SubmitterNote     string     `gorm:"column:submitter_note;type:text;not null;default:''" json:"submitter_note,omitempty"`
+	AdminNotes        string     `gorm:"column:admin_notes;type:text;not null;default:''" json:"admin_notes,omitempty"`
+	ReviewedBy        string     `gorm:"column:reviewed_by;size:191;not null;default:''" json:"reviewed_by,omitempty"`
+	PublicTemplateID  *uint64    `gorm:"column:public_template_id;index" json:"public_template_id,omitempty"`
+	ReviewedAt        *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	CreatedAt         time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at,omitempty"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at,omitempty"`
+}
+
+func (ImageTemplatePublishRequest) TableName() string { return "image_template_publish_requests" }
 
 type HostedPricingRule struct {
 	ID                         uint64    `gorm:"primaryKey" json:"id,omitempty"`

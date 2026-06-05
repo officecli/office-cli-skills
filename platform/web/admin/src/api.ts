@@ -1,4 +1,4 @@
-import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreditLedgerEntry, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, ImagePromptTemplate, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
+import type { AdminGrowth, AdminIdentity, AdminPreference, ApiKey, BillingEvent, CreditLedgerEntry, CreateRedemptionCodeRequest, Envelope, FingerprintQuality, HostedBillingConfig, HostedCreditPack, HostedModelPricingConfig, HostedPricingRule, HostedPricingSetting, ImagePromptTemplate, ImageTemplatePublishRequest, OperationsFunnel, Order, Overview, QuotaSources, RedemptionCode, RedemptionCodeListResponse, RedemptionRecordListResponse, UpdateRedemptionCodeRequest, UsageEvent, User } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -82,6 +82,8 @@ export const api = {
   createHostedCreditPack: (payload: HostedCreditPack) => request<HostedCreditPack>('/api/admin/hosted-credit-packs', { method: 'POST', body: JSON.stringify(payload) }),
   updateHostedCreditPack: (id: number, payload: HostedCreditPack) => request<HostedCreditPack>(`/api/admin/hosted-credit-packs/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   imageTemplates: () => request<ImagePromptTemplate[]>('/api/admin/image-templates'),
+  imageTemplatePublishRequests: () => request<ImageTemplatePublishRequest[]>('/api/admin/image-templates/publish-requests?status=pending'),
+  reviewImageTemplatePublishRequest: (id: number, payload: { action: 'approve' | 'reject'; admin_notes?: string }) => request<ImageTemplatePublishRequest>(`/api/admin/image-templates/publish-requests/${id}/review`, { method: 'POST', body: JSON.stringify(payload) }),
   createImageTemplate: (payload: ImagePromptTemplate) => request<ImagePromptTemplate>('/api/admin/image-templates', { method: 'POST', body: JSON.stringify(payload) }),
   updateImageTemplate: (id: number, payload: ImagePromptTemplate) => request<ImagePromptTemplate>(`/api/admin/image-templates/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   enableImageTemplate: (id: number) => request<ImagePromptTemplate>(`/api/admin/image-templates/${id}/enable`, { method: 'POST' }),

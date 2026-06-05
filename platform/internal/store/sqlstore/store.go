@@ -1489,11 +1489,22 @@ func (s *Store) UpdateHostedModelPricingConfig(ctx context.Context, id uint64, v
 
 func (s *Store) ListImagePromptTemplates(ctx context.Context, enabledOnly bool) ([]model.ImagePromptTemplate, error) {
 	query := s.db.WithContext(ctx).Model(&model.ImagePromptTemplate{})
+	query = query.Where("visibility = ? OR visibility = ''", "platform_public")
 	if enabledOnly {
 		query = query.Where("enabled = ?", true)
 	}
 	var items []model.ImagePromptTemplate
 	err := query.Order("sort_order asc, id asc").Find(&items).Error
+	return items, err
+}
+
+func (s *Store) ListUserPrivateImagePromptTemplates(ctx context.Context, userID uint64) ([]model.ImagePromptTemplate, error) {
+	var items []model.ImagePromptTemplate
+	err := s.db.WithContext(ctx).
+		Model(&model.ImagePromptTemplate{}).
+		Where("visibility = ? AND owner_user_id = ?", "user_private", userID).
+		Order("sort_order asc, id asc").
+		Find(&items).Error
 	return items, err
 }
 
@@ -1518,6 +1529,55 @@ func (s *Store) UpdateImagePromptTemplate(ctx context.Context, id uint64, values
 
 func (s *Store) DeleteImagePromptTemplate(ctx context.Context, id uint64) error {
 	return s.db.WithContext(ctx).Delete(&model.ImagePromptTemplate{}, id).Error
+}
+
+func (s *Store) CreateImageGenerationProvenance(ctx context.Context, item *model.ImageGenerationProvenance) error {
+	return s.db.WithContext(ctx).Create(item).Error
+}
+
+func (s *Store) GetImageGenerationProvenance(ctx context.Context, id uint64) (*model.ImageGenerationProvenance, error) {
+	var item model.ImageGenerationProvenance
+	if err := s.db.WithContext(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Store) GetImageGenerationProvenanceByRequestID(ctx context.Context, requestID string) (*model.ImageGenerationProvenance, error) {
+	var item model.ImageGenerationProvenance
+	if err := s.db.WithContext(ctx).Where("request_id = ?", strings.TrimSpace(requestID)).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Store) CreateImageTemplatePublishRequest(ctx context.Context, item *model.ImageTemplatePublishRequest) error {
+	return s.db.WithContext(ctx).Create(item).Error
+}
+
+func (s *Store) GetImageTemplatePublishRequest(ctx context.Context, id uint64) (*model.ImageTemplatePublishRequest, error) {
+	var item model.ImageTemplatePublishRequest
+	if err := s.db.WithContext(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Store) UpdateImageTemplatePublishRequest(ctx context.Context, id uint64, values map[string]any) (*model.ImageTemplatePublishRequest, error) {
+	if err := s.db.WithContext(ctx).Model(&model.ImageTemplatePublishRequest{}).Where("id = ?", id).Updates(values).Error; err != nil {
+		return nil, err
+	}
+	return s.GetImageTemplatePublishRequest(ctx, id)
+}
+
+func (s *Store) ListImageTemplatePublishRequests(ctx context.Context, status string) ([]model.ImageTemplatePublishRequest, error) {
+	query := s.db.WithContext(ctx).Model(&model.ImageTemplatePublishRequest{})
+	if strings.TrimSpace(status) != "" {
+		query = query.Where("status = ?", strings.TrimSpace(status))
+	}
+	var items []model.ImageTemplatePublishRequest
+	err := query.Order("created_at desc, id desc").Find(&items).Error
+	return items, err
 }
 
 func (s *Store) ensureDefaultHostedModelPricingConfigs(ctx context.Context) error {

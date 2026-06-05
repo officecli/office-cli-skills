@@ -366,6 +366,30 @@ func (s *agentBridgeServer) handleRequest(ctx context.Context, req jsonRPCReques
 			return
 		}
 		s.writeResult(req.ID, templates)
+	case "image_templates/create":
+		var params CreateUserImagePromptTemplateRequest
+		if err := decodeParams(req.Params, &params); err != nil {
+			s.writeError(req.ID, -32602, err.Error(), nil)
+			return
+		}
+		template, err := s.app.createUserImagePromptTemplate(ctx, s.cfg, params)
+		if err != nil {
+			s.writeError(req.ID, -32000, err.Error(), nil)
+			return
+		}
+		s.writeResult(req.ID, template)
+	case "image_template_publish_requests/create":
+		var params CreateImageTemplatePublishRequest
+		if err := decodeParams(req.Params, &params); err != nil {
+			s.writeError(req.ID, -32602, err.Error(), nil)
+			return
+		}
+		publishRequest, err := s.app.createImageTemplatePublishRequest(ctx, s.cfg, params)
+		if err != nil {
+			s.writeError(req.ID, -32000, err.Error(), nil)
+			return
+		}
+		s.writeResult(req.ID, publishRequest)
 	case "session/open":
 		session := s.openSession()
 		s.writeResult(req.ID, session)

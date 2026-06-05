@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/officecli/officecli/platform/internal/model"
@@ -145,6 +146,8 @@ type ImagePromptSlot struct {
 
 type ImagePromptTemplateResponse struct {
 	ID           uint64            `json:"id"`
+	OwnerUserID  uint64            `json:"owner_user_id,omitempty"`
+	Visibility   string            `json:"visibility,omitempty"`
 	Slug         string            `json:"slug"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`
@@ -169,6 +172,69 @@ type UpsertImagePromptTemplateRequest struct {
 	SortOrder    int               `json:"sort_order"`
 	Enabled      bool              `json:"enabled"`
 	Slots        []ImagePromptSlot `json:"slots,omitempty"`
+}
+
+type UserImagePromptTemplatesResponse struct {
+	Public  []ImagePromptTemplateResponse `json:"public"`
+	Private []ImagePromptTemplateResponse `json:"private"`
+}
+
+type CreateUserImagePromptTemplateRequest struct {
+	SourceTemplateID uint64            `json:"source_template_id,omitempty"`
+	Slug             string            `json:"slug"`
+	Title            string            `json:"title"`
+	Description      string            `json:"description"`
+	PromptPreset     string            `json:"prompt_preset,omitempty"`
+	Slots            []ImagePromptSlot `json:"slots,omitempty"`
+	SortOrder        int               `json:"sort_order,omitempty"`
+}
+
+type RecordImageGenerationProvenanceRequest struct {
+	RequestID        string    `json:"request_id"`
+	UserID           uint64    `json:"user_id"`
+	Prompt           string    `json:"prompt"`
+	ImageName        string    `json:"image_name,omitempty"`
+	ContentType      string    `json:"content_type,omitempty"`
+	Image            io.Reader `json:"-"`
+	ImageSize        int64     `json:"-"`
+	SourceTemplateID uint64    `json:"source_template_id,omitempty"`
+}
+
+type ImageGenerationProvenanceResponse struct {
+	ID               uint64 `json:"id"`
+	RequestID        string `json:"request_id"`
+	UserID           uint64 `json:"user_id"`
+	PromptSHA256     string `json:"prompt_sha256"`
+	ImageSHA256      string `json:"image_sha256"`
+	ImageContentType string `json:"image_content_type,omitempty"`
+	CreatedAt        string `json:"created_at,omitempty"`
+}
+
+type CreateImageTemplatePublishRequest struct {
+	PrivateTemplateID uint64 `json:"private_template_id"`
+	ProvenanceID      uint64 `json:"provenance_id"`
+	RequestID         string `json:"request_id,omitempty"`
+	SubmitterNote     string `json:"submitter_note,omitempty"`
+}
+
+type ReviewImageTemplatePublishRequest struct {
+	Action     string `json:"action"`
+	AdminNotes string `json:"admin_notes,omitempty"`
+}
+
+type ImageTemplatePublishRequestResponse struct {
+	ID                uint64 `json:"id"`
+	PrivateTemplateID uint64 `json:"private_template_id"`
+	RequesterUserID   uint64 `json:"requester_user_id"`
+	ProvenanceID      uint64 `json:"provenance_id"`
+	Status            string `json:"status"`
+	SubmitterNote     string `json:"submitter_note,omitempty"`
+	AdminNotes        string `json:"admin_notes,omitempty"`
+	ReviewedBy        string `json:"reviewed_by,omitempty"`
+	PublicTemplateID  uint64 `json:"public_template_id,omitempty"`
+	ReviewedAt        string `json:"reviewed_at,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
 }
 
 type ComposeImagePromptTemplateRequest struct {

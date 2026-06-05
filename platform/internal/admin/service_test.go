@@ -571,6 +571,142 @@ func TestImagePromptTemplateOldShapeWithoutSlots(t *testing.T) {
 	require.Empty(t, items[0].Slots)
 }
 
+func TestUserPrivateImageTemplateCopyAndPublishReview(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_publish_flow?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.ImageGenerationProvenance{}, &model.ImageTemplatePublishRequest{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+	objectStore := &fakeImageTemplateObjectStore{}
+	svc.SetImageTemplateObjectStore(objectStore)
+
+	public, err := svc.CreateImagePromptTemplate(context.Background(), UpsertImagePromptTemplateRequest{
+		Slug:         "public-poster",
+		Title:        "Public Poster",
+		Description:  "Platform template",
+		PromptPreset: "Public preset for {{product}}",
+		SortOrder:    10,
+		Enabled:      true,
+		Slots: []ImagePromptSlot{
+			{Key: "product", Label: "Product", Required: true},
+		},
+	})
+	require.NoError(t, err)
+
+	privateCopy, err := svc.CreateUserImagePromptTemplate(context.Background(), 42, CreateUserImagePromptTemplateRequest{
+		SourceTemplateID: public.ID,
+		Slug:             "my-poster",
+		Title:            "My Poster",
+		Description:      "Saved in my account",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "my-poster", privateCopy.Slug)
+	require.Equal(t, "Public preset for {{product}}", privateCopy.PromptPreset)
+	require.Equal(t, uint64(42), privateCopy.OwnerUserID)
+	require.Equal(t, "user_private", privateCopy.Visibility)
+	require.Len(t, privateCopy.Slots, 1)
+
+	otherUserItems, err := svc.ListUserImagePromptTemplates(context.Background(), 7, "/api/image-templates")
+	require.NoError(t, err)
+	require.Empty(t, otherUserItems.Private)
+	require.Len(t, otherUserItems.Public, 1)
+
+	provenance, err := svc.RecordImageGenerationProvenance(context.Background(), RecordImageGenerationProvenanceRequest{
+		RequestID:   "img-req-1",
+		UserID:      42,
+		Prompt:      privateCopy.PromptPreset,
+		ImageName:   "poster.png",
+		ContentType: "image/png",
+		Image:       bytes.NewReader([]byte("generated-image")),
+		ImageSize:   int64(len("generated-image")),
+	})
+	require.NoError(t, err)
+	require.NotZero(t, provenance.ID)
+	require.NotEmpty(t, provenance.PromptSHA256)
+	require.NotEmpty(t, provenance.ImageSHA256)
+
+	submission, err := svc.CreateImageTemplatePublishRequest(context.Background(), 42, CreateImageTemplatePublishRequest{
+		PrivateTemplateID: privateCopy.ID,
+		RequestID:         provenance.RequestID,
+		SubmitterNote:     "Useful launch poster",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pending", submission.Status)
+	require.Equal(t, privateCopy.ID, submission.PrivateTemplateID)
+
+	approved, err := svc.ReviewImageTemplatePublishRequest(context.Background(), "admin@example.com", submission.ID, ReviewImageTemplatePublishRequest{
+		Action:     "approve",
+		AdminNotes: "Looks good",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", approved.Status)
+	require.NotZero(t, approved.PublicTemplateID)
+
+	publicItems, err := svc.ListImagePromptTemplates(context.Background(), true, "/api/image-templates")
+	require.NoError(t, err)
+	require.Len(t, publicItems, 2)
+	var published *ImagePromptTemplateResponse
+	for i := range publicItems {
+		if publicItems[i].Title == "My Poster" {
+			published = &publicItems[i]
+			break
+		}
+	}
+	require.NotNil(t, published)
+	require.Equal(t, "Public preset for {{product}}", published.PromptPreset)
+	require.Contains(t, published.ThumbnailURL, "/api/image-templates/")
+}
+
+func TestImageTemplatePublishRequestRejectsMismatchedProvenance(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_prompt_template_publish_rejects_mismatch?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImagePromptTemplate{}, &model.ImageGenerationProvenance{}, &model.ImageTemplatePublishRequest{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+	svc.SetImageTemplateObjectStore(&fakeImageTemplateObjectStore{})
+
+	privateTemplate, err := svc.CreateUserImagePromptTemplate(context.Background(), 42, CreateUserImagePromptTemplateRequest{
+		Slug:         "private",
+		Title:        "Private",
+		PromptPreset: "expected prompt",
+	})
+	require.NoError(t, err)
+	otherPrompt, err := svc.RecordImageGenerationProvenance(context.Background(), RecordImageGenerationProvenanceRequest{
+		RequestID:   "img-req-2",
+		UserID:      42,
+		Prompt:      "tampered prompt",
+		ImageName:   "poster.png",
+		ContentType: "image/png",
+		Image:       bytes.NewReader([]byte("generated-image")),
+		ImageSize:   int64(len("generated-image")),
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateImageTemplatePublishRequest(context.Background(), 42, CreateImageTemplatePublishRequest{
+		PrivateTemplateID: privateTemplate.ID,
+		ProvenanceID:      otherPrompt.ID,
+	})
+	require.ErrorContains(t, err, "generated prompt does not match private template")
+
+	otherUser, err := svc.RecordImageGenerationProvenance(context.Background(), RecordImageGenerationProvenanceRequest{
+		RequestID:   "img-req-3",
+		UserID:      7,
+		Prompt:      "expected prompt",
+		ImageName:   "poster.png",
+		ContentType: "image/png",
+		Image:       bytes.NewReader([]byte("other-user-image")),
+		ImageSize:   int64(len("other-user-image")),
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateImageTemplatePublishRequest(context.Background(), 42, CreateImageTemplatePublishRequest{
+		PrivateTemplateID: privateTemplate.ID,
+		ProvenanceID:      otherUser.ID,
+	})
+	require.ErrorContains(t, err, "generation task does not belong to user")
+}
+
 func TestParseImagePromptSlotsLegacyShapes(t *testing.T) {
 	// A row predating the slots column reads back as "" → no slots, no panic.
 	require.Nil(t, parseImagePromptSlots(""))
