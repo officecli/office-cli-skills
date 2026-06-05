@@ -27,6 +27,7 @@ type Store interface {
 	ListRedemptionCodes(ctx context.Context, filter sqlstore.RedemptionCodeFilter) ([]model.RedemptionCode, int64, error)
 	UpdateRedemptionCode(ctx context.Context, id uint64, updates sqlstore.RedemptionCodeUpdates) (*model.RedemptionCode, error)
 	SetRedemptionCodeStatus(ctx context.Context, id uint64, status model.RedemptionCodeStatus) (*model.RedemptionCode, error)
+	DeleteRedemptionCode(ctx context.Context, id uint64) error
 	ListRedemptionRecords(ctx context.Context, filter sqlstore.RedemptionRecordFilter) ([]model.RedemptionCodeRedemption, int64, error)
 	RedeemCode(ctx context.Context, rc sqlstore.RedeemContext) (*sqlstore.RedeemResult, error)
 }
@@ -218,6 +219,13 @@ func (s *Service) DisableCode(ctx context.Context, id uint64) (*model.Redemption
 		return nil, fmt.Errorf("redemption service is unavailable")
 	}
 	return s.store.SetRedemptionCodeStatus(ctx, id, model.RedemptionCodeStatusDisabled)
+}
+
+func (s *Service) DeleteCode(ctx context.Context, id uint64) error {
+	if s == nil || s.store == nil {
+		return fmt.Errorf("redemption service is unavailable")
+	}
+	return s.store.DeleteRedemptionCode(ctx, id)
 }
 
 func (s *Service) ListRedemptions(ctx context.Context, req ListRecordsRequest) ([]model.RedemptionCodeRedemption, int64, error) {

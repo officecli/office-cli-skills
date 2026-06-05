@@ -11,8 +11,10 @@ dist/
 output/
 .omx/
 .omc/
+.omo/
 .deepseek/
 .playwright-cli/
+.playwright-mcp/
 .inspection-reports/
 /.tmp/
 platform/web/*/vite.config.js
@@ -23,3 +25,6 @@ packages/npm/officecli/runtime/
 platform/tmp/
 tmp/
 test-results/
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+/*.png

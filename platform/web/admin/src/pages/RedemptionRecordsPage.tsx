@@ -31,32 +31,32 @@ export default function RedemptionRecordsPage() {
     <Panel>
       <SectionHeading
         eyebrow="Redemption records"
-        title="兑换记录"
-        body="记录所有用户兑换码使用流水，可按 code、用户 ID、入口来源过滤。"
+        title="Redemption Records"
+        body="Review every user redemption event. Filter by code, user ID, or source."
         action={
           <Space wrap>
-            <Input.Search placeholder="按 code" allowClear value={codeFilter} onSearch={setCodeFilter} onChange={(e) => setCodeFilter(e.target.value)} style={{ width: 200 }} />
-            <Input.Search placeholder="按用户 ID" allowClear value={userIDFilter} onSearch={setUserIDFilter} onChange={(e) => setUserIDFilter(e.target.value)} style={{ width: 160 }} />
+            <Input.Search placeholder="Filter by code" allowClear value={codeFilter} onSearch={setCodeFilter} onChange={(e) => setCodeFilter(e.target.value)} style={{ width: 200 }} />
+            <Input.Search placeholder="Filter by user ID" allowClear value={userIDFilter} onSearch={setUserIDFilter} onChange={(e) => setUserIDFilter(e.target.value)} style={{ width: 160 }} />
             <Select<SourceFilter>
               value={source}
               onChange={setSource}
               style={{ width: 160 }}
               options={[
-                { value: '', label: '全部入口' },
+                { value: '', label: 'All sources' },
                 { value: 'app', label: 'Web /app' },
-                { value: 'cli', label: 'CLI 二进制' },
+                { value: 'cli', label: 'CLI binary' },
                 { value: 'tui', label: 'TUI' },
-                { value: 'desktop', label: '桌面 app' },
+                { value: 'desktop', label: 'Desktop app' },
               ]}
             />
           </Space>
         }
       />
       {records.length === 0 && !isFetching ? (
-        <EmptyState title="尚无兑换记录" body="用户兑换兑换码后将在此处显示。" />
+        <EmptyState title="No redemption records" body="User redemption activity appears here after a code is redeemed." />
       ) : (
         <DataTable
-          headers={['时间', 'Code', '用户 ID', 'Credits', '入口', 'IP', 'User-Agent']}
+          headers={['Time', 'Code', 'User ID', 'Credits', 'Source', 'IP', 'User-Agent']}
           columns="minmax(0,1.1fr) minmax(0,1fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.7fr) minmax(0,0.9fr) minmax(0,1.4fr)"
           rows={records.map((r) => [
             <span key={`t-${r.id}`}>{formatDate(r.redeemed_at)}</span>,

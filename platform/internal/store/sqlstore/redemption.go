@@ -147,13 +147,13 @@ func (s *Store) ListRedemptionCodes(ctx context.Context, filter RedemptionCodeFi
 // UpdateRedemptionCodeFields applies admin-supplied edits to an existing code.
 // Nil-valued pointers indicate "leave unchanged". Returns the refreshed row.
 type RedemptionCodeUpdates struct {
-	CreditAmount    *int
-	MaxRedemptions  *int  // *int with explicit nil-vs-int distinction
-	ClearMaxLimit   bool  // when true, sets max_redemptions to NULL
-	PerUserLimit    *int
-	ExpiresAt       *time.Time
-	ClearExpiresAt  bool
-	Notes           *string
+	CreditAmount   *int
+	MaxRedemptions *int // *int with explicit nil-vs-int distinction
+	ClearMaxLimit  bool // when true, sets max_redemptions to NULL
+	PerUserLimit   *int
+	ExpiresAt      *time.Time
+	ClearExpiresAt bool
+	Notes          *string
 }
 
 func (s *Store) UpdateRedemptionCode(ctx context.Context, id uint64, updates RedemptionCodeUpdates) (*model.RedemptionCode, error) {
@@ -217,6 +217,20 @@ func (s *Store) SetRedemptionCodeStatus(ctx context.Context, id uint64, status m
 		return nil, ErrRedemptionCodeNotFound
 	}
 	return s.GetRedemptionCodeByID(ctx, id)
+}
+
+func (s *Store) DeleteRedemptionCode(ctx context.Context, id uint64) error {
+	if id == 0 {
+		return fmt.Errorf("id is required")
+	}
+	res := s.db.WithContext(ctx).Delete(&model.RedemptionCode{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrRedemptionCodeNotFound
+	}
+	return nil
 }
 
 func (s *Store) ListRedemptionRecords(ctx context.Context, filter RedemptionRecordFilter) ([]model.RedemptionCodeRedemption, int64, error) {

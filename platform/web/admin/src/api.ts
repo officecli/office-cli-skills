@@ -100,5 +100,6 @@ export const api = {
   updateRedemptionCode: (id: number, payload: UpdateRedemptionCodeRequest) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   enableRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}/enable`, { method: 'POST' }),
   disableRedemptionCode: (id: number) => request<RedemptionCode>(`/api/admin/redemption-codes/${id}/disable`, { method: 'POST' }),
+  deleteRedemptionCode: (id: number) => request<{ success: boolean }>(`/api/admin/redemption-codes/${id}`, { method: 'DELETE' }),
   listRedemptionRecords: (params: URLSearchParams) => request<RedemptionRecordListResponse>(`/api/admin/redemption-codes/redemptions?${params.toString()}`),
 }

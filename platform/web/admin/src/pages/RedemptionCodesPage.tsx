@@ -45,21 +45,21 @@ export default function RedemptionCodesPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreateRedemptionCodeRequest) => api.createRedemptionCode(payload),
     onSuccess: async (code) => {
-      message.success(`兑换码 ${code.code} 已创建（默认禁用，需手动启用）`)
+      message.success(`Redemption code ${code.code} was created disabled. Enable it when it is ready.`)
       setCreateOpen(false)
       await invalidate()
     },
-    onError: (err: Error) => message.error(err.message || '创建失败'),
+    onError: (err: Error) => message.error(err.message || 'Failed to create redemption code.'),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: UpdateRedemptionCodeRequest }) => api.updateRedemptionCode(id, payload),
     onSuccess: async () => {
-      message.success('已保存')
+      message.success('Saved.')
       setEditing(null)
       await invalidate()
     },
-    onError: (err: Error) => message.error(err.message || '保存失败'),
+    onError: (err: Error) => message.error(err.message || 'Failed to save redemption code.'),
   })
 
   const toggleMut = useMutation({
@@ -68,7 +68,16 @@ export default function RedemptionCodesPage() {
     onSuccess: async () => {
       await invalidate()
     },
-    onError: (err: Error) => message.error(err.message || '状态切换失败'),
+    onError: (err: Error) => message.error(err.message || 'Failed to update status.'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: api.deleteRedemptionCode,
+    onSuccess: async () => {
+      message.success('Deleted.')
+      await invalidate()
+    },
+    onError: (err: Error) => message.error(err.message || 'Failed to delete redemption code.'),
   })
 
   const codes = data?.items ?? []
@@ -77,29 +86,30 @@ export default function RedemptionCodesPage() {
     <Panel>
       <SectionHeading
         eyebrow="Redemption codes"
-        title="兑换码管理"
-        body="管理员可创建、启停、修改兑换码。新建的兑换码默认为「禁用」状态，需手动启用方可被用户领取。设置 expires_at 为空即长期有效；max_redemptions 留空即不限总次数。"
+        title="Redemption Code Management"
+        body="Admins can create, enable, disable, edit, and delete redemption codes. New codes are created disabled and must be enabled before users can redeem them. Leave expires_at empty for no expiry; leave max_redemptions empty for unlimited total claims."
         action={
           <Space>
-            <Input.Search placeholder="搜索 code" allowClear value={query} onSearch={setQuery} onChange={(e) => setQuery(e.target.value)} style={{ width: 220 }} />
+            <Input.Search placeholder="Search code" allowClear value={query} onSearch={setQuery} onChange={(e) => setQuery(e.target.value)} style={{ width: 220 }} />
             <Select<StatusFilter>
               value={status}
               onChange={setStatus}
               style={{ width: 140 }}
               options={[
-                { value: '', label: '全部状态' },
-                { value: 'enabled', label: '已启用' },
-                { value: 'disabled', label: '已禁用' },
+                { value: '', label: 'All statuses' },
+                { value: 'enabled', label: 'Enabled' },
+                { value: 'disabled', label: 'Disabled' },
               ]}
             />
-            <Button type="primary" onClick={() => setCreateOpen(true)}>新增兑换码</Button>
+            <Button type="primary" onClick={() => setCreateOpen(true)}>New Code</Button>
           </Space>
         }
-      />      {codes.length === 0 && !isFetching ? (
-        <EmptyState title="尚无兑换码" body="点击右上角“新增兑换码”创建第一个，新建后默认禁用，待审核确认后再启用。" />
+      />
+      {codes.length === 0 && !isFetching ? (
+        <EmptyState title="No redemption codes" body="Create the first code from the top-right action. New codes stay disabled until reviewed and enabled." />
       ) : (
         <DataTable
-          headers={['Code', 'Credits', '已用 / 总数', '每人上限', '过期时间', '状态', '操作']}
+          headers={['Code', 'Credits', 'Used / Total', 'Per-user Limit', 'Expires At', 'Status', 'Actions']}
           columns="minmax(0,1.4fr) minmax(0,0.7fr) minmax(0,1fr) minmax(0,0.7fr) minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1.4fr)"
           rows={codes.map((code) => [
             <div key={`code-${code.id}`}>
@@ -108,11 +118,11 @@ export default function RedemptionCodesPage() {
             </div>,
             <span key={`credit-${code.id}`} className="text-white">{formatNumber(code.credit_amount)}</span>,
             <span key={`used-${code.id}`}>
-              {formatNumber(code.redemptions_used)} / {code.max_redemptions == null ? <Tag color="geekblue">不限</Tag> : formatNumber(code.max_redemptions)}
+              {formatNumber(code.redemptions_used)} / {code.max_redemptions == null ? <Tag color="geekblue">Unlimited</Tag> : formatNumber(code.max_redemptions)}
             </span>,
             <span key={`peruser-${code.id}`}>{code.per_user_limit}</span>,
             <span key={`exp-${code.id}`}>
-              {code.expires_at ? formatDate(code.expires_at) : <Tag color="green">长期有效</Tag>}
+              {code.expires_at ? formatDate(code.expires_at) : <Tag color="green">No expiry</Tag>}
             </span>,
             <StatusPill key={`status-${code.id}`} value={code.status === 'enabled' ? 'active' : 'disabled'} />,
             <Space key={`action-${code.id}`} wrap>
@@ -120,10 +130,22 @@ export default function RedemptionCodesPage() {
                 checked={code.status === 'enabled'}
                 loading={toggleMut.isPending}
                 onChange={(checked) => toggleMut.mutate({ id: code.id, enable: checked })}
-                checkedChildren="启用"
-                unCheckedChildren="禁用"
+                checkedChildren="On"
+                unCheckedChildren="Off"
               />
-              <Button size="small" onClick={() => setEditing(code)}>编辑</Button>
+              <Button size="small" onClick={() => setEditing(code)}>Edit</Button>
+              <Button
+                size="small"
+                danger
+                loading={deleteMut.isPending}
+                onClick={() => {
+                  if (window.confirm(`Delete redemption code ${code.code}? This cannot be undone.`)) {
+                    deleteMut.mutate(code.id)
+                  }
+                }}
+              >
+                Delete
+              </Button>
             </Space>,
           ])}
         />
@@ -168,63 +190,63 @@ function CreateCodeDrawer({ open, loading, onClose, onSubmit }: {
 
   return (
     <Drawer
-      title="新增兑换码"
+      title="New Redemption Code"
       open={open}
       onClose={onClose}
       width={520}
       destroyOnClose
       extra={
         <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={loading} onClick={() => form.submit()}>创建</Button>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="primary" loading={loading} onClick={() => form.submit()}>Create</Button>
         </Space>
       }
     >
-      <Typography.Paragraph type="secondary">新建的兑换码默认为禁用状态，需在列表中手动启用后才能被用户兑换。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">New codes are disabled by default and must be enabled in the list before users can redeem them.</Typography.Paragraph>
       <Form<FormValues>
         form={form}
         layout="vertical"
         initialValues={{ credit_amount: 100, per_user_limit: 1, unlimited: false, long_term: false }}
         onFinish={handleFinish}
       >
-        <Form.Item label="Code（留空自动生成）" name="code">
+        <Form.Item label="Code (leave blank to auto-generate)" name="code">
           <Input
-            placeholder="例如 PROMO2026, 留空将生成 16 位随机码"
+            placeholder="Example: PROMO2026. Blank generates a random 16-character code."
             onChange={(e) => form.setFieldValue('code', e.target.value.toUpperCase())}
           />
         </Form.Item>
         <Form.Item
-          label="兑换 credits 数量"
+          label="Credits granted"
           name="credit_amount"
-          rules={[{ required: true, message: '请输入正整数' }]}
+          rules={[{ required: true, message: 'Enter a positive integer.' }]}
         >
           <InputNumber min={1} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item label="每人可兑换次数" name="per_user_limit" tooltip="同一用户最多可兑换次数（默认 1）">
+        <Form.Item label="Per-user claim limit" name="per_user_limit" tooltip="Maximum claims per user. Defaults to 1.">
           <InputNumber min={1} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item label="总兑换次数不限" name="unlimited" valuePropName="checked">
+        <Form.Item label="Unlimited total claims" name="unlimited" valuePropName="checked">
           <Switch />
         </Form.Item>
         <Form.Item shouldUpdate={(prev, curr) => prev.unlimited !== curr.unlimited} noStyle>
           {({ getFieldValue }) => getFieldValue('unlimited') ? null : (
-            <Form.Item label="总兑换次数" name="max_redemptions" rules={[{ type: 'number', min: 1, message: '至少 1' }]}>
-              <InputNumber min={1} style={{ width: '100%' }} placeholder="例如 1000" />
+            <Form.Item label="Total claim limit" name="max_redemptions" rules={[{ type: 'number', min: 1, message: 'Minimum is 1.' }]}>
+              <InputNumber min={1} style={{ width: '100%' }} placeholder="Example: 1000" />
             </Form.Item>
           )}
         </Form.Item>
-        <Form.Item label="长期有效" name="long_term" valuePropName="checked">
+        <Form.Item label="No expiry" name="long_term" valuePropName="checked">
           <Switch />
         </Form.Item>
         <Form.Item shouldUpdate={(prev, curr) => prev.long_term !== curr.long_term} noStyle>
           {({ getFieldValue }) => getFieldValue('long_term') ? null : (
-            <Form.Item label="过期时间" name="expires_at">
+            <Form.Item label="Expires at" name="expires_at">
               <DatePicker showTime style={{ width: '100%' }} />
             </Form.Item>
           )}
         </Form.Item>
-        <Form.Item label="备注" name="notes">
-          <Input.TextArea rows={3} placeholder="可选：运营活动名称、用途等" />
+        <Form.Item label="Notes" name="notes">
+          <Input.TextArea rows={3} placeholder="Optional campaign name, purpose, or review notes." />
         </Form.Item>
       </Form>
     </Drawer>
@@ -242,12 +264,12 @@ function EditCodeModal({ code, loading, onClose, onSubmit }: {
   return (
     <Modal
       open={!!code}
-      title={code ? `编辑兑换码 ${code.code}` : ''}
+      title={code ? `Edit redemption code ${code.code}` : ''}
       onCancel={onClose}
       destroyOnClose
       confirmLoading={loading}
       onOk={() => form.submit()}
-      okText="保存"
+      okText="Save"
     >
       {code ? (
         <Form<FormValues>
@@ -281,33 +303,33 @@ function EditCodeModal({ code, loading, onClose, onSubmit }: {
             onSubmit(payload)
           }}
         >
-          <Form.Item label="兑换 credits 数量" name="credit_amount" rules={[{ required: true }]}>
+          <Form.Item label="Credits granted" name="credit_amount" rules={[{ required: true }]}>
             <InputNumber min={1} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="每人可兑换次数" name="per_user_limit">
+          <Form.Item label="Per-user claim limit" name="per_user_limit">
             <InputNumber min={1} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item label="总兑换次数不限" name="unlimited" valuePropName="checked">
+          <Form.Item label="Unlimited total claims" name="unlimited" valuePropName="checked">
             <Switch />
           </Form.Item>
           <Form.Item shouldUpdate={(prev, curr) => prev.unlimited !== curr.unlimited} noStyle>
             {({ getFieldValue }) => getFieldValue('unlimited') ? null : (
-              <Form.Item label="剩余总次数（修改后将作为新的上限）" name="max_redemptions">
+              <Form.Item label="Total claim limit after update" name="max_redemptions">
                 <InputNumber min={1} style={{ width: '100%' }} />
               </Form.Item>
             )}
           </Form.Item>
-          <Form.Item label="长期有效" name="long_term" valuePropName="checked">
+          <Form.Item label="No expiry" name="long_term" valuePropName="checked">
             <Switch />
           </Form.Item>
           <Form.Item shouldUpdate={(prev, curr) => prev.long_term !== curr.long_term} noStyle>
             {({ getFieldValue }) => getFieldValue('long_term') ? null : (
-              <Form.Item label="过期时间" name="expires_at">
+              <Form.Item label="Expires at" name="expires_at">
                 <DatePicker showTime style={{ width: '100%' }} />
               </Form.Item>
             )}
           </Form.Item>
-          <Form.Item label="备注" name="notes">
+          <Form.Item label="Notes" name="notes">
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>

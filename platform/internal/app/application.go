@@ -115,6 +115,7 @@ type adminRouteService interface {
 	UpdateRedemptionCode(ctx context.Context, actorEmail string, id uint64, req admin.UpdateRedemptionCodeRequest) (*model.RedemptionCode, error)
 	EnableRedemptionCode(ctx context.Context, actorEmail string, id uint64) (*model.RedemptionCode, error)
 	DisableRedemptionCode(ctx context.Context, actorEmail string, id uint64) (*model.RedemptionCode, error)
+	DeleteRedemptionCode(ctx context.Context, actorEmail string, id uint64) error
 	ListRedemptionRecords(ctx context.Context, req admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error)
 }
 
@@ -1823,6 +1824,15 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg Config, adminSvc adminRouteSe
 			return
 		}
 		httpapi.JSON(c, http.StatusOK, data)
+	})
+	protected.DELETE("/redemption-codes/:id", func(c *gin.Context) {
+		id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+		actor, _ := currentAdminEmail(c, adminSvc)
+		if err := adminSvc.DeleteRedemptionCode(c.Request.Context(), actor, id); err != nil {
+			httpapi.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpapi.JSON(c, http.StatusOK, gin.H{"success": true})
 	})
 }
 

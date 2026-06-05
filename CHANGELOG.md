@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.109 - 2026-06-05
+
+### Added
+
+- Added admin deletion for redemption codes, including backend audit logging and admin UI controls.
+
+### Changed
+
+- Updated redemption admin pages to English copy for release-facing operations.
+- Ignored local orchestration, temporary worktree, and Playwright MCP artifacts.
+
 ## 0.2.108 - 2026-06-03
 
 ### Added

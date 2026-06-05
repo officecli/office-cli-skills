@@ -132,6 +132,18 @@ func (s *Service) DisableRedemptionCode(ctx context.Context, actorEmail string, 
 	return code, nil
 }
 
+func (s *Service) DeleteRedemptionCode(ctx context.Context, actorEmail string, id uint64) error {
+	svc, err := s.redemptionService()
+	if err != nil {
+		return err
+	}
+	if err := svc.DeleteCode(ctx, id); err != nil {
+		return err
+	}
+	_ = s.store.CreateAuditLog(ctx, "redemption_code.delete", "redemption_code", fmt.Sprintf("%d", id), sqlstore.JSONString(map[string]any{"actor": actorEmail}))
+	return nil
+}
+
 func (s *Service) ListRedemptionRecords(ctx context.Context, req ListRedemptionRecordsRequest) (*ListRedemptionRecordsResponse, error) {
 	svc, err := s.redemptionService()
 	if err != nil {

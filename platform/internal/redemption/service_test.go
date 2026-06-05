@@ -123,6 +123,16 @@ func (f *fakeStore) SetRedemptionCodeStatus(_ context.Context, id uint64, status
 	return &out, nil
 }
 
+func (f *fakeStore) DeleteRedemptionCode(_ context.Context, id uint64) error {
+	c, ok := f.codes[id]
+	if !ok {
+		return sqlstore.ErrRedemptionCodeNotFound
+	}
+	delete(f.codeByCode, c.Code)
+	delete(f.codes, id)
+	return nil
+}
+
 func (f *fakeStore) ListRedemptionRecords(_ context.Context, filter sqlstore.RedemptionRecordFilter) ([]model.RedemptionCodeRedemption, int64, error) {
 	var out []model.RedemptionCodeRedemption
 	for _, r := range f.redemptions {

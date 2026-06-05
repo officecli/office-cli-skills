@@ -15,6 +15,7 @@ import (
 
 	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/model"
+	"github.com/officecli/officecli/platform/internal/redemption"
 	redisstore "github.com/officecli/officecli/platform/internal/store/redis"
 	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
@@ -160,6 +161,34 @@ func TestCreateKeyAndUpdateQuota(t *testing.T) {
 	plaintext, err := svc.GetAPIKeyPlaintext(context.Background(), key.ID, "admin@example.com")
 	require.NoError(t, err)
 	require.Equal(t, result.PlaintextKey, plaintext)
+}
+
+func TestDeleteRedemptionCodeRemovesCodeAndAudits(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:delete_redemption_code?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.RedemptionCode{}, &model.AdminAuditLog{}))
+	store := sqlstore.NewWithDB(db)
+	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
+	require.NoError(t, err)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", cipher, nil, nil)
+	svc.SetRedemptionService(redemption.NewService(store))
+
+	created, err := svc.CreateRedemptionCode(context.Background(), "admin@example.com", CreateRedemptionCodeRequest{
+		Code:         "DELETE-ME",
+		CreditAmount: 25,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DeleteRedemptionCode(context.Background(), "admin@example.com", created.ID))
+	_, err = store.GetRedemptionCodeByID(context.Background(), created.ID)
+	require.ErrorIs(t, err, sqlstore.ErrRedemptionCodeNotFound)
+
+	var logs []model.AdminAuditLog
+	require.NoError(t, db.Order("id ASC").Find(&logs).Error)
+	require.Len(t, logs, 2)
+	require.Equal(t, "redemption_code.delete", logs[1].Action)
+	require.Equal(t, "redemption_code", logs[1].TargetType)
+	require.JSONEq(t, `{"actor":"admin@example.com"}`, logs[1].PayloadJSON)
 }
 
 func TestCreateAPIKeyPersistsHostedOnlyFields(t *testing.T) {

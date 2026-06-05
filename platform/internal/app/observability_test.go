@@ -160,6 +160,9 @@ func (fakeAdminRouteFailureService) EnableRedemptionCode(_ context.Context, _ st
 func (fakeAdminRouteFailureService) DisableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
 	return nil, errors.New("not configured")
 }
+func (fakeAdminRouteFailureService) DeleteRedemptionCode(_ context.Context, _ string, _ uint64) error {
+	return errors.New("not configured")
+}
 func (fakeAdminRouteFailureService) ListRedemptionRecords(_ context.Context, _ admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error) {
 	return &admin.ListRedemptionRecordsResponse{Items: []model.RedemptionCodeRedemption{}}, nil
 }

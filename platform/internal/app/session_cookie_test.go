@@ -69,23 +69,25 @@ func (f *fakeAuthRouteService) ResolveSession(cookieValue string) (*auth.Session
 }
 
 type fakeAdminRouteService struct {
-	loginCookie        string
-	logoutCookie       string
-	sessionEmail       string
-	sessionName        string
-	preferences        map[string]string
-	loginURL           string
-	mockEmail          string
-	mockName           string
-	mockCookie         string
-	callbackUser       *admin.AdminIdentity
-	callbackRaw        string
-	callbackTo         string
-	callbackErr        error
-	plaintext          string
-	plaintextErr       error
-	overview           *model.OverviewStats
-	fingerprintQuality *model.FingerprintQuality
+	loginCookie           string
+	logoutCookie          string
+	sessionEmail          string
+	sessionName           string
+	preferences           map[string]string
+	loginURL              string
+	mockEmail             string
+	mockName              string
+	mockCookie            string
+	callbackUser          *admin.AdminIdentity
+	callbackRaw           string
+	callbackTo            string
+	callbackErr           error
+	plaintext             string
+	plaintextErr          error
+	overview              *model.OverviewStats
+	fingerprintQuality    *model.FingerprintQuality
+	deletedRedemptionID   uint64
+	deleteRedemptionActor string
 }
 
 func (f *fakeAdminRouteService) ResolveSession(cookieValue string) (string, error) {
@@ -231,6 +233,11 @@ func (f *fakeAdminRouteService) EnableRedemptionCode(_ context.Context, _ string
 func (f *fakeAdminRouteService) DisableRedemptionCode(_ context.Context, _ string, _ uint64) (*model.RedemptionCode, error) {
 	return &model.RedemptionCode{}, nil
 }
+func (f *fakeAdminRouteService) DeleteRedemptionCode(_ context.Context, actorEmail string, id uint64) error {
+	f.deleteRedemptionActor = actorEmail
+	f.deletedRedemptionID = id
+	return nil
+}
 func (f *fakeAdminRouteService) ListRedemptionRecords(_ context.Context, _ admin.ListRedemptionRecordsRequest) (*admin.ListRedemptionRecordsResponse, error) {
 	return &admin.ListRedemptionRecordsResponse{Items: []model.RedemptionCodeRedemption{}}, nil
 }
@@ -322,6 +329,24 @@ func TestAdminFingerprintQualityRouteRequiresAdminAndReturnsEnvelope(t *testing.
 	require.Len(t, body.Data.Summary, 1)
 	require.Len(t, body.Data.Rows, 1)
 	require.Equal(t, "candidate_real_or_unknown", body.Data.Rows[0].Bucket)
+}
+
+func TestRegisterAdminRoutesDeletesRedemptionCode(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api")
+	adminSvc := &fakeAdminRouteService{sessionEmail: "admin@example.com"}
+	registerAdminRoutes(api, Config{AppEnv: "production", AdminSessionTTL: time.Hour}, adminSvc)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/admin/redemption-codes/42", nil)
+	req.AddCookie(&http.Cookie{Name: "cop_admin_session", Value: "existing-admin"})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.EqualValues(t, 42, adminSvc.deletedRedemptionID)
+	require.Equal(t, "admin@example.com", adminSvc.deleteRedemptionActor)
+	require.JSONEq(t, `{"data":{"success":true}}`, rec.Body.String())
 }
 
 func TestRegisterAuthRoutesCallbackSetsSecureLaxCookieInProduction(t *testing.T) {
