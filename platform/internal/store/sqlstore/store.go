@@ -795,7 +795,7 @@ func (s *Store) TransferAnonymousCreditsToUser(ctx context.Context, fingerprint 
 		// Idempotency: if an outbound ledger entry already exists, treat as no-op.
 		var existing model.FingerprintCreditLedger
 		if err := tx.Where("idempotency_key = ?", idemKey).First(&existing).Error; err == nil {
-			return nil
+			return associateAnonymousUsageEventsTx(tx, fingerprint, userID)
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -846,6 +846,9 @@ func (s *Store) TransferAnonymousCreditsToUser(ctx context.Context, fingerprint 
 				return err
 			}
 		}
+		if err := associateAnonymousUsageEventsTx(tx, fingerprint, userID); err != nil {
+			return err
+		}
 		if err := tx.Save(fpAccount).Error; err != nil {
 			return err
 		}
@@ -853,6 +856,12 @@ func (s *Store) TransferAnonymousCreditsToUser(ctx context.Context, fingerprint 
 		return nil
 	})
 	return transferred, err
+}
+
+func associateAnonymousUsageEventsTx(tx *gorm.DB, fingerprint string, userID uint64) error {
+	return tx.Model(&model.UsageEvent{}).
+		Where("fingerprint_hash = ? AND (user_id IS NULL OR user_id = 0)", fingerprint).
+		Update("user_id", userID).Error
 }
 
 // ErrHostedCreditsExhausted is returned by Precheck/Charge functions when an
@@ -3094,8 +3103,8 @@ func (s *Store) ListAppUsageEvents(ctx context.Context, userID uint64) ([]model.
 	err := s.db.WithContext(ctx).
 		Table("usage_events").
 		Select("usage_events.*").
-		Joins("JOIN api_keys ON api_keys.id = usage_events.api_key_id").
-		Where("api_keys.owner_user_id = ?", userID).
+		Joins("LEFT JOIN api_keys ON api_keys.id = usage_events.api_key_id").
+		Where("usage_events.user_id = ? OR api_keys.owner_user_id = ?", userID, userID).
 		Order("usage_events.created_at desc").
 		Limit(200).
 		Scan(&events).Error

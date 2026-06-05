@@ -645,6 +645,63 @@ func TestBackfillSignupHostedCreditsMigrationShape(t *testing.T) {
 	}
 }
 
+func TestAssociateAnonymousUsageEventsMigrationShape(t *testing.T) {
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "postgres", "035_associate_anonymous_usage_events.sql")
+	sqlBytes, err := os.ReadFile(migrationPath)
+	require.NoError(t, err)
+	lower := strings.ToLower(string(sqlBytes))
+
+	requiredSubstrings := []string{
+		"update usage_events",
+		"from fingerprint_credit_accounts",
+		"migrated_to_user_id",
+		"usage_events.fingerprint_hash = fingerprint_credit_accounts.fingerprint_hash",
+		"usage_events.user_id is null",
+		"usage_events.user_id = 0",
+	}
+	for _, needle := range requiredSubstrings {
+		require.Containsf(t, lower, needle, "035 migration must contain %q", needle)
+	}
+}
+
+func TestAssociateAnonymousUsageEventsMigrationBackfillsMigratedFingerprints(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:associate_anonymous_usage_events_migration?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.FingerprintCreditAccount{}, &model.UsageEvent{}))
+	store := NewWithDB(db)
+
+	userID := uint64(89)
+	otherUserID := uint64(90)
+	fingerprint := "fp-migrated"
+	require.NoError(t, db.Create(&model.FingerprintCreditAccount{
+		FingerprintHash:  fingerprint,
+		MigratedToUserID: &userID,
+	}).Error)
+	events := []model.UsageEvent{
+		{FingerprintHash: fingerprint, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+		{FingerprintHash: fingerprint, UserID: &otherUserID, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+		{FingerprintHash: "fp-unmigrated", Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	migrationPath := filepath.Join("..", "..", "..", "migrations", "postgres", "035_associate_anonymous_usage_events.sql")
+	require.NoError(t, store.ApplyMigrationFile(context.Background(), migrationPath))
+
+	var migrated model.UsageEvent
+	require.NoError(t, db.First(&migrated, events[0].ID).Error)
+	require.NotNil(t, migrated.UserID)
+	require.Equal(t, userID, *migrated.UserID)
+
+	var alreadyOwned model.UsageEvent
+	require.NoError(t, db.First(&alreadyOwned, events[1].ID).Error)
+	require.NotNil(t, alreadyOwned.UserID)
+	require.Equal(t, otherUserID, *alreadyOwned.UserID)
+
+	var unrelated model.UsageEvent
+	require.NoError(t, db.First(&unrelated, events[2].ID).Error)
+	require.Nil(t, unrelated.UserID)
+}
+
 func TestCLILoginChallengeMigrationsIncludeDeviceFlowColumns(t *testing.T) {
 	requiredColumns := []string{"flow", "user_code_hash"}
 	migrationPaths := []string{

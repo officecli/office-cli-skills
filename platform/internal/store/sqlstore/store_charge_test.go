@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -24,6 +25,7 @@ func newChargeTestStore(t *testing.T, dsn string) (*Store, *gorm.DB) {
 		&model.UserHostedCreditLedger{},
 		&model.FingerprintCreditAccount{},
 		&model.FingerprintCreditLedger{},
+		&model.UsageEvent{},
 	))
 	return NewWithDB(db), db
 }
@@ -225,6 +227,118 @@ func TestChargeAPIKeyCreditsBasicAndIdempotent(t *testing.T) {
 	var ledgers []model.UserHostedCreditLedger
 	require.NoError(t, db.Where("source_type = ?", model.HostedCreditLedgerSourceCharge).Find(&ledgers).Error)
 	require.Len(t, ledgers, 1)
+}
+
+func TestTransferAnonymousCreditsToUserAssociatesAnonymousUsageEvents(t *testing.T) {
+	store, db := newChargeTestStore(t, "file:transfer_anonymous_usage_events?mode=memory&cache=shared")
+	ctx := context.Background()
+	fingerprint := "fp-transfer-usage"
+	userID := uint64(42)
+	otherUserID := uint64(99)
+
+	_, _, _, err := store.GrantHostedCreditsToFingerprint(ctx, fingerprint, model.HostedCreditLedgerSourceAnonymousSignupBonus, "bonus:fp-transfer-usage", 96, "anon bonus", "{}")
+	require.NoError(t, err)
+
+	events := []model.UsageEvent{
+		{FingerprintHash: fingerprint, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+		{FingerprintHash: fingerprint, Mode: model.UsageModeHosted, Action: model.UsageActionStatus, Result: model.UsageResultAllowed},
+		{FingerprintHash: fingerprint, UserID: &otherUserID, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+		{FingerprintHash: "fp-other", Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	transferred, err := store.TransferAnonymousCreditsToUser(ctx, fingerprint, userID)
+	require.NoError(t, err)
+	require.Equal(t, 96, transferred)
+
+	var rebound []model.UsageEvent
+	require.NoError(t, db.Order("id asc").Find(&rebound).Error)
+	require.NotNil(t, rebound[0].UserID)
+	require.Equal(t, userID, *rebound[0].UserID)
+	require.NotNil(t, rebound[1].UserID)
+	require.Equal(t, userID, *rebound[1].UserID)
+	require.NotNil(t, rebound[2].UserID)
+	require.Equal(t, otherUserID, *rebound[2].UserID, "existing user ownership must not be overwritten")
+	require.Nil(t, rebound[3].UserID, "other fingerprints must not be associated")
+}
+
+func TestTransferAnonymousCreditsToUserIdempotentPathStillAssociatesUsageEvents(t *testing.T) {
+	store, db := newChargeTestStore(t, "file:transfer_anonymous_usage_events_idempotent?mode=memory&cache=shared")
+	ctx := context.Background()
+	fingerprint := "fp-transfer-existing"
+	userID := uint64(43)
+	idemKey := fmt.Sprintf("anonymous-transfer:%s:%d", fingerprint, userID)
+
+	require.NoError(t, db.Create(&model.FingerprintCreditAccount{
+		FingerprintHash:  fingerprint,
+		CreditBalance:    0,
+		BonusGranted:     true,
+		MigratedToUserID: &userID,
+	}).Error)
+	require.NoError(t, db.Create(&model.UserHostedCreditAccount{UserID: userID, CreditBalance: 88}).Error)
+	require.NoError(t, db.Create(&model.FingerprintCreditLedger{
+		FingerprintHash: fingerprint,
+		SourceType:      model.HostedCreditLedgerSourceAnonymousTransferOut,
+		IdempotencyKey:  idemKey,
+		CreditDelta:     -88,
+		Reason:          "anonymous credits transferred to user account",
+		MetadataJSON:    `{"user_id":43}`,
+	}).Error)
+	require.NoError(t, db.Create(&model.UsageEvent{
+		FingerprintHash: fingerprint,
+		Mode:            model.UsageModeHosted,
+		Action:          model.UsageActionGenerate,
+		Result:          model.UsageResultAllowed,
+	}).Error)
+
+	transferred, err := store.TransferAnonymousCreditsToUser(ctx, fingerprint, userID)
+	require.NoError(t, err)
+	require.Zero(t, transferred)
+
+	var event model.UsageEvent
+	require.NoError(t, db.First(&event, "fingerprint_hash = ?", fingerprint).Error)
+	require.NotNil(t, event.UserID)
+	require.Equal(t, userID, *event.UserID)
+
+	var account model.UserHostedCreditAccount
+	require.NoError(t, db.First(&account, "user_id = ?", userID).Error)
+	require.Equal(t, 88, account.CreditBalance, "idempotent transfer must not duplicate credits")
+}
+
+func TestListAppUsageEventsIncludesDirectUserEventsAndOwnedAPIKeyEvents(t *testing.T) {
+	store, db := newChargeTestStore(t, "file:list_app_usage_direct_user_events?mode=memory&cache=shared")
+	ctx := context.Background()
+	userID := uint64(44)
+	directEventTime := time.Date(2026, 6, 5, 11, 0, 0, 0, time.UTC)
+	keyEventTime := directEventTime.Add(-time.Minute)
+	defaultRuntimeMode := "hosted"
+
+	require.NoError(t, db.Create(&model.User{ID: userID, Email: "usage@example.com", Name: "Usage User", InviteCode: "invite-usage", Status: model.UserStatusActive}).Error)
+	key := &model.APIKey{
+		OwnerUserID:        &userID,
+		KeyHash:            "hash-usage",
+		KeyPrefix:          "cop_usage",
+		Status:             model.APIKeyStatusActive,
+		PlanName:           "Hosted",
+		AllowedModes:       "hosted_only",
+		HostedEnabled:      true,
+		DefaultRuntimeMode: &defaultRuntimeMode,
+	}
+	require.NoError(t, db.Create(key).Error)
+
+	directUserID := userID
+	events := []model.UsageEvent{
+		{FingerprintHash: "fp-direct", UserID: &directUserID, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: directEventTime},
+		{FingerprintHash: "fp-key", APIKeyID: &key.ID, Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: keyEventTime},
+		{FingerprintHash: "fp-other", Mode: model.UsageModeHosted, Action: model.UsageActionGenerate, Result: model.UsageResultAllowed, CreatedAt: directEventTime.Add(time.Minute)},
+	}
+	require.NoError(t, db.Create(&events).Error)
+
+	listed, err := store.ListAppUsageEvents(ctx, userID)
+	require.NoError(t, err)
+	require.Len(t, listed, 2)
+	require.Equal(t, events[0].ID, listed[0].ID)
+	require.Equal(t, events[1].ID, listed[1].ID)
 }
 
 func TestPrecheckHostedCreditsByUserReturnsExhaustedBelowMin(t *testing.T) {
