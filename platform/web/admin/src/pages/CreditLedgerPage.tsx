@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Switch } from 'antd'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, formatDate } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, formatDate } from '../components/ui'
 
 export default function CreditLedgerPage() {
   const [includeZeroDelta, setIncludeZeroDelta] = useState(false)
-  const { data: entries = [] } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['admin-credit-ledger', includeZeroDelta],
     queryFn: () => api.creditLedger(includeZeroDelta),
   })
+  const entries = data ?? []
+  const entriesLoading = !data && isFetching
 
   return (
     <Panel>
@@ -22,7 +24,9 @@ export default function CreditLedgerPage() {
         <Switch checked={includeZeroDelta} onChange={setIncludeZeroDelta} />
         <span className="text-sm text-outline">Show zero-delta rows</span>
       </div>
-      {entries.length ? (
+      {entriesLoading ? (
+        <LoadingState label="Loading credit ledger..." />
+      ) : entries.length ? (
         <DataTable
           headers={['User', 'Source', 'Delta', 'Reason', 'Usage', 'Created']}
           columns="minmax(0,0.6fr) minmax(0,1fr) minmax(0,0.6fr) minmax(0,1.2fr) minmax(0,0.6fr) minmax(0,1fr)"

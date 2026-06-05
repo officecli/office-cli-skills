@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 
 export default function OrdersPage() {
   const queryClient = useQueryClient()
-  const { data: orders = [] } = useQuery({ queryKey: ['admin-orders'], queryFn: api.orders })
+  const { data, isFetching } = useQuery({ queryKey: ['admin-orders'], queryFn: api.orders })
+  const orders = data ?? []
+  const ordersLoading = !data && isFetching
   const update = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => api.updateOrder(id, { status }),
     onSuccess: async () => {
@@ -19,7 +21,9 @@ export default function OrdersPage() {
         title="Orders and checkout state"
         body="Inspect account hosted credit purchases, legacy target-key metadata, and last-mile payment status from a single operator surface."
       />
-      {orders.length ? (
+      {ordersLoading ? (
+        <LoadingState label="Loading orders..." />
+      ) : orders.length ? (
         <DataTable
           headers={['Order', 'Pack', 'Destination', 'Status', 'Created', 'Action']}
           columns="minmax(0,0.9fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,0.9fr)"

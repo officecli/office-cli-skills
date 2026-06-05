@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 interface FilterState {
   fingerprint: string
@@ -21,7 +21,7 @@ export default function QuotaSourcesPage() {
   const [draft, setDraft] = useState<FilterState>(defaultFilters)
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
 
-  const { data } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['admin-quota-sources', filters],
     queryFn: () => {
       const params = new URLSearchParams()
@@ -36,6 +36,7 @@ export default function QuotaSourcesPage() {
   const rewardGrants = data?.reward_grants ?? []
   const paidExternalKeys = data?.paid_external_keys ?? []
   const hostedKeys = data?.hosted_keys ?? []
+  const quotaSourcesLoading = !data && isFetching
 
   return (
     <div className="space-y-8">
@@ -71,79 +72,87 @@ export default function QuotaSourcesPage() {
         </form>
       </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Legacy account rewards" title="Reward grants" body="Legacy reward grants remain account-owned historical quota and should never be mixed into anonymous trial counts or account hosted credits." />
-        {rewardGrants.length ? (
-          <div className="space-y-3">
-            {rewardGrants.map((grant) => (
-              <div key={grant.id} className="admin-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
-                <div>
-                  <div className="text-white">{grant.reason}</div>
-                  <div className="mt-1 text-sm text-outline">User {grant.user_id} / {grant.source_type} / created {formatDate(grant.created_at)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-white">{formatNumber(grant.amount_total - grant.amount_used)} remaining</div>
-                  <div className="text-xs text-outline">{formatNumber(grant.amount_used)} used / {formatNumber(grant.amount_total)} total</div>
-                </div>
+      {quotaSourcesLoading ? (
+        <Panel>
+          <LoadingState label="Loading quota sources..." />
+        </Panel>
+      ) : (
+        <>
+          <Panel>
+            <SectionHeading eyebrow="Legacy account rewards" title="Reward grants" body="Legacy reward grants remain account-owned historical quota and should never be mixed into anonymous trial counts or account hosted credits." />
+            {rewardGrants.length ? (
+              <div className="space-y-3">
+                {rewardGrants.map((grant) => (
+                  <div key={grant.id} className="admin-card-muted flex flex-wrap items-center justify-between gap-4 p-5">
+                    <div>
+                      <div className="text-white">{grant.reason}</div>
+                      <div className="mt-1 text-sm text-outline">User {grant.user_id} / {grant.source_type} / created {formatDate(grant.created_at)}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-white">{formatNumber(grant.amount_total - grant.amount_used)} remaining</div>
+                      <div className="text-xs text-outline">{formatNumber(grant.amount_used)} used / {formatNumber(grant.amount_total)} total</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <EmptyState title="No reward grants matched" body="Try filtering by user ID if you are tracing a single account." />
+            )}
+          </Panel>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Panel>
+              <SectionHeading eyebrow="Paid external" title="Paid external quota keys" body="These keys carry billable document-generation quota." />
+              {paidExternalKeys.length ? (
+                <div className="space-y-3">
+                  {paidExternalKeys.map((key) => (
+                    <div key={key.id} className="admin-card-muted p-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-white">{key.key_prefix}</div>
+                          <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
+                        </div>
+                        <StatusPill value={key.status} />
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Total</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_total)}</div></div>
+                        <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_used)}</div></div>
+                        <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_remaining)}</div></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No paid keys matched" body="Filter by key prefix or user ID to narrow a paid quota trace." />
+              )}
+            </Panel>
+
+            <Panel>
+              <SectionHeading eyebrow="Account hosted" title="Hosted credit credentials" body="These rows are legacy key-shaped compatibility views; the authoritative hosted credits balance is account-level." />
+              {hostedKeys.length ? (
+                <div className="space-y-3">
+                  {hostedKeys.map((key) => (
+                    <div key={key.id} className="admin-card-muted p-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-white">{key.key_prefix}</div>
+                          <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
+                        </div>
+                        <StatusPill value={key.status} />
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-1">
+                        <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Balance</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_balance)}</div></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="No hosted credentials matched" body="Hosted credit compatibility rows will appear here when the current filter set matches hosted-enabled credentials." />
+              )}
+            </Panel>
           </div>
-        ) : (
-          <EmptyState title="No reward grants matched" body="Try filtering by user ID if you are tracing a single account." />
-        )}
-      </Panel>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Panel>
-          <SectionHeading eyebrow="Paid external" title="Paid external quota keys" body="These keys carry billable document-generation quota." />
-          {paidExternalKeys.length ? (
-            <div className="space-y-3">
-              {paidExternalKeys.map((key) => (
-                <div key={key.id} className="admin-card-muted p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-white">{key.key_prefix}</div>
-                      <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
-                    </div>
-                    <StatusPill value={key.status} />
-                  </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Total</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_total)}</div></div>
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Used</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_used)}</div></div>
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Remaining</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.quota_remaining)}</div></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="No paid keys matched" body="Filter by key prefix or user ID to narrow a paid quota trace." />
-          )}
-        </Panel>
-
-        <Panel>
-          <SectionHeading eyebrow="Account hosted" title="Hosted credit credentials" body="These rows are legacy key-shaped compatibility views; the authoritative hosted credits balance is account-level." />
-          {hostedKeys.length ? (
-            <div className="space-y-3">
-              {hostedKeys.map((key) => (
-                <div key={key.id} className="admin-card-muted p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-white">{key.key_prefix}</div>
-                      <div className="mt-1 text-sm text-outline">{key.plan_name}</div>
-                    </div>
-                    <StatusPill value={key.status} />
-                  </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-1">
-                    <div className="admin-card-muted p-4"><div className="info-eyebrow-tight text-outline">Balance</div><div className="mt-2 text-2xl font-bold text-white">{formatNumber(key.credit_balance)}</div></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="No hosted credentials matched" body="Hosted credit compatibility rows will appear here when the current filter set matches hosted-enabled credentials." />
-          )}
-        </Panel>
-      </div>
+        </>
+      )}
     </div>
   )
 }

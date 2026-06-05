@@ -5,7 +5,7 @@ import { Activity, Download, ShieldAlert, Waypoints } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { DataTable, MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
+import { DataTable, LoadingState, MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
 import { buildFingerprintQualityCsv } from '../fingerprintQualityCsv'
 import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewUsageTrendPoint } from '../types'
 
@@ -17,10 +17,13 @@ const guardrails = [
 
 export default function DashboardPage() {
   const [hideDefaultFiltered, setHideDefaultFiltered] = useState(true)
-  const { data: overview } = useQuery({ queryKey: ['admin-overview'], queryFn: api.overview })
-  const { data: funnel30d } = useQuery({ queryKey: ['admin-operations-funnel', '30d', 'dashboard'], queryFn: () => api.operationsFunnel('30d') })
-  const { data: fingerprintQuality } = useQuery({ queryKey: ['admin-fingerprint-quality'], queryFn: api.fingerprintQuality })
+  const { data: overview, isFetching: overviewFetching } = useQuery({ queryKey: ['admin-overview'], queryFn: api.overview })
+  const { data: funnel30d, isFetching: funnel30dFetching } = useQuery({ queryKey: ['admin-operations-funnel', '30d', 'dashboard'], queryFn: () => api.operationsFunnel('30d') })
+  const { data: fingerprintQuality, isFetching: fingerprintQualityFetching } = useQuery({ queryKey: ['admin-fingerprint-quality'], queryFn: api.fingerprintQuality })
   const funnel = funnel30d ?? overview?.operations_funnel_30d
+  const overviewLoading = !overview && overviewFetching
+  const funnelLoading = !funnel && funnel30dFetching
+  const fingerprintQualityLoading = !fingerprintQuality && fingerprintQualityFetching
   const trendData = toTrendChartData(overview?.usage_trend ?? [])
   const hasTrendData = trendData.some((item) => item.value > 0)
   const resultData = positiveBreakdown(overview?.result_breakdown ?? [])
@@ -43,17 +46,23 @@ export default function DashboardPage() {
           body="Review key posture, free-machine pressure, and blocked traffic before taking any action on the platform."
           action={<Link to="/operations/funnel"><Button>Operations / Funnel</Button></Link>}
         />
-        <div className="grid gap-4 xl:grid-cols-4">
-          <MetricCard label="Total API Keys" value={formatNumber(overview?.total_api_keys)} detail="All managed credentials across the platform" />
-          <MetricCard label="Active Keys" value={formatNumber(overview?.active_api_keys)} detail="Keys currently allowed to process traffic" />
-          <MetricCard label="Total Machines" value={formatNumber(funnel?.machine_quality?.total_machines ?? overview?.free_machines)} detail="Distinct non-hosted fingerprints from usage events" tone="warning" />
-          <MetricCard label="Blocked 24H" value={formatNumber(overview?.blocked_last_24h)} detail="Requests denied by policy in the last 24 hours" tone="critical" />
-        </div>
+        {overviewLoading ? (
+          <LoadingState label="Loading platform overview..." />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-4">
+            <MetricCard label="Total API Keys" value={formatNumber(overview?.total_api_keys)} detail="All managed credentials across the platform" />
+            <MetricCard label="Active Keys" value={formatNumber(overview?.active_api_keys)} detail="Keys currently allowed to process traffic" />
+            <MetricCard label="Total Machines" value={formatNumber(funnel?.machine_quality?.total_machines ?? overview?.free_machines)} detail="Distinct non-hosted fingerprints from usage events" tone="warning" />
+            <MetricCard label="Blocked 24H" value={formatNumber(overview?.blocked_last_24h)} detail="Requests denied by policy in the last 24 hours" tone="critical" />
+          </div>
+        )}
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day." legend={['Checks', 'Consumes', 'Blocked']}>
-          {hasTrendData ? (
+          {overviewLoading ? (
+            <LoadingState label="Loading usage trend..." className="min-h-[280px]" />
+          ) : hasTrendData ? (
             <Line
               {...baseChartConfig}
               data={trendData}
@@ -70,30 +79,38 @@ export default function DashboardPage() {
           ) : <ChartEmpty />}
         </ChartPanel>
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
-          <PiePanel title="Result mix" data={resultData} colors={['#34d399', '#fb7185']} />
-          <PiePanel title="Mode mix" data={modeData} colors={['#7dd3fc', '#fbbf24', '#a78bfa', '#2dd4bf']} />
-          <PiePanel title="API key status" data={apiKeyStatusData} colors={['#34d399', '#f59e0b', '#fb7185', '#94a3b8']} />
+          <PiePanel title="Result mix" data={resultData} colors={['#34d399', '#fb7185']} loading={overviewLoading} />
+          <PiePanel title="Mode mix" data={modeData} colors={['#7dd3fc', '#fbbf24', '#a78bfa', '#2dd4bf']} loading={overviewLoading} />
+          <PiePanel title="API key status" data={apiKeyStatusData} colors={['#34d399', '#f59e0b', '#fb7185', '#94a3b8']} loading={overviewLoading} />
         </div>
       </div>
 
       <div className="dashboard-shell">
         <Panel>
           <SectionHeading eyebrow="Traffic pressure" title="Policy-facing activity snapshot" body="These counters help operators decide whether the platform is seeing healthy document traffic or something that needs intervention." />
-          <div className="grid gap-4 md:grid-cols-3">
-            <MetricCard label="Checks 24H" value={formatNumber(overview?.checks_last_24h)} detail="Requests that reached policy evaluation" />
-            <MetricCard label="Consumes 24H" value={formatNumber(overview?.consumes_last_24h)} detail="Requests that consumed free/reward/paid quota or hosted credits" />
-            <MetricCard label="Expired Keys" value={formatNumber(overview?.expired_api_keys)} detail="Credentials that need attention or archival" />
-          </div>
+          {overviewLoading ? (
+            <LoadingState label="Loading traffic pressure..." />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              <MetricCard label="Checks 24H" value={formatNumber(overview?.checks_last_24h)} detail="Requests that reached policy evaluation" />
+              <MetricCard label="Consumes 24H" value={formatNumber(overview?.consumes_last_24h)} detail="Requests that consumed free/reward/paid quota or hosted credits" />
+              <MetricCard label="Expired Keys" value={formatNumber(overview?.expired_api_keys)} detail="Credentials that need attention or archival" />
+            </div>
+          )}
         </Panel>
 
         <Panel>
           <SectionHeading eyebrow="30-day operations funnel" title="Activation and revenue signal" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <MetricCard label="Activated Users" value={formatNumber(funnel?.activated_users)} detail="CLI sessions or usage users in the last 30 days" />
-            <MetricCard label="Paid Users" value={formatNumber(funnel?.paid_users)} detail="Distinct users with paid orders in the last 30 days" />
-            <MetricCard label="Activation Rate" value={formatPercent(funnel?.activation_rate)} detail="Registered cohort activated in the selected window" />
-            <MetricCard label="Paid Conversion Rate" value={formatPercent(funnel?.paid_conversion_rate)} detail="Registered cohort paid in the selected window" />
-          </div>
+          {funnelLoading ? (
+            <LoadingState label="Loading 30-day operations funnel..." />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              <MetricCard label="Activated Users" value={formatNumber(funnel?.activated_users)} detail="CLI sessions or usage users in the last 30 days" />
+              <MetricCard label="Paid Users" value={formatNumber(funnel?.paid_users)} detail="Distinct users with paid orders in the last 30 days" />
+              <MetricCard label="Activation Rate" value={formatPercent(funnel?.activation_rate)} detail="Registered cohort activated in the selected window" />
+              <MetricCard label="Paid Conversion Rate" value={formatPercent(funnel?.paid_conversion_rate)} detail="Registered cohort paid in the selected window" />
+            </div>
+          )}
         </Panel>
 
         <Panel>
@@ -122,49 +139,55 @@ export default function DashboardPage() {
             </div>
           )}
         />
-        <div data-testid="fingerprint-quality-summary" className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(fingerprintQuality?.summary ?? []).map((item) => (
-            <div key={item.bucket} className="admin-card-muted p-4">
-              <div className="flex items-start justify-between gap-3">
-                <Typography.Text strong>{item.bucket}</Typography.Text>
-                <Typography.Text type={item.default_filtered ? 'warning' : 'secondary'}>
-                  {item.default_filtered ? 'filtered by default' : 'kept by default'}
-                </Typography.Text>
-              </div>
-              <Typography.Paragraph className="!mb-3 !mt-2 text-sm" type="secondary">{item.reason}</Typography.Paragraph>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><Typography.Text type="secondary">Fingerprints</Typography.Text><div>{formatNumber(item.fingerprints)}</div></div>
-                <div><Typography.Text type="secondary">Events</Typography.Text><div>{formatNumber(item.events)}</div></div>
-              </div>
-            </div>
-          ))}
-        </div>
-        {fingerprintRows.length ? (
-          <DataTable
-            headers={['Bucket', 'Reason', 'Fingerprint', 'Prefix', 'First', 'Last', 'Events', 'Generate', 'Status', 'Blocked', 'User-bound', 'IP count', 'IPs', 'CLI versions', 'Runtime modes', 'Document types', 'User agents']}
-            rows={fingerprintRows.map((row) => [
-              row.bucket,
-              row.reason,
-              row.fingerprint_hash,
-              row.fingerprint_prefix,
-              formatTimestamp(row.first_at),
-              formatTimestamp(row.last_at),
-              formatNumber(row.events),
-              formatNumber(row.generate_events),
-              formatNumber(row.status_events),
-              formatNumber(row.blocked_events),
-              formatNumber(row.user_bound_events),
-              formatNumber(row.ip_count),
-              joinList(row.ips),
-              joinList(row.cli_versions),
-              joinList(row.runtime_modes),
-              joinList(row.document_types),
-              joinList(row.user_agents),
-            ])}
-            columns="fingerprint-quality"
-          />
+        {fingerprintQualityLoading ? (
+          <LoadingState label="Loading fingerprint quality..." />
         ) : (
-          <Empty description="No fingerprint rows in the current filter" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <>
+            <div data-testid="fingerprint-quality-summary" className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {(fingerprintQuality?.summary ?? []).map((item) => (
+                <div key={item.bucket} className="admin-card-muted p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <Typography.Text strong>{item.bucket}</Typography.Text>
+                    <Typography.Text type={item.default_filtered ? 'warning' : 'secondary'}>
+                      {item.default_filtered ? 'filtered by default' : 'kept by default'}
+                    </Typography.Text>
+                  </div>
+                  <Typography.Paragraph className="!mb-3 !mt-2 text-sm" type="secondary">{item.reason}</Typography.Paragraph>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div><Typography.Text type="secondary">Fingerprints</Typography.Text><div>{formatNumber(item.fingerprints)}</div></div>
+                    <div><Typography.Text type="secondary">Events</Typography.Text><div>{formatNumber(item.events)}</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {fingerprintRows.length ? (
+              <DataTable
+                headers={['Bucket', 'Reason', 'Fingerprint', 'Prefix', 'First', 'Last', 'Events', 'Generate', 'Status', 'Blocked', 'User-bound', 'IP count', 'IPs', 'CLI versions', 'Runtime modes', 'Document types', 'User agents']}
+                rows={fingerprintRows.map((row) => [
+                  row.bucket,
+                  row.reason,
+                  row.fingerprint_hash,
+                  row.fingerprint_prefix,
+                  formatTimestamp(row.first_at),
+                  formatTimestamp(row.last_at),
+                  formatNumber(row.events),
+                  formatNumber(row.generate_events),
+                  formatNumber(row.status_events),
+                  formatNumber(row.blocked_events),
+                  formatNumber(row.user_bound_events),
+                  formatNumber(row.ip_count),
+                  joinList(row.ips),
+                  joinList(row.cli_versions),
+                  joinList(row.runtime_modes),
+                  joinList(row.document_types),
+                  joinList(row.user_agents),
+                ])}
+                columns="fingerprint-quality"
+              />
+            ) : (
+              <Empty description="No fingerprint rows in the current filter" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </>
         )}
       </Panel>
 
@@ -208,10 +231,12 @@ function ChartPanel({ title, description, legend, children }: { title: string; d
   )
 }
 
-function PiePanel({ title, data, colors }: { title: string; data: OverviewBreakdownItem[]; colors: string[] }) {
+function PiePanel({ title, data, colors, loading = false }: { title: string; data: OverviewBreakdownItem[]; colors: string[]; loading?: boolean }) {
   return (
     <ChartPanel title={title} legend={data.map((item) => item.label)}>
-      {data.length ? (
+      {loading ? (
+        <LoadingState label={`Loading ${title.toLowerCase()}...`} className="min-h-[190px]" />
+      ) : data.length ? (
         <Pie
           {...baseChartConfig}
           height={190}

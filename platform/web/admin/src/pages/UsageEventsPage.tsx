@@ -4,13 +4,13 @@ import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable 
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Button, DatePicker, Dropdown, Select, Space, Spin, Table, Tooltip, Typography } from 'antd'
+import { Button, DatePicker, Dropdown, Select, Space, Table, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { GripVertical, MoreVertical, RotateCcw, Settings2 } from 'lucide-react'
 import { api } from '../api'
-import { EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
+import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 import type { AdminPreference, UsageEvent } from '../types'
 
 interface FilterState {
@@ -357,9 +357,7 @@ export default function UsageEventsPage() {
           </div>
         </form>
         {usageEventsLoading ? (
-          <div className="flex min-h-64 items-center justify-center">
-            <Spin size="large" description={<Typography.Text type="secondary">Loading usage events...</Typography.Text>} />
-          </div>
+          <LoadingState label="Loading usage events..." />
         ) : usageEvents.length ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={visibleKeys} strategy={horizontalListSortingStrategy}>

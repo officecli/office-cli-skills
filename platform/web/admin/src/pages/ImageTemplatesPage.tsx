@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
 import { ApiError, api } from '../api'
-import { EmptyState, Panel, SectionHeading, StatusPill } from '../components/ui'
+import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill } from '../components/ui'
 import type { ImagePromptTemplate } from '../types'
 
 const blankTemplate: ImagePromptTemplate = {
@@ -29,8 +29,10 @@ function normalizeTemplate(template: ImagePromptTemplate): ImagePromptTemplate {
 
 export default function ImageTemplatesPage() {
   const queryClient = useQueryClient()
-  const { data: templates = [], isLoading } = useQuery({ queryKey: ['admin-image-templates'], queryFn: api.imageTemplates })
-  const { data: publishRequests = [], isLoading: publishRequestsLoading } = useQuery({ queryKey: ['admin-image-template-publish-requests'], queryFn: api.imageTemplatePublishRequests })
+  const { data: templatesData, isLoading } = useQuery({ queryKey: ['admin-image-templates'], queryFn: api.imageTemplates })
+  const { data: publishRequestsData, isLoading: publishRequestsLoading } = useQuery({ queryKey: ['admin-image-template-publish-requests'], queryFn: api.imageTemplatePublishRequests })
+  const templates = templatesData ?? []
+  const publishRequests = publishRequestsData ?? []
   const [draft, setDraft] = useState<ImagePromptTemplate>(blankTemplate)
   const [editDrafts, setEditDrafts] = useState<Record<number, ImagePromptTemplate>>({})
   const [error, setError] = useState('')
@@ -115,7 +117,7 @@ export default function ImageTemplatesPage() {
 
       <Panel>
         <SectionHeading eyebrow="Community publishing" title="Publish requests" body="Approve private templates only when the attached image generation task proves the prompt and generated image match." />
-        {publishRequestsLoading ? <div className="text-sm text-outline">Loading publish requests...</div> : publishRequests.length ? (
+        {publishRequestsLoading ? <LoadingState label="Loading publish requests..." /> : publishRequests.length ? (
           <div className="grid gap-3">
             {publishRequests.map((request) => (
               <div key={request.id} className="admin-card-muted flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
@@ -136,7 +138,7 @@ export default function ImageTemplatesPage() {
 
       <Panel>
         <SectionHeading eyebrow="Template library" title="Configured templates" body="Upload a thumbnail for each template so OfficeDex can display visual examples." />
-        {isLoading ? <div className="text-sm text-outline">Loading templates...</div> : sortedTemplates.length ? (
+        {isLoading ? <LoadingState label="Loading templates..." /> : sortedTemplates.length ? (
           <div className="grid gap-4 xl:grid-cols-2">
             {sortedTemplates.map((template) => {
               const activeDraft = draftFor(template)

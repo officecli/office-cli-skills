@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import { EmptyState, Panel, SectionHeading, StatusPill, formatNumber } from '../components/ui'
+import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatNumber } from '../components/ui'
 import type { HostedCreditPack, HostedModelPricingConfig, HostedPricingRule } from '../types'
 
 const blankRule: HostedPricingRule = {
@@ -68,7 +68,7 @@ const defaultModelConfigs: HostedModelPricingConfig[] = [
 
 export default function HostedPricingRulesPage() {
   const queryClient = useQueryClient()
-  const { data } = useQuery({ queryKey: ['admin-hosted-billing'], queryFn: api.hostedBilling })
+  const { data, isFetching } = useQuery({ queryKey: ['admin-hosted-billing'], queryFn: api.hostedBilling })
   const [markupPercent, setMarkupPercent] = useState('')
   const [creditsPerUSDDraft, setCreditsPerUSDDraft] = useState('100')
   const [creditRatioUnlocked, setCreditRatioUnlocked] = useState(false)
@@ -92,6 +92,7 @@ export default function HostedPricingRulesPage() {
   const updateRule = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedPricingRule }) => api.updateHostedPricingRule(id, payload), onSuccess: invalidate })
   const createPack = useMutation({ mutationFn: api.createHostedCreditPack, onSuccess: async () => { setPackDraft(blankPack); await invalidate() } })
   const updatePack = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: HostedCreditPack }) => api.updateHostedCreditPack(id, payload), onSuccess: invalidate })
+  const hostedBillingLoading = !data && isFetching
 
   useEffect(() => {
     setCreditsPerUSDDraft(String(creditsPerUSD))
@@ -117,7 +118,10 @@ export default function HostedPricingRulesPage() {
     <div className="space-y-8">
       <Panel>
         <SectionHeading eyebrow="Hosted billing" title="Hosted pricing controls" body="Configure aigateway base cost, margin, and prepaid credit packs without restarting the platform." />
-        <form className="admin-card-muted flex flex-wrap items-end gap-4 p-5" onSubmit={handleSettingsSubmit}>
+        {hostedBillingLoading ? (
+          <LoadingState label="Loading hosted pricing..." />
+        ) : (
+          <form className="admin-card-muted flex flex-wrap items-end gap-4 p-5" onSubmit={handleSettingsSubmit}>
           <label className="w-40 text-sm text-outline">Global markup %
             <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={settingsMarkupPercent} onChange={(event) => setMarkupPercent(event.target.value)} />
           </label>
@@ -127,83 +131,88 @@ export default function HostedPricingRulesPage() {
           <div className="pb-3 text-sm text-outline">Credit ratio: {formatNumber(normalizeCreditsPerUSD(creditsPerUSDDraft, creditsPerUSD))} credits = $1 USD</div>
           <button type="button" className="admin-secondary-button self-end" onClick={unlockCreditRatio} disabled={creditRatioUnlocked}>Unlock credit ratio</button>
           <button type="submit" className="admin-primary-button self-end px-5" disabled={updateSettings.isPending} aria-label="Save pricing settings">Save settings</button>
-        </form>
+          </form>
+        )}
       </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Aigateway cost" title="Model pricing" body="Configure shared text and image model costs once, then reference them from hosted profiles." />
-        <div className="space-y-3">
-          {modelConfigs.map((config) => (
-            <ModelConfigRow
-              key={config.key}
-              config={config}
-              creditsPerUSD={creditsPerUSD}
-              onSave={(payload) => config.id ? updateModelConfig.mutate({ id: config.id, payload }) : createModelConfig.mutate(payload)}
-            />
-          ))}
-        </div>
-      </Panel>
+      {hostedBillingLoading ? null : (
+        <>
+          <Panel>
+            <SectionHeading eyebrow="Aigateway cost" title="Model pricing" body="Configure shared text and image model costs once, then reference them from hosted profiles." />
+            <div className="space-y-3">
+              {modelConfigs.map((config) => (
+                <ModelConfigRow
+                  key={config.key}
+                  config={config}
+                  creditsPerUSD={creditsPerUSD}
+                  onSave={(payload) => config.id ? updateModelConfig.mutate({ id: config.id, payload }) : createModelConfig.mutate(payload)}
+                />
+              ))}
+            </div>
+          </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Hosted profiles" title="Pricing rules" body="Profiles choose shared model pricing and keep only reservation, minimum charge, and markup policy." />
-        <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          createRule.mutate(normalizeRule(ruleDraft))
-        }}>
-          <ProfileSelect label="Profile" value={ruleDraft.document_profile} onChange={(value) => setRuleDraft({ ...ruleDraft, document_profile: value })} />
-          <ModelSelect label="Text model" value={ruleDraft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
-          <ModelSelect label="Image model" value={ruleDraft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
-          <NumberField label="Markup % override" value={bpsToPercentValue(ruleDraft.markup_bps)} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
-          <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
-          <NumberField label="Image credits/asset" value={ruleDraft.image_per_asset_credits ?? 0} onChange={(value) => setRuleDraft({ ...ruleDraft, image_per_asset_credits: Number(value) })} />
-          <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
-          <button type="submit" className="admin-primary-button self-end" disabled={createRule.isPending}>Create rule</button>
-        </form>
-        {data?.rules.length ? (
-          <div className="space-y-3">
-            {data.rules.map((rule) => (
-              <RuleRow
-                key={rule.id}
-                rule={rule}
-                textModelConfigs={textModelConfigs}
-                imageModelConfigs={imageModelConfigs}
-                onSave={(payload) => rule.id && updateRule.mutate({ id: rule.id, payload })}
-                onToggle={() => rule.id && updateRule.mutate({ id: rule.id, payload: { ...rule, enabled: !rule.enabled } })}
-              />
-            ))}
-          </div>
-        ) : <EmptyState title="No hosted pricing rules" body="Create a rule before enabling hosted public billing." />}
-      </Panel>
+          <Panel>
+            <SectionHeading eyebrow="Hosted profiles" title="Pricing rules" body="Profiles choose shared model pricing and keep only reservation, minimum charge, and markup policy." />
+            <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+              event.preventDefault()
+              createRule.mutate(normalizeRule(ruleDraft))
+            }}>
+              <ProfileSelect label="Profile" value={ruleDraft.document_profile} onChange={(value) => setRuleDraft({ ...ruleDraft, document_profile: value })} />
+              <ModelSelect label="Text model" value={ruleDraft.text_model_key ?? ''} options={textModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, text_model_key: value })} />
+              <ModelSelect label="Image model" value={ruleDraft.image_model_key ?? ''} options={imageModelConfigs} onChange={(value) => setRuleDraft({ ...ruleDraft, image_model_key: value })} />
+              <NumberField label="Markup % override" value={bpsToPercentValue(ruleDraft.markup_bps)} onChange={(value) => setRuleDraft({ ...ruleDraft, markup_bps: value === '' ? undefined : percentToBPS(value) })} />
+              <NumberField label="Minimum credits" value={ruleDraft.minimum_charge_credits} onChange={(value) => setRuleDraft({ ...ruleDraft, minimum_charge_credits: Number(value) })} />
+              <NumberField label="Image credits/asset" value={ruleDraft.image_per_asset_credits ?? 0} onChange={(value) => setRuleDraft({ ...ruleDraft, image_per_asset_credits: Number(value) })} />
+              <label className="flex items-center gap-2 self-end text-sm text-outline"><input type="checkbox" checked={ruleDraft.enabled} onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.checked })} /> Enabled</label>
+              <button type="submit" className="admin-primary-button self-end" disabled={createRule.isPending}>Create rule</button>
+            </form>
+            {data?.rules.length ? (
+              <div className="space-y-3">
+                {data.rules.map((rule) => (
+                  <RuleRow
+                    key={rule.id}
+                    rule={rule}
+                    textModelConfigs={textModelConfigs}
+                    imageModelConfigs={imageModelConfigs}
+                    onSave={(payload) => rule.id && updateRule.mutate({ id: rule.id, payload })}
+                    onToggle={() => rule.id && updateRule.mutate({ id: rule.id, payload: { ...rule, enabled: !rule.enabled } })}
+                  />
+                ))}
+              </div>
+            ) : <EmptyState title="No hosted pricing rules" body="Create a rule before enabling hosted public billing." />}
+          </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Prepaid packs" title="Hosted credit packs" body="Enabled packs are visible to users and can be purchased through Stripe Checkout." />
-        <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          createPack.mutate(normalizePack(packDraft))
-        }}>
-          <TextField label="Code" value={packDraft.code} onChange={(value) => setPackDraft({ ...packDraft, code: value })} />
-          <TextField label="Name" value={packDraft.name} onChange={(value) => setPackDraft({ ...packDraft, name: value })} />
-          <NumberField label="Credits" value={packDraft.credit_amount} onChange={(value) => setPackDraft({ ...packDraft, credit_amount: Number(value) })} />
-          <div className="self-end text-sm text-outline">{creditUSDLabel(packDraft.credit_amount, creditsPerUSD)}</div>
-          <label className="md:col-span-3 text-sm text-outline">Description
-            <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
-          </label>
-          <button type="submit" className="admin-primary-button self-end" disabled={createPack.isPending}>Create pack</button>
-        </form>
-        {data?.packs.length ? (
-          <div className="space-y-3">
-            {data.packs.map((pack) => (
-              <PackRow
-                key={pack.id}
-                pack={pack}
-                creditsPerUSD={creditsPerUSD}
-                onSave={(payload) => pack.id && updatePack.mutate({ id: pack.id, payload })}
-                onToggle={() => pack.id && updatePack.mutate({ id: pack.id, payload: { ...pack, enabled: !pack.enabled } })}
-              />
-            ))}
-          </div>
-        ) : <EmptyState title="No hosted credit packs" body="Create an enabled pack to expose hosted billing to users." />}
-      </Panel>
+          <Panel>
+            <SectionHeading eyebrow="Prepaid packs" title="Hosted credit packs" body="Enabled packs are visible to users and can be purchased through Stripe Checkout." />
+            <form className="admin-card-muted mb-6 grid gap-4 p-5 md:grid-cols-4" onSubmit={(event: FormEvent) => {
+              event.preventDefault()
+              createPack.mutate(normalizePack(packDraft))
+            }}>
+              <TextField label="Code" value={packDraft.code} onChange={(value) => setPackDraft({ ...packDraft, code: value })} />
+              <TextField label="Name" value={packDraft.name} onChange={(value) => setPackDraft({ ...packDraft, name: value })} />
+              <NumberField label="Credits" value={packDraft.credit_amount} onChange={(value) => setPackDraft({ ...packDraft, credit_amount: Number(value) })} />
+              <div className="self-end text-sm text-outline">{creditUSDLabel(packDraft.credit_amount, creditsPerUSD)}</div>
+              <label className="md:col-span-3 text-sm text-outline">Description
+                <input className="admin-code-card mt-2 w-full rounded-2xl border border-outline-variant/20 px-4 py-3 text-white outline-none focus:border-primary/40" value={packDraft.description} onChange={(event) => setPackDraft({ ...packDraft, description: event.target.value })} />
+              </label>
+              <button type="submit" className="admin-primary-button self-end" disabled={createPack.isPending}>Create pack</button>
+            </form>
+            {data?.packs.length ? (
+              <div className="space-y-3">
+                {data.packs.map((pack) => (
+                  <PackRow
+                    key={pack.id}
+                    pack={pack}
+                    creditsPerUSD={creditsPerUSD}
+                    onSave={(payload) => pack.id && updatePack.mutate({ id: pack.id, payload })}
+                    onToggle={() => pack.id && updatePack.mutate({ id: pack.id, payload: { ...pack, enabled: !pack.enabled } })}
+                  />
+                ))}
+              </div>
+            ) : <EmptyState title="No hosted credit packs" body="Create an enabled pack to expose hosted billing to users." />}
+          </Panel>
+        </>
+      )}
     </div>
   )
 }

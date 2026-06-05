@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Input, Select, Space } from 'antd'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, formatDate, formatNumber } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, formatDate, formatNumber } from '../components/ui'
 
 type SourceFilter = '' | 'app' | 'cli' | 'tui' | 'desktop'
 
@@ -26,6 +26,7 @@ export default function RedemptionRecordsPage() {
   })
 
   const records = data?.items ?? []
+  const recordsLoading = !data && isFetching
 
   return (
     <Panel>
@@ -52,7 +53,9 @@ export default function RedemptionRecordsPage() {
           </Space>
         }
       />
-      {records.length === 0 && !isFetching ? (
+      {recordsLoading ? (
+        <LoadingState label="Loading redemption records..." />
+      ) : records.length === 0 ? (
         <EmptyState title="No redemption records" body="User redemption activity appears here after a code is redeemed." />
       ) : (
         <DataTable

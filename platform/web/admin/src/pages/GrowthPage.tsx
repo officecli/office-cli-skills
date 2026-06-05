@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 export default function GrowthPage() {
-  const { data: growth } = useQuery({ queryKey: ['admin-growth'], queryFn: api.growth })
+  const { data: growth, isFetching } = useQuery({ queryKey: ['admin-growth'], queryFn: api.growth })
+  const growthLoading = !growth && isFetching
 
   const rewardRows = (growth?.reward_grants ?? []).map((grant) => {
     const remaining = Math.max(grant.amount_total - grant.amount_used, 0)
@@ -49,7 +50,10 @@ export default function GrowthPage() {
           title="Reward grants, referrals, and Discord connections"
           body="This panel consumes the real `/api/admin/growth` ledger so operations can trace account hosted credit grants, referrals, and Discord records."
         />
-        <div className="grid gap-4 md:grid-cols-3">
+        {growthLoading ? (
+          <LoadingState label="Loading growth data..." />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
           <div className="admin-card-muted p-5">
             <div className="info-eyebrow text-outline">Hosted credit grants</div>
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.hosted_credit_grants?.length)}</div>
@@ -62,44 +66,49 @@ export default function GrowthPage() {
             <div className="info-eyebrow text-outline">Discord connections</div>
             <div className="mt-3 text-3xl font-bold text-white">{formatNumber(growth?.discord_connections.length)}</div>
           </div>
-        </div>
-      </Panel>
-
-      <Panel>
-        <SectionHeading eyebrow="Hosted credits ledger" title="Signup, invite, and Discord credits" body="New users receive signup hosted credits; each activated referral grants 100 hosted credits to the inviter, and each verified Discord connection grants 100 hosted credits." />
-        {hostedCreditRows.length ? (
-          <DataTable headers={['User', 'API key', 'Source', 'Credits', 'Idempotency key', 'Created']} rows={hostedCreditRows} columns="0.6fr 0.7fr 1fr 0.6fr 1.4fr 1fr" />
-        ) : (
-          <EmptyState title="No hosted credit grants yet" body="Signup and invite hosted credit grants appear here after users enter the app or referrals activate." />
+          </div>
         )}
       </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Reward ledger" title="Reward grants" body="Remaining is computed from the persisted grant totals and usage counters." />
-        {rewardRows.length ? (
-          <DataTable headers={['User', 'Source', 'Remaining', 'Idempotency key', 'Created']} rows={rewardRows} columns="0.7fr 1fr 0.7fr 1.4fr 1fr" />
-        ) : (
-          <EmptyState title="No reward grants yet" body="Reward grant rows will appear here after invite activation or future verified Discord rewards land." />
-        )}
-      </Panel>
+      {growthLoading ? null : (
+        <>
+          <Panel>
+            <SectionHeading eyebrow="Hosted credits ledger" title="Signup, invite, and Discord credits" body="New users receive signup hosted credits; each activated referral grants 100 hosted credits to the inviter, and each verified Discord connection grants 100 hosted credits." />
+            {hostedCreditRows.length ? (
+              <DataTable headers={['User', 'API key', 'Source', 'Credits', 'Idempotency key', 'Created']} rows={hostedCreditRows} columns="0.6fr 0.7fr 1fr 0.6fr 1.4fr 1fr" />
+            ) : (
+              <EmptyState title="No hosted credit grants yet" body="Signup and invite hosted credit grants appear here after users enter the app or referrals activate." />
+            )}
+          </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Referral ledger" title="Referrals" body="Use this list to track registration, activation, and reward timestamps per invited account." />
-        {referralRows.length ? (
-          <DataTable headers={['Inviter', 'Invited', 'Invite code', 'Activated', 'Reward granted']} rows={referralRows} columns="0.7fr 0.7fr 1fr 1fr 1fr" />
-        ) : (
-          <EmptyState title="No referrals yet" body="Referral rows are written after invite-bearing login callbacks complete." />
-        )}
-      </Panel>
+          <Panel>
+            <SectionHeading eyebrow="Reward ledger" title="Reward grants" body="Remaining is computed from the persisted grant totals and usage counters." />
+            {rewardRows.length ? (
+              <DataTable headers={['User', 'Source', 'Remaining', 'Idempotency key', 'Created']} rows={rewardRows} columns="0.7fr 1fr 0.7fr 1.4fr 1fr" />
+            ) : (
+              <EmptyState title="No reward grants yet" body="Reward grant rows will appear here after invite activation or future verified Discord rewards land." />
+            )}
+          </Panel>
 
-      <Panel>
-        <SectionHeading eyebrow="Discord ledger" title="Discord connections" body="Guild verification remains explicitly blocked until a trusted Discord membership checker is configured in production." />
-        {discordRows.length ? (
-          <DataTable headers={['User', 'Discord user ID', 'Username', 'Guild status', 'Reward granted']} rows={discordRows} columns="0.7fr 1.2fr 1fr 1fr 1fr" />
-        ) : (
-          <EmptyState title="No Discord connections yet" body="Once users link Discord through the app, the records appear here for operations review." />
-        )}
-      </Panel>
+          <Panel>
+            <SectionHeading eyebrow="Referral ledger" title="Referrals" body="Use this list to track registration, activation, and reward timestamps per invited account." />
+            {referralRows.length ? (
+              <DataTable headers={['Inviter', 'Invited', 'Invite code', 'Activated', 'Reward granted']} rows={referralRows} columns="0.7fr 0.7fr 1fr 1fr 1fr" />
+            ) : (
+              <EmptyState title="No referrals yet" body="Referral rows are written after invite-bearing login callbacks complete." />
+            )}
+          </Panel>
+
+          <Panel>
+            <SectionHeading eyebrow="Discord ledger" title="Discord connections" body="Guild verification remains explicitly blocked until a trusted Discord membership checker is configured in production." />
+            {discordRows.length ? (
+              <DataTable headers={['User', 'Discord user ID', 'Username', 'Guild status', 'Reward granted']} rows={discordRows} columns="0.7fr 1.2fr 1fr 1fr 1fr" />
+            ) : (
+              <EmptyState title="No Discord connections yet" body="Once users link Discord through the app, the records appear here for operations review." />
+            )}
+          </Panel>
+        </>
+      )}
     </div>
   )
 }

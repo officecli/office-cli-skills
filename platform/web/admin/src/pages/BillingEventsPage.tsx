@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate } from '../components/ui'
 
 export default function BillingEventsPage() {
-  const { data: events = [] } = useQuery({ queryKey: ['admin-billing-events'], queryFn: api.billingEvents })
+  const { data, isFetching } = useQuery({ queryKey: ['admin-billing-events'], queryFn: api.billingEvents })
+  const events = data ?? []
+  const eventsLoading = !data && isFetching
 
   return (
     <Panel>
@@ -12,7 +14,9 @@ export default function BillingEventsPage() {
         title="Billing events"
         body="Track Stripe webhook ingestion, ignored events, and failed payment-side transitions without digging through raw logs."
       />
-      {events.length ? (
+      {eventsLoading ? (
+        <LoadingState label="Loading billing events..." />
+      ) : events.length ? (
         <DataTable
           headers={['Event', 'Type', 'Order', 'Status', 'Processed', 'Error']}
           columns="minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.2fr)"

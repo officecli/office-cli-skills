@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 export default function UsersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedUserID, setSelectedUserID] = useState<number | null>(null)
-  const { data: users = [] } = useQuery({ queryKey: ['admin-users'], queryFn: () => api.users() })
+  const { data, isFetching } = useQuery({ queryKey: ['admin-users'], queryFn: () => api.users() })
+  const users = data ?? []
+  const usersLoading = !data && isFetching
   const { data: selectedUserKeys = [], isFetching: isFetchingKeys } = useQuery({
     queryKey: ['admin-user-api-keys', selectedUserID],
     queryFn: () => api.apiKeys(selectedUserID ?? undefined),
@@ -28,7 +30,9 @@ export default function UsersPage() {
         title="Registered users"
         body="Review account state, invite code presence, and operator-level account health without leaving the admin plane."
       />
-      {users.length ? (
+      {usersLoading ? (
+        <LoadingState label="Loading users..." />
+      ) : users.length ? (
         <div className="space-y-6">
           <DataTable
             headers={['UID', 'User', 'Invite code', 'Hosted credits', 'Status', 'Created', 'Action']}
@@ -81,7 +85,7 @@ export default function UsersPage() {
             <div className="admin-card-muted p-5">
               <div className="info-eyebrow text-primary">User API keys</div>
               {isFetchingKeys ? (
-                <div className="mt-3 text-sm text-outline">Loading keys...</div>
+                <LoadingState label="Loading user API keys..." className="min-h-24" />
               ) : selectedUserKeys.length ? (
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   {selectedUserKeys.map((key) => (

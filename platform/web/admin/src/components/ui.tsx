@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import { Card, Empty, Skeleton as AntSkeleton, Statistic, Table, Tag, Typography } from 'antd'
+import { Card, Empty, Skeleton as AntSkeleton, Spin, Statistic, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { cn, formatDate, formatNumber } from '../lib/utils'
 
@@ -87,6 +87,14 @@ export function EmptyState({ title, body }: { title: string; body: string }) {
         </div>
       )}
     />
+  )
+}
+
+export function LoadingState({ label, className }: { label: string; className?: string }) {
+  return (
+    <div role="status" aria-label={label} className={cn('flex min-h-64 items-center justify-center', className)}>
+      <Spin size="large" description={<Typography.Text type="secondary">{label}</Typography.Text>} />
+    </div>
   )
 }
 

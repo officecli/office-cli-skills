@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App as AntApp, Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Tag, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { api } from '../api'
-import { DataTable, EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 import type { CreateRedemptionCodeRequest, RedemptionCode, UpdateRedemptionCodeRequest } from '../types'
 
 type StatusFilter = '' | 'enabled' | 'disabled'
@@ -81,6 +81,7 @@ export default function RedemptionCodesPage() {
   })
 
   const codes = data?.items ?? []
+  const codesLoading = !data && isFetching
 
   return (
     <Panel>
@@ -105,7 +106,9 @@ export default function RedemptionCodesPage() {
           </Space>
         }
       />
-      {codes.length === 0 && !isFetching ? (
+      {codesLoading ? (
+        <LoadingState label="Loading redemption codes..." />
+      ) : codes.length === 0 ? (
         <EmptyState title="No redemption codes" body="Create the first code from the top-right action. New codes stay disabled until reviewed and enabled." />
       ) : (
         <DataTable

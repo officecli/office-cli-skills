@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, KeyRound, Plus, Save, ToggleLeft, ToggleRight } from 'lucide-react'
 import { ApiError, api } from '../api'
 import type { ApiKey, User } from '../types'
-import { EmptyState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
+import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
 type KeyType = 'hosted_only' | 'external_only' | 'hybrid'
 
@@ -79,7 +79,9 @@ function userOptionLabel(user: User) {
 
 export default function ApiKeysPage() {
   const queryClient = useQueryClient()
-  const { data: keys = [] } = useQuery({ queryKey: ['admin-api-keys'], queryFn: () => api.apiKeys() })
+  const { data, isFetching } = useQuery({ queryKey: ['admin-api-keys'], queryFn: () => api.apiKeys() })
+  const keys = data ?? []
+  const keysLoading = !data && isFetching
   const [showCreate, setShowCreate] = useState(false)
   const [showCreateAdvanced, setShowCreateAdvanced] = useState(false)
   const [createForm, setCreateForm] = useState(blankForm)
@@ -278,7 +280,9 @@ export default function ApiKeysPage() {
           </div>
         ) : null}
 
-        {keys.length ? (
+        {keysLoading ? (
+          <LoadingState label="Loading API keys..." />
+        ) : keys.length ? (
           <div className="grid gap-4 xl:grid-cols-2">
             {keys.map((key) => {
               const draft = activeDraft(key)
