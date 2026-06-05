@@ -276,8 +276,8 @@ describe('platform admin shell', () => {
 
     expect(await screen.findByRole('heading', { name: /Recent usage events/i })).toBeInTheDocument()
     expect(document.title).toBe('OfficeCLI Admin | Usage Events')
-    expect(screen.getByRole('option', { name: 'reward' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'hosted' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('mode=reward'), expect.objectContaining({ credentials: 'include' }))
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('mode=hosted'), expect.objectContaining({ credentials: 'include' }))
   })
 
   it('renders usage event audit details and sends audit filters', async () => {
@@ -346,7 +346,8 @@ describe('platform admin shell', () => {
     expect(screen.getByText(/officecli\/0\.2\.65 audit-test/i)).toBeInTheDocument()
     expect(screen.getByText(/198\.51\.100\.7, 10\.0\.0\.4/i)).toBeInTheDocument()
     expect(screen.getByText(/gpt-4\.1/i)).toBeInTheDocument()
-    expect(screen.getByText(/123 \/ 45 \/ 6/i)).toBeInTheDocument()
+    expect(screen.getByText(/174 total tokens/i)).toBeInTheDocument()
+    expect(screen.getByText(/prompt 123 \/ completion 45 \/ reasoning 6/i)).toBeInTheDocument()
     expect(screen.getByText(/reserved 20 \/ settled 8 \/ refund 12/i)).toBeInTheDocument()
     expect(screen.getByText(/capped/i)).toBeInTheDocument()
 
@@ -357,7 +358,7 @@ describe('platform admin shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/i }))
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?mode=free&mode=reward&mode=paid&mode=hosted&result=allowed&result=blocked&action=generate&api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
     })
   })
 

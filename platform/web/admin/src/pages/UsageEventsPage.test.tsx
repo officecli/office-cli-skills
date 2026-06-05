@@ -85,6 +85,43 @@ describe('admin usage events page', () => {
     expect(screen.getByPlaceholderText('Select end time')).toBeInTheDocument()
   })
 
+  it('shows total token usage with prompt, completion, and reasoning details', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/preferences/usage-events-table') {
+        return { ok: true, status: 200, json: async () => ({ data: null }) }
+      }
+      if (url.startsWith('/api/admin/usage-events?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 101,
+              request_id: 'req-token-101',
+              fingerprint_hash: 'fp-token-machine',
+              mode: 'hosted',
+              action: 'generate',
+              result: 'allowed',
+              model_name: 'gpt-4.1',
+              prompt_tokens: 123,
+              completion_tokens: 45,
+              reasoning_tokens: 6,
+              created_at: '2026-05-15T08:00:00Z',
+            }],
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithUrl('/usage-events')
+
+    expect(await screen.findByText(/174 total tokens/i)).toBeInTheDocument()
+    expect(screen.getByText(/prompt 123 \/ completion 45 \/ reasoning 6/i)).toBeInTheDocument()
+  })
+
   it('serializes multi-select filter changes as repeated query params', () => {
     const params = buildUsageEventParams({
       mode: ['free', 'paid'],

@@ -113,7 +113,7 @@ const usageColumns: UsageColumn[] = [
   { key: 'cli_document', label: 'CLI / Document', width: 160, render: (event) => compactText(`${valueOrDash(event.cli_version)} / ${valueOrDash(event.document_type)}`) },
   { key: 'runtime_provider', label: 'Runtime / Provider', width: 170, render: (event) => compactText(`${valueOrDash(event.runtime_mode)} / ${valueOrDash(event.provider)}`) },
   { key: 'model_charge', label: 'Model / Charge', width: 180, render: (event) => compactText(`${event.model_name || event.provider || '--'} / ${chargeLabel(event)}`) },
-  { key: 'tokens', label: 'Tokens', width: 150, render: (event) => compactText(`${event.prompt_tokens ?? 0} / ${event.completion_tokens ?? 0} / ${event.reasoning_tokens ?? 0}`) },
+  { key: 'tokens', label: 'Tokens', width: 210, render: renderTokenUsage },
   { key: 'images', label: 'Images', width: 100, render: (event) => compactText(`${event.image_count ?? 0}`) },
   { key: 'credits', label: 'Credits', width: 240, render: (event) => compactText(`reserved ${event.reserved_credits ?? 0} / settled ${event.settled_credits ?? 0} / refund ${event.refund_credits ?? 0}`) },
   { key: 'cost_profit', label: 'Cost / Profit', width: 180, render: (event) => compactText(`${creditsFromMicrousd(event.upstream_cost_microusd)} / ${creditsFromMicrousd(event.profit_microusd)}${event.cap_applied ? ' capped' : ''}`) },
@@ -491,6 +491,23 @@ function monoText(value: string) {
   return <Tooltip title={value}><span className="admin-table-mono block max-w-full truncate font-mono">{value}</span></Tooltip>
 }
 
+function renderTokenUsage(event: UsageEvent) {
+  const prompt = event.prompt_tokens ?? 0
+  const completion = event.completion_tokens ?? 0
+  const reasoning = event.reasoning_tokens ?? 0
+  const total = prompt + completion + reasoning
+  const detail = `prompt ${formatTokenCount(prompt)} / completion ${formatTokenCount(completion)} / reasoning ${formatTokenCount(reasoning)}`
+  const title = `${formatTokenCount(total)} total tokens; ${detail}`
+  return (
+    <Tooltip title={title}>
+      <span className="block max-w-full">
+        <span className="block truncate text-white">{formatTokenCount(total)} total tokens</span>
+        <span className="block truncate text-xs text-outline">{detail}</span>
+      </span>
+    </Tooltip>
+  )
+}
+
 function chargeLabel(event: UsageEvent) {
   if (event.mode === 'hosted') {
     return `${event.settled_credits ?? 0} credits`
@@ -508,4 +525,8 @@ function valueOrDash(value?: string | number) {
 function creditsFromMicrousd(value?: number) {
   const credits = Math.ceil(((value ?? 0) * 100) / 1_000_000)
   return `${credits} credits`
+}
+
+function formatTokenCount(value: number) {
+  return Math.max(0, Math.trunc(value)).toLocaleString('en-US')
 }
