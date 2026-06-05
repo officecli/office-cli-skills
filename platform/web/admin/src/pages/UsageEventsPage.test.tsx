@@ -62,7 +62,7 @@ describe('admin usage events page', () => {
     })
   })
 
-  it('queries default multi-select filters with generate action only', async () => {
+  it('queries default multi-select filters with check and generate actions', async () => {
     mockEmpty()
     renderWithUrl('/usage-events')
 
@@ -72,7 +72,7 @@ describe('admin usage events page', () => {
       const params = paramsFromUsageURL(usageCalls[0])
       expect(params.getAll('mode')).toEqual(['free', 'reward', 'paid', 'hosted'])
       expect(params.getAll('result')).toEqual(['allowed', 'blocked'])
-      expect(params.getAll('action')).toEqual(['generate'])
+      expect(params.getAll('action')).toEqual(['check', 'generate'])
       expect(params.getAll('action')).not.toContain('status')
     })
   })
@@ -126,7 +126,7 @@ describe('admin usage events page', () => {
     const params = buildUsageEventParams({
       mode: ['free', 'paid'],
       result: ['allowed'],
-      action: ['generate', 'status'],
+      action: ['check', 'generate', 'status'],
       reason_code: 'quota_ok',
       fingerprint_hash: '',
       api_key_id: '',
@@ -139,7 +139,7 @@ describe('admin usage events page', () => {
 
     expect(params.getAll('mode')).toEqual(['free', 'paid'])
     expect(params.getAll('result')).toEqual(['allowed'])
-    expect(params.getAll('action')).toEqual(['generate', 'status'])
+    expect(params.getAll('action')).toEqual(['check', 'generate', 'status'])
     expect(params.get('reason_code')).toBe('quota_ok')
     expect(params.get('user_id')).toBe('42')
   })

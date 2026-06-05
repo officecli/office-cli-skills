@@ -52,6 +52,7 @@ const (
 	UsageModePaid   UsageMode = "paid"
 	UsageModeHosted UsageMode = "hosted"
 
+	UsageActionCheck    UsageAction = "check"
 	UsageActionGenerate UsageAction = "generate"
 	UsageActionStatus   UsageAction = "status"
 

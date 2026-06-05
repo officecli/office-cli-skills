@@ -283,6 +283,8 @@ func TestAnonymousFingerprintGetsStarterCredits(t *testing.T) {
 	require.Equal(t, 100, resp.QuotaSnapshot.CreditAccount.Available)
 	require.NotNil(t, resp.CommitToken)
 	require.Equal(t, model.AccessModeHosted, resp.CommitToken.AccessMode)
+	require.Len(t, usage.events, 1)
+	require.Equal(t, model.UsageActionCheck, usage.events[0].Action)
 }
 
 // TestAnonymousZeroBalanceBlocks verifies that an exhausted fingerprint account

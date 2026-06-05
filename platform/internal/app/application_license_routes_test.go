@@ -442,6 +442,9 @@ func TestRegisterLicenseRoutesAddsAuditContextToUsageEvents(t *testing.T) {
 		t.Fatalf("usage events = %d", len(usage.events))
 	}
 	event := usage.events[0]
+	if event.Action != model.UsageActionCheck {
+		t.Fatalf("usage action = %s", event.Action)
+	}
 	if event.ClientIP == nil || *event.ClientIP != "198.51.100.9" {
 		t.Fatalf("client ip = %#v", event.ClientIP)
 	}

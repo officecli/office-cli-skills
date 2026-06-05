@@ -46,7 +46,7 @@ interface UsageColumn {
 const preferenceKey = 'usage-events-table'
 const modeFilterValues = ['free', 'reward', 'paid', 'hosted']
 const resultFilterValues = ['allowed', 'blocked']
-const actionFilterValues = ['generate', 'status']
+const actionFilterValues = ['check', 'generate', 'status']
 const defaultActionFilterValues = actionFilterValues.filter((value) => value !== 'status')
 
 const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }))

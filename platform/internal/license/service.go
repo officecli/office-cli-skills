@@ -725,7 +725,6 @@ func (s *Service) issueCommitToken(req CheckRequest, accessMode model.AccessMode
 }
 
 func buildUsageEvent(req CheckRequest, mode model.UsageMode, resp *CheckResponse, key *model.APIKey) *model.UsageEvent {
-	action := model.UsageAction(req.Action)
 	result := model.UsageResultBlocked
 	if resp.Allowed {
 		result = model.UsageResultAllowed
@@ -733,7 +732,7 @@ func buildUsageEvent(req CheckRequest, mode model.UsageMode, resp *CheckResponse
 	event := &model.UsageEvent{
 		FingerprintHash: req.FingerprintHash,
 		Mode:            mode,
-		Action:          action,
+		Action:          model.UsageActionCheck,
 		Result:          result,
 		BilledUnits:     0,
 		UnitType:        unitTypeForDocumentType(req.DocumentType),

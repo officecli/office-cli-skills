@@ -46,7 +46,7 @@ export interface UsageEvent {
   request_id?: string
   fingerprint_hash: string
   mode: 'free' | 'reward' | 'paid' | 'hosted'
-  action: 'generate' | 'status'
+  action: 'check' | 'generate' | 'status'
   result: 'allowed' | 'blocked'
   reason_code?: string
   created_at: string
