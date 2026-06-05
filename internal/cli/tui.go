@@ -36,7 +36,9 @@ const tuiStartupBanner = `╭─── OfficeCLI ──────────�
 │  ███ █   █   ███ ███ ███ ███ ███ ███ │
 ╰───────────────────────────────────────╯`
 
-const tuiStartupTip = `Tip: Type "Create a Word document about AI agents" and press Enter.`
+const tuiStartupTip = `Use the GUI desktop app with officedex. Official site: https://officedex.ai/
+https://github.com/officecli/officedex
+Tip: Type "Create a Word document about AI agents" and press Enter.`
 
 type TUIOptions struct {
 	NoAltScreen bool

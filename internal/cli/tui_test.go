@@ -107,6 +107,8 @@ func TestTUIModelBottomAlignsShortConversationNearInput(t *testing.T) {
 	lines := strings.Split(view, "\n")
 	bannerLine := lineIndexContaining(lines, "╭─── OfficeCLI")
 	logoLine := lineIndexContaining(lines, "███ ███ ███ ███ ███ ███ ███ █   ███")
+	desktopLine := lineIndexContaining(lines, "Use the GUI desktop app with officedex. Official site: https://officedex.ai/")
+	githubLine := lineIndexContaining(lines, "https://github.com/officecli/officedex")
 	tipLine := lineIndexContaining(lines, "Tip: Type")
 	inputLine := lineIndexContaining(lines, "> Describe a document")
 	if bannerLine < 0 {
@@ -117,6 +119,20 @@ func TestTUIModelBottomAlignsShortConversationNearInput(t *testing.T) {
 	}
 	if tipLine < 0 || !strings.Contains(view, "Word document") || !strings.Contains(view, "AI agents") {
 		t.Fatalf("startup tip should teach a Word document prompt:\n%s", view)
+	}
+	if desktopLine < 0 {
+		t.Fatalf("startup tip should mention the officedex official site:\n%s", view)
+	}
+	if githubLine < 0 {
+		t.Fatalf("startup tip should mention the officedex GitHub repository:\n%s", view)
+	}
+	if !(desktopLine < githubLine && githubLine < tipLine) {
+		t.Fatalf("startup tips should show desktop, GitHub, then prompt tip; got desktop=%d github=%d tip=%d:\n%s", desktopLine, githubLine, tipLine, view)
+	}
+	for _, r := range tuiStartupTip {
+		if r >= '\u4e00' && r <= '\u9fff' {
+			t.Fatalf("startup tip should remain English-only, found CJK rune %q in %q", r, tuiStartupTip)
+		}
 	}
 	for _, removed := range []string{"Welcome to OfficeCLI", "▗▟▙", "▐▛", "▝▙", "▘▘"} {
 		if strings.Contains(view, removed) {
