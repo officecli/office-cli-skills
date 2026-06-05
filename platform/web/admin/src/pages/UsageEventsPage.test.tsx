@@ -85,6 +85,26 @@ describe('admin usage events page', () => {
     expect(screen.getByPlaceholderText('Select end time')).toBeInTheDocument()
   })
 
+  it('shows loading feedback instead of the empty state while usage events are loading', () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/preferences/usage-events-table') {
+        return { ok: true, status: 200, json: async () => ({ data: null }) }
+      }
+      if (url.startsWith('/api/admin/usage-events?')) {
+        return new Promise(() => undefined)
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithUrl('/usage-events')
+
+    expect(screen.getByText(/loading usage events/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no usage events matched/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/adjust the filter set/i)).not.toBeInTheDocument()
+  })
+
   it('shows total token usage with prompt, completion, and reasoning details', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)

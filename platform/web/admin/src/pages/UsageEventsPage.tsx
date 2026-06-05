@@ -4,7 +4,7 @@ import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable 
 import { CSS } from '@dnd-kit/utilities'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Button, DatePicker, Dropdown, Select, Space, Table, Tooltip, Typography } from 'antd'
+import { Button, DatePicker, Dropdown, Select, Space, Spin, Table, Tooltip, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -157,12 +157,14 @@ export default function UsageEventsPage() {
     setColumnPreferences(mergePreferences(savedPreferences))
   }, [savedPreferences])
 
-  const { data = [] } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ['admin-usage-events', filters],
     queryFn: () => {
       return api.usageEvents(buildUsageEventParams(filters))
     },
   })
+  const usageEvents = data ?? []
+  const usageEventsLoading = !data && isFetching
 
   const visiblePreferences = columnPreferences.filter((preference) => preference.visible && columnByKey.has(preference.key))
   const visibleKeys = visiblePreferences.map((preference) => preference.key)
@@ -354,13 +356,17 @@ export default function UsageEventsPage() {
             }}>Reset</button>
           </div>
         </form>
-        {data.length ? (
+        {usageEventsLoading ? (
+          <div className="flex min-h-64 items-center justify-center">
+            <Spin size="large" description={<Typography.Text type="secondary">Loading usage events...</Typography.Text>} />
+          </div>
+        ) : usageEvents.length ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={visibleKeys} strategy={horizontalListSortingStrategy}>
               <Table
                 className="admin-table admin-usage-table"
                 columns={tableColumns}
-                dataSource={data}
+                dataSource={usageEvents}
                 pagination={false}
                 rowKey="id"
                 scroll={{ x: Math.max(scrollWidth, 960) }}
