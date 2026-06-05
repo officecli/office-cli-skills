@@ -21,6 +21,7 @@ const (
 // 25s default so downstream stall detectors (which are tuned for ≥60s
 // silence) always see fresh activity.
 var imageHeartbeatInterval = 25 * time.Second
+var structuredLLMHeartbeatInterval = 25 * time.Second
 
 // SetImageHeartbeatIntervalForTesting overrides the image generation
 // heartbeat cadence and returns a restore function. It is exported so
@@ -33,11 +34,67 @@ func SetImageHeartbeatIntervalForTesting(d time.Duration) (restore func()) {
 	return func() { imageHeartbeatInterval = previous }
 }
 
+// SetStructuredLLMHeartbeatIntervalForTesting overrides the structured LLM
+// heartbeat cadence for tests. Production keeps the 25s default.
+func SetStructuredLLMHeartbeatIntervalForTesting(d time.Duration) (restore func()) {
+	previous := structuredLLMHeartbeatInterval
+	structuredLLMHeartbeatInterval = d
+	return func() { structuredLLMHeartbeatInterval = previous }
+}
+
 func emitProgress(ctx context.Context, emitter engine.ProgressEmitter, step, status, content string) {
 	if emitter == nil {
 		return
 	}
 	emitter.Emit(ctx, engine.ProgressEvent{Step: step, Status: status, Content: strings.TrimSpace(content)})
+}
+
+func completeStructuredWithHeartbeat(
+	ctx context.Context,
+	llm engine.LLMClient,
+	emitter engine.ProgressEmitter,
+	req engine.StructuredCompletionRequest,
+	step string,
+	label string,
+) (string, error) {
+	if llm == nil {
+		return "", fmt.Errorf("llm client is nil")
+	}
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = "structured LLM response"
+	}
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	if emitter != nil && structuredLLMHeartbeatInterval > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			start := time.Now()
+			ticker := time.NewTicker(structuredLLMHeartbeatInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					elapsed := time.Since(start)
+					emitter.Emit(ctx, engine.ProgressEvent{
+						Step:      step,
+						Status:    "running",
+						Content:   fmt.Sprintf("Still waiting on %s (elapsed %ds)", label, int(elapsed.Seconds())),
+						ElapsedMs: elapsed.Milliseconds(),
+					})
+				}
+			}
+		}()
+	}
+	response, err := llm.CompleteStructured(ctx, req)
+	close(done)
+	wg.Wait()
+	return response, err
 }
 
 // generateImageWithHeartbeat invokes llm.GenerateImage while emitting
@@ -80,9 +137,9 @@ func generateImageWithHeartbeat(
 				case <-ticker.C:
 					elapsed := time.Since(start)
 					emitter.Emit(ctx, engine.ProgressEvent{
-						Step:    step,
-						Status:  "running",
-						Content: fmt.Sprintf("Still waiting on image provider (asset %d/%d, elapsed %ds)", assetIndex, assetTotal, int(elapsed.Seconds())),
+						Step:      step,
+						Status:    "running",
+						Content:   fmt.Sprintf("Still waiting on image provider (asset %d/%d, elapsed %ds)", assetIndex, assetTotal, int(elapsed.Seconds())),
 						ElapsedMs: elapsed.Milliseconds(),
 					})
 				}

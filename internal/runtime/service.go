@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -20,6 +22,13 @@ import (
 const (
 	PPTXBackendOfficegen            = "officegen"
 	PPTXBackendArtifactExperimental = "artifact-experimental"
+)
+
+var (
+	pptxExplicitDigitSlideCountBeforeUnit = regexp.MustCompile(`(?i)\b(\d{1,2})\s*[- ]?\s*(?:slide|slides|page|pages)\b`)
+	pptxExplicitDigitSlideCountAfterUnit  = regexp.MustCompile(`(?i)\b(?:slide|slides|page|pages)\s*(?:count)?\s*(?:of|:|=)?\s*(\d{1,2})\b`)
+	pptxExplicitWordSlideCountBeforeUnit  = regexp.MustCompile(`(?i)\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*[- ]?\s*(?:slide|slides|page|pages)\b`)
+	pptxExplicitChineseSlideCount         = regexp.MustCompile(`([一二三四五六七八九十]|\d{1,2})\s*页`)
 )
 
 type GenerateParams struct {
@@ -39,6 +48,7 @@ type GenerateParams struct {
 	ReferencePPTXSources []string
 	PPTXBackend          string
 	LocalPreview         bool
+	Debug                bool
 }
 
 func NormalizePPTXBackend(value string) (string, error) {
@@ -81,11 +91,45 @@ type ReferenceStyleMetadata struct {
 }
 
 type PPTXBuildOptions struct {
-	CreditBalanceSink func(int)
-	CreditChargedSink func(int)
-	Backend           string
-	ReferenceProfile  *pptxref.ReferenceStyleProfile
-	ReferenceBrief    *PPTXReferenceStyleBrief
+	CreditBalanceSink          func(int)
+	CreditChargedSink          func(int)
+	Backend                    string
+	RequestedStyle             string
+	UserPrompt                 string
+	ReferenceScanRoot          string
+	ReferenceProfile           *pptxref.ReferenceStyleProfile
+	ReferenceBrief             *PPTXReferenceStyleBrief
+	GenerateArtifactDesignPlan bool
+	ArtifactDesignPlanLLM      engine.LLMClient
+	ArtifactPreviewReviewer    PPTXArtifactPreviewReviewer
+	ArtifactDebugSink          func(PPTXArtifactDebugMetadata)
+}
+
+type PPTXArtifactPreviewReviewer interface {
+	ReviewPPTXArtifactPreviews(ctx context.Context, req PPTXArtifactPreviewReviewRequest) (*PPTXArtifactPreviewReviewResult, error)
+}
+
+type PPTXArtifactPreviewReviewRequest struct {
+	PreviewFiles []string
+	InspectPath  string
+	OutputPPTX   string
+	SlideCount   int
+}
+
+type PPTXArtifactPreviewReviewResult struct {
+	Score     int                              `json:"score,omitempty"`
+	Summary   string                           `json:"summary,omitempty"`
+	Strengths []string                         `json:"strengths,omitempty"`
+	Issues    []PPTXArtifactPreviewReviewIssue `json:"issues,omitempty"`
+}
+
+type PPTXArtifactPreviewReviewIssue struct {
+	Severity     string `json:"severity,omitempty"`
+	Code         string `json:"code,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Message      string `json:"message,omitempty"`
+	SlideNumbers []int  `json:"slide_numbers,omitempty"`
+	Suggestion   string `json:"suggestion,omitempty"`
 }
 
 type GeneratedArtifact struct {
@@ -99,6 +143,7 @@ type GeneratedArtifact struct {
 	HostedCreditBalance  *int
 	HostedCreditsCharged *int
 	ReferenceStyle       *ReferenceStyleMetadata
+	PPTXArtifactDebug    *PPTXArtifactDebugMetadata
 	PPTXBackend          string
 	AccessMode           string
 	Remaining            int
@@ -106,11 +151,62 @@ type GeneratedArtifact struct {
 	PaidQuotaRemaining   int
 }
 
+type PPTXArtifactDebugMetadata struct {
+	Enabled               bool                        `json:"enabled"`
+	Backend               string                      `json:"backend,omitempty"`
+	WorkerVersion         string                      `json:"worker_version,omitempty"`
+	WorkerDir             string                      `json:"worker_dir,omitempty"`
+	WorkerScriptPath      string                      `json:"worker_script_path,omitempty"`
+	RequestPath           string                      `json:"request_path,omitempty"`
+	ResponsePath          string                      `json:"response_path,omitempty"`
+	InspectPath           string                      `json:"inspect_path,omitempty"`
+	PreviewFiles          []string                    `json:"preview_files,omitempty"`
+	PreviewCount          int                         `json:"preview_count"`
+	RepairMode            string                      `json:"repair_mode,omitempty"`
+	Attempts              int                         `json:"attempts,omitempty"`
+	ImportedRefs          int                         `json:"imported_refs,omitempty"`
+	EditableItems         int                         `json:"editable_items,omitempty"`
+	NativeCharts          int                         `json:"native_charts,omitempty"`
+	VisualAssets          int                         `json:"visual_assets,omitempty"`
+	VisualVerdict         string                      `json:"visual_verdict,omitempty"`
+	VisualScore           int                         `json:"visual_score,omitempty"`
+	QualitySummary        *PPTXArtifactQualitySummary `json:"quality_summary,omitempty"`
+	FinalOutputPPTX       string                      `json:"final_output_pptx,omitempty"`
+	NarrativePlanPath     string                      `json:"narrative_plan_path,omitempty"`
+	NarrativePlanMarkdown string                      `json:"-"`
+}
+
+type PPTXArtifactQualitySummary struct {
+	Backend             string   `json:"backend,omitempty"`
+	WorkerVersion       string   `json:"worker_version,omitempty"`
+	SlideCount          int      `json:"slide_count,omitempty"`
+	ExpectedCharts      int      `json:"expected_charts,omitempty"`
+	PreviewCount        int      `json:"preview_count,omitempty"`
+	Attempts            int      `json:"attempts,omitempty"`
+	RepairMode          string   `json:"repair_mode,omitempty"`
+	EditableItems       int      `json:"editable_items,omitempty"`
+	NativeCharts        int      `json:"native_charts,omitempty"`
+	VisualAssets        int      `json:"visual_assets,omitempty"`
+	ImportedRefs        int      `json:"imported_refs,omitempty"`
+	VisualVerdict       string   `json:"visual_verdict,omitempty"`
+	VisualScore         int      `json:"visual_score,omitempty"`
+	VisualIssues        []string `json:"visual_issues,omitempty"`
+	PreviewIssues       []string `json:"preview_issues,omitempty"`
+	EditableCoverageOK  bool     `json:"editable_coverage_ok"`
+	NativeChartOK       bool     `json:"native_chart_ok"`
+	PreviewCoverageOK   bool     `json:"preview_coverage_ok"`
+	VisualVerdictOK     bool     `json:"visual_verdict_ok"`
+	IssueFree           bool     `json:"issue_free"`
+	QualityGate         string   `json:"quality_gate"`
+	MissingRequirements []string `json:"missing_requirements,omitempty"`
+}
+
 type Service struct {
-	llm      engine.LLMClient
-	imageLLM engine.LLMClient
-	progress engine.ProgressEmitter
-	modifier *modify.Modifier
+	llm                     engine.LLMClient
+	imageLLM                engine.LLMClient
+	progress                engine.ProgressEmitter
+	modifier                *modify.Modifier
+	artifactPreviewReviewer PPTXArtifactPreviewReviewer
 }
 
 func NewService(llm engine.LLMClient, progress any) *Service {
@@ -124,6 +220,13 @@ func NewService(llm engine.LLMClient, progress any) *Service {
 func (s *Service) WithImageLLM(llm engine.LLMClient) *Service {
 	if s != nil {
 		s.imageLLM = llm
+	}
+	return s
+}
+
+func (s *Service) WithPPTXArtifactPreviewReviewer(reviewer PPTXArtifactPreviewReviewer) *Service {
+	if s != nil {
+		s.artifactPreviewReviewer = reviewer
 	}
 	return s
 }
@@ -159,7 +262,7 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 	case engine.DocumentTypeReport:
 		return s.generateReport(ctx, envelope.Prompt, params.Topic, params.SourceFilePath, target, meta)
 	case engine.DocumentTypePPTX:
-		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ReferenceScanEnabled, params.ReferenceScanRoot, params.ReferencePPTXSources, params.PPTXBackend)
+		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ReferenceScanEnabled, params.ReferenceScanRoot, params.ReferencePPTXSources, params.PPTXBackend, params.Debug)
 	case engine.DocumentTypeIMG:
 		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
 	default:
@@ -365,7 +468,7 @@ func imageExtensionFromMIME(mime string) string {
 	}
 }
 
-func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview, referenceScanEnabled bool, referenceScanRoot string, referencePPTXSources []string, pptxBackend string) (*GeneratedArtifact, error) {
+func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview, referenceScanEnabled bool, referenceScanRoot string, referencePPTXSources []string, pptxBackend string, debug bool) (*GeneratedArtifact, error) {
 	backend, err := NormalizePPTXBackend(pptxBackend)
 	if err != nil {
 		return nil, err
@@ -410,6 +513,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 	var imageCreditBalance *int
 	imageCreditsCharged := 0
 	imageCreditsChargedSet := false
+	var pptxArtifactDebug *PPTXArtifactDebugMetadata
 	buildOptions := PPTXBuildOptions{
 		CreditBalanceSink: func(balance int) {
 			value := balance
@@ -421,15 +525,25 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		},
 	}
 	buildOptions.Backend = backend
+	buildOptions.UserPrompt = prompt
+	buildOptions.ReferenceScanRoot = referenceScanRoot
 	buildOptions.ReferenceProfile = referenceProfile
 	buildOptions.ReferenceBrief = referenceBrief
+	buildOptions.GenerateArtifactDesignPlan = backend == PPTXBackendArtifactExperimental
+	buildOptions.ArtifactDesignPlanLLM = s.llm
+	buildOptions.ArtifactPreviewReviewer = s.artifactPreviewReviewer
+	if debug {
+		buildOptions.ArtifactDebugSink = func(meta PPTXArtifactDebugMetadata) {
+			pptxArtifactDebug = &meta
+		}
+	}
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(ctx, imageLLM, s.progress, response, fallback, target.Style, enableImages, localPreview, buildOptions)
 	if err != nil {
 		if !shouldRetryPPTXAssembly(err) {
 			return nil, err
 		}
 		emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Detected incomplete JSON output. Switching to structured repair retry")
-		response, err = s.llm.CompleteStructured(ctx, buildPPTXRepairRequest(basePrompt, response))
+		response, err = completeStructuredWithHeartbeat(ctx, s.llm, s.progress, buildPPTXRepairRequest(basePrompt, response), progressStepGenerateLLM, "PPTX structured repair")
 		if err != nil {
 			emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "Structured PPTX repair failed")
 			return nil, fmt.Errorf("content generation failed: %w", err)
@@ -465,6 +579,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		HostedCreditBalance:  hostedCreditBalance,
 		HostedCreditsCharged: hostedCreditsChargedPtr,
 		ReferenceStyle:       referenceStyleMetadata(referenceProfile, referenceBrief, referenceScanEnabled || len(referencePPTXSources) > 0),
+		PPTXArtifactDebug:    pptxArtifactDebug,
 		PPTXBackend:          backend,
 	}, nil
 }
@@ -503,10 +618,13 @@ func (s *Service) buildPPTXReferenceStyleBrief(ctx context.Context, profile *ppt
 		return nil, nil
 	}
 	fallback := deterministicPPTXReferenceStyleBrief(profile)
+	if referenceProfileHasOnlyParsedBucket(profile, "current-output") {
+		return fallback, nil
+	}
 	if s == nil || s.llm == nil {
 		return fallback, nil
 	}
-	response, err := s.llm.CompleteStructured(ctx, buildPPTXReferenceStyleBriefRequest(profile, prompt, target))
+	response, err := completeStructuredWithHeartbeat(ctx, s.llm, s.progress, buildPPTXReferenceStyleBriefRequest(profile, prompt, target), progressStepGenerateLLM, "PPTX reference style brief")
 	if err != nil {
 		return fallback, []engine.GenerateIssue{{
 			Code:    "WARN_PPTX_REFERENCE_STYLE_BRIEF_FALLBACK",
@@ -564,7 +682,7 @@ Target:
 %s
 %s
 
-Return JSON only. Use only these safe style presets for stylePresetHint when possible: executive-dark, editorial-light, explainer-voxel-light, tech-contrast, training-manual.
+Return JSON only. Use only these safe style presets for stylePresetHint when possible: executive-dark, editorial-light, explainer-voxel-light, investor-warm, project-forest, review-copper, collaboration-slate, tech-contrast, training-manual.
 Do not copy source slide wording. Do not output raw XML, arbitrary fonts, absolute coordinates, or low-level colors. Treat palette and typography as intent only.
 `, strings.TrimSpace(userPrompt), generateengine.FormatDocumentPromptTarget(target), formatPPTXReferenceStylePrompt(profile))
 }
@@ -573,15 +691,27 @@ func deterministicPPTXReferenceStyleBrief(profile *pptxref.ReferenceStyleProfile
 	if profile == nil || profile.ParsedCount == 0 {
 		return nil
 	}
-	preset := officegen.StylePresetEditorialLight
-	switch {
-	case profile.LayoutSignals["dashboard"] > 0 || profile.LayoutSignals["chart"] > 0:
-		preset = officegen.StylePresetTechContrast
-	case profile.LayoutSignals["bullets"] > profile.LayoutSignals["sections"]:
-		preset = officegen.StylePresetTrainingManual
-	case hasSerifReferenceFont(profile.FontFamilies):
-		preset = officegen.StylePresetEditorialLight
+	if referenceProfileHasOnlyParsedBucket(profile, "current-output") {
+		return &PPTXReferenceStyleBrief{
+			StylePresetHint:  officegen.StylePresetExecutiveDark,
+			PaletteIntent:    "No stable source deck palette is available; use a restrained, readable palette chosen by the renderer.",
+			TypographyIntent: "No stable source deck typography is available; use common office sans typography with clear hierarchy.",
+			LayoutRhythm:     "No stable reference layout is available; prioritize the user request, editable structure, readability, and preview validation.",
+			ImageTreatment:   "do not reuse images or visual motifs from previous generated outputs",
+			DoNotCopy: []string{
+				"previous generated-output slide wording",
+				"previous generated-output images",
+				"raw XML",
+			},
+			RendererConstraints: []string{
+				"ignore previous generated-output style details unless the user explicitly asks to reuse them",
+				"renderer owns theme, font, color, contrast, and geometry",
+				"all important text remains editable",
+				"charts remain native editable objects when used",
+			},
+		}
 	}
+	preset := inferReferenceStylePreset(profile)
 	layout := "balanced editable sections"
 	if len(profile.LayoutSignals) > 0 {
 		layout = formatIntMap(profile.LayoutSignals)
@@ -603,6 +733,67 @@ func deterministicPPTXReferenceStyleBrief(profile *pptxref.ReferenceStyleProfile
 			"charts remain native editable objects when used",
 		},
 	}
+}
+
+func inferReferenceStylePreset(profile *pptxref.ReferenceStyleProfile) string {
+	if profile == nil {
+		return officegen.StylePresetEditorialLight
+	}
+	if preset := inferReferencePaletteStylePreset(profile.ThemeColors); preset != "" {
+		return preset
+	}
+	switch {
+	case profile.LayoutSignals["dashboard"] > 0 || profile.LayoutSignals["chart"] > 0:
+		return officegen.StylePresetTechContrast
+	case profile.LayoutSignals["bullets"] > profile.LayoutSignals["sections"]:
+		return officegen.StylePresetTrainingManual
+	case hasSerifReferenceFont(profile.FontFamilies):
+		return officegen.StylePresetEditorialLight
+	default:
+		return officegen.StylePresetEditorialLight
+	}
+}
+
+func inferReferencePaletteStylePreset(colors []string) string {
+	dark, warm, green := 0, 0, 0
+	for _, color := range colors {
+		r, g, b, ok := parseReferenceHexColor(color)
+		if !ok {
+			continue
+		}
+		luma := (299*r + 587*g + 114*b) / 1000
+		if luma < 42 {
+			dark++
+		}
+		if g > r && g >= b && g >= 70 {
+			green++
+		}
+		if r >= 120 && r > g && g >= 35 && g <= 185 && b <= 120 {
+			warm++
+		}
+	}
+	switch {
+	case green >= 2:
+		return officegen.StylePresetProjectForest
+	case warm >= 2:
+		return officegen.StylePresetReviewCopper
+	case dark >= 2:
+		return officegen.StylePresetExecutiveDark
+	default:
+		return ""
+	}
+}
+
+func parseReferenceHexColor(value string) (int, int, int, bool) {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(value) != 6 {
+		return 0, 0, 0, false
+	}
+	var r, g, b int
+	if _, err := fmt.Sscanf(value, "%02x%02x%02x", &r, &g, &b); err != nil {
+		return 0, 0, 0, false
+	}
+	return r, g, b, true
 }
 
 func normalizePPTXReferenceStyleBrief(brief PPTXReferenceStyleBrief, fallback *PPTXReferenceStyleBrief) PPTXReferenceStyleBrief {
@@ -636,9 +827,11 @@ func referenceStyleMetadata(profile *pptxref.ReferenceStyleProfile, brief *PPTXR
 		meta.DuplicateCount = profile.DuplicateCount
 		meta.SourceBuckets = copyIntMap(profile.SourceBuckets)
 		meta.AggregateSlideCount = profile.AggregateSlideCount
-		meta.FontFamilies = append([]string(nil), profile.FontFamilies...)
-		meta.ThemeColors = append([]string(nil), profile.ThemeColors...)
-		meta.LayoutSignals = copyIntMap(profile.LayoutSignals)
+		if !referenceProfileHasOnlyParsedBucket(profile, "current-output") {
+			meta.FontFamilies = append([]string(nil), profile.FontFamilies...)
+			meta.ThemeColors = append([]string(nil), profile.ThemeColors...)
+			meta.LayoutSignals = copyIntMap(profile.LayoutSignals)
+		}
 		meta.Limitations = append([]string(nil), profile.Limitations...)
 	}
 	if brief != nil {
@@ -963,6 +1156,16 @@ func BuildPPTXPromptWithReferenceBrief(description string, target generateengine
 	outlineRules := buildArchetypePromptRules(archetype)
 	referenceRules := formatPPTXReferenceStylePrompt(referenceProfile)
 	referenceBriefRules := formatPPTXReferenceStyleBrief(referenceBrief)
+	slideCountRule := "Keep the deck to 6-10 slides, usually 7-9."
+	explicitSlideCount := detectExplicitPPTXSlideCount(description)
+	if explicitSlideCount > 0 {
+		slideCountRule = fmt.Sprintf("Keep the deck to exactly %d slides. The slides array must contain exactly %d slide objects; do not add a contents, agenda, chapter divider, or extra expansion slide unless the user explicitly included it within those %d slides.", explicitSlideCount, explicitSlideCount, explicitSlideCount)
+		if strings.TrimSpace(outlineRules) != "" {
+			outlineRules += fmt.Sprintf("\n- Explicit slide count overrides archetype storyline examples; compress or merge the storyline into exactly %d slides and do not follow the full archetype sequence when it would exceed that count.", explicitSlideCount)
+		}
+	} else if wantsConciseFourSlidePPTX(description, referenceBrief) {
+		slideCountRule = "Keep the deck to 4 slides: cover, key observations, one simple chart, and closing."
+	}
 	return fmt.Sprintf(`Generate a JSON structure for a PPT presentation based on the following request.
 
 Request: %s
@@ -989,12 +1192,13 @@ Return JSON only. Do not add any extra commentary:
 }
 
 Requirements:
-	- Keep the deck to 6-10 slides, usually 7-9.
+	- %s
 	- stylePreset must be one of executive-dark, editorial-light, explainer-voxel-light, tech-contrast, or training-manual. If the user did not specify one, choose the closest fit for the topic.
 	- Use role/headline/takeaway/blocks/visual as the preferred semantic schema. The renderer will convert this into editable PPT text, shapes, charts, and image assets.
 	- Do not output theme, bgColor, bgColor2, font, text color, or shape color fields. The renderer owns design tokens, contrast, and layout geometry.
 	- The first slide must use role=cover and the title layout.
 	- The deck should read like a real presentation, not a flat list of content pages. Prefer a storyline that fits the topic instead of reusing one generic scaffold.
+		- If an exact slide count is specified, it overrides all "usually" storyline, toc, chapter, and expansion guidance.
 	- For business decks, slide 2 should usually be a toc page, an early slide should read as an executive summary or key takeaways page, and the final slide should read as recommendation, decision, or one clear next action. Only use rollout-style endings when the request explicitly asks for rollout, implementation cadence, or milestones.
 	- For game, hobby, culture, science, education, or general explainer decks, use the early slides to clarify what the topic is, why it stands out, or how it works, and avoid forcing a business-rollout ending.
 	- Every slide must include role, headline, takeaway, blocks, layout, and variant. Use roles from this set only: cover, toc, chapter, summary, evidence, analysis, action, closing.
@@ -1018,7 +1222,464 @@ Requirements:
 - For game, hobby, culture, science, education, or general explainer topics, the closing slide should end on a takeaway, who-it-suits summary, or how-to-start guidance, and must not sound like owners, milestones, rollout, or validation criteria.
 - Wording should fit the audience and style. Prefer quantified, conclusion-first language for business topics, and plain, vivid, example-led language for explainer topics. Avoid vague slogans.
 	%s
-	%s`, description, generateengine.FormatDocumentPromptTarget(target), referenceRules, referenceBriefRules, presetHint, slideExample, imageRules, outlineRules)
+	%s`, description, generateengine.FormatDocumentPromptTarget(target), referenceRules, referenceBriefRules, presetHint, slideExample, slideCountRule, imageRules, outlineRules)
+}
+
+func wantsConciseFourSlidePPTX(description string, referenceBrief *PPTXReferenceStyleBrief) bool {
+	text := strings.ToLower(description)
+	hasFourPartRequest := strings.Contains(text, "cover slide") &&
+		strings.Contains(text, "closing slide") &&
+		strings.Contains(text, "chart") &&
+		(strings.Contains(text, "key observations") || strings.Contains(text, "observations"))
+	if hasFourPartRequest {
+		return true
+	}
+	if referenceBrief != nil {
+		for _, constraint := range referenceBrief.RendererConstraints {
+			normalized := strings.ToLower(strings.TrimSpace(constraint))
+			if strings.Contains(normalized, "4-slide") || strings.Contains(normalized, "4 slide") || strings.Contains(normalized, "four-slide") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func detectExplicitPPTXSlideCount(description string) int {
+	text := strings.TrimSpace(description)
+	if text == "" {
+		return 0
+	}
+	for _, re := range []*regexp.Regexp{
+		pptxExplicitDigitSlideCountBeforeUnit,
+		pptxExplicitDigitSlideCountAfterUnit,
+	} {
+		if match := re.FindStringSubmatch(text); len(match) == 2 {
+			if count := normalizeExplicitPPTXSlideCount(match[1]); count > 0 {
+				return count
+			}
+		}
+	}
+	if match := pptxExplicitWordSlideCountBeforeUnit.FindStringSubmatch(text); len(match) == 2 {
+		if count := normalizeExplicitPPTXSlideCount(match[1]); count > 0 {
+			return count
+		}
+	}
+	if match := pptxExplicitChineseSlideCount.FindStringSubmatch(text); len(match) == 2 {
+		if count := normalizeExplicitPPTXSlideCount(match[1]); count > 0 {
+			return count
+		}
+	}
+	return 0
+}
+
+func normalizeExplicitPPTXSlideCount(value string) int {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return 0
+	}
+	if n, err := strconv.Atoi(value); err == nil {
+		if n >= 1 && n <= 30 {
+			return n
+		}
+		return 0
+	}
+	english := map[string]int{
+		"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+		"seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+	}
+	if n := english[value]; n > 0 {
+		return n
+	}
+	chinese := map[string]int{
+		"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+		"六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+	}
+	return chinese[value]
+}
+
+func ensureExplicitArtifactChartSlide(slides []officegen.Slide, prompt, deckTitle string) []officegen.Slide {
+	if len(slides) == 0 || !wantsExplicitPPTXChart(prompt) {
+		return slides
+	}
+	for _, slide := range slides {
+		if slide.Chart != nil {
+			return slides
+		}
+	}
+	chartSlide := defaultArtifactChartSlide(slides, prompt, deckTitle)
+	insertAt := preferredArtifactChartInsertIndex(slides)
+	if len(slides) < 10 {
+		out := make([]officegen.Slide, 0, len(slides)+1)
+		out = append(out, slides[:insertAt]...)
+		out = append(out, chartSlide)
+		out = append(out, slides[insertAt:]...)
+		return out
+	}
+	replaceAt := preferredArtifactChartReplacementIndex(slides)
+	out := append([]officegen.Slide(nil), slides...)
+	out[replaceAt] = chartSlide
+	return out
+}
+
+func wantsExplicitPPTXChart(prompt string) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if text == "" {
+		return false
+	}
+	for _, blocker := range []string{"no chart", "no charts", "without chart", "without charts", "不要图表", "不需要图表", "无图表"} {
+		if strings.Contains(text, blocker) {
+			return false
+		}
+	}
+	for _, term := range []string{" chart", "charts", "bar chart", "line chart", "pie chart", "dashboard", "图表", "柱状图", "折线图", "饼图"} {
+		if strings.Contains(text, term) {
+			return true
+		}
+	}
+	return strings.HasPrefix(text, "chart")
+}
+
+func defaultArtifactChartSlide(slides []officegen.Slide, prompt, deckTitle string) officegen.Slide {
+	chart := chartFromMetricSlides(slides)
+	title := "Simple Chart"
+	subtitle := "A compact native chart keeps the requested evidence editable."
+	points := []string{"Compare the main signals in one readable view.", "Use the chart as evidence, not decoration."}
+	source := "Illustrative index derived from the requested deck structure."
+	text := strings.ToLower(prompt + " " + deckTitle)
+	if strings.Contains(text, "board") || strings.Contains(text, "metric") || strings.Contains(text, "operating") || strings.Contains(text, "analytics") {
+		title = "Operating Metrics Snapshot"
+		subtitle = "The requested metrics become a native editable chart."
+		points = []string{"The highest signal shows the strongest operating momentum.", "Use the spread to focus the board discussion."}
+		source = "Illustrative operating index for presentation structure."
+	}
+	if chart == nil {
+		chart = &officegen.ChartData{
+			Type:       "bar",
+			Title:      title,
+			Categories: []string{"Adoption", "Quality", "Velocity"},
+			Values:     []float64{82, 74, 88},
+		}
+	}
+	return officegen.Slide{
+		Title:         title,
+		Layout:        "chart",
+		Variant:       "chart-focus",
+		NarrativeRole: "evidence",
+		Subtitle:      subtitle,
+		Points:        points,
+		Chart:         normalizeChart(chart),
+		Source:        source,
+	}
+}
+
+func chartFromMetricSlides(slides []officegen.Slide) *officegen.ChartData {
+	for _, slide := range slides {
+		if len(slide.Metrics) < 2 {
+			continue
+		}
+		categories := make([]string, 0, 4)
+		values := make([]float64, 0, 4)
+		for _, metric := range slide.Metrics {
+			if len(categories) >= 4 {
+				break
+			}
+			label := trimChartLabel(cleanVisibleText(metric.Label), 10)
+			if label == "" {
+				continue
+			}
+			value, ok := parseMetricChartValue(metric.Value)
+			if !ok {
+				value = 70 + float64(len(categories))*8
+			}
+			categories = append(categories, label)
+			values = append(values, value)
+		}
+		if len(categories) >= 2 {
+			return &officegen.ChartData{
+				Type:       "bar",
+				Title:      firstNonEmpty(cleanVisibleText(slide.Title), "Operating Metrics"),
+				Categories: categories,
+				Values:     values,
+			}
+		}
+	}
+	return nil
+}
+
+func parseMetricChartValue(value string) (float64, bool) {
+	cleaned := strings.TrimSpace(value)
+	if cleaned == "" {
+		return 0, false
+	}
+	cleaned = strings.TrimPrefix(cleaned, "+")
+	cleaned = strings.TrimSuffix(cleaned, "%")
+	cleaned = strings.ReplaceAll(cleaned, ",", "")
+	parsed, err := strconv.ParseFloat(cleaned, 64)
+	if err != nil {
+		return 0, false
+	}
+	if parsed < 0 {
+		parsed = -parsed
+	}
+	return parsed, true
+}
+
+func preferredArtifactChartInsertIndex(slides []officegen.Slide) int {
+	for idx, slide := range slides {
+		if idx == 0 {
+			continue
+		}
+		if len(slide.Metrics) > 0 || strings.EqualFold(slide.Layout, "dashboard") {
+			return minInt(idx+1, len(slides))
+		}
+	}
+	return minInt(2, len(slides))
+}
+
+func preferredArtifactChartReplacementIndex(slides []officegen.Slide) int {
+	for idx := 1; idx < len(slides); idx++ {
+		slide := slides[idx]
+		if slide.IsTitle || strings.EqualFold(slide.Layout, "closing") || len(slide.Metrics) > 0 {
+			continue
+		}
+		if len(slide.Sections) == 0 || strings.EqualFold(slide.Layout, "toc") || strings.EqualFold(slide.Layout, "chapter") {
+			return idx
+		}
+	}
+	if len(slides) > 2 {
+		return len(slides) - 2
+	}
+	return len(slides) - 1
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func compactExplicitFourSlidePPTX(slides []officegen.Slide, deckTitle string) []officegen.Slide {
+	if len(slides) == 0 {
+		return slides
+	}
+	used := map[int]bool{}
+	pick := func(match func(officegen.Slide) bool) (officegen.Slide, bool) {
+		for idx, slide := range slides {
+			if used[idx] || !match(slide) {
+				continue
+			}
+			used[idx] = true
+			return slide, true
+		}
+		return officegen.Slide{}, false
+	}
+	pickLast := func(match func(officegen.Slide) bool) (officegen.Slide, bool) {
+		for idx := len(slides) - 1; idx >= 0; idx-- {
+			if used[idx] || !match(slides[idx]) {
+				continue
+			}
+			used[idx] = true
+			return slides[idx], true
+		}
+		return officegen.Slide{}, false
+	}
+	cover, ok := pick(func(slide officegen.Slide) bool {
+		return slide.IsTitle || strings.EqualFold(slide.Layout, "title")
+	})
+	if !ok {
+		cover = slides[0]
+		used[0] = true
+	}
+	cover.Layout = "title"
+	cover.IsTitle = true
+	if strings.TrimSpace(deckTitle) != "" {
+		cover.Title = deckTitle
+	} else if strings.TrimSpace(cover.Title) == "" {
+		cover.Title = firstNonEmpty(deckTitle, "Presentation")
+	}
+
+	observations, ok := pick(func(slide officegen.Slide) bool {
+		text := strings.ToLower(slide.Title + " " + slide.Content + " " + slide.Subtitle)
+		return slide.Chart == nil && !strings.EqualFold(slide.Layout, "closing") &&
+			(strings.Contains(text, "observation") || strings.Contains(text, "summary") || strings.Contains(text, "takeaway"))
+	})
+	if !ok {
+		observations, ok = pick(func(slide officegen.Slide) bool {
+			return slide.Chart == nil && !slide.IsTitle && !strings.EqualFold(slide.Layout, "closing")
+		})
+	}
+	if !ok {
+		observations = officegen.Slide{
+			Title:    "Key Observations",
+			Layout:   "content",
+			Variant:  "sections-grid",
+			Points:   []string{"Reference style signals", "Key observations", "What good output should preserve"},
+			Sections: []officegen.SlideSection{{Heading: "Style", Detail: "Use style cues as layout intent."}, {Heading: "Structure", Detail: "Keep text concise and editable."}},
+		}
+	}
+	observations.Layout = "content"
+	if strings.TrimSpace(observations.Title) == "" || strings.Contains(strings.ToLower(observations.Title), "executive summary") {
+		observations.Title = "Key Observations"
+	}
+
+	chartSlide, ok := pick(func(slide officegen.Slide) bool {
+		return slide.Chart != nil || strings.EqualFold(slide.Layout, "chart")
+	})
+	if !ok || chartSlide.Chart == nil {
+		chartSlide = officegen.Slide{
+			Title:   "Simple Chart",
+			Content: "A compact chart summarizes the quality signals.",
+			Layout:  "chart",
+			Variant: "chart-focus",
+			Points:  []string{"Use a native chart object.", "Keep the chart readable and restrained."},
+			Chart: &officegen.ChartData{
+				Type:       "bar",
+				Title:      "Quality signals",
+				Categories: []string{"Style", "Objects", "Preview"},
+				Values:     []float64{72, 88, 84},
+			},
+		}
+	} else {
+		chartSlide.Layout = "chart"
+		if strings.TrimSpace(chartSlide.Variant) == "" {
+			chartSlide.Variant = "chart-focus"
+		}
+	}
+	if strings.TrimSpace(chartSlide.Title) == "" {
+		chartSlide.Title = "Simple Chart"
+	}
+
+	closing, ok := pickLast(func(slide officegen.Slide) bool {
+		text := strings.ToLower(slide.Title + " " + slide.Content + " " + slide.Subtitle)
+		return strings.EqualFold(slide.Layout, "closing") || strings.Contains(text, "closing") || strings.Contains(text, "close")
+	})
+	if !ok {
+		closing = officegen.Slide{
+			Title:   "Closing",
+			Content: "Style learning succeeds when palette, hierarchy, and density become a reusable presentation system.",
+			Layout:  "closing",
+			Variant: "closing-takeaway",
+			Points:  []string{"Use the style system as intent.", "Keep final slides in a clear deck flow."},
+		}
+	}
+	closing.Layout = "closing"
+	if strings.TrimSpace(closing.Title) == "" || strings.EqualFold(closing.Title, "recommendation") {
+		closing.Title = "Closing"
+	}
+
+	return []officegen.Slide{cover, observations, chartSlide, closing}
+}
+
+func polishArtifactConciseStyleLearningSlides(slides []officegen.Slide, profile *pptxref.ReferenceStyleProfile, brief *PPTXReferenceStyleBrief) []officegen.Slide {
+	if len(slides) < 4 {
+		return slides
+	}
+	out := append([]officegen.Slide(nil), slides...)
+	out[0].Subtitle = firstNonEmpty(
+		shortenLayoutText(referenceBriefCoverSubtitle(brief), 92),
+		"A concise deck shaped by local reference patterns: palette, rhythm, hierarchy, and readable evidence.",
+	)
+	out[0].Points = []string{"Style cues", "Card rhythm", "Readable flow"}
+
+	out[1].Title = "Reference Style Signals"
+	out[1].Subtitle = "System over template."
+	out[1].Content = "Recurring palette, density, and hierarchy become a coherent visual system."
+	out[1].Points = nil
+	out[1].Sections = []officegen.SlideSection{
+		{Heading: "Repeatable style", Detail: "Use recurring panels and accent rules."},
+		{Heading: "Structured content", Detail: "Keep labels and values editable."},
+		{Heading: "Readable hierarchy", Detail: "Keep contrast and spacing consistent across slides."},
+	}
+
+	out[2].Title = "Fidelity Comes From Enforced Layers"
+	out[2].Subtitle = "Clear chart, stable hierarchy."
+	out[2].Content = ""
+	out[2].Points = []string{"Let reference cues guide emphasis.", "Keep the layout calm and scannable."}
+	out[2].Layout = "chart"
+	out[2].Chart = referenceSignalChart(profile)
+
+	out[3].Title = "Reference Style Becomes a Reusable System"
+	out[3].Subtitle = ""
+	out[3].Content = "Carry palette, hierarchy, and spacing into one clear deck system."
+	out[3].Points = []string{"Use the style system as intent.", "Keep final slides in a clear deck flow."}
+	out[3].Sections = []officegen.SlideSection{
+		{Heading: "Intent", Detail: "Learn palette, hierarchy, density, and rhythm from the reference set."},
+		{Heading: "Execution", Detail: "Compose text, shapes, imagery, and chart objects deliberately."},
+	}
+	return out
+}
+
+func wantsReferenceStyleLearningArtifact(prompt string, profile *pptxref.ReferenceStyleProfile, brief *PPTXReferenceStyleBrief) bool {
+	text := strings.ToLower(strings.TrimSpace(prompt))
+	if strings.Contains(text, "learn") && strings.Contains(text, "style") && (strings.Contains(text, "pptx") || strings.Contains(text, "reference")) {
+		return true
+	}
+	if strings.Contains(text, "reference style") || strings.Contains(text, "style from ppt") {
+		return true
+	}
+	if strings.Contains(text, "reference builder") || strings.Contains(text, "reference-driven") {
+		return true
+	}
+	if brief != nil && (strings.TrimSpace(brief.LayoutRhythm) != "" || strings.TrimSpace(brief.PaletteIntent) != "" || strings.TrimSpace(brief.TypographyIntent) != "") {
+		return true
+	}
+	return profile != nil && profile.AggregateSlideCount > 0
+}
+
+func referenceBriefCoverSubtitle(brief *PPTXReferenceStyleBrief) string {
+	if brief == nil {
+		return ""
+	}
+	for _, value := range []string{brief.LayoutRhythm, brief.PaletteIntent, brief.TypographyIntent} {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func referenceSignalChart(profile *pptxref.ReferenceStyleProfile) *officegen.ChartData {
+	values := []float64{78, 86, 82, 80}
+	if profile != nil {
+		palette := artifactScoreFromCount(len(profile.ThemeColors), 4, 64, 94)
+		rhythm := artifactScoreFromCount(profile.AggregateSlideCount, 20, 70, 96)
+		hierarchy := artifactScoreFromCount(len(profile.FontFamilies), 3, 68, 90)
+		density := 82.0
+		if profile.DensitySignals.AverageCharsPerSlide > 0 {
+			switch {
+			case profile.DensitySignals.AverageCharsPerSlide <= 180:
+				density = 90
+			case profile.DensitySignals.AverageCharsPerSlide <= 320:
+				density = 82
+			default:
+				density = 70
+			}
+		}
+		values = []float64{palette, rhythm, hierarchy, density}
+	}
+	return &officegen.ChartData{
+		Type:       "bar",
+		Title:      "High-fidelity contribution",
+		Categories: []string{"Style Profile", "Layout Rhythm", "Editable Objects", "Readable Flow"},
+		Values:     values,
+	}
+}
+
+func artifactScoreFromCount(count, divisor int, minScore, maxScore float64) float64 {
+	if divisor <= 0 {
+		divisor = 1
+	}
+	score := minScore + float64(count/divisor)
+	if score > maxScore {
+		return maxScore
+	}
+	if score < minScore {
+		return minScore
+	}
+	return score
 }
 
 func formatPPTXReferenceStyleBrief(brief *PPTXReferenceStyleBrief) string {
@@ -1056,6 +1717,7 @@ func formatPPTXReferenceStylePrompt(profile *pptxref.ReferenceStyleProfile) stri
 	if profile == nil || profile.ParsedCount == 0 {
 		return ""
 	}
+	outputOnly := referenceProfileHasOnlyParsedBucket(profile, "current-output")
 	var b strings.Builder
 	b.WriteString("\nReference style profile:\n")
 	b.WriteString(fmt.Sprintf("- Discovered PPTX files: %d\n", profile.DiscoveredCount))
@@ -1070,19 +1732,21 @@ func formatPPTXReferenceStylePrompt(profile *pptxref.ReferenceStyleProfile) stri
 		b.WriteString("- Source buckets: " + formatIntMap(profile.SourceBuckets) + "\n")
 	}
 	b.WriteString(fmt.Sprintf("- Aggregate slides: %d\n", profile.AggregateSlideCount))
-	if len(profile.FontFamilies) > 0 {
+	if outputOnly {
+		b.WriteString("- Stable reference details: unavailable; parsed PPTX files are previous generated outputs and must not be treated as source style examples.\n")
+	} else if len(profile.FontFamilies) > 0 {
 		b.WriteString("- Recurring font families: " + strings.Join(limitStrings(profile.FontFamilies, 8), ", ") + "\n")
 	}
-	if len(profile.ThemeColors) > 0 {
+	if !outputOnly && len(profile.ThemeColors) > 0 {
 		b.WriteString("- Recurring theme colors: " + strings.Join(limitStrings(profile.ThemeColors, 10), ", ") + "\n")
 	}
-	if len(profile.LayoutSignals) > 0 {
+	if !outputOnly && len(profile.LayoutSignals) > 0 {
 		b.WriteString("- Layout signals: " + formatIntMap(profile.LayoutSignals) + "\n")
 	}
-	if profile.DensitySignals.AverageCharsPerSlide > 0 || profile.DensitySignals.MaxCharsPerSlide > 0 {
+	if !outputOnly && (profile.DensitySignals.AverageCharsPerSlide > 0 || profile.DensitySignals.MaxCharsPerSlide > 0) {
 		b.WriteString(fmt.Sprintf("- Density signals: averageCharsPerSlide=%d, maxCharsPerSlide=%d\n", profile.DensitySignals.AverageCharsPerSlide, profile.DensitySignals.MaxCharsPerSlide))
 	}
-	if len(profile.RepresentativeSlideTextSummaries) > 0 {
+	if !outputOnly && len(profile.RepresentativeSlideTextSummaries) > 0 {
 		b.WriteString("- Representative slide text summaries:\n")
 		for _, summary := range limitStrings(profile.RepresentativeSlideTextSummaries, 4) {
 			b.WriteString("  - " + summary + "\n")
@@ -1102,6 +1766,23 @@ func formatPPTXReferenceStylePrompt(profile *pptxref.ReferenceStyleProfile) stri
 	}
 	b.WriteString("- Use these as style intent only. Do not copy source slide wording wholesale, do not expose raw XML, and do not output theme, bgColor, font, text color, shape color, absolute coordinates, or arbitrary XML fields.\n")
 	return b.String()
+}
+
+func referenceProfileHasOnlyParsedBucket(profile *pptxref.ReferenceStyleProfile, bucket string) bool {
+	if profile == nil || profile.ParsedCount == 0 {
+		return false
+	}
+	parsedInBucket := 0
+	for _, file := range profile.SourceFiles {
+		if strings.TrimSpace(file.FailedReason) != "" {
+			continue
+		}
+		if file.SourceBucket != bucket {
+			return false
+		}
+		parsedInBucket++
+	}
+	return parsedInBucket == profile.ParsedCount
 }
 
 func formatIntMap(values map[string]int) string {
@@ -1143,6 +1824,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: %w", err)
 	}
 	payload := *payloadPtr
+	options.RequestedStyle = requestedStyle
 	if len(payload.Slides) == 0 {
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure is empty")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: slides cannot be empty")
@@ -1157,7 +1839,34 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			payload.Slides[idx].Visuals = nil
 		}
 	}
+	requestText := strings.TrimSpace(options.UserPrompt + " " + fallback)
+	conciseFourSlideRequest := wantsConciseFourSlidePPTX(requestText, options.ReferenceBrief)
+	if conciseFourSlideRequest {
+		payload.Slides = compactExplicitFourSlidePPTX(payload.Slides, payload.Title)
+		if backend == PPTXBackendArtifactExperimental && wantsReferenceStyleLearningArtifact(strings.TrimSpace(options.UserPrompt+" "+fallback), options.ReferenceProfile, options.ReferenceBrief) {
+			payload.Slides = polishArtifactConciseStyleLearningSlides(payload.Slides, options.ReferenceProfile, options.ReferenceBrief)
+		}
+	}
+	if explicitSlideCount := detectExplicitPPTXSlideCount(requestText); explicitSlideCount > 0 && !conciseFourSlideRequest {
+		before := len(payload.Slides)
+		archetype := detectPPTXArchetype(requestText, payload.Title)
+		payload.Slides = dropPPTXScaffoldSlidesForExplicitCount(payload.Slides, requestText)
+		payload.Slides = constrainPPTXSlidesToExplicitCount(payload.Slides, explicitSlideCount, archetype, payload.Title)
+		if len(payload.Slides) != before || before != explicitSlideCount {
+			warnings = append(warnings, engine.GenerateIssue{
+				Code:    "WARN_PPT_EXPLICIT_SLIDE_COUNT_ENFORCED",
+				Field:   "slides",
+				Message: fmt.Sprintf("The generated deck was normalized to the requested %d-slide count.", explicitSlideCount),
+			})
+		}
+	}
 	if backend == PPTXBackendArtifactExperimental {
+		if !conciseFourSlideRequest {
+			payload.Slides = ensureExplicitArtifactChartSlide(payload.Slides, requestText, payload.Title)
+		}
+		if explicitSlideCount := detectExplicitPPTXSlideCount(requestText); explicitSlideCount > 0 && !conciseFourSlideRequest {
+			payload.Slides = constrainPPTXSlidesToExplicitCount(payload.Slides, explicitSlideCount, detectPPTXArchetype(requestText, payload.Title), payload.Title)
+		}
 		for idx := range payload.Slides {
 			payload.Slides[idx].ImageData = nil
 			payload.Slides[idx].ImageMIME = ""
@@ -1166,7 +1875,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 				payload.Slides[idx].Visuals[visualIdx].ImageMIME = ""
 			}
 		}
-		fileBytes, fileName, workerWarnings, previewHTML, previewJSON, err := buildPPTXWithArtifactWorker(ctx, progress, payload, fallback, localPreview, options)
+		fileBytes, fileName, workerWarnings, previewHTML, previewJSON, err := buildPPTXWithArtifactWorker(ctx, llm, progress, payload, fallback, enableImages, localPreview, options)
 		if err != nil {
 			emitProgress(ctx, progress, progressStepAssemble, "failed", "Artifact experimental PPTX assembly failed")
 			return nil, "", nil, nil, nil, err
@@ -1328,7 +2037,11 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		return nil
 	}
 
-	const maxSlides = 10
+	maxSlides := 10
+	explicitSlideCount := detectExplicitPPTXSlideCount(fallback)
+	if explicitSlideCount > 0 {
+		maxSlides = explicitSlideCount
+	}
 	warnings := make([]engine.GenerateIssue, 0, 3)
 	payload.Title = cleanVisibleText(firstNonEmpty(payload.Title, generateengine.ExtractTitleFromDescription(fallback), "Presentation"))
 	archetype := detectPPTXArchetype(fallback, payload.Title)
@@ -1402,7 +2115,7 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		})
 	}
 
-	if archetype == pptxArchetypeExplainer {
+	if archetype == pptxArchetypeExplainer && explicitSlideCount == 0 {
 		slides = buildExplainerDeck(slides, payload.Title, enableImages)
 	} else {
 		slides[0].Layout = "title"
@@ -1443,7 +2156,11 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 		}
 
 		slides = softlyApplyArchetypeDefaults(slides, archetype, payload.Title)
-		if archetype == pptxArchetypeProject {
+		if explicitSlideCount > 0 {
+			slides = dropPPTXScaffoldSlidesForExplicitCount(slides, fallback)
+			slides = ensureClosingActionSlide(slides, payload.Title, archetype, len(slides))
+			slides = reduceAdjacentVariantRepetition(slides)
+		} else if archetype == pptxArchetypeProject {
 			slides = buildProjectPlanDeck(slides, payload.Title)
 			slidesTrimmed = false
 		} else {
@@ -1460,6 +2177,17 @@ func normalizePPTXPayloadWithOptions(payload *pptxPayload, fallback, requestedSt
 	slides = applyCoverImageDefaults(slides, payload.Title, enableImages)
 	slides = compactDeckTextDensity(slides, 230)
 	slides = reduceAdjacentVariantRepetition(slides)
+	if explicitSlideCount > 0 {
+		before := len(slides)
+		slides = constrainPPTXSlidesToExplicitCount(slides, explicitSlideCount, archetype, payload.Title)
+		if len(slides) != before || before != explicitSlideCount {
+			warnings = append(warnings, engine.GenerateIssue{
+				Code:    "WARN_PPT_EXPLICIT_SLIDE_COUNT_ENFORCED",
+				Field:   "slides",
+				Message: fmt.Sprintf("The generated deck was normalized to the requested %d-slide count.", explicitSlideCount),
+			})
+		}
+	}
 
 	payload.Slides = slides
 
@@ -3093,8 +3821,8 @@ func defaultSupportingSlide(archetype pptxArchetype, deckTitle string) officegen
 		Subtitle: "Support the headline with the few facts that change the decision",
 		Sections: []officegen.SlideSection{
 			{Heading: "Signal", Detail: "Show the strongest evidence behind the conclusion"},
-			{Heading: "Tradeoff", Detail: "Explain what becomes easier, faster, or safer"},
-			{Heading: "Constraint", Detail: "Call out the key limit, dependency, or condition"},
+			{Heading: "Tradeoff", Detail: "Explain what becomes easier or safer"},
+			{Heading: "Constraint", Detail: "Call out the key condition or dependency"},
 		},
 	}
 	slide.Variant = normalizeSlideVariant(slide)
@@ -3202,6 +3930,113 @@ func ensureClosingActionSlide(slides []officegen.Slide, deckTitle string, archet
 		slides[lastIdx] = defaultActionSlide(archetype, deckTitle)
 	}
 	return slides
+}
+
+func dropPPTXScaffoldSlidesForExplicitCount(slides []officegen.Slide, requestText string) []officegen.Slide {
+	if explicitPPTXRequestAllowsScaffold(requestText) || len(slides) <= 1 {
+		return slides
+	}
+	out := make([]officegen.Slide, 0, len(slides))
+	for idx, slide := range slides {
+		if idx > 0 && idx < len(slides)-1 && isPPTXScaffoldSlide(slide) {
+			continue
+		}
+		out = append(out, slide)
+	}
+	if len(out) == 0 {
+		return slides
+	}
+	return out
+}
+
+func explicitPPTXRequestAllowsScaffold(requestText string) bool {
+	text := strings.ToLower(strings.TrimSpace(requestText))
+	if text == "" {
+		return false
+	}
+	for _, term := range []string{"contents", "content slide", "table of contents", "agenda", "toc", "chapter", "section divider", "目录", "议程", "章节"} {
+		if strings.Contains(text, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func isPPTXScaffoldSlide(slide officegen.Slide) bool {
+	layout := slideLayoutName(slide)
+	if layout == "toc" || layout == "chapter" {
+		return true
+	}
+	title := strings.ToLower(strings.TrimSpace(slide.Title))
+	switch title {
+	case "contents", "agenda", "table of contents", "section", "chapter":
+		return true
+	default:
+		return strings.HasPrefix(title, "chapter ") || strings.HasPrefix(title, "section ")
+	}
+}
+
+func constrainPPTXSlidesToExplicitCount(slides []officegen.Slide, count int, archetype pptxArchetype, deckTitle string) []officegen.Slide {
+	if count <= 0 || len(slides) == 0 {
+		return slides
+	}
+	out := append([]officegen.Slide(nil), slides...)
+	if len(out) > count {
+		chartSlide, hasChart := firstPPTXChartSlide(out)
+		closingSlide, hasClosing := lastPPTXClosingSlide(out)
+		out = append([]officegen.Slide(nil), out[:count]...)
+		if hasChart && !containsPPTXChartSlide(out) && count > 2 {
+			replaceIdx := count / 2
+			if replaceIdx <= 0 {
+				replaceIdx = 1
+			}
+			if replaceIdx >= count-1 {
+				replaceIdx = count - 2
+			}
+			out[replaceIdx] = chartSlide
+		}
+		if hasClosing && count > 1 {
+			out[count-1] = closingSlide
+		}
+	}
+	for len(out) < count {
+		out = append(out, defaultArchetypeSlide(archetype, len(out), deckTitle))
+	}
+	if len(out) > 0 {
+		out[0].Layout = "title"
+		out[0].IsTitle = true
+		out[0].NarrativeRole = "cover"
+		if strings.TrimSpace(out[0].Title) == "" {
+			out[0].Title = firstNonEmpty(deckTitle, "Presentation")
+		}
+	}
+	if count > 1 {
+		out = ensureClosingActionSlide(out, deckTitle, archetype, len(out))
+	}
+	return out
+}
+
+func firstPPTXChartSlide(slides []officegen.Slide) (officegen.Slide, bool) {
+	for _, slide := range slides {
+		if slide.Chart != nil || strings.EqualFold(slideLayoutName(slide), "chart") {
+			return slide, true
+		}
+	}
+	return officegen.Slide{}, false
+}
+
+func containsPPTXChartSlide(slides []officegen.Slide) bool {
+	_, ok := firstPPTXChartSlide(slides)
+	return ok
+}
+
+func lastPPTXClosingSlide(slides []officegen.Slide) (officegen.Slide, bool) {
+	for idx := len(slides) - 1; idx >= 0; idx-- {
+		if isActionSlide(slides[idx]) || looksLikeClosingSlide(slides[idx]) || strings.EqualFold(slideLayoutName(slides[idx]), "closing") {
+			return slides[idx], true
+		}
+	}
+	return officegen.Slide{}, false
 }
 
 func applyNarrativeScaffold(slides []officegen.Slide, deckTitle string, archetype pptxArchetype, maxSlides int) []officegen.Slide {
@@ -4771,7 +5606,75 @@ func finishLayoutPhrase(value string) string {
 	for len(words) > 1 {
 		tail := strings.ToLower(strings.Trim(words[len(words)-1], ".,;:，。；：()[]{}"))
 		switch tail {
-		case "and", "or", "but", "with", "without", "for", "from", "to", "by", "of", "in", "on", "at", "as", "the", "a", "an":
+		case "and", "or", "but", "with", "without", "for", "from", "to", "by", "of", "in", "on", "at", "as", "the", "a", "an", "any", "every", "while", "because", "although", "though", "before", "after", "if", "when", "where", "whether", "which", "that", "is", "are", "was", "were", "through", "into", "keep", "so", "more", "less", "use", "uses", "used", "support", "supports", "supported", "feel", "feels", "felt", "carry", "carries", "carried", "kept", "stay", "stays", "stayed", "make", "makes", "made", "create", "creates", "created":
+			words = words[:len(words)-1]
+			value = strings.Join(words, " ")
+			value = strings.TrimRight(value, " ,;:，；：")
+			continue
+		}
+		if len(words) >= 3 {
+			prev2 := strings.ToLower(strings.Trim(words[len(words)-3], ".,;:，。；：()[]{}"))
+			prev1 := strings.ToLower(strings.Trim(words[len(words)-2], ".,;:，。；：()[]{}"))
+			if prev2 == "so" && (prev1 == "the" || prev1 == "a" || prev1 == "an") {
+				words = words[:len(words)-3]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+		}
+		if len(words) >= 2 {
+			prev := strings.ToLower(strings.Trim(words[len(words)-2], ".,;:，。；：()[]{}"))
+			if isWeakTerminalLeadIn(prev) && isWeakTerminalNoun(tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+			if isWeakTerminalPreposition(prev) && isWeakTerminalNoun(tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+			if isWeakTerminalVerb(prev) && isWeakTerminalNoun(tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+			if isWeakTerminalAdjective(prev) && isWeakTerminalNoun(tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+			if isWeakTerminalNounPair(prev, tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+		}
+		if len(words) >= 3 {
+			prev2 := strings.ToLower(strings.Trim(words[len(words)-3], ".,;:，。；：()[]{}"))
+			prev1 := strings.ToLower(strings.Trim(words[len(words)-2], ".,;:，。；：()[]{}"))
+			if isWeakTerminalVerb(prev2) && (prev1 == "the" || prev1 == "a" || prev1 == "an") && (isWeakTerminalNoun(tail) || isWeakTerminalAdjective(tail)) {
+				words = words[:len(words)-3]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+		}
+		if len(words) >= 2 {
+			prev := strings.ToLower(strings.Trim(words[len(words)-2], ".,;:，。；：()[]{}"))
+			if (prev == "a" || prev == "an" || prev == "the") && isWeakTerminalAdjective(tail) {
+				words = words[:len(words)-2]
+				value = strings.Join(words, " ")
+				value = strings.TrimRight(value, " ,;:，；：")
+				continue
+			}
+		}
+		if len(words) > 2 && isWeakTerminalAdjective(tail) {
 			words = words[:len(words)-1]
 			value = strings.Join(words, " ")
 			value = strings.TrimRight(value, " ,;:，；：")
@@ -4786,6 +5689,60 @@ func finishLayoutPhrase(value string) string {
 		return value
 	}
 	return value + "."
+}
+
+func isWeakTerminalAdjective(value string) bool {
+	switch value {
+	case "clear", "concise", "strong", "simple", "consistent", "recurring", "readable", "structured", "fresh", "quiet", "clean", "large", "compact", "repeatable", "main", "short", "selective", "calm", "usually", "derived":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakTerminalLeadIn(value string) bool {
+	switch value {
+	case "when", "where", "how", "why":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakTerminalPreposition(value string) bool {
+	switch value {
+	case "in", "on", "of", "with", "for", "through", "around":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakTerminalVerb(value string) bool {
+	switch value {
+	case "keep", "keeps", "kept", "carry", "carries", "hold", "holds", "show", "shows", "use", "uses", "used", "support", "supports", "supported", "help", "helps", "helped", "feel", "feels", "felt", "stay", "stays", "stayed", "make", "makes", "made", "create", "creates", "created", "strengthen", "strengthens", "strengthened":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakTerminalNoun(value string) bool {
+	switch value {
+	case "structure", "message", "layout", "hierarchy", "spacing", "signal", "signals", "style", "system", "content", "idea", "ideas", "point", "points", "presentation", "deck", "card", "cards", "chart", "discipline":
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakTerminalNounPair(prev, tail string) bool {
+	switch prev + " " + tail {
+	case "hierarchy spacing", "layout discipline":
+		return true
+	default:
+		return false
+	}
 }
 
 func diversifyBusinessLayouts(slides []officegen.Slide, archetype pptxArchetype) []officegen.Slide {
@@ -4908,6 +5865,13 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				}
 			}
 		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Title) > 64 {
+			next := shortenLayoutText(slide.Title, 64)
+			if next != slide.Title {
+				slide.Title = next
+				changed = true
+			}
+		}
 		if textDensityRunes(slide) > maxRunes && len(slide.Metrics) > 0 && len(slide.Points) > 2 {
 			slide.Points = slide.Points[:2]
 			changed = true
@@ -4923,6 +5887,27 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 				changed = true
 			}
 		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Content) > 70 {
+			next := shortenLayoutText(slide.Content, 70)
+			if next != slide.Content {
+				slide.Content = next
+				changed = true
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Subtitle) > 42 {
+			next := shortenLayoutText(slide.Subtitle, 42)
+			if next != slide.Subtitle {
+				slide.Subtitle = next
+				changed = true
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Content) > 42 {
+			next := shortenLayoutText(slide.Content, 42)
+			if next != slide.Content {
+				slide.Content = next
+				changed = true
+			}
+		}
 		if textDensityRunes(slide) > maxRunes && len(slide.Sections) > 2 {
 			slide.Sections = slide.Sections[:2]
 			changed = true
@@ -4930,6 +5915,39 @@ func compactSlideTextDensity(slide officegen.Slide, maxRunes int) officegen.Slid
 		if textDensityRunes(slide) > maxRunes && len(slide.Points) > 2 {
 			slide.Points = slide.Points[:2]
 			changed = true
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Content) > 28 {
+			next := shortenLayoutText(slide.Content, 28)
+			if next != slide.Content {
+				slide.Content = next
+				changed = true
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Subtitle) > 32 {
+			next := shortenLayoutText(slide.Subtitle, 32)
+			if next != slide.Subtitle {
+				slide.Subtitle = next
+				changed = true
+			}
+		}
+		for idx := range slide.Points {
+			if textDensityRunes(slide) <= maxRunes {
+				break
+			}
+			if utf8.RuneCountInString(slide.Points[idx]) > 20 {
+				next := shortenLayoutText(slide.Points[idx], 20)
+				if next != slide.Points[idx] {
+					slide.Points[idx] = next
+					changed = true
+				}
+			}
+		}
+		if textDensityRunes(slide) > maxRunes && utf8.RuneCountInString(slide.Title) > 48 {
+			next := shortenLayoutText(slide.Title, 48)
+			if next != slide.Title {
+				slide.Title = next
+				changed = true
+			}
 		}
 		if !changed {
 			break

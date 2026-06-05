@@ -82,6 +82,7 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 	if err != nil {
 		return nil, err
 	}
+	hasStableStyleSource := hasStableReferenceStyleSource(absRoot, sources)
 	profile := &ReferenceStyleProfile{
 		Root:            absRoot,
 		DiscoveredCount: len(sources),
@@ -96,6 +97,7 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 	var representativeSummaries []weightedSummary
 	totalChars := 0
 	maxChars := 0
+	signalSlideCount := 0
 
 	for _, source := range sources {
 		cleanPath, err := filepath.Abs(source)
@@ -114,6 +116,9 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 			SourceBucket: classifySourceBucket(absRoot, cleanPath),
 		}
 		weight := bucketSignalWeight(file.SourceBucket)
+		if hasStableStyleSource && isLowSignalSourceBucket(file.SourceBucket) {
+			weight = 0
+		}
 		data, err := os.ReadFile(cleanPath)
 		if err != nil {
 			file.FailedReason = "read pptx: " + err.Error()
@@ -143,13 +148,17 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 		if themeXML, err := ooxmledit.ExtractThemeXML(data); err == nil {
 			themeSum := sha256.Sum256([]byte(themeXML))
 			file.ThemeXMLDigest = hex.EncodeToString(themeSum[:])
-			themeDigests[file.ThemeXMLDigest] += weight
-			for _, color := range extractThemeColors(themeXML) {
-				themeColors[color] += weight
+			if weight > 0 {
+				themeDigests[file.ThemeXMLDigest] += weight
+				for _, color := range extractThemeColors(themeXML) {
+					themeColors[color] += weight
+				}
 			}
 		}
 		for _, family := range extractPPTXFontFamilies(data) {
-			fonts[family] += weight
+			if weight > 0 {
+				fonts[family] += weight
+			}
 			file.FontFamilies = append(file.FontFamilies, family)
 		}
 		sort.Strings(file.FontFamilies)
@@ -161,22 +170,32 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 			if line == "" {
 				continue
 			}
-			representativeSummaries = append(representativeSummaries, weightedSummary{
-				text:   line,
-				path:   cleanPath,
-				index:  summaryIndex,
-				weight: weight,
-			})
+			if weight > 0 {
+				representativeSummaries = append(representativeSummaries, weightedSummary{
+					text:   line,
+					path:   cleanPath,
+					index:  summaryIndex,
+					weight: weight,
+				})
+			}
 			summaryIndex++
+		}
+		if weight > 0 {
+			signalSlideCount += file.SlideCount
 		}
 		for _, xmlContent := range contentXMLs {
 			chars := slideCharCount(xmlContent)
-			totalChars += chars
-			if chars > maxChars {
-				maxChars = chars
-			}
-			for signal, count := range inferLayoutSignals(xmlContent) {
-				profile.LayoutSignals[signal] += count * weight
+			if weight > 0 {
+				for _, color := range extractSlideColors(xmlContent) {
+					themeColors[color] += weight
+				}
+				totalChars += chars
+				if chars > maxChars {
+					maxChars = chars
+				}
+				for signal, count := range inferLayoutSignals(xmlContent) {
+					profile.LayoutSignals[signal] += count * weight
+				}
 			}
 		}
 		profile.ParsedCount++
@@ -184,8 +203,8 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 		profile.appendFile(file)
 	}
 
-	if profile.AggregateSlideCount > 0 {
-		profile.DensitySignals.AverageCharsPerSlide = totalChars / profile.AggregateSlideCount
+	if signalSlideCount > 0 {
+		profile.DensitySignals.AverageCharsPerSlide = totalChars / signalSlideCount
 	}
 	profile.DensitySignals.MaxCharsPerSlide = maxChars
 	profile.FontFamilies = sortedWeightedKeys(fonts)
@@ -193,6 +212,9 @@ func BuildProfileWithOptions(root string, explicit []string, scanRoot bool) (*Re
 	profile.ThemeXMLDigests = sortedWeightedKeys(themeDigests)
 	profile.RepresentativeSlideTextSummaries = selectRepresentativeSummaries(representativeSummaries)
 	profile.ReuseGuidance = buildReuseGuidance(profile)
+	if profileHasOnlyParsedBucket(profile, "current-output") {
+		profile.Limitations = append(profile.Limitations, "Only previous output PPTX files were found; these are weak reference signals and may reflect earlier generated artifacts rather than stable source style.")
+	}
 	if profile.FailedCount > 0 {
 		profile.Limitations = append(profile.Limitations, fmt.Sprintf("%d reference PPTX files could not be parsed and were skipped.", profile.FailedCount))
 	}
@@ -220,6 +242,23 @@ func (p *ReferenceStyleProfile) addFailed(path, reason string) {
 	})
 }
 
+func profileHasOnlyParsedBucket(profile *ReferenceStyleProfile, bucket string) bool {
+	if profile == nil || profile.ParsedCount == 0 {
+		return false
+	}
+	parsedInBucket := 0
+	for _, file := range profile.SourceFiles {
+		if strings.TrimSpace(file.FailedReason) != "" {
+			continue
+		}
+		if file.SourceBucket != bucket {
+			return false
+		}
+		parsedInBucket++
+	}
+	return parsedInBucket == profile.ParsedCount
+}
+
 func discoverPPTXSources(root string, explicit []string, scanRoot bool) ([]string, error) {
 	var sources []string
 	if scanRoot {
@@ -227,7 +266,13 @@ func discoverPPTXSources(root string, explicit []string, scanRoot bool) ([]strin
 			if err != nil {
 				return nil
 			}
-			if entry == nil || entry.IsDir() {
+			if entry == nil {
+				return nil
+			}
+			if entry.IsDir() {
+				if shouldSkipImplicitReferenceDir(root, path, entry.Name()) {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			name := entry.Name()
@@ -250,6 +295,27 @@ func discoverPPTXSources(root string, explicit []string, scanRoot bool) ([]strin
 	}
 	sort.Strings(sources)
 	return sources, nil
+}
+
+func shouldSkipImplicitReferenceDir(root, path, name string) bool {
+	if samePath(root, path) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case ".git", ".worktrees", ".claude", ".omo", ".playwright-mcp", "node_modules", "output", "tmp", "testdata":
+		return true
+	default:
+		return false
+	}
+}
+
+func samePath(left, right string) bool {
+	leftAbs, leftErr := filepath.Abs(left)
+	rightAbs, rightErr := filepath.Abs(right)
+	if leftErr == nil && rightErr == nil {
+		return leftAbs == rightAbs
+	}
+	return filepath.Clean(left) == filepath.Clean(right)
 }
 
 func classifySourceBucket(root, path string) string {
@@ -275,6 +341,29 @@ func classifySourceBucket(root, path string) string {
 		}
 	}
 	return "other"
+}
+
+func hasStableReferenceStyleSource(root string, sources []string) bool {
+	for _, source := range sources {
+		cleanPath, err := filepath.Abs(source)
+		if err != nil {
+			continue
+		}
+		switch classifySourceBucket(root, cleanPath) {
+		case "other", "demo-assets":
+			return true
+		}
+	}
+	return false
+}
+
+func isLowSignalSourceBucket(bucket string) bool {
+	switch bucket {
+	case "current-output", "worktree", "tmp", "testdata":
+		return true
+	default:
+		return false
+	}
 }
 
 func bucketSignalWeight(bucket string) int {
@@ -327,8 +416,16 @@ func extractPPTXFontFamilies(deck []byte) []string {
 }
 
 func extractThemeColors(themeXML string) []string {
+	return extractSRGBColors(themeXML)
+}
+
+func extractSlideColors(slideXML string) []string {
+	return extractSRGBColors(slideXML)
+}
+
+func extractSRGBColors(xml string) []string {
 	colors := map[string]struct{}{}
-	for _, match := range themeColorPattern.FindAllStringSubmatch(themeXML, -1) {
+	for _, match := range themeColorPattern.FindAllStringSubmatch(xml, -1) {
 		if len(match) == 2 {
 			colors[strings.ToUpper(match[1])] = struct{}{}
 		}
@@ -377,7 +474,44 @@ func buildReuseGuidance(profile *ReferenceStyleProfile) []string {
 	if len(profile.SourceBuckets) > 0 {
 		guidance = append(guidance, "Prioritize stable current-directory references over worktree, tmp, testdata, and previous output buckets when style signals conflict; aggregate prompt signals are already ordered with this bucket weighting.")
 	}
+	if profileHasStableParsedBucket(profile) && profileHasLowSignalParsedBucket(profile) {
+		guidance = append(guidance, "Previous output, tmp, worktree, and testdata PPTX files were parsed for transparency, but stable reference decks drive aggregate style signals.")
+	}
+	if profileHasOnlyParsedBucket(profile, "current-output") {
+		guidance = append(guidance, "Treat previous output PPTX files as weak style hints; prefer the user request, editable-object quality, readability, and preview validation over repeating generated-output patterns.")
+	}
 	return guidance
+}
+
+func profileHasStableParsedBucket(profile *ReferenceStyleProfile) bool {
+	if profile == nil {
+		return false
+	}
+	for _, file := range profile.SourceFiles {
+		if strings.TrimSpace(file.FailedReason) != "" {
+			continue
+		}
+		switch file.SourceBucket {
+		case "other", "demo-assets":
+			return true
+		}
+	}
+	return false
+}
+
+func profileHasLowSignalParsedBucket(profile *ReferenceStyleProfile) bool {
+	if profile == nil {
+		return false
+	}
+	for _, file := range profile.SourceFiles {
+		if strings.TrimSpace(file.FailedReason) != "" {
+			continue
+		}
+		if isLowSignalSourceBucket(file.SourceBucket) {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedKeys(values map[string]struct{}) []string {

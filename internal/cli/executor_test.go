@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -263,6 +264,69 @@ func TestExecutorAddsReferenceStyleAndStructuralReviewMetadata(t *testing.T) {
 	if result.PPTXReview.StructureScore < 70 {
 		t.Fatalf("structure score = %d, want >= 70 (%#v)", result.PPTXReview.StructureScore, result.PPTXReview)
 	}
+}
+
+func TestExecutorAddsPPTXArtifactDebugMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(debugPPTXGenerator{}, nil, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		Topic:        "Debug Artifact Deck",
+		OutputDir:    tmpDir,
+		Publish:      false,
+		Debug:        true,
+		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.PPTXArtifactDebug == nil {
+		t.Fatalf("missing artifact debug metadata: %+v", result)
+	}
+	if result.PPTXArtifactDebug.WorkerVersion != "artifact-experimental-test" || result.PPTXArtifactDebug.PreviewCount != 2 {
+		t.Fatalf("artifact debug metadata = %#v", result.PPTXArtifactDebug)
+	}
+	if strings.TrimSpace(result.PPTXArtifactDebug.NarrativePlanPath) == "" {
+		t.Fatalf("missing narrative plan path: %#v", result.PPTXArtifactDebug)
+	}
+	planBytes, err := os.ReadFile(filepath.Join(tmpDir, "narrative_plan.md"))
+	if err != nil {
+		t.Fatalf("read narrative plan sidecar: %v", err)
+	}
+	plan := string(planBytes)
+	for _, expected := range []string{"# Narrative Plan", "Audience", "Editability Plan"} {
+		if !strings.Contains(plan, expected) {
+			t.Fatalf("narrative plan sidecar missing %q:\n%s", expected, plan)
+		}
+	}
+}
+
+type debugPPTXGenerator struct{}
+
+func (debugPPTXGenerator) Generate(_ context.Context, _ GenerateParams) (*GeneratedArtifact, error) {
+	data, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{{
+		Title:   "Debug Artifact Deck",
+		Layout:  "title",
+		IsTitle: true,
+	}}, officegen.PPTXOptions{Title: "Debug Artifact Deck"})
+	if err != nil {
+		return nil, err
+	}
+	return &GeneratedArtifact{
+		DocumentName: "debug-artifact.pptx",
+		DocumentType: string(engine.DocumentTypePPTX),
+		Bytes:        data,
+		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+		PPTXArtifactDebug: &runtime.PPTXArtifactDebugMetadata{
+			Enabled:               true,
+			Backend:               runtime.PPTXBackendArtifactExperimental,
+			WorkerVersion:         "artifact-experimental-test",
+			PreviewCount:          2,
+			InspectPath:           "/tmp/inspect.json",
+			NarrativePlanMarkdown: "# Narrative Plan\n\n## Audience\nDebug audience.\n\n## Editability Plan\nKeep text editable.\n",
+		},
+	}, nil
 }
 
 // docPreviewGenerator emits a sidecar-shaped artifact for any document type.

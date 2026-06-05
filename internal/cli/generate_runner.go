@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/officecli/officecli/engine"
 	generateengine "github.com/officecli/officecli/engine/generate"
 	publishprovider "github.com/officecli/officecli/internal/providers/publish"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 	"github.com/officecli/officecli/internal/runtime"
 )
 
@@ -100,6 +102,9 @@ func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJo
 	service := runtime.NewService(llmClient, progress)
 	if imageLLMClient != nil {
 		service.WithImageLLM(imageLLMClient)
+	}
+	if previewReviewer := pptxArtifactPreviewReviewerForConfig(cfg, job); previewReviewer != nil {
+		service.WithPPTXArtifactPreviewReviewer(previewReviewer)
 	}
 	executor := NewExecutor(service, publisher, manager)
 	executor.progress = progress
@@ -226,6 +231,85 @@ func publishConfigForLicense(publishCfg publishprovider.Config, licenseCfg Licen
 		publishCfg.APIKey = strings.TrimSpace(licenseCfg.APIKey)
 	}
 	return publishCfg
+}
+
+type pptxArtifactPreviewReviewerAdapter struct {
+	reviewer *reviewprovider.OpenAIReviewer
+}
+
+func pptxArtifactPreviewReviewerForConfig(cfg Config, job GenerateJob) runtime.PPTXArtifactPreviewReviewer {
+	if job.DocumentType != engine.DocumentTypePPTX || strings.TrimSpace(job.PPTXBackend) != runtime.PPTXBackendArtifactExperimental {
+		return nil
+	}
+	provider := strings.ToLower(strings.TrimSpace(cfg.LLM.Provider))
+	if provider != "" && provider != "openai" {
+		return nil
+	}
+	if missingLLMConfig(cfg) != "" {
+		return nil
+	}
+	return pptxArtifactPreviewReviewerAdapter{
+		reviewer: reviewprovider.NewOpenAIReviewer(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.ReviewModel, cfg.LLM.TimeoutSec),
+	}
+}
+
+func (r pptxArtifactPreviewReviewerAdapter) ReviewPPTXArtifactPreviews(ctx context.Context, req runtime.PPTXArtifactPreviewReviewRequest) (*runtime.PPTXArtifactPreviewReviewResult, error) {
+	if r.reviewer == nil {
+		return nil, fmt.Errorf("visual preview reviewer is unavailable")
+	}
+	pages := make([]reviewprovider.ImageReviewPage, 0, len(req.PreviewFiles))
+	for idx, previewPath := range req.PreviewFiles {
+		previewPath = strings.TrimSpace(previewPath)
+		if previewPath == "" {
+			continue
+		}
+		data, err := os.ReadFile(previewPath)
+		if err != nil {
+			return nil, fmt.Errorf("read artifact preview image %q: %w", previewPath, err)
+		}
+		pages = append(pages, reviewprovider.ImageReviewPage{
+			Page: idx + 1,
+			MIME: "image/png",
+			Data: data,
+		})
+		if len(pages) >= 8 {
+			break
+		}
+	}
+	if len(pages) == 0 {
+		return nil, fmt.Errorf("no artifact preview images were available for visual review")
+	}
+	visual, err := r.reviewer.ReviewImages(ctx, pages, reviewprovider.StructureReport{
+		Score:   100,
+		Summary: fmt.Sprintf("Artifact experimental worker rendered %d preview image(s) for %d slide(s).", len(pages), req.SlideCount),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertPPTXArtifactPreviewReviewResult(visual), nil
+}
+
+func convertPPTXArtifactPreviewReviewResult(visual *reviewprovider.VisualResult) *runtime.PPTXArtifactPreviewReviewResult {
+	if visual == nil {
+		return nil
+	}
+	issues := make([]runtime.PPTXArtifactPreviewReviewIssue, 0, len(visual.Issues))
+	for _, issue := range visual.Issues {
+		issues = append(issues, runtime.PPTXArtifactPreviewReviewIssue{
+			Severity:     issue.Severity,
+			Code:         issue.Code,
+			Title:        issue.Title,
+			Message:      issue.Message,
+			SlideNumbers: append([]int(nil), issue.SlideNumbers...),
+			Suggestion:   issue.Suggestion,
+		})
+	}
+	return &runtime.PPTXArtifactPreviewReviewResult{
+		Score:     visual.Score,
+		Summary:   visual.Summary,
+		Strengths: append([]string(nil), visual.Strengths...),
+		Issues:    issues,
+	}
 }
 
 func (a *App) applyImagePromptTemplate(ctx context.Context, cfg Config, job GenerateJob) (GenerateJob, error) {
@@ -500,6 +584,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		LocalPreview:          localPreview,
 		OutputDir:             outputDir,
 		Publish:               publish,
+		Debug:                 req.Args.Debug,
 		JSONOutput:            true,
 		Warnings:              warnings,
 	}, nil

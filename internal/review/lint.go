@@ -14,11 +14,14 @@ import (
 )
 
 var (
-	slideNumPattern        = regexp.MustCompile(`slide(\d+)\.xml$`)
-	bulletPattern          = regexp.MustCompile(`(?s)<a:bu(Char|AutoNum)\b`)
-	placeholderTextPattern = regexp.MustCompile(`(?i)(IMG_PLACEHOLDER_|click to add|placeholder)`) //nolint:lll
-	fontFamilyPattern      = regexp.MustCompile(`typeface="([^"]+)"`)
+	slideNumPattern         = regexp.MustCompile(`slide(\d+)\.xml$`)
+	bulletPattern           = regexp.MustCompile(`(?s)<a:bu(Char|AutoNum)\b`)
+	placeholderTextPattern  = regexp.MustCompile(`(?i)(IMG_PLACEHOLDER_|click to add|placeholder)`) //nolint:lll
+	imagePlaceholderPattern = regexp.MustCompile(`(?i)IMG_PLACEHOLDER_`)
+	fontFamilyPattern       = regexp.MustCompile(`typeface="([^"]+)"`)
 )
+
+const pptxDenseSlideCharThreshold = 640
 
 func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 	contentXMLs, err := ooxmledit.ExtractContentXML(deck, ooxmledit.FileTypePPTX)
@@ -39,7 +42,7 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 	hasEmptySlide := false
 	hasDenseSlide := false
 	hasBulletOverflow := false
-	hasPlaceholderResidue := false
+	hasPlaceholderResidueIssue := false
 	layoutCounts := map[string]int{}
 	variantCounts := map[string]int{}
 	sectionsGridSlides := make([]int, 0, 4)
@@ -75,7 +78,7 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 		for _, run := range nonEmptyRuns {
 			totalChars += utf8.RuneCountInString(run)
 		}
-		if totalChars > 240 {
+		if totalChars > pptxDenseSlideCharThreshold {
 			hasDenseSlide = true
 			issues = append(issues, Issue{
 				Severity:     "medium",
@@ -100,8 +103,8 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 			})
 		}
 
-		if placeholderTextPattern.MatchString(xmlContent) {
-			hasPlaceholderResidue = true
+		if hasPlaceholderResidue(xmlContent, nonEmptyRuns) {
+			hasPlaceholderResidueIssue = true
 			issues = append(issues, Issue{
 				Severity:     "high",
 				Code:         "PLACEHOLDER_RESIDUE",
@@ -196,7 +199,7 @@ func lintPPTX(_ string, deck []byte) (StructureReport, error) {
 	if !hasBulletOverflow {
 		strengths = append(strengths, "Bullet usage stays restrained and the main points remain focused.")
 	}
-	if !hasPlaceholderResidue {
+	if !hasPlaceholderResidueIssue {
 		strengths = append(strengths, "No obvious template placeholder residue was detected.")
 	}
 
@@ -277,6 +280,18 @@ func extractPPTXFontFamilies(deck []byte) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+func hasPlaceholderResidue(xmlContent string, visibleTextRuns []string) bool {
+	if imagePlaceholderPattern.MatchString(xmlContent) {
+		return true
+	}
+	for _, run := range visibleTextRuns {
+		if placeholderTextPattern.MatchString(run) {
+			return true
+		}
+	}
+	return false
 }
 
 func structurePenalty(code string) int {

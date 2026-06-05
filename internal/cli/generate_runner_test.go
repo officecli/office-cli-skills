@@ -6,14 +6,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/runtime"
 )
 
 func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.T) {
@@ -88,6 +91,89 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 	// against the fingerprint credit account directly.
 	if gotPayload["fingerprint_hash"] == "" {
 		t.Fatalf("anonymous access payload missing fingerprint_hash: %#v", gotPayload)
+	}
+}
+
+func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesExperimentalOpenAI(t *testing.T) {
+	cfg := Config{LLM: LLMConfig{
+		Provider: "openai",
+		BaseURL:  "https://llm.example",
+		APIKey:   "key",
+		Model:    "gpt-test",
+	}}
+	job := GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+	}
+	if pptxArtifactPreviewReviewerForConfig(cfg, job) == nil {
+		t.Fatal("expected preview reviewer for artifact-experimental OpenAI config")
+	}
+	officegenJob := job
+	officegenJob.PPTXBackend = runtime.PPTXBackendOfficegen
+	if pptxArtifactPreviewReviewerForConfig(cfg, officegenJob) != nil {
+		t.Fatal("officegen backend should not enable artifact preview reviewer")
+	}
+	nonPPTX := job
+	nonPPTX.DocumentType = engine.DocumentTypeDOCX
+	if pptxArtifactPreviewReviewerForConfig(cfg, nonPPTX) != nil {
+		t.Fatal("non-PPTX generation should not enable artifact preview reviewer")
+	}
+	missingCfg := cfg
+	missingCfg.LLM.APIKey = ""
+	if pptxArtifactPreviewReviewerForConfig(missingCfg, job) != nil {
+		t.Fatal("missing LLM config should not enable artifact preview reviewer")
+	}
+	otherProvider := cfg
+	otherProvider.LLM.Provider = "anthropic"
+	if pptxArtifactPreviewReviewerForConfig(otherProvider, job) != nil {
+		t.Fatal("non-OpenAI provider should not enable artifact preview reviewer")
+	}
+}
+
+func TestPPTXArtifactPreviewReviewerAdapterReviewsRenderedPNGs(t *testing.T) {
+	var sawChat bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		sawChat = true
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"score\\\":87,\\\"summary\\\":\\\"The rendered previews need a stronger chart hierarchy.\\\",\\\"strengths\\\":[\\\"Readable slide text\\\"],\\\"issues\\\":[{\\\"severity\\\":\\\"medium\\\",\\\"code\\\":\\\"CHART_HIERARCHY\\\",\\\"title\\\":\\\"Chart hierarchy\\\",\\\"message\\\":\\\"Slide 3 callouts compete with the chart.\\\",\\\"slide_numbers\\\":[3],\\\"suggestion\\\":\\\"Reduce secondary callout density.\\\"}]}\"}}]}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	previewPath := filepath.Join(t.TempDir(), "slide-01.png")
+	if err := os.WriteFile(previewPath, []byte("png-bytes"), 0o644); err != nil {
+		t.Fatalf("write preview: %v", err)
+	}
+	reviewer := pptxArtifactPreviewReviewerForConfig(Config{LLM: LLMConfig{
+		Provider: "openai",
+		BaseURL:  server.URL,
+		APIKey:   "key",
+		Model:    "gpt-test",
+	}}, GenerateJob{
+		DocumentType: engine.DocumentTypePPTX,
+		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+	})
+	if reviewer == nil {
+		t.Fatal("missing preview reviewer")
+	}
+	result, err := reviewer.ReviewPPTXArtifactPreviews(context.Background(), runtime.PPTXArtifactPreviewReviewRequest{
+		PreviewFiles: []string{previewPath},
+		SlideCount:   4,
+	})
+	if err != nil {
+		t.Fatalf("ReviewPPTXArtifactPreviews: %v", err)
+	}
+	if !sawChat {
+		t.Fatal("expected chat image review request")
+	}
+	if result.Score != 87 || result.Summary != "The rendered previews need a stronger chart hierarchy." {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Issues) != 1 || result.Issues[0].Code != "CHART_HIERARCHY" || len(result.Issues[0].SlideNumbers) != 1 || result.Issues[0].SlideNumbers[0] != 3 {
+		t.Fatalf("issues = %#v", result.Issues)
 	}
 }
 

@@ -943,6 +943,12 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 			OverallScore:   82,
 			StructureScore: 82,
 		},
+		PPTXArtifactDebug: &runtime.PPTXArtifactDebugMetadata{
+			Enabled:       true,
+			Backend:       runtime.PPTXBackendArtifactExperimental,
+			WorkerVersion: "artifact-experimental-test",
+			PreviewCount:  4,
+		},
 		PPTXBackend: runtime.PPTXBackendArtifactExperimental,
 	})
 
@@ -973,6 +979,9 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 	}
 	if _, ok := meta["pptx_review"].(*PPTXReviewMetadata); !ok {
 		t.Fatalf("pptx_review missing from result_meta: %#v", meta)
+	}
+	if _, ok := meta["pptx_artifact_debug"].(*runtime.PPTXArtifactDebugMetadata); !ok {
+		t.Fatalf("pptx_artifact_debug missing from result_meta: %#v", meta)
 	}
 	if meta["pptx_backend"] != runtime.PPTXBackendArtifactExperimental {
 		t.Fatalf("pptx_backend missing from result_meta: %#v", meta)

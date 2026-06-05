@@ -63,6 +63,12 @@ type VisualResult struct {
 	Issues    []Issue
 }
 
+type ImageReviewPage struct {
+	Page int
+	MIME string
+	Data []byte
+}
+
 type StructureReport struct {
 	Score     int
 	Summary   string

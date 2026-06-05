@@ -324,6 +324,7 @@ func (s *Service) Render(ctx context.Context, params GenerateParams, payload jso
 				hostedCreditsCharged += charged
 				hostedCreditsChargedSet = true
 			},
+			ArtifactDesignPlanLLM: s.llm,
 		})
 		if err != nil {
 			return nil, err

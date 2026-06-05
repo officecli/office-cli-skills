@@ -208,6 +208,41 @@ func TestOpenAIReviewer_FallsBackToImageChatReviewWhenResponsesHasNoText(t *test
 	}
 }
 
+func TestOpenAIReviewer_ReviewImagesUsesChatImageReview(t *testing.T) {
+	t.Parallel()
+
+	var sawChat bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/chat/completions":
+			sawChat = true
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"score\\\":89,\\\"summary\\\":\\\"Rendered previews need one hierarchy fix.\\\",\\\"strengths\\\":[\\\"Readable text\\\"],\\\"issues\\\":[{\\\"severity\\\":\\\"medium\\\",\\\"code\\\":\\\"CHART_HIERARCHY\\\",\\\"title\\\":\\\"Chart hierarchy\\\",\\\"message\\\":\\\"Slide 2 chart lacks a clear lead insight.\\\",\\\"slide_numbers\\\":[2],\\\"suggestion\\\":\\\"Promote the primary chart callout.\\\"}]}\"}}]}\n\n")
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	reviewer := NewOpenAIReviewer(server.URL, "", "gpt-review-test", 30)
+	result, err := reviewer.ReviewImages(context.Background(), []ImageReviewPage{
+		{Page: 1, MIME: "image/png", Data: []byte("png-bytes")},
+	}, StructureReport{Score: 92, Summary: "Structure is solid"})
+	if err != nil {
+		t.Fatalf("ReviewImages: %v", err)
+	}
+	if !sawChat {
+		t.Fatal("expected chat image review request")
+	}
+	if result.Score != 89 || result.Summary != "Rendered previews need one hierarchy fix." {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Issues) != 1 || result.Issues[0].Code != "CHART_HIERARCHY" || len(result.Issues[0].SlideNumbers) != 1 || result.Issues[0].SlideNumbers[0] != 2 {
+		t.Fatalf("issues = %#v", result.Issues)
+	}
+}
+
 func TestExtractResponseText_SupportsNestedTextValue(t *testing.T) {
 	t.Parallel()
 

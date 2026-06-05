@@ -73,6 +73,37 @@ func TestAppRun_ReviewJSONOutput(t *testing.T) {
 	}
 }
 
+func TestAppRun_ReviewForcesExternalRuntimeMode(t *testing.T) {
+	deckPath := filepath.Join(t.TempDir(), "deck.pptx")
+	if err := os.WriteFile(deckPath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, &bytes.Buffer{}, strings.NewReader(""))
+	stub := &stubReviewer{result: &ReviewResult{
+		Status:         "partial",
+		DocumentType:   "pptx",
+		FilePath:       deckPath,
+		OverallScore:   82,
+		StructureScore: 82,
+		Summary:        "Structural checks passed.",
+	}}
+	app.newReviewer = func(cfg Config, progress engine.ProgressEmitter) (Reviewer, error) {
+		return stub, nil
+	}
+
+	job, err := BuildReviewJob([]string{"--json", "--no-visual", "pptx", deckPath})
+	if err != nil {
+		t.Fatalf("BuildReviewJob: %v", err)
+	}
+	if _, err := app.executeReviewJob(context.Background(), Config{Runtime: RuntimeConfig{Mode: RuntimeModeHosted}}, job, nil); err != nil {
+		t.Fatalf("executeReviewJob: %v", err)
+	}
+	if stub.lastReq.RuntimeMode != string(RuntimeModeExternal) {
+		t.Fatalf("RuntimeMode = %q, want %q", stub.lastReq.RuntimeMode, RuntimeModeExternal)
+	}
+}
+
 func TestAppRun_ScoreJSONOutput(t *testing.T) {
 	deckPath := filepath.Join(t.TempDir(), "deck.pptx")
 	if err := os.WriteFile(deckPath, []byte("test"), 0o644); err != nil {

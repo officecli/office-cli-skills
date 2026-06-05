@@ -187,6 +187,7 @@ type bridgeInvokeArgs struct {
 	EnableVisual         *bool           `json:"enable_visual,omitempty"`
 	FailBelow            *int            `json:"fail_below,omitempty"`
 	EmitPreview          *bool           `json:"emit_preview,omitempty"`
+	Debug                bool            `json:"debug,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -1491,6 +1492,9 @@ func buildGenerateBridgeMeta(result GenerateResult) map[string]any {
 	}
 	if result.ReferenceStyle != nil {
 		meta["reference_style"] = result.ReferenceStyle
+	}
+	if result.PPTXArtifactDebug != nil {
+		meta["pptx_artifact_debug"] = result.PPTXArtifactDebug
 	}
 	if result.PPTXReview != nil {
 		meta["pptx_review"] = result.PPTXReview

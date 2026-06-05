@@ -77,6 +77,31 @@ func (c *OpenAIReviewer) ReviewPDF(ctx context.Context, pdfPath string, structur
 	return c.requestImageReview(ctx, pdfPath, structure, err)
 }
 
+func (c *OpenAIReviewer) ReviewImages(ctx context.Context, pages []ImageReviewPage, structure StructureReport) (*VisualResult, error) {
+	if len(pages) == 0 {
+		return nil, fmt.Errorf("no page images were provided for visual review")
+	}
+	images := make([]visualPageImage, 0, len(pages))
+	for _, page := range pages {
+		if len(page.Data) == 0 {
+			continue
+		}
+		mime := strings.TrimSpace(page.MIME)
+		if mime == "" {
+			mime = "image/png"
+		}
+		images = append(images, visualPageImage{
+			Page: page.Page,
+			MIME: mime,
+			Data: append([]byte(nil), page.Data...),
+		})
+	}
+	if len(images) == 0 {
+		return nil, fmt.Errorf("no non-empty page images were provided for visual review")
+	}
+	return c.requestChatImageReview(ctx, images, structure)
+}
+
 func (c *OpenAIReviewer) uploadPDF(ctx context.Context, pdfPath string) (string, error) {
 	file, err := os.Open(pdfPath)
 	if err != nil {

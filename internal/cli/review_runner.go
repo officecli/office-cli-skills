@@ -49,7 +49,7 @@ func (a *App) executeReviewJob(ctx context.Context, cfg Config, job ReviewJob, p
 		DocumentType:  job.DocumentType,
 		EnableVisual:  job.EnableVisual,
 		FailBelow:     job.FailBelow,
-		RuntimeMode:   string(cfg.RuntimeModeOrDefault()),
+		RuntimeMode:   string(RuntimeModeExternal),
 		LLMProvider:   cfg.LLM.Provider,
 		LLMBaseURL:    cfg.LLM.BaseURL,
 		LLMAPIKey:     cfg.LLM.APIKey,

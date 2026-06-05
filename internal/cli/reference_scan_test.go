@@ -101,6 +101,7 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 			EnableReferenceScan:  boolPtr(false),
 			ReferencePPTX:        first,
 			ReferencePPTXSources: []string{second},
+			Debug:                true,
 		},
 	})
 	if err != nil {
@@ -114,6 +115,9 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 	}
 	if job.PPTXBackend != appruntime.PPTXBackendArtifactExperimental {
 		t.Fatalf("PPTXBackend = %q", job.PPTXBackend)
+	}
+	if !job.Debug {
+		t.Fatal("expected bridge debug=true to enable debug metadata")
 	}
 	wantSources := []string{first, second}
 	if len(job.ReferencePPTXSources) != len(wantSources) {

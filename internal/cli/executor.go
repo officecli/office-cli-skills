@@ -44,6 +44,7 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		ReferencePPTXSources: append([]string(nil), job.ReferencePPTXSources...),
 		PPTXBackend:          job.PPTXBackend,
 		LocalPreview:         job.LocalPreview,
+		Debug:                job.Debug,
 	})
 	if err != nil {
 		emitProgress(ctx, e.progress, progressStepGenerate, "failed", "Content generation failed")
@@ -68,15 +69,16 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	allWarnings := append([]engine.GenerateIssue(nil), job.Warnings...)
 	allWarnings = append(allWarnings, artifact.Warnings...)
 	result := GenerateResult{
-		Status:         "success",
-		FilePath:       filePath,
-		DocumentType:   string(job.DocumentType),
-		DocumentName:   artifact.DocumentName,
-		RuntimeMode:    resultRuntimeMode(job, job.LicenseCheck),
-		Warnings:       warningMessages(allWarnings),
-		CreditMode:     inferCreditMode(job),
-		ReferenceStyle: artifact.ReferenceStyle,
-		PPTXBackend:    resultPPTXBackend(artifact, job),
+		Status:            "success",
+		FilePath:          filePath,
+		DocumentType:      string(job.DocumentType),
+		DocumentName:      artifact.DocumentName,
+		RuntimeMode:       resultRuntimeMode(job, job.LicenseCheck),
+		Warnings:          warningMessages(allWarnings),
+		CreditMode:        inferCreditMode(job),
+		ReferenceStyle:    artifact.ReferenceStyle,
+		PPTXArtifactDebug: artifact.PPTXArtifactDebug,
+		PPTXBackend:       resultPPTXBackend(artifact, job),
 	}
 	if artifact.HostedCreditsCharged != nil {
 		result.CreditsCharged = *artifact.HostedCreditsCharged
@@ -180,6 +182,15 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 			}
 			result.LocalPreviewDataPath = localPreviewDataPath
 		}
+	}
+	if job.Debug && artifact.PPTXArtifactDebug != nil && strings.TrimSpace(artifact.PPTXArtifactDebug.NarrativePlanMarkdown) != "" {
+		narrativePlanPath := filepath.Join(job.OutputDir, "narrative_plan.md")
+		if err := writeFileAtomic(narrativePlanPath, []byte(artifact.PPTXArtifactDebug.NarrativePlanMarkdown), 0o644); err != nil {
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Narrative plan file write failed")
+			return GenerateResult{}, fmt.Errorf("narrative plan file write failed: %w", err)
+		}
+		artifact.PPTXArtifactDebug.NarrativePlanPath = narrativePlanPath
+		result.PPTXArtifactDebug = artifact.PPTXArtifactDebug
 	}
 	emitProgress(ctx, e.progress, progressStepWriteFile, "completed", "Local file write completed")
 
