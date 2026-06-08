@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +37,30 @@ func (hostedCreditGenerator) Generate(_ context.Context, params GenerateParams) 
 		Bytes:                []byte("pptx-bytes"),
 		HostedCreditBalance:  cliIntPtr(1100230),
 		HostedCreditsCharged: cliIntPtr(14),
+	}, nil
+}
+
+type gifGenerator struct{}
+
+func (gifGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + ".gif",
+		DocumentType: string(params.DocumentType),
+		Bytes:        []byte("gif-bytes"),
+		Sidecars: []GeneratedSidecar{{
+			FileName: params.Topic + ".sheet.png",
+			Bytes:    []byte("sheet-bytes"),
+		}},
+	}, nil
+}
+
+type pngImageGenerator struct{}
+
+func (pngImageGenerator) Generate(_ context.Context, params GenerateParams) (*GeneratedArtifact, error) {
+	return &GeneratedArtifact{
+		DocumentName: params.Topic + ".png",
+		DocumentType: string(params.DocumentType),
+		Bytes:        solidPNGBytesForTest(480, 270, color.RGBA{R: 40, G: 90, B: 160, A: 255}),
 	}, nil
 }
 
@@ -200,6 +228,76 @@ func TestExecutorPropagatesHostedCreditArtifactFields(t *testing.T) {
 	}
 }
 
+func TestExecutorWritesGIFSheetSidecar(t *testing.T) {
+	tmpDir := t.TempDir()
+	executor := NewExecutor(gifGenerator{}, fakePublisher{}, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypeGIF,
+		Topic:        "Token_Reaction",
+		OutputDir:    tmpDir,
+		Publish:      false,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if filepath.Ext(result.FilePath) != ".gif" {
+		t.Fatalf("file path = %s", result.FilePath)
+	}
+	data, err := os.ReadFile(result.FilePath)
+	if err != nil {
+		t.Fatalf("read gif: %v", err)
+	}
+	if string(data) != "gif-bytes" {
+		t.Fatalf("gif bytes = %q", string(data))
+	}
+	sheetPath := filepath.Join(tmpDir, "Token_Reaction.sheet.png")
+	sheet, err := os.ReadFile(sheetPath)
+	if err != nil {
+		t.Fatalf("read sheet sidecar: %v", err)
+	}
+	if string(sheet) != "sheet-bytes" {
+		t.Fatalf("sheet bytes = %q", string(sheet))
+	}
+}
+
+func TestExecutorAppliesImageWatermarkBeforeReturningIMG(t *testing.T) {
+	tmpDir := t.TempDir()
+	sourceColor := color.RGBA{R: 40, G: 90, B: 160, A: 255}
+	executor := NewExecutor(pngImageGenerator{}, nil, nil)
+
+	result, err := executor.Run(context.Background(), GenerateJob{
+		DocumentType: engine.DocumentTypeIMG,
+		Topic:        "Launch_Visual",
+		OutputDir:    tmpDir,
+		Publish:      false,
+		ImageWatermark: &ImageWatermarkOptions{
+			Apply:           true,
+			PaidEntitlement: false,
+			CanDisable:      false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.ImageWatermark == nil || !result.ImageWatermark.Applied {
+		t.Fatalf("image watermark result = %#v, want applied", result.ImageWatermark)
+	}
+	img := readPNGForTest(t, result.FilePath)
+	if img.Bounds().Dy() <= 270 {
+		t.Fatalf("image height = %d, want bottom watermark footer appended", img.Bounds().Dy())
+	}
+	if !rectHasChangedPixelForTest(img, sourceColor, image.Rect(0, 270, 480, img.Bounds().Dy())) {
+		t.Fatal("bottom footer has no watermark pixels")
+	}
+	if !rectHasChangedPixelForTest(img, sourceColor, image.Rect(265, 218, 466, 258)) {
+		t.Fatal("bottom-right corner has no footmark pixels")
+	}
+	if rectHasChangedPixelForTest(img, sourceColor, image.Rect(150, 75, 330, 190)) {
+		t.Fatal("watermark changed center pixels; diagonal watermark should stay removed")
+	}
+}
+
 func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 	tmpDir := t.TempDir()
 	executor := NewExecutor(previewGenerator{}, fakePublisher{}, nil)
@@ -235,6 +333,47 @@ func TestExecutorWritesLocalPreviewSidecars(t *testing.T) {
 			t.Fatalf("orphan temp file remains: %s", name)
 		}
 	}
+}
+
+func solidPNGBytesForTest(width, height int, c color.RGBA) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.SetRGBA(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func readPNGForTest(t *testing.T, path string) image.Image {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open png: %v", err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatalf("decode png: %v", err)
+	}
+	return img
+}
+
+func rectHasChangedPixelForTest(img image.Image, sourceColor color.RGBA, rect image.Rectangle) bool {
+	rect = rect.Intersect(img.Bounds())
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			got := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
+			if got != sourceColor {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestExecutorAddsReferenceStyleAndStructuralReviewMetadata(t *testing.T) {

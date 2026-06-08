@@ -34,6 +34,7 @@ type WebhookEvent struct {
 	ID                string
 	Type              string
 	CheckoutSessionID string
+	PaymentStatus     string
 	PaymentIntentID   string
 	CustomerID        string
 	Metadata          map[string]string
@@ -64,6 +65,8 @@ type Store interface {
 	CreateBillingEvent(ctx context.Context, event *model.BillingEvent) error
 	GetBillingEventByEventID(ctx context.Context, eventID string) (*model.BillingEvent, error)
 	FinalizeOrderPayment(ctx context.Context, params FinalizeOrderPaymentParams) (*model.Order, bool, error)
+	SetUserPaidEntitlement(ctx context.Context, userID uint64, paid bool, source string) error
+	HasActivePaidOrderByUser(ctx context.Context, userID uint64) (bool, error)
 	ListOrdersByUser(ctx context.Context, userID uint64) ([]model.Order, error)
 	ListOrders(ctx context.Context) ([]model.Order, error)
 	ListBillingEvents(ctx context.Context) ([]model.BillingEvent, error)
@@ -261,6 +264,15 @@ func (s *Service) HandleWebhook(ctx context.Context, payload []byte, signature s
 			_ = s.store.CreateBillingEvent(ctx, billEvent)
 			return fmt.Errorf("%s", msg)
 		}
+		if event.PaymentStatus != "paid" {
+			billEvent.Status = model.BillingEventStatusIgnored
+			billEvent.OrderID = &order.ID
+			msg := "checkout session is not paid"
+			billEvent.ErrorMessage = &msg
+			processedAt := time.Now().UTC()
+			billEvent.ProcessedAt = &processedAt
+			return s.store.CreateBillingEvent(ctx, billEvent)
+		}
 		_, transitioned, err := s.finalizePaidOrder(ctx, order, billEvent, event.PaymentIntentID, event.CustomerID)
 		if err != nil {
 			return err
@@ -283,7 +295,16 @@ func (s *Service) HandleWebhook(ctx context.Context, payload []byte, signature s
 		order, _ := s.store.GetOrderByCheckoutSessionID(ctx, event.CheckoutSessionID)
 		if order != nil {
 			billEvent.OrderID = &order.ID
-			_ = s.store.UpdateOrder(ctx, order.ID, map[string]any{"status": model.OrderStatusRefunded})
+			if err := s.store.UpdateOrder(ctx, order.ID, map[string]any{"status": model.OrderStatusRefunded}); err != nil {
+				return err
+			}
+			hasActivePaidOrder, err := s.store.HasActivePaidOrderByUser(ctx, order.UserID)
+			if err != nil {
+				return err
+			}
+			if err := s.store.SetUserPaidEntitlement(ctx, order.UserID, hasActivePaidOrder, "stripe"); err != nil {
+				return err
+			}
 		}
 	default:
 		billEvent.Status = model.BillingEventStatusIgnored

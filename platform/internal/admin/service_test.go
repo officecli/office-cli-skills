@@ -52,6 +52,15 @@ func (f *fakeImageTemplateObjectStore) GetObject(_ context.Context, key string) 
 
 type memoryRedis struct{ data map[string]any }
 
+func mustJSONField(t *testing.T, payload string, key string) any {
+	t.Helper()
+	var values map[string]any
+	require.NoError(t, json.Unmarshal([]byte(payload), &values))
+	value, ok := values[key]
+	require.Truef(t, ok, "missing JSON field %q in %s", key, payload)
+	return value
+}
+
 func TestNewServiceNormalizesAdminAllowlist(t *testing.T) {
 	cipher, err := apikey.NewCipher(apikey.DefaultDevEncryptionKey)
 	require.NoError(t, err)
@@ -832,6 +841,41 @@ func TestUpdateUserReEnableDoesNotRestoreDisabledAPIKeys(t *testing.T) {
 	savedKey, err := store.FindAPIKeyByID(context.Background(), key.ID)
 	require.NoError(t, err)
 	require.Equal(t, model.APIKeyStatusDisabled, savedKey.Status)
+}
+
+func TestUpdateUserCanSetPaidEntitlementAndAudits(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:update_user_paid_entitlement?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.AdminAuditLog{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+
+	user := &model.User{
+		GoogleSub:  model.StringPtr("paid-user-sub"),
+		Email:      "paid-user@example.com",
+		Name:       "Paid User",
+		InviteCode: "invite-paid-user",
+		Status:     model.UserStatusActive,
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	paid := true
+	require.NoError(t, svc.UpdateUser(context.Background(), user.ID, UpdateUserRequest{PaidEntitlement: &paid}))
+
+	savedUser, err := store.GetUserByID(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.True(t, savedUser.PaidEntitlement)
+	require.NotNil(t, savedUser.PaidEntitlementUpdatedAt)
+	require.Equal(t, "admin", savedUser.PaidEntitlementSource)
+
+	var logs []model.AdminAuditLog
+	require.NoError(t, db.Order("id ASC").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, "user.update", logs[0].Action)
+	require.Equal(t, "user", logs[0].TargetType)
+	require.Equal(t, "admin", mustJSONField(t, logs[0].PayloadJSON, "paid_entitlement_source"))
+	require.Equal(t, true, mustJSONField(t, logs[0].PayloadJSON, "paid_entitlement"))
 }
 
 func TestGetAPIKeyPlaintextRejectsLegacyRecords(t *testing.T) {

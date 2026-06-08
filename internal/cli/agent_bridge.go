@@ -158,36 +158,38 @@ type bridgeInvokeParams struct {
 }
 
 type bridgeInvokeArgs struct {
-	DocumentType         string          `json:"document_type"`
-	Format               string          `json:"format,omitempty"`
-	Topic                string          `json:"topic"`
-	Prompt               string          `json:"prompt,omitempty"`
-	SourceFile           string          `json:"source_file,omitempty"`
-	FilePath             string          `json:"file_path,omitempty"`
-	Payload              json.RawMessage `json:"payload,omitempty"`
-	Mode                 string          `json:"mode,omitempty"`
-	RuntimeMode          string          `json:"runtime_mode,omitempty"`
-	Language             string          `json:"lang,omitempty"`
-	Style                string          `json:"style,omitempty"`
-	Audience             string          `json:"audience,omitempty"`
-	OutputDir            string          `json:"out,omitempty"`
-	Ratio                string          `json:"ratio,omitempty"`
-	Size                 string          `json:"size,omitempty"`
-	PromptTemplateID     string          `json:"prompt_template_id,omitempty"`
-	ReferenceImage       string          `json:"reference_image,omitempty"`
-	ReferenceImages      []string        `json:"reference_images,omitempty"`
-	ReferenceRoot        string          `json:"reference_root,omitempty"`
-	ReferencePPTX        string          `json:"reference_pptx,omitempty"`
-	ReferencePPTXSources []string        `json:"reference_pptxs,omitempty"`
-	PPTXBackend          string          `json:"pptx_backend,omitempty"`
-	ImageQuality         string          `json:"image_quality,omitempty"`
-	Publish              *bool           `json:"publish,omitempty"`
-	EnableImages         *bool           `json:"enable_images,omitempty"`
-	EnableReferenceScan  *bool           `json:"enable_reference_scan,omitempty"`
-	EnableVisual         *bool           `json:"enable_visual,omitempty"`
-	FailBelow            *int            `json:"fail_below,omitempty"`
-	EmitPreview          *bool           `json:"emit_preview,omitempty"`
-	Debug                bool            `json:"debug,omitempty"`
+	DocumentType         string                 `json:"document_type"`
+	Format               string                 `json:"format,omitempty"`
+	Topic                string                 `json:"topic"`
+	Prompt               string                 `json:"prompt,omitempty"`
+	SourceFile           string                 `json:"source_file,omitempty"`
+	FilePath             string                 `json:"file_path,omitempty"`
+	Payload              json.RawMessage        `json:"payload,omitempty"`
+	Mode                 string                 `json:"mode,omitempty"`
+	RuntimeMode          string                 `json:"runtime_mode,omitempty"`
+	Language             string                 `json:"lang,omitempty"`
+	Style                string                 `json:"style,omitempty"`
+	Audience             string                 `json:"audience,omitempty"`
+	OutputDir            string                 `json:"out,omitempty"`
+	Ratio                string                 `json:"ratio,omitempty"`
+	Size                 string                 `json:"size,omitempty"`
+	FPS                  int                    `json:"fps,omitempty"`
+	ImageWatermark       *ImageWatermarkOptions `json:"image_watermark,omitempty"`
+	PromptTemplateID     string                 `json:"prompt_template_id,omitempty"`
+	ReferenceImage       string                 `json:"reference_image,omitempty"`
+	ReferenceImages      []string               `json:"reference_images,omitempty"`
+	ReferenceRoot        string                 `json:"reference_root,omitempty"`
+	ReferencePPTX        string                 `json:"reference_pptx,omitempty"`
+	ReferencePPTXSources []string               `json:"reference_pptxs,omitempty"`
+	PPTXBackend          string                 `json:"pptx_backend,omitempty"`
+	ImageQuality         string                 `json:"image_quality,omitempty"`
+	Publish              *bool                  `json:"publish,omitempty"`
+	EnableImages         *bool                  `json:"enable_images,omitempty"`
+	EnableReferenceScan  *bool                  `json:"enable_reference_scan,omitempty"`
+	EnableVisual         *bool                  `json:"enable_visual,omitempty"`
+	FailBelow            *int                   `json:"fail_below,omitempty"`
+	EmitPreview          *bool                  `json:"emit_preview,omitempty"`
+	Debug                bool                   `json:"debug,omitempty"`
 }
 
 type bridgePrepareResult struct {
@@ -501,6 +503,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				"xlsx":   s.documentGenerationCapability(engine.DocumentTypeXLSX),
 				"report": s.documentGenerationCapability(engine.DocumentTypeReport),
 				"img":    s.documentGenerationCapability(engine.DocumentTypeIMG),
+				"gif":    s.documentGenerationCapability(engine.DocumentTypeGIF),
 			},
 			"document_modification": map[string]any{
 				"pptx": s.documentModificationCapability(engine.DocumentTypePPTX),
@@ -510,7 +513,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			"image_generation": map[string]any{
 				"provider_control":  "server",
 				"preferred_tool":    bridgeToolOfficeGenerate,
-				"document_type":     "img",
+				"document_type":     "img|gif",
 				"ratio_values":      []string{"square", "landscape", "portrait"},
 				"publish_supported": true,
 				"default_publish":   true,
@@ -533,6 +536,10 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"invoke_field": "size",
 					"format":       "WxH (e.g. 1280x768)",
 					"notes":        "Overrides ratio when set; upstream model may snap to nearest supported tier.",
+				},
+				"watermark": map[string]any{
+					"supported":    true,
+					"invoke_field": "image_watermark",
 				},
 				"notes": []string{
 					"Standalone image generation uses the configured local image provider in external runtime mode.",
@@ -573,7 +580,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 			{
 				"name": "office.generate",
 				"input_schema": map[string]any{
-					"document_type":         "pptx|docx|xlsx|report|img",
+					"document_type":         "pptx|docx|xlsx|report|img|gif",
 					"topic":                 "string",
 					"prompt":                "string",
 					"file_path":             "string (.xlsx for report)",
@@ -581,9 +588,11 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"runtime_mode":          "external|hosted",
 					"ratio":                 "square|landscape|portrait (img only)",
 					"size":                  "WxH explicit pixels, e.g. 1280x768 (img only)",
+					"fps":                   "4-24 frames per second (gif only; default 16)",
+					"image_watermark":       "object {apply,paidEntitlement,canDisable} (img only)",
 					"prompt_template_id":    "server-managed image prompt template id (img only)",
-					"reference_image":       "local path or http/https URL (img only)",
-					"reference_images":      "array of paths or URLs (img only)",
+					"reference_image":       "local path or http/https URL (img|gif only)",
+					"reference_images":      "array of paths or URLs (img|gif only)",
 					"enable_reference_scan": "boolean (pptx only) - default true; false disables automatic recursive PPTX style scanning",
 					"reference_root":        "directory root for recursive PPTX reference style scanning (pptx only)",
 					"reference_pptx":        "explicit reference PPTX path (pptx only)",
@@ -658,32 +667,51 @@ func (s *agentBridgeServer) updateCapability(ctx context.Context) map[string]any
 }
 
 func (s *agentBridgeServer) documentGenerationCapability(documentType engine.DocumentType) map[string]any {
-	if documentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(documentType) {
+		imageGeneration := map[string]any{
+			"provider_control": "server",
+			"reference_image": map[string]any{
+				"supported":          true,
+				"max_count":          8,
+				"invoke_field":       "reference_image",
+				"invoke_field_array": "reference_images",
+				"input":              "local path or http/https URL; use reference_images array for multiple",
+			},
+		}
+		if documentType == engine.DocumentTypeIMG {
+			imageGeneration["ratio_values"] = []string{"square", "landscape", "portrait"}
+			imageGeneration["templates"] = map[string]any{
+				"supported":    true,
+				"list_method":  "image_templates/list",
+				"invoke_field": "prompt_template_id",
+			}
+			imageGeneration["size"] = map[string]any{
+				"supported":    true,
+				"invoke_field": "size",
+				"format":       "WxH",
+			}
+			imageGeneration["watermark"] = map[string]any{
+				"supported":    true,
+				"invoke_field": "image_watermark",
+			}
+		} else {
+			imageGeneration["sheet"] = map[string]any{
+				"grid":   "4x4",
+				"size":   "1024x1024",
+				"frames": 16,
+			}
+			imageGeneration["fps"] = map[string]any{
+				"supported": true,
+				"min":       4,
+				"max":       24,
+				"default":   16,
+			}
+		}
 		return map[string]any{
 			"agent_render_supported": false,
 			"preferred_tool":         bridgeToolOfficeGenerate,
 			"prepare_required":       false,
-			"image_generation": map[string]any{
-				"provider_control": "server",
-				"ratio_values":     []string{"square", "landscape", "portrait"},
-				"templates": map[string]any{
-					"supported":    true,
-					"list_method":  "image_templates/list",
-					"invoke_field": "prompt_template_id",
-				},
-				"reference_image": map[string]any{
-					"supported":          true,
-					"max_count":          8,
-					"invoke_field":       "reference_image",
-					"invoke_field_array": "reference_images",
-					"input":              "local path or http/https URL; use reference_images array for multiple",
-				},
-				"size": map[string]any{
-					"supported":    true,
-					"invoke_field": "size",
-					"format":       "WxH",
-				},
-			},
+			"image_generation":       imageGeneration,
 			"publish_support": map[string]any{
 				"publish_supported": true,
 				"default_publish":   true,
@@ -1262,7 +1290,7 @@ func (s *agentBridgeServer) runGenerateTask(ctx context.Context, task *bridgeTas
 }
 
 func generateTaskCompletedPayload(result GenerateResult) map[string]any {
-	return map[string]any{
+	payload := map[string]any{
 		"status":          result.Status,
 		"document_type":   result.DocumentType,
 		"document_name":   result.DocumentName,
@@ -1273,6 +1301,14 @@ func generateTaskCompletedPayload(result GenerateResult) map[string]any {
 		"credit_balance":  result.CreditBalance,
 		"credit_mode":     result.CreditMode,
 	}
+	if result.ImageWatermark != nil {
+		payload["image_watermark"] = map[string]any{
+			"applied":         result.ImageWatermark.Applied,
+			"paidEntitlement": result.ImageWatermark.PaidEntitlement,
+			"canDisable":      result.ImageWatermark.CanDisable,
+		}
+	}
+	return payload
 }
 
 func (s *agentBridgeServer) runReviewTask(ctx context.Context, task *bridgeTask, job ReviewJob) {

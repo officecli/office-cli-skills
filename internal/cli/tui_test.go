@@ -709,7 +709,7 @@ func TestTUIModelReportTypeUsesWorkbookPathFromPrompt(t *testing.T) {
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(tuiModel)
-	model.selectedTypeIndex = 4
+	model.selectedTypeIndex = indexOfTUIDocumentType("report")
 	model.refreshTypeSelectionEntry()
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -734,7 +734,7 @@ func TestTUIModelReportTypePromptsForMissingWorkbookPath(t *testing.T) {
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(tuiModel)
-	model.selectedTypeIndex = 4
+	model.selectedTypeIndex = indexOfTUIDocumentType("report")
 	model.refreshTypeSelectionEntry()
 
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})

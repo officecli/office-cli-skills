@@ -470,7 +470,7 @@ Description:
 
 func NewHelpText() string {
 	return `Usage:
-  officecli new <pptx|docx|xlsx|report|img> <topic> [brief]
+  officecli new <pptx|docx|xlsx|report|img|gif> <topic> [brief]
 
 Common options:
   --prompt <text>         Provide the full prompt directly
@@ -1447,7 +1447,7 @@ func (a *App) runWhoami(ctx context.Context, cfg Config) error {
 }
 
 func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
-	result, err := a.checkLicenseWithRuntime(ctx, cfg.License, cfg.RuntimeModeOrDefault(), "", "status")
+	result, err := a.checkLicenseWithRuntime(ctx, cfg.License, cfg.RuntimeModeOrDefault(), "", "auth_status")
 	if err != nil {
 		return err
 	}
@@ -1458,6 +1458,9 @@ func (a *App) runAuthStatus(ctx context.Context, cfg Config) error {
 		if _, err := fmt.Fprintf(a.Stdout, "Current plan: %s\n", result.PlanName); err != nil {
 			return err
 		}
+	}
+	if _, err := fmt.Fprintf(a.Stdout, "Paid entitlement: %t\n", result.PaidEntitlement); err != nil {
+		return err
 	}
 	if _, err := fmt.Fprintln(a.Stdout, ""); err != nil {
 		return err
@@ -1649,6 +1652,10 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 	} else {
 		runtimeMode = RuntimeModeHosted
 	}
+	requestAction := action
+	if action == "auth_status" {
+		requestAction = "status"
+	}
 	checkReq := LicenseCheckRequest{
 		FingerprintHash: fingerprintHash,
 		UserID:          cfg.UserID,
@@ -1657,7 +1664,7 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		DocumentType:    documentType,
 		RuntimeMode:     runtimeModeLabel(runtimeMode),
 		RequestNonce:    requestNonce,
-		Action:          action,
+		Action:          requestAction,
 	}
 	result, err := manager.Check(ctx, LicenseCheckRequest{
 		FingerprintHash: checkReq.FingerprintHash,
@@ -1702,6 +1709,9 @@ func (a *App) checkLicenseWithRuntime(ctx context.Context, cfg LicenseConfig, ru
 		}
 	}
 	if !result.Allowed {
+		if action == "auth_status" {
+			return result, nil
+		}
 		fallback := "Credit balance exhausted. Run `officecli login`, then buy hosted credits for your account."
 		if result.ReasonCode == "hosted_credit_exhausted" {
 			fallback = "Hosted credits are exhausted. Run `officecli login`, then buy hosted credits for your account."

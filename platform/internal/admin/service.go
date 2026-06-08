@@ -486,6 +486,11 @@ func (s *Service) UpdateUser(ctx context.Context, id uint64, req UpdateUserReque
 		updates["status"] = *req.Status
 		disableUser = model.UserStatus(strings.TrimSpace(*req.Status)) == model.UserStatusDisabled
 	}
+	if req.PaidEntitlement != nil {
+		updates["paid_entitlement"] = *req.PaidEntitlement
+		updates["paid_entitlement_updated_at"] = time.Now().UTC()
+		updates["paid_entitlement_source"] = "admin"
+	}
 	if len(updates) == 0 {
 		return nil
 	}

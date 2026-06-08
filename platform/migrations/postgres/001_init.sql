@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
   invite_code VARCHAR(64) NOT NULL UNIQUE,
   avatar_url VARCHAR(512) NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'active',
+  paid_entitlement BOOLEAN NOT NULL DEFAULT FALSE,
+  paid_entitlement_updated_at TIMESTAMPTZ NULL,
+  paid_entitlement_source VARCHAR(32) NOT NULL DEFAULT 'none',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

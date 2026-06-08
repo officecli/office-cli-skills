@@ -24,6 +24,10 @@ type HostedCreditAccountStore interface {
 	GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error)
 }
 
+type PaidEntitlementStore interface {
+	GetUserPaidEntitlement(ctx context.Context, userID uint64) (bool, error)
+}
+
 type FingerprintCreditStore interface {
 	GetHostedCreditAccountByFingerprint(ctx context.Context, fingerprint string) (*model.FingerprintCreditAccount, error)
 }
@@ -160,12 +164,17 @@ func (s *Service) checkAccountHosted(ctx context.Context, req CheckRequest) (*Ch
 	if err != nil {
 		return nil, err
 	}
+	paidEntitlement, err := s.paidEntitlementForUser(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
 	response := &CheckResponse{
 		AllowedModes:        []string{"hosted"},
 		DefaultRuntimeMode:  string(model.AccessModeHosted),
 		SelectedRuntimeMode: string(model.AccessModeHosted),
 		HostedEnabled:       true,
 		CreditBalance:       account.CreditBalance,
+		PaidEntitlement:     paidEntitlement,
 	}
 	if account.CreditBalance <= 0 {
 		response.Allowed = false
@@ -230,6 +239,12 @@ func (s *Service) checkPaid(ctx context.Context, req CheckRequest) (*CheckRespon
 		response.Message = "the current key has no remaining document generations; replace it or buy more quota"
 	default:
 		response.Allowed = true
+		if key.OwnerUserID != nil {
+			response.PaidEntitlement, err = s.paidEntitlementForUser(ctx, *key.OwnerUserID)
+			if err != nil {
+				return nil, err
+			}
+		}
 		if requestedRuntimeMode(req, key) == string(model.AccessModeHosted) {
 			response.AccessMode = model.AccessModeHosted
 			response.HostedEnabled = key.SupportsHosted()
@@ -281,6 +296,10 @@ func (s *Service) checkReward(ctx context.Context, req CheckRequest) (*CheckResp
 		SelectedRuntimeMode: "external",
 		RewardRemaining:     balance.Remaining,
 		Message:             fmt.Sprintf("reward mode is active with %d document generations remaining.", balance.Remaining),
+	}
+	response.PaidEntitlement, err = s.paidEntitlementForUser(ctx, req.UserID)
+	if err != nil {
+		return nil, false, err
 	}
 	response.CommitToken, err = s.issueCommitToken(req, model.AccessModeReward, "")
 	if err != nil {
@@ -663,6 +682,17 @@ func (s *Service) rewardBalanceResponse(ctx context.Context, userID uint64) (*Co
 		resp.Remaining = balance.Remaining
 	}
 	return resp, nil
+}
+
+func (s *Service) paidEntitlementForUser(ctx context.Context, userID uint64) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	store, ok := s.apiKeys.(PaidEntitlementStore)
+	if !ok {
+		return false, nil
+	}
+	return store.GetUserPaidEntitlement(ctx, userID)
 }
 
 func (s *Service) buildQuotaSnapshot(ctx context.Context, req CheckRequest, key *model.APIKey, fingerprintAccount *model.FingerprintCreditAccount, rewardRemaining int) (*QuotaSnapshot, error) {

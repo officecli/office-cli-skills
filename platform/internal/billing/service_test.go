@@ -69,6 +69,7 @@ type fakeStore struct {
 	billingEvents        map[string]*model.BillingEvent
 	hostedPacks          []model.HostedCreditPack
 	userCredits          map[uint64]int
+	paidEntitlements     map[uint64]bool
 	updateOrderCalls     int
 	stripeCustomer       *model.StripeCustomer
 	createdAuditCount    int
@@ -123,6 +124,12 @@ func (f *fakeStore) UpdateOrder(_ context.Context, id uint64, values map[string]
 		}
 		if customerID, ok := values["stripe_customer_id"].(string); ok {
 			order.StripeCustomerID = &customerID
+		}
+		if status, ok := values["status"].(model.OrderStatus); ok {
+			order.Status = status
+		}
+		if status, ok := values["status"].(string); ok {
+			order.Status = model.OrderStatus(status)
 		}
 	}
 	return nil
@@ -201,6 +208,12 @@ func (f *fakeStore) FinalizeOrderPayment(_ context.Context, params FinalizeOrder
 			order.StripeCustomerID = &customerID
 			f.stripeCustomer = &model.StripeCustomer{UserID: order.UserID, StripeCustomerID: customerID}
 		}
+		if order.AmountTotal > 0 {
+			if f.paidEntitlements == nil {
+				f.paidEntitlements = map[uint64]bool{}
+			}
+			f.paidEntitlements[order.UserID] = true
+		}
 		switch order.PackKind {
 		case model.PackKindHostedCredits:
 			if f.userCredits == nil {
@@ -228,6 +241,23 @@ func (f *fakeStore) FinalizeOrderPayment(_ context.Context, params FinalizeOrder
 
 func (f *fakeStore) ListOrdersByUser(_ context.Context, _ uint64) ([]model.Order, error) {
 	return nil, nil
+}
+
+func (f *fakeStore) SetUserPaidEntitlement(_ context.Context, userID uint64, paid bool, _ string) error {
+	if f.paidEntitlements == nil {
+		f.paidEntitlements = map[uint64]bool{}
+	}
+	f.paidEntitlements[userID] = paid
+	return nil
+}
+
+func (f *fakeStore) HasActivePaidOrderByUser(_ context.Context, userID uint64) (bool, error) {
+	for _, order := range f.orders {
+		if order.UserID == userID && order.Status == model.OrderStatusPaid && order.AmountTotal > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (f *fakeStore) ListOrders(_ context.Context) ([]model.Order, error) {
@@ -661,6 +691,7 @@ func TestHandleWebhookAndReconcileRemainIdempotent(t *testing.T) {
 			ID:                "evt_1",
 			Type:              "checkout.session.completed",
 			CheckoutSessionID: sessionID,
+			PaymentStatus:     "paid",
 			PaymentIntentID:   "pi_test_123",
 			CustomerID:        "cus_test_123",
 			RawPayload:        `{"id":"evt_1"}`,
@@ -689,6 +720,198 @@ func TestHandleWebhookAndReconcileRemainIdempotent(t *testing.T) {
 	require.Equal(t, model.OrderStatusPaid, order.Status)
 	require.Equal(t, 105, *store.apiKeys[7].QuotaTotal)
 	require.Equal(t, 1, store.createdAuditCount)
+}
+
+func TestHandleWebhookSetsPaidEntitlementForRealPaidOrder(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_paid_entitlement"
+	store := &fakeStore{
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "hosted-100",
+			PackName:                "Hosted 100",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             100,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_paid_entitlement",
+			Type:              "checkout.session.completed",
+			CheckoutSessionID: sessionID,
+			PaymentStatus:     "paid",
+			PaymentIntentID:   "pi_paid_entitlement",
+			CustomerID:        "cus_paid_entitlement",
+			RawPayload:        `{"id":"evt_paid_entitlement"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Equal(t, model.OrderStatusPaid, store.orders[0].Status)
+	require.True(t, store.paidEntitlements[42])
+}
+
+func TestHandleWebhookDoesNotSetPaidEntitlementForZeroAmountOrder(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_free_entitlement"
+	store := &fakeStore{
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "hosted-free",
+			PackName:                "Hosted Free",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             0,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_free_entitlement",
+			Type:              "checkout.session.completed",
+			CheckoutSessionID: sessionID,
+			PaymentStatus:     "paid",
+			PaymentIntentID:   "pi_free_entitlement",
+			CustomerID:        "cus_free_entitlement",
+			RawPayload:        `{"id":"evt_free_entitlement"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-free", Name: "Hosted Free", Currency: "usd", AmountTotal: 0, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Equal(t, model.OrderStatusPaid, store.orders[0].Status)
+	require.False(t, store.paidEntitlements[42])
+}
+
+func TestHandleWebhookIgnoresCheckoutCompletedWhenPaymentStatusIsNotPaid(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_checkout_unpaid"
+	store := &fakeStore{
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPending,
+			PackCode:                "hosted-100",
+			PackName:                "Hosted 100",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             100,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_checkout_unpaid",
+			Type:              "checkout.session.completed",
+			CheckoutSessionID: sessionID,
+			PaymentStatus:     "unpaid",
+			PaymentIntentID:   "pi_checkout_unpaid",
+			RawPayload:        `{"id":"evt_checkout_unpaid"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Equal(t, model.OrderStatusPending, store.orders[0].Status)
+	require.Equal(t, 0, store.finalizePaymentCalls)
+	require.False(t, store.paidEntitlements[42])
+	require.Equal(t, model.BillingEventStatusIgnored, store.billingEvents["evt_checkout_unpaid"].Status)
+}
+
+func TestHandleWebhookRefundRecalculatesPaidEntitlement(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "cs_live_refunded_entitlement"
+	store := &fakeStore{
+		paidEntitlements: map[uint64]bool{42: true},
+		orders: []*model.Order{{
+			ID:                      1,
+			UserID:                  42,
+			Status:                  model.OrderStatusPaid,
+			PackCode:                "hosted-100",
+			PackName:                "Hosted 100",
+			PackKind:                model.PackKindHostedCredits,
+			AmountTotal:             100,
+			CreditAmount:            100,
+			StripeCheckoutSessionID: &sessionID,
+		}},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_refund_entitlement",
+			Type:              "charge.refunded",
+			CheckoutSessionID: sessionID,
+			RawPayload:        `{"id":"evt_refund_entitlement"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Equal(t, model.OrderStatusRefunded, store.orders[0].Status)
+	require.False(t, store.paidEntitlements[42])
+}
+
+func TestHandleWebhookRefundKeepsPaidEntitlementWhenAnotherPaidOrderExists(t *testing.T) {
+	t.Parallel()
+
+	refundedSessionID := "cs_live_refunded_entitlement_keep"
+	otherSessionID := "cs_live_other_paid_entitlement"
+	store := &fakeStore{
+		paidEntitlements: map[uint64]bool{42: true},
+		orders: []*model.Order{
+			{
+				ID:                      1,
+				UserID:                  42,
+				Status:                  model.OrderStatusPaid,
+				PackCode:                "hosted-100",
+				PackName:                "Hosted 100",
+				PackKind:                model.PackKindHostedCredits,
+				AmountTotal:             100,
+				CreditAmount:            100,
+				StripeCheckoutSessionID: &refundedSessionID,
+			},
+			{
+				ID:                      2,
+				UserID:                  42,
+				Status:                  model.OrderStatusPaid,
+				PackCode:                "hosted-300",
+				PackName:                "Hosted 300",
+				PackKind:                model.PackKindHostedCredits,
+				AmountTotal:             300,
+				CreditAmount:            300,
+				StripeCheckoutSessionID: &otherSessionID,
+			},
+		},
+	}
+	gateway := &fakeGateway{
+		webhookEvent: &WebhookEvent{
+			ID:                "evt_refund_entitlement_keep",
+			Type:              "charge.refunded",
+			CheckoutSessionID: refundedSessionID,
+			RawPayload:        `{"id":"evt_refund_entitlement_keep"}`,
+		},
+	}
+	svc := NewService(store, gateway, []model.PricingPack{{Code: "hosted-100", Name: "Hosted 100", Currency: "usd", AmountTotal: 100, CreditAmount: 100, PackKind: string(model.PackKindHostedCredits)}})
+
+	require.NoError(t, svc.HandleWebhook(context.Background(), []byte(`{}`), "sig"))
+
+	require.Equal(t, model.OrderStatusRefunded, store.orders[0].Status)
+	require.Equal(t, model.OrderStatusPaid, store.orders[1].Status)
+	require.True(t, store.paidEntitlements[42])
 }
 
 func TestPricingDedupesByCodeWithConfigWinningOverStaleDBPack(t *testing.T) {
@@ -802,6 +1025,7 @@ func TestHandleWebhookRecordsIgnoredEventWhenOrderAlreadyPaid(t *testing.T) {
 			ID:                "evt_double_delivery_456",
 			Type:              "checkout.session.completed",
 			CheckoutSessionID: sessionID,
+			PaymentStatus:     "paid",
 			PaymentIntentID:   paidIntent,
 			RawPayload:        `{"id":"evt_double_delivery_456"}`,
 		},

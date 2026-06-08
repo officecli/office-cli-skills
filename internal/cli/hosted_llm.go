@@ -70,7 +70,7 @@ func newHostedImageLLMClient(cfg LicenseConfig) (GeneratorLLMClient, error) {
 }
 
 func hostedTextModelName(job GenerateJob) string {
-	if job.DocumentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(job.DocumentType) {
 		return "hosted/image"
 	}
 	return "hosted/text"

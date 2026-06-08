@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/png"
 	"io"
 	"os"
@@ -606,6 +607,66 @@ func TestServiceGenerateIMGUsesImageProviderAndRatio(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateGIFBuildsAnimatedArtifactAndSheetSidecar(t *testing.T) {
+	sheetBytes := makeGIFSheetPNG(t, 1024, 1024)
+	llm := &fakeLLMClient{
+		imageResult: &engine.ImageGenerationResult{Data: sheetBytes, MIME: "image/png", CreditBalance: intPtr(9), CreditsCharged: intPtr(3)},
+	}
+	service := NewService(llm, nil)
+
+	doc, err := service.Generate(context.Background(), GenerateParams{
+		DocumentType: engine.DocumentTypeGIF,
+		Prompt:       "一个女生先眨眼，然后说 Token 用完了吗，最后笑一下。",
+		Topic:        "Token Reaction",
+		GifFPS:       16,
+	})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if doc.DocumentType != "gif" {
+		t.Fatalf("document type = %q", doc.DocumentType)
+	}
+	if doc.DocumentName != "Token_Reaction.gif" {
+		t.Fatalf("document name = %q", doc.DocumentName)
+	}
+	decoded, err := gif.DecodeAll(bytes.NewReader(doc.Bytes))
+	if err != nil {
+		t.Fatalf("decode gif: %v", err)
+	}
+	if len(decoded.Image) != 16 {
+		t.Fatalf("gif frames = %d, want 16", len(decoded.Image))
+	}
+	if decoded.LoopCount != 0 {
+		t.Fatalf("loop count = %d, want infinite loop", decoded.LoopCount)
+	}
+	if len(decoded.Delay) != 16 || decoded.Delay[0] != 6 {
+		t.Fatalf("gif delay = %#v, want 6cs at 16fps", decoded.Delay)
+	}
+	if len(doc.Sidecars) != 1 || doc.Sidecars[0].FileName != "Token_Reaction.sheet.png" {
+		t.Fatalf("sidecars = %#v", doc.Sidecars)
+	}
+	if !bytes.Equal(doc.Sidecars[0].Bytes, sheetBytes) {
+		t.Fatal("sheet sidecar bytes changed")
+	}
+	if llm.lastImageRequest.Size != "1024x1024" {
+		t.Fatalf("image size = %q", llm.lastImageRequest.Size)
+	}
+	if llm.lastImageRequest.TargetAspectRatio != 1 {
+		t.Fatalf("aspect ratio = %f", llm.lastImageRequest.TargetAspectRatio)
+	}
+	for _, needle := range []string{"4x4", "16", "1024x1024", "同一个主体", "Token 用完了吗"} {
+		if !strings.Contains(llm.lastImageRequest.Prompt, needle) {
+			t.Fatalf("gif prompt missing %q:\n%s", needle, llm.lastImageRequest.Prompt)
+		}
+	}
+	if doc.HostedCreditBalance == nil || *doc.HostedCreditBalance != 9 {
+		t.Fatalf("hosted credit balance = %#v", doc.HostedCreditBalance)
+	}
+	if doc.HostedCreditsCharged == nil || *doc.HostedCreditsCharged != 3 {
+		t.Fatalf("hosted credits charged = %#v", doc.HostedCreditsCharged)
+	}
+}
+
 func TestPPTXBuildOptionsCreditChargedSinkAccumulates(t *testing.T) {
 	called := 0
 	totalCharged := 0
@@ -625,6 +686,29 @@ func TestPPTXBuildOptionsCreditChargedSinkAccumulates(t *testing.T) {
 	if totalCharged != 22 {
 		t.Fatalf("expected accumulated total 22, got %d", totalCharged)
 	}
+}
+
+func makeGIFSheetPNG(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	cellW := width / 4
+	cellH := height / 4
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			idx := row*4 + col
+			fill := color.RGBA{R: uint8(16 * idx), G: uint8(255 - 12*idx), B: uint8(64 + 8*idx), A: 255}
+			for y := row * cellH; y < (row+1)*cellH; y++ {
+				for x := col * cellW; x < (col+1)*cellW; x++ {
+					img.SetRGBA(x, y, fill)
+				}
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode sheet png: %v", err)
+	}
+	return buf.Bytes()
 }
 
 func TestServiceGenerateIMGRejectsEmptyImageData(t *testing.T) {

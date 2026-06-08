@@ -114,6 +114,7 @@ func (g *StripeGateway) ParseWebhook(payload []byte, signature string) (*Webhook
 	case "checkout.session.completed", "payment_intent.payment_failed", "charge.refunded":
 		var data struct {
 			ID            string            `json:"id"`
+			PaymentStatus string            `json:"payment_status"`
 			PaymentIntent string            `json:"payment_intent"`
 			Customer      string            `json:"customer"`
 			Metadata      map[string]string `json:"metadata"`
@@ -122,6 +123,7 @@ func (g *StripeGateway) ParseWebhook(payload []byte, signature string) (*Webhook
 			return nil, err
 		}
 		result.CheckoutSessionID = data.ID
+		result.PaymentStatus = data.PaymentStatus
 		result.PaymentIntentID = data.PaymentIntent
 		result.CustomerID = data.Customer
 		result.Metadata = data.Metadata

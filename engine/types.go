@@ -10,6 +10,7 @@ const (
 	DocumentTypeXLSX   DocumentType = "xlsx"
 	DocumentTypeReport DocumentType = "report"
 	DocumentTypeIMG    DocumentType = "img"
+	DocumentTypeGIF    DocumentType = "gif"
 )
 
 type GenerateIssue struct {

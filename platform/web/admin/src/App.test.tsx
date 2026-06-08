@@ -358,7 +358,7 @@ describe('platform admin shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Apply filters/i }))
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?mode=free&mode=reward&mode=paid&mode=hosted&result=allowed&result=blocked&action=check&action=generate&api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
+      expect(fetchMock).toHaveBeenCalledWith('/api/admin/usage-events?mode=free&mode=reward&mode=paid&mode=hosted&result=allowed&result=blocked&action=generate&api_key_id=7&user_id=42&client_ip=203.0.113&request_id=req-audit', expect.objectContaining({ credentials: 'include' }))
     })
   })
 

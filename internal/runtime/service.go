@@ -1,10 +1,18 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color/palette"
+	"image/draw"
+	"image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -42,6 +50,8 @@ type GenerateParams struct {
 	Audience             string
 	EnableImages         bool
 	ImageRatio           string
+	ImageSize            string
+	GifFPS               int
 	ReferenceImages      []engine.ImageReference
 	ReferenceScanEnabled bool
 	ReferenceScanRoot    string
@@ -149,6 +159,12 @@ type GeneratedArtifact struct {
 	Remaining            int
 	RewardRemaining      int
 	PaidQuotaRemaining   int
+	Sidecars             []GeneratedSidecar
+}
+
+type GeneratedSidecar struct {
+	FileName string
+	Bytes    []byte
 }
 
 type PPTXArtifactDebugMetadata struct {
@@ -265,6 +281,8 @@ func (s *Service) Generate(ctx context.Context, params GenerateParams) (*Generat
 		return s.generatePPTX(ctx, envelope.Prompt, params.Topic, target, meta, params.EnableImages, params.LocalPreview, params.ReferenceScanEnabled, params.ReferenceScanRoot, params.ReferencePPTXSources, params.PPTXBackend, params.Debug)
 	case engine.DocumentTypeIMG:
 		return s.generateIMG(ctx, envelope.Prompt, params.Topic, target, params.ImageRatio, params.ReferenceImages, meta)
+	case engine.DocumentTypeGIF:
+		return s.generateGIF(ctx, envelope.Prompt, params.Topic, target, params.GifFPS, params.ReferenceImages, meta)
 	default:
 		return nil, fmt.Errorf("unsupported document type: %s", params.DocumentType)
 	}
@@ -426,6 +444,62 @@ func (s *Service) generateIMG(ctx context.Context, prompt, topic string, target 
 	}, nil
 }
 
+func (s *Service) generateGIF(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, fps int, references []engine.ImageReference, meta *generateengine.PPTXMeta) (*GeneratedArtifact, error) {
+	if fps <= 0 {
+		fps = 16
+	}
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "running", "Requesting GIF sheet generation from the configured image provider")
+	imageResult, err := generateImageWithHeartbeat(ctx, s.llm, s.progress, engine.ImageGenerationRequest{
+		Prompt:            buildGIFSheetPrompt(prompt, target),
+		TargetAspectRatio: 1,
+		Size:              "1024x1024",
+		ReferenceImages:   append([]engine.ImageReference(nil), references...),
+	}, progressStepGenerateLLM, 1, 1)
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "GIF sheet generation failed")
+		return nil, fmt.Errorf("gif sheet generation failed: %w", err)
+	}
+	if imageResult == nil || len(imageResult.Data) == 0 {
+		emitProgress(ctx, s.progress, progressStepGenerateLLM, "failed", "GIF sheet generation returned empty data")
+		return nil, fmt.Errorf("gif sheet generation returned empty data")
+	}
+	emitProgress(ctx, s.progress, progressStepGenerateLLM, "completed", "GIF sheet generation completed")
+
+	emitProgress(ctx, s.progress, progressStepAssemble, "running", "Assembling GIF frames")
+	gifBytes, warnings, err := buildGIFBytesFromSheet(imageResult.Data, fps)
+	if err != nil {
+		emitProgress(ctx, s.progress, progressStepAssemble, "failed", "GIF assembly failed")
+		return nil, fmt.Errorf("gif assembly failed: %w", err)
+	}
+	emitProgress(ctx, s.progress, progressStepAssemble, "completed", "GIF assembly completed")
+
+	title := strings.TrimSpace(topic)
+	if title == "" {
+		title = generateengine.ExtractTitleFromDescription(prompt)
+	}
+	if title == "" {
+		title = "gif"
+	}
+	base := generateengine.SanitizeFileName(title)
+	allWarnings := append(convertIssues(meta), warnings...)
+	return &GeneratedArtifact{
+		DocumentName:         base + ".gif",
+		DocumentType:         string(engine.DocumentTypeGIF),
+		Bytes:                gifBytes,
+		Warnings:             allWarnings,
+		HostedCreditBalance:  imageResult.CreditBalance,
+		HostedCreditsCharged: imageResult.CreditsCharged,
+		AccessMode:           imageResult.AccessMode,
+		Remaining:            imageResult.Remaining,
+		RewardRemaining:      imageResult.RewardRemaining,
+		PaidQuotaRemaining:   imageResult.PaidQuotaRemaining,
+		Sidecars: []GeneratedSidecar{{
+			FileName: base + ".sheet.png",
+			Bytes:    append([]byte(nil), imageResult.Data...),
+		}},
+	}, nil
+}
+
 func buildImageGenerationPrompt(prompt string, target generateengine.PromptTarget) string {
 	parts := []string{strings.TrimSpace(prompt)}
 	if strings.TrimSpace(target.Style) != "" {
@@ -442,6 +516,71 @@ func buildImageGenerationPrompt(prompt string, target generateengine.PromptTarge
 		return "Generate an image."
 	}
 	return out
+}
+
+func buildGIFSheetPrompt(prompt string, target generateengine.PromptTarget) string {
+	userPrompt := strings.TrimSpace(buildImageGenerationPrompt(prompt, target))
+	if userPrompt == "" {
+		userPrompt = "生成一个适合制作 GIF 表情包的连续动作。"
+	}
+	return strings.TrimSpace(`生成一张 1024x1024 的 4x4 十六宫格 GIF 分镜 sheet 图，用来制作 GIF。每一格代表 GIF 的一帧，帧顺序必须从左到右、从上到下。
+
+用户画面内容 / 动作描述：
+` + userPrompt + `
+
+硬性要求：
+- 必须是一张完整的 4x4 网格图，总共 16 帧，每格大小一致。
+- 16 帧必须像同一段一秒钟视频的连续截图，固定机位、固定光线、固定背景、固定镜头距离。
+- 必须保持同一个主体：身份、五官、发型、服装、人物比例、位置和构图稳定。
+- 只允许眼睛、嘴型、手势或轻微表情按用户描述连续变化。
+- 如果用户描述包含字幕，字幕内容、位置、字体和底条必须在 16 帧中保持完全稳定，不能遮挡主体关键区域。
+- 不要给每格添加编号，不要出现多主体，不要跳帧，不要突然换脸，不要切换镜头，不要让主体或字幕被裁切。
+- 重点是稳定：同一个主体、同一场景、连续动作，适合裁切成 GIF。`)
+}
+
+func buildGIFBytesFromSheet(sheet []byte, fps int) ([]byte, []engine.GenerateIssue, error) {
+	if fps <= 0 {
+		fps = 16
+	}
+	src, _, err := image.Decode(bytes.NewReader(sheet))
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode sheet image: %w", err)
+	}
+	bounds := src.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width < 4 || height < 4 || width%4 != 0 || height%4 != 0 {
+		return nil, nil, fmt.Errorf("sheet image must be evenly divisible into a 4x4 grid, got %dx%d", width, height)
+	}
+	var warnings []engine.GenerateIssue
+	if width != 1024 || height != 1024 {
+		warnings = append(warnings, engine.GenerateIssue{
+			Code:    "WARN_GIF_SHEET_SIZE",
+			Message: fmt.Sprintf("GIF sheet was %dx%d instead of 1024x1024; it was still evenly cropped into 16 frames.", width, height),
+			Field:   "image_size",
+		})
+	}
+	cellW := width / 4
+	cellH := height / 4
+	delay := int(math.Round(100.0 / float64(fps)))
+	if delay < 1 {
+		delay = 1
+	}
+	out := &gif.GIF{LoopCount: 0}
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			frame := image.NewPaletted(image.Rect(0, 0, cellW, cellH), palette.Plan9)
+			sourcePoint := image.Point{X: bounds.Min.X + col*cellW, Y: bounds.Min.Y + row*cellH}
+			draw.FloydSteinberg.Draw(frame, frame.Bounds(), src, sourcePoint)
+			out.Image = append(out.Image, frame)
+			out.Delay = append(out.Delay, delay)
+		}
+	}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, out); err != nil {
+		return nil, nil, fmt.Errorf("encode gif: %w", err)
+	}
+	return buf.Bytes(), warnings, nil
 }
 
 func imageAspectRatio(value string) float64 {

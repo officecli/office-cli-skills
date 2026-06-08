@@ -90,17 +90,20 @@ const (
 )
 
 type User struct {
-	ID            uint64     `gorm:"primaryKey" json:"id"`
-	GoogleSub     *string    `gorm:"column:google_sub;size:191;uniqueIndex" json:"google_sub,omitempty"`
-	GitHubSub     *string    `gorm:"column:github_sub;size:191;uniqueIndex" json:"github_sub,omitempty"`
-	Email         string     `gorm:"column:email;size:191;uniqueIndex;not null" json:"email"`
-	Name          string     `gorm:"column:name;size:191;not null" json:"name"`
-	InviteCode    string     `gorm:"column:invite_code;size:64;uniqueIndex;not null" json:"invite_code"`
-	AvatarURL     *string    `gorm:"column:avatar_url;size:512" json:"avatar_url,omitempty"`
-	Status        UserStatus `gorm:"column:status;size:16;index;not null" json:"status"`
-	CreditBalance int        `gorm:"column:credit_balance;->;-:migration" json:"credit_balance"`
-	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
+	ID                       uint64     `gorm:"primaryKey" json:"id"`
+	GoogleSub                *string    `gorm:"column:google_sub;size:191;uniqueIndex" json:"google_sub,omitempty"`
+	GitHubSub                *string    `gorm:"column:github_sub;size:191;uniqueIndex" json:"github_sub,omitempty"`
+	Email                    string     `gorm:"column:email;size:191;uniqueIndex;not null" json:"email"`
+	Name                     string     `gorm:"column:name;size:191;not null" json:"name"`
+	InviteCode               string     `gorm:"column:invite_code;size:64;uniqueIndex;not null" json:"invite_code"`
+	AvatarURL                *string    `gorm:"column:avatar_url;size:512" json:"avatar_url,omitempty"`
+	Status                   UserStatus `gorm:"column:status;size:16;index;not null" json:"status"`
+	CreditBalance            int        `gorm:"column:credit_balance;->;-:migration" json:"credit_balance"`
+	PaidEntitlement          bool       `gorm:"column:paid_entitlement;not null;default:false" json:"paid_entitlement"`
+	PaidEntitlementUpdatedAt *time.Time `gorm:"column:paid_entitlement_updated_at" json:"paid_entitlement_updated_at,omitempty"`
+	PaidEntitlementSource    string     `gorm:"column:paid_entitlement_source;size:32;not null;default:none" json:"paid_entitlement_source,omitempty"`
+	CreatedAt                time.Time  `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	UpdatedAt                time.Time  `gorm:"column:updated_at;autoUpdateTime" json:"updated_at"`
 }
 
 func (User) TableName() string { return "users" }

@@ -62,7 +62,7 @@ describe('admin usage events page', () => {
     })
   })
 
-  it('queries default multi-select filters with check and generate actions', async () => {
+  it('queries default multi-select filters with generate action only', async () => {
     mockEmpty()
     renderWithUrl('/usage-events')
 
@@ -72,9 +72,68 @@ describe('admin usage events page', () => {
       const params = paramsFromUsageURL(usageCalls[0])
       expect(params.getAll('mode')).toEqual(['free', 'reward', 'paid', 'hosted'])
       expect(params.getAll('result')).toEqual(['allowed', 'blocked'])
-      expect(params.getAll('action')).toEqual(['check', 'generate'])
+      expect(params.getAll('action')).toEqual(['generate'])
+      expect(params.getAll('action')).not.toContain('check')
       expect(params.getAll('action')).not.toContain('status')
     })
+  })
+
+  it('moves audit identity columns to the end even when saved preferences put them first', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/preferences/usage-events-table') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              version: 1,
+              columns: [
+                { key: 'fingerprint_hash', visible: true, fixed: 'left', width: 220 },
+                { key: 'request_id', visible: true, fixed: 'left', width: 180 },
+                { key: 'client_ip', visible: true, fixed: 'left', width: 150 },
+                { key: 'request', visible: true, fixed: 'left', width: 260 },
+                { key: 'created_at', visible: true, width: 180 },
+                { key: 'mode_result', visible: true, width: 160 },
+                { key: 'action_reason', visible: true, width: 170 },
+              ],
+            },
+          }),
+        }
+      }
+      if (url.startsWith('/api/admin/usage-events?')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              id: 202,
+              request_id: 'req-order-202',
+              fingerprint_hash: 'fp-order-machine',
+              mode: 'hosted',
+              action: 'generate',
+              result: 'allowed',
+              client_ip: '203.0.113.10',
+              request_method: 'POST',
+              request_host: 'platform.officecli.io',
+              request_path: '/api/license/check',
+              created_at: '2026-05-15T08:00:00Z',
+            }],
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderWithUrl('/usage-events')
+
+    await screen.findByText(/fp-order-machine/i)
+    const headers = Array.from(document.querySelectorAll('th'))
+      .map((header) => header.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+      .filter(Boolean)
+
+    expect(headers.slice(-4)).toEqual(['Client IP', 'Request', 'Fingerprint', 'Request ID'])
   })
 
   it('renders start and end time as date-time picker controls', async () => {

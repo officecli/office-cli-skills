@@ -17,6 +17,7 @@ describe('admin image templates page', () => {
   afterEach(() => {
     fetchMock.mockReset()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('lists templates and creates a template', async () => {
@@ -86,10 +87,106 @@ describe('admin image templates page', () => {
     renderPage()
 
     await screen.findByDisplayValue('Poster')
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const fileInput = document.querySelector('.image-template-thumbnail-input') as HTMLInputElement
     fireEvent.change(fileInput, { target: { files: [new File(['png'], 'thumb.png', { type: 'image/png' })] } })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/admin/image-templates/7/thumbnail', expect.objectContaining({ method: 'POST' })))
+  })
+
+  it('exports configured templates as importable JSON', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/image-templates' && (!init || init.method === undefined)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              {
+                id: 7,
+                slug: 'poster',
+                title: 'Poster',
+                description: 'Poster style',
+                prompt_preset: 'cinematic {{product}}',
+                sort_order: 10,
+                enabled: true,
+                slots: [{ key: 'product', label: 'Product', default_value: 'bicycle', required: true }],
+              },
+            ],
+          }),
+        }
+      }
+      if (url === '/api/admin/image-templates/publish-requests?status=pending' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:templates')
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn()
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:templates')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    renderPage()
+
+    await screen.findByDisplayValue('Poster')
+    fireEvent.click(screen.getByRole('button', { name: /export json/i }))
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:templates')
+  })
+
+  it('imports image template JSON and creates each template', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/image-templates' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/admin/image-templates/publish-requests?status=pending' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/admin/image-templates' && init?.method === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 9, ...JSON.parse(String(init.body)) } }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    await screen.findByText(/No image templates/i)
+    const file = new File([
+      JSON.stringify({
+        version: 1,
+        templates: [
+          {
+            slug: 'admission',
+            title: 'Admission',
+            description: 'Admission letter',
+            promptPreset: 'Hold {{university_name}} letter',
+            sortOrder: 12,
+            enabled: true,
+            slots: [{ key: 'university_name', label: 'University name', defaultValue: 'Cambridge', required: true }],
+          },
+        ],
+      }),
+    ], 'templates.json', { type: 'application/json' })
+    const input = document.querySelector('.image-template-json-input') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      const createCalls = fetchMock.mock.calls.filter((call) => call[0] === '/api/admin/image-templates' && call[1]?.method === 'POST')
+      expect(createCalls).toHaveLength(1)
+      expect(JSON.parse(String(createCalls[0][1]?.body))).toMatchObject({
+        slug: 'admission',
+        title: 'Admission',
+        prompt_preset: 'Hold {{university_name}} letter',
+        sort_order: 12,
+        slots: [{ key: 'university_name', label: 'University name', default_value: 'Cambridge', required: true }],
+      })
+    })
   })
 
   it('reviews a pending publish request', async () => {

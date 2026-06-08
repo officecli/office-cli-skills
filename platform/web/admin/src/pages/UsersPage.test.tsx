@@ -1,15 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import UsersPage from './UsersPage'
 
 const fetchMock = vi.fn()
-
-function LocationProbe() {
-  const location = useLocation()
-  return <div data-testid="location">{location.pathname}{location.search}</div>
-}
 
 function renderPage() {
   return render(
@@ -17,7 +12,6 @@ function renderPage() {
       <MemoryRouter initialEntries={['/users']}>
         <Routes>
           <Route path="/users" element={<UsersPage />} />
-          <Route path="/usage-events" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -39,7 +33,7 @@ describe('admin users page', () => {
           status: 200,
           json: async () => ({
             data: [
-              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', credit_balance: 1250, created_at: '2026-04-01T00:00:00Z' },
+              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', paid_entitlement: true, paid_entitlement_source: 'stripe', credit_balance: 1250, created_at: '2026-04-01T00:00:00Z' },
             ],
           }),
         }
@@ -53,7 +47,47 @@ describe('admin users page', () => {
     expect(await screen.findByText('42')).toBeInTheDocument()
     expect(screen.getByText('demo@example.com')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Hosted credits' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Paid user' })).toBeInTheDocument()
+    expect(screen.getByText('Paid')).toBeInTheDocument()
     expect(screen.getByText('1,250')).toBeInTheDocument()
+  })
+
+  it('can toggle paid user entitlement from the roster', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/users') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { id: 42, email: 'demo@example.com', name: 'Demo User', invite_code: 'invite-000016', status: 'active', paid_entitlement: false, credit_balance: 1250, created_at: '2026-04-01T00:00:00Z' },
+            ],
+          }),
+        }
+      }
+      if (url === '/api/admin/users/42' && init?.method === 'PATCH') {
+        expect(JSON.parse(String(init.body))).toEqual({ paid_entitlement: true })
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { success: true } }),
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: /mark paid/i }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/admin/users/42',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ paid_entitlement: true }) }),
+      )
+    })
   })
 
   it('shows owned api keys and quota for a user', async () => {
@@ -111,7 +145,7 @@ describe('admin users page', () => {
     expect(screen.getByText('Hosted credits account-level')).toBeInTheDocument()
   })
 
-  it('navigates to usage-events filtered by user when clicking the action button', async () => {
+  it('opens usage-events in a new tab from the action link', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/admin/users') {
@@ -131,13 +165,13 @@ describe('admin users page', () => {
 
     renderPage()
 
-    const viewEventsButton = await screen.findByRole('button', { name: /^view events$/i })
-    fireEvent.click(viewEventsButton)
-
-    expect(await screen.findByTestId('location')).toHaveTextContent('/usage-events?user_id=42')
+    const viewEventsLink = await screen.findByRole('link', { name: /^view events$/i })
+    expect(viewEventsLink).toHaveAttribute('href', '/usage-events?user_id=42')
+    expect(viewEventsLink).toHaveAttribute('target', '_blank')
+    expect(viewEventsLink).toHaveAttribute('rel', 'noreferrer')
   })
 
-  it('navigates to usage-events filtered by user when clicking the user cell', async () => {
+  it('opens usage-events in a new tab from the user cell link', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === '/api/admin/users') {
@@ -157,9 +191,9 @@ describe('admin users page', () => {
 
     renderPage()
 
-    const userCellButton = await screen.findByRole('button', { name: /view usage events for ops operator/i })
-    fireEvent.click(userCellButton)
-
-    expect(await screen.findByTestId('location')).toHaveTextContent('/usage-events?user_id=7')
+    const userCellLink = await screen.findByRole('link', { name: /view usage events for ops operator/i })
+    expect(userCellLink).toHaveAttribute('href', '/usage-events?user_id=7')
+    expect(userCellLink).toHaveAttribute('target', '_blank')
+    expect(userCellLink).toHaveAttribute('rel', 'noreferrer')
   })
 })

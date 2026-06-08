@@ -112,6 +112,8 @@ type GenerateJob struct {
 	EnableImages          bool
 	ImageRatio            string
 	ImageSize             string
+	GifFPS                int
+	ImageWatermark        *ImageWatermarkOptions
 	PromptTemplateID      string
 	ReferenceImageSources []string
 	ReferenceImages       []engine.ImageReference
@@ -157,6 +159,19 @@ type GenerateResult struct {
 	PPTXArtifactDebug      *runtime.PPTXArtifactDebugMetadata `json:"pptx_artifact_debug,omitempty"`
 	PPTXReview             *PPTXReviewMetadata                `json:"pptx_review,omitempty"`
 	PPTXBackend            string                             `json:"pptx_backend,omitempty"`
+	ImageWatermark         *ImageWatermarkResult              `json:"image_watermark,omitempty"`
+}
+
+type ImageWatermarkOptions struct {
+	Apply           bool `json:"apply"`
+	PaidEntitlement bool `json:"paidEntitlement"`
+	CanDisable      bool `json:"canDisable"`
+}
+
+type ImageWatermarkResult struct {
+	Applied         bool `json:"applied"`
+	PaidEntitlement bool `json:"paidEntitlement"`
+	CanDisable      bool `json:"canDisable"`
 }
 
 type PPTXReviewMetadata struct {
@@ -230,6 +245,7 @@ type ReviewJob struct {
 
 type GenerateParams = runtime.GenerateParams
 type GeneratedArtifact = runtime.GeneratedArtifact
+type GeneratedSidecar = runtime.GeneratedSidecar
 type ReviewRequest = reviewprovider.Request
 type ReviewResult = reviewprovider.Result
 type ReviewIssue = reviewprovider.Issue

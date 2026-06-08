@@ -75,7 +75,8 @@ type UpdateOrderRequest struct {
 }
 
 type UpdateUserRequest struct {
-	Status *string `json:"status,omitempty"`
+	Status          *string `json:"status,omitempty"`
+	PaidEntitlement *bool   `json:"paid_entitlement,omitempty"`
 }
 
 type UpdateHostedPricingSettingsRequest struct {

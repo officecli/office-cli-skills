@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/officecli/officecli/engine"
+	"github.com/officecli/officecli/internal/imagewatermark"
 	reviewprovider "github.com/officecli/officecli/internal/review"
 )
 
@@ -38,6 +39,8 @@ func (e *Executor) Run(ctx context.Context, job GenerateJob) (GenerateResult, er
 		Audience:             job.Audience,
 		EnableImages:         job.EnableImages,
 		ImageRatio:           job.ImageRatio,
+		ImageSize:            job.ImageSize,
+		GifFPS:               job.GifFPS,
 		ReferenceImages:      append([]engine.ImageReference(nil), job.ReferenceImages...),
 		ReferenceScanEnabled: job.ReferenceScanEnabled,
 		ReferenceScanRoot:    job.ReferenceScanRoot,
@@ -167,6 +170,21 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "File write failed")
 		return GenerateResult{}, fmt.Errorf("file write failed: %w", err)
 	}
+	if err := applyImageWatermarkToGeneratedFile(filePath, job, &result); err != nil {
+		emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Image watermark failed")
+		return GenerateResult{}, fmt.Errorf("image watermark failed: %w", err)
+	}
+	for _, sidecar := range artifact.Sidecars {
+		name := strings.TrimSpace(sidecar.FileName)
+		if name == "" || len(sidecar.Bytes) == 0 {
+			continue
+		}
+		sidecarPath := filepath.Join(job.OutputDir, filepath.Base(name))
+		if err := writeFileAtomic(sidecarPath, sidecar.Bytes, 0o644); err != nil {
+			emitProgress(ctx, e.progress, progressStepWriteFile, "failed", "Sidecar file write failed")
+			return GenerateResult{}, fmt.Errorf("sidecar file write failed: %w", err)
+		}
+	}
 	if previewSidecarAllowed(job.DocumentType) {
 		if len(artifact.PreviewHTML) > 0 {
 			if err := writeFileAtomic(localPreviewPath, artifact.PreviewHTML, 0o644); err != nil {
@@ -231,6 +249,40 @@ func (e *Executor) finalizeArtifact(ctx context.Context, job GenerateJob, artifa
 	}
 	emitProgress(ctx, e.progress, progressStepFinalize, "completed", "Document generated")
 	return result, nil
+}
+
+func applyImageWatermarkToGeneratedFile(filePath string, job GenerateJob, result *GenerateResult) error {
+	if job.DocumentType != engine.DocumentTypeIMG || job.ImageWatermark == nil {
+		return nil
+	}
+	metadata := &ImageWatermarkResult{
+		Applied:         false,
+		PaidEntitlement: job.ImageWatermark.PaidEntitlement,
+		CanDisable:      job.ImageWatermark.CanDisable,
+	}
+	if result != nil {
+		result.ImageWatermark = metadata
+	}
+	if !job.ImageWatermark.Apply {
+		return nil
+	}
+	if !isStaticImageWatermarkTarget(filePath) {
+		return fmt.Errorf("unsupported image watermark target: %s", filepath.Ext(filePath))
+	}
+	if err := imagewatermark.Apply(filePath, imagewatermark.Options{}); err != nil {
+		return err
+	}
+	metadata.Applied = true
+	return nil
+}
+
+func isStaticImageWatermarkTarget(filePath string) bool {
+	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(filePath), ".")) {
+	case "png", "jpg", "jpeg":
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldRunPPTXReferenceStructuralReview(job GenerateJob, artifact *GeneratedArtifact) bool {

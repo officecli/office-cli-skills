@@ -17,9 +17,10 @@ import (
 )
 
 type fakeAPIKeyStore struct {
-	mu             sync.Mutex
-	key            *model.APIKey
-	hostedAccounts map[uint64]*model.UserHostedCreditAccount
+	mu               sync.Mutex
+	key              *model.APIKey
+	hostedAccounts   map[uint64]*model.UserHostedCreditAccount
+	paidEntitlements map[uint64]bool
 }
 
 func (f *fakeAPIKeyStore) FindByHash(_ context.Context, _ string) (*model.APIKey, error) {
@@ -67,6 +68,11 @@ func (f *fakeAPIKeyStore) GetHostedCreditAccountByUser(_ context.Context, userID
 	}
 	copied := *account
 	return &copied, nil
+}
+func (f *fakeAPIKeyStore) GetUserPaidEntitlement(_ context.Context, userID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.paidEntitlements != nil && f.paidEntitlements[userID], nil
 }
 
 type fakeFingerprintCreditStore struct {
@@ -405,6 +411,44 @@ func TestCheckPaidAPIKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckAccountHostedCarriesPaidEntitlementWhenBalanceIsZero(t *testing.T) {
+	store := &fakeAPIKeyStore{
+		hostedAccounts: map[uint64]*model.UserHostedCreditAccount{
+			42: {UserID: 42, CreditBalance: 0},
+		},
+		paidEntitlements: map[uint64]bool{42: true},
+	}
+	svc := NewService(store, dummyFingerprintCreditStore(), dummyAnonymousGranter(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
+	req := testCheckRequest("fp", "status")
+	req.UserID = 42
+	req.RuntimeMode = string(model.AccessModeHosted)
+
+	resp, err := svc.Check(context.Background(), req)
+	require.NoError(t, err)
+	require.False(t, resp.Allowed)
+	require.Equal(t, model.AccessModeBlocked, resp.AccessMode)
+	require.True(t, resp.PaidEntitlement)
+	require.Equal(t, 0, resp.CreditBalance)
+}
+
+func TestCheckAccountHostedDoesNotGrantEntitlementForBonusCreditsOnly(t *testing.T) {
+	store := &fakeAPIKeyStore{
+		hostedAccounts: map[uint64]*model.UserHostedCreditAccount{
+			42: {UserID: 42, CreditBalance: 100},
+		},
+	}
+	svc := NewService(store, dummyFingerprintCreditStore(), dummyAnonymousGranter(), newFakeUsageStore(), newFakeIdemStore(), nil, nil, "salt", time.Hour)
+	req := testCheckRequest("fp", "status")
+	req.UserID = 42
+	req.RuntimeMode = string(model.AccessModeHosted)
+
+	resp, err := svc.Check(context.Background(), req)
+	require.NoError(t, err)
+	require.True(t, resp.Allowed)
+	require.False(t, resp.PaidEntitlement)
+	require.Equal(t, 100, resp.CreditBalance)
 }
 
 func TestCheckPrefersRewardForLoggedInUser(t *testing.T) {

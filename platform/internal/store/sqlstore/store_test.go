@@ -795,9 +795,10 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserHostedCreditAccount{}))
 
+	paidAt := time.Date(2026, 6, 8, 7, 20, 0, 0, time.UTC)
 	users := []model.User{
 		{GoogleSub: model.StringPtr("sub-1"), Email: "alpha@example.com", Name: "Alpha", InviteCode: "invite-alpha", Status: model.UserStatusActive},
-		{GoogleSub: model.StringPtr("sub-2"), Email: "beta@example.com", Name: "Beta", InviteCode: "invite-beta", Status: model.UserStatusActive},
+		{GoogleSub: model.StringPtr("sub-2"), Email: "beta@example.com", Name: "Beta", InviteCode: "invite-beta", Status: model.UserStatusActive, PaidEntitlement: true, PaidEntitlementUpdatedAt: &paidAt, PaidEntitlementSource: "stripe"},
 		{GoogleSub: model.StringPtr("sub-3"), Email: "ops@example.org", Name: "Ops", InviteCode: "invite-ops", Status: model.UserStatusActive},
 	}
 	for i := range users {
@@ -817,6 +818,9 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	require.Len(t, byID, 1)
 	require.Equal(t, "beta@example.com", byID[0].Email)
 	require.Equal(t, 1250, byID[0].CreditBalance)
+	require.True(t, byID[0].PaidEntitlement)
+	require.NotNil(t, byID[0].PaidEntitlementUpdatedAt)
+	require.Equal(t, "stripe", byID[0].PaidEntitlementSource)
 
 	byEmail, err := store.ListUsers(context.Background(), "example.com")
 	require.NoError(t, err)
@@ -825,6 +829,31 @@ func TestListUsersFiltersByIDAndEmail(t *testing.T) {
 	require.Equal(t, 1250, byEmail[0].CreditBalance)
 	require.Equal(t, "alpha@example.com", byEmail[1].Email)
 	require.Equal(t, 0, byEmail[1].CreditBalance)
+}
+
+func TestUserPaidEntitlementDefaultsFalseAndCanBeSet(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:user_paid_entitlement?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}))
+
+	user := &model.User{GoogleSub: model.StringPtr("paid-sub"), Email: "paid-store@example.com", Name: "Paid Store", InviteCode: "invite-paid-store", Status: model.UserStatusActive}
+	require.NoError(t, db.Create(user).Error)
+
+	store := NewWithDB(db)
+	paid, err := store.GetUserPaidEntitlement(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.False(t, paid)
+
+	require.NoError(t, store.SetUserPaidEntitlement(context.Background(), user.ID, true, "admin"))
+	paid, err = store.GetUserPaidEntitlement(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.True(t, paid)
+
+	saved, err := store.GetUserByID(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.True(t, saved.PaidEntitlement)
+	require.Equal(t, "admin", saved.PaidEntitlementSource)
+	require.NotNil(t, saved.PaidEntitlementUpdatedAt)
 }
 
 func TestCountReferralsByInviterUserID(t *testing.T) {

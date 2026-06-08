@@ -47,7 +47,8 @@ const preferenceKey = 'usage-events-table'
 const modeFilterValues = ['free', 'reward', 'paid', 'hosted']
 const resultFilterValues = ['allowed', 'blocked']
 const actionFilterValues = ['check', 'generate', 'status']
-const defaultActionFilterValues = actionFilterValues.filter((value) => value !== 'status')
+const defaultActionFilterValues = ['generate']
+const auditIdentityColumnKeys = ['client_ip', 'request', 'fingerprint_hash', 'request_id']
 
 const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }))
 const modeOptions = selectOptions(modeFilterValues)
@@ -121,11 +122,11 @@ const usageColumns: UsageColumn[] = [
   { key: 'forwarded_for', label: 'Forwarded-For', width: 220, render: (event) => monoText(valueOrDash(event.forwarded_for)) },
 ]
 
-const defaultPreferences: ColumnPreference[] = usageColumns.map((column) => ({
+const defaultPreferences: ColumnPreference[] = orderPreferences(usageColumns.map((column) => ({
   key: column.key,
   visible: true,
   width: column.width,
-}))
+})))
 
 const columnByKey = new Map(usageColumns.map((column) => [column.key, column]))
 
@@ -221,7 +222,7 @@ export default function UsageEventsPage() {
   }
 
   function resetColumns() {
-    persist(defaultPreferences)
+    persist(orderPreferences(defaultPreferences))
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -459,7 +460,17 @@ function mergePreferences(saved?: AdminPreference): ColumnPreference[] {
       merged.push({ key: column.key, visible: true, width: column.width })
     }
   }
-  return merged
+  return orderPreferences(merged)
+}
+
+function orderPreferences(preferences: ColumnPreference[]) {
+  const auditIdentityKeys = new Set(auditIdentityColumnKeys)
+  const mainColumns = preferences.filter((preference) => !auditIdentityKeys.has(preference.key))
+  const auditColumns = auditIdentityColumnKeys
+    .map((key) => preferences.find((preference) => preference.key === key))
+    .filter((preference): preference is ColumnPreference => Boolean(preference))
+    .map((preference) => ({ ...preference, fixed: undefined }))
+  return [...mainColumns, ...auditColumns]
 }
 
 function toPreferencePayload(columns: ColumnPreference[]): AdminPreference {

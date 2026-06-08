@@ -1,9 +1,9 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, Download, FileInput, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill } from '../components/ui'
-import type { ImagePromptTemplate } from '../types'
+import type { ImagePromptSlot, ImagePromptTemplate } from '../types'
 
 const blankTemplate: ImagePromptTemplate = {
   slug: '',
@@ -16,19 +16,149 @@ const blankTemplate: ImagePromptTemplate = {
 
 function normalizeTemplate(template: ImagePromptTemplate): ImagePromptTemplate {
   return {
-    ...blankTemplate,
-    ...template,
     slug: template.slug.trim(),
     title: template.title.trim(),
     description: template.description.trim(),
     prompt_preset: template.prompt_preset.trim(),
     sort_order: Number(template.sort_order) || 0,
     enabled: Boolean(template.enabled),
+    ...(template.slots?.length ? { slots: template.slots } : {}),
+  }
+}
+
+function exportImageTemplatesJSON(templates: ImagePromptTemplate[]): string {
+  return `${JSON.stringify({
+    version: 1,
+    templates: templates.map((template) => ({
+      slug: template.slug,
+      title: template.title,
+      description: template.description,
+      prompt_preset: template.prompt_preset,
+      sort_order: template.sort_order,
+      enabled: template.enabled,
+      ...(template.thumbnail_url ? { thumbnail_url: template.thumbnail_url } : {}),
+      ...(template.slots?.length ? { slots: template.slots } : {}),
+    })),
+  }, null, 2)}\n`
+}
+
+function importImageTemplatesJSON(raw: string): ImagePromptTemplate[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  const rawTemplates = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === 'object' && parsed !== null && Array.isArray((parsed as { templates?: unknown }).templates)
+      ? (parsed as { templates: unknown[] }).templates
+      : null
+  if (!rawTemplates) throw new Error('Template JSON must be an array or an object with a templates array.')
+  return rawTemplates.map((item, index) => normalizeImportedTemplate(item, index))
+}
+
+function normalizeImportedTemplate(item: unknown, index: number): ImagePromptTemplate {
+  if (typeof item !== 'object' || item === null) throw new Error(`template[${index}] must be an object.`)
+  const raw = item as Record<string, unknown>
+  const title = stringValue(raw.title).trim()
+  const promptPreset = stringValue(raw.prompt_preset ?? raw.promptPreset).trim()
+  if (!title) throw new Error(`template[${index}].title is required.`)
+  if (!promptPreset) throw new Error(`template[${index}].prompt_preset is required.`)
+  return {
+    slug: slugify(stringValue(raw.slug).trim() || title),
+    title,
+    description: stringValue(raw.description).trim(),
+    prompt_preset: promptPreset,
+    sort_order: numberValue(raw.sort_order ?? raw.sortOrder, index),
+    enabled: booleanValue(raw.enabled, true),
+    slots: normalizeImportedSlots(raw.slots),
+  }
+}
+
+function normalizeImportedSlots(raw: unknown): ImagePromptSlot[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const seen = new Set<string>()
+  return raw.map((item, index) => {
+    if (typeof item !== 'object' || item === null) throw new Error(`slot[${index}] must be an object.`)
+    const slot = item as Record<string, unknown>
+    const key = stringValue(slot.key).trim()
+    const label = stringValue(slot.label).trim()
+    if (!/^[a-z0-9_]+$/.test(key)) throw new Error(`slot key "${key}" must match ^[a-z0-9_]+$.`)
+    if (seen.has(key)) throw new Error(`slot key "${key}" is duplicated.`)
+    if (!label) throw new Error(`slot "${key}" label is required.`)
+    seen.add(key)
+    return {
+      key,
+      label,
+      example: stringValue(slot.example).trim() || undefined,
+      default_value: stringValue(slot.default_value ?? slot.defaultValue).trim() || undefined,
+      help_text: stringValue(slot.help_text ?? slot.helpText).trim() || undefined,
+      required: booleanValue(slot.required, false),
+      multiline: booleanValue(slot.multiline, false),
+    }
+  })
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function numberValue(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96)
+  return slug || 'image-template'
+}
+
+function readFileText(file: File): Promise<string> {
+  if (typeof file.text === 'function') return file.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file.'))
+    reader.readAsText(file)
+  })
+}
+
+function downloadJSON(filename: string, json: string) {
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function editableTemplate(template: ImagePromptTemplate): ImagePromptTemplate {
+  return {
+    slug: template.slug.trim(),
+    title: template.title.trim(),
+    description: template.description.trim(),
+    prompt_preset: template.prompt_preset.trim(),
+    sort_order: Number(template.sort_order) || 0,
+    enabled: Boolean(template.enabled),
+    ...(template.slots?.length ? { slots: template.slots } : {}),
   }
 }
 
 export default function ImageTemplatesPage() {
   const queryClient = useQueryClient()
+  const jsonInputRef = useRef<HTMLInputElement>(null)
   const { data: templatesData, isLoading } = useQuery({ queryKey: ['admin-image-templates'], queryFn: api.imageTemplates })
   const { data: publishRequestsData, isLoading: publishRequestsLoading } = useQuery({ queryKey: ['admin-image-template-publish-requests'], queryFn: api.imageTemplatePublishRequests })
   const templates = templatesData ?? []
@@ -36,6 +166,7 @@ export default function ImageTemplatesPage() {
   const [draft, setDraft] = useState<ImagePromptTemplate>(blankTemplate)
   const [editDrafts, setEditDrafts] = useState<Record<number, ImagePromptTemplate>>({})
   const [error, setError] = useState('')
+  const [importMessage, setImportMessage] = useState('')
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-image-templates'] })
     queryClient.invalidateQueries({ queryKey: ['admin-image-template-publish-requests'] })
@@ -80,6 +211,23 @@ export default function ImageTemplatesPage() {
     onSuccess: invalidate,
     onError: (err) => setError(errorMessage(err, 'Failed to review publish request.')),
   })
+  const importTemplates = useMutation({
+    mutationFn: async (payloads: ImagePromptTemplate[]) => {
+      for (const payload of payloads) {
+        await api.createImageTemplate(normalizeTemplate(payload))
+      }
+      return payloads.length
+    },
+    onSuccess: async (count) => {
+      setError('')
+      setImportMessage(`Imported ${count} image templates.`)
+      await invalidate()
+    },
+    onError: (err) => {
+      setImportMessage('')
+      setError(errorMessage(err, 'Failed to import template JSON.'))
+    },
+  })
 
   function submitCreate(event: FormEvent) {
     event.preventDefault()
@@ -95,6 +243,21 @@ export default function ImageTemplatesPage() {
     setEditDrafts((current) => ({ ...current, [id]: next }))
   }
 
+  function exportTemplates() {
+    downloadJSON('officecli-image-templates.json', exportImageTemplatesJSON(sortedTemplates))
+    setImportMessage(`Exported ${sortedTemplates.length} image templates.`)
+  }
+
+  async function importTemplatesFile(file: File) {
+    try {
+      const imported = importImageTemplatesJSON(await readFileText(file))
+      importTemplates.mutate(imported)
+    } catch (err) {
+      setImportMessage('')
+      setError(err instanceof Error ? `Failed to import template JSON: ${err.message}` : 'Failed to import template JSON.')
+    }
+  }
+
   return (
     <div className="space-y-8">
       <Panel>
@@ -103,6 +266,26 @@ export default function ImageTemplatesPage() {
           title="Prompt templates"
           body="Templates are server-managed preset prompts. OfficeDex fetches this list live and passes the selected template id to OfficeCLI generation."
         />
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={() => jsonInputRef.current?.click()} disabled={importTemplates.isPending}>
+            <FileInput size={14} /> Import JSON
+          </button>
+          <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={exportTemplates}>
+            <Download size={14} /> Export JSON
+          </button>
+          <input
+            ref={jsonInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="image-template-json-input hidden"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              if (file) void importTemplatesFile(file)
+            }}
+          />
+          {importMessage ? <span className="text-sm text-emerald-200">{importMessage}</span> : null}
+        </div>
         {error ? <div className="admin-card-muted mb-4 rounded-2xl border border-red-400/40 p-4 text-sm text-red-200">{error}</div> : null}
         <form className="admin-card-muted grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4" onSubmit={submitCreate}>
           <TextField label="Slug" value={draft.slug} onChange={(value) => setDraft({ ...draft, slug: value })} placeholder="liblib-poster" required />
@@ -141,7 +324,7 @@ export default function ImageTemplatesPage() {
         {isLoading ? <LoadingState label="Loading templates..." /> : sortedTemplates.length ? (
           <div className="grid gap-4 xl:grid-cols-2">
             {sortedTemplates.map((template) => {
-              const activeDraft = draftFor(template)
+              const activeDraft = editableTemplate(draftFor(template))
               const id = template.id ?? 0
               return (
                 <form key={id || template.slug} className="admin-card-muted grid gap-4 p-5" onSubmit={(event) => {
@@ -166,7 +349,7 @@ export default function ImageTemplatesPage() {
                     <label className="admin-secondary-button inline-flex cursor-pointer items-center gap-2">
                       <ImageUp size={14} />
                       Upload thumbnail
-                      <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => {
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="image-template-thumbnail-input hidden" onChange={(event) => {
                         const file = event.target.files?.[0]
                         if (id && file) upload.mutate({ id, file })
                         event.currentTarget.value = ''

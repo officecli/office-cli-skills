@@ -86,6 +86,7 @@ type CheckResult struct {
 	HostedEnabled       bool           `json:"hosted_enabled,omitempty"`
 	CreditBalance       int            `json:"credit_balance,omitempty"`
 	PlanName            string         `json:"plan_name,omitempty"`
+	PaidEntitlement     bool           `json:"paid_entitlement,omitempty"`
 	ExpiresAt           *time.Time     `json:"expires_at,omitempty"`
 	RewardRemaining     int            `json:"reward_remaining,omitempty"`
 	PaidQuotaTotal      int            `json:"paid_quota_total,omitempty"`

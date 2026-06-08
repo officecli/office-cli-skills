@@ -99,6 +99,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	var pptxBackend string
 	var imageSize string
 	var imageQuality string
+	var gifFPS int
 	var jsonOutput bool
 	var localPreview bool
 	var debug bool
@@ -123,6 +124,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	fs.StringVar(&pptxBackend, "pptx-backend", "", "")
 	fs.StringVar(&imageSize, "size", "", "")
 	fs.StringVar(&imageQuality, "image-quality", "", "")
+	fs.IntVar(&gifFPS, "fps", 0, "")
 	fs.BoolVar(&jsonOutput, "json", false, "")
 	fs.BoolVar(&localPreview, "local-preview", false, "")
 	fs.BoolVar(&debug, "debug", false, "")
@@ -181,7 +183,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 
 	modeSpecified := strings.TrimSpace(mode) != ""
 	finalMode := strings.TrimSpace(mode)
-	if documentType == engine.DocumentTypeIMG && finalMode == "" {
+	if isStandaloneImageDocumentType(documentType) && finalMode == "" {
 		finalMode = "fast"
 	} else if finalMode == "" {
 		finalMode = strings.TrimSpace(cfg.Defaults.Mode)
@@ -194,12 +196,12 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported mode: %s", finalMode)
 	}
-	if documentType == engine.DocumentTypeIMG && modeSpecified && strings.EqualFold(finalMode, "best") {
-		return GenerateJob{}, fmt.Errorf("--mode best is not supported for img generation")
+	if isStandaloneImageDocumentType(documentType) && modeSpecified && strings.EqualFold(finalMode, "best") {
+		return GenerateJob{}, fmt.Errorf("--mode best is not supported for %s generation", documentType)
 	}
 
 	selectedRuntimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(runtimeMode)))
-	if documentType == engine.DocumentTypeIMG && selectedRuntimeMode == "" {
+	if isStandaloneImageDocumentType(documentType) && selectedRuntimeMode == "" {
 		selectedRuntimeMode = cfg.RuntimeModeOrDefault()
 	} else if selectedRuntimeMode == "" {
 		selectedRuntimeMode = cfg.RuntimeModeOrDefault()
@@ -226,7 +228,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	}
 
 	publishEnabled := cfg.Defaults.Publish
-	if documentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(documentType) {
 		publishEnabled = true
 	}
 	if publishFlag.set {
@@ -244,8 +246,8 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		return GenerateJob{}, fmt.Errorf("--ratio is only supported for img generation")
 	}
 	referenceImageList := referenceImages.Slice()
-	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
-		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img generation")
+	if len(referenceImageList) > 0 && !isStandaloneImageDocumentType(documentType) {
+		return GenerateJob{}, fmt.Errorf("--reference-image is only supported for img or gif generation")
 	}
 	referenceRoot = strings.TrimSpace(referenceRoot)
 	referencePPTXList := referencePPTXs.Slice()
@@ -295,6 +297,19 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	default:
 		return GenerateJob{}, fmt.Errorf("unsupported image ratio: %s", ratio)
 	}
+	if gifFPS != 0 && documentType != engine.DocumentTypeGIF {
+		return GenerateJob{}, fmt.Errorf("--fps is only supported for gif generation")
+	}
+	if documentType == engine.DocumentTypeGIF {
+		if gifFPS == 0 {
+			gifFPS = 16
+		}
+		if gifFPS < 4 || gifFPS > 24 {
+			return GenerateJob{}, fmt.Errorf("--fps must be between 4 and 24")
+		}
+		imageRatio = "square"
+		finalImageSize = "1024x1024"
+	}
 	finalStyle := strings.TrimSpace(style)
 	styleSpecified := finalStyle != ""
 	if finalStyle == "" && documentType == engine.DocumentTypePPTX {
@@ -315,14 +330,14 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		}
 	}
 	var warnings []engine.GenerateIssue
-	if documentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(documentType) {
 		switch {
 		case sourceFile != "":
-			return GenerateJob{}, fmt.Errorf("--file is not supported for img generation")
+			return GenerateJob{}, fmt.Errorf("--file is not supported for %s generation", documentType)
 		case localPreview:
-			return GenerateJob{}, fmt.Errorf("--local-preview is not supported for img generation")
+			return GenerateJob{}, fmt.Errorf("--local-preview is not supported for %s generation", documentType)
 		case noImagesFlag.set && noImagesFlag.value:
-			return GenerateJob{}, fmt.Errorf("--no-images is not supported for img generation")
+			return GenerateJob{}, fmt.Errorf("--no-images is not supported for %s generation", documentType)
 		}
 	} else if documentType == engine.DocumentTypeReport {
 		if sourceFile == "" {
@@ -351,6 +366,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 		EnableImages:          enableImages,
 		ImageRatio:            imageRatio,
 		ImageSize:             finalImageSize,
+		GifFPS:                gifFPS,
 		ReferenceImageSources: referenceImageList,
 		ReferenceScanEnabled:  referenceScanEnabled,
 		ReferenceScanRoot:     finalReferenceRoot,
@@ -398,7 +414,7 @@ func normalizeFlagArgs(args []string) []string {
 	for i < len(args) {
 		current := args[i]
 		switch current {
-		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--reference-root", "--reference-pptx", "--pptx-backend", "--size", "--image-quality", "--fail-below":
+		case "--prompt", "--prompt-file", "--mode", "--runtime-mode", "--lang", "--style", "--audience", "--out", "--file", "--ratio", "--reference-image", "--reference-root", "--reference-pptx", "--pptx-backend", "--size", "--image-quality", "--fps", "--fail-below":
 			flags = append(flags, current)
 			if i+1 < len(args) {
 				flags = append(flags, args[i+1])
@@ -426,6 +442,7 @@ func normalizeFlagArgs(args []string) []string {
 				strings.HasPrefix(current, "--pptx-backend=") ||
 				strings.HasPrefix(current, "--size=") ||
 				strings.HasPrefix(current, "--image-quality=") ||
+				strings.HasPrefix(current, "--fps=") ||
 				strings.HasPrefix(current, "--fail-below=") ||
 				strings.HasPrefix(current, "--publish=") ||
 				strings.HasPrefix(current, "--no-publish=") ||
@@ -486,9 +503,15 @@ func parseDocumentType(value string) (engine.DocumentType, error) {
 		return engine.DocumentTypeReport, nil
 	case "img", "image":
 		return engine.DocumentTypeIMG, nil
+	case "gif":
+		return engine.DocumentTypeGIF, nil
 	default:
 		return "", fmt.Errorf("unsupported document type: %s", value)
 	}
+}
+
+func isStandaloneImageDocumentType(documentType engine.DocumentType) bool {
+	return documentType == engine.DocumentTypeIMG || documentType == engine.DocumentTypeGIF
 }
 
 type ioDiscard struct{}

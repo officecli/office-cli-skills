@@ -394,7 +394,7 @@ func shouldRequireLicenseAPIKeyPreflight(command string, args []string) bool {
 
 func isImageNewCommand(args []string) bool {
 	documentType := strings.ToLower(strings.TrimSpace(firstNewDocumentTypeArg(args)))
-	return documentType == "img" || documentType == "image"
+	return documentType == "img" || documentType == "image" || documentType == "gif"
 }
 
 func firstNewDocumentTypeArg(args []string) string {

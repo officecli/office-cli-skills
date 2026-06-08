@@ -205,7 +205,7 @@ var (
 	tuiCardStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
 )
 
-var tuiDocumentTypeOptions = []string{"docx", "pptx", "xlsx", "img", "report"}
+var tuiDocumentTypeOptions = []string{"docx", "pptx", "xlsx", "img", "gif", "report"}
 
 func (a *App) runTUIProgram(ctx context.Context, cfg Config, initialPrompt string, opts TUIOptions) error {
 	rootCtx := ctx
@@ -1160,6 +1160,8 @@ func inferTUIDocumentType(prompt string) string {
 		return "xlsx"
 	case strings.Contains(normalized, "docx"), strings.Contains(normalized, "doc "), strings.Contains(normalized, "word"), strings.Contains(normalized, "brief"), strings.Contains(prompt, "文档"), strings.Contains(prompt, "方案"):
 		return "docx"
+	case strings.Contains(normalized, "gif"), strings.Contains(prompt, "动图"), strings.Contains(prompt, "表情包"), strings.Contains(strings.ToLower(prompt), "gif"):
+		return "gif"
 	case strings.Contains(normalized, "img"), strings.Contains(normalized, "image"), strings.Contains(normalized, "poster"), strings.Contains(prompt, "图片"), strings.Contains(prompt, "海报"), strings.Contains(prompt, "视觉图"), hasChineseImagePromptIntent(prompt):
 		return "img"
 	default:

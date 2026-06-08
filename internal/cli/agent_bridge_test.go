@@ -611,6 +611,83 @@ func TestBuildGenerateJobFromRequest_PPTXImageQualityIsAcceptedAndIgnored(t *tes
 	}
 }
 
+func TestBuildGenerateJobFromRequest_GIFAcceptsFPSAndReferenceImages(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	job, err := app.buildGenerateJobFromRequest(Config{
+		Defaults: DefaultsConfig{OutputDir: t.TempDir(), Publish: false, Mode: "best"},
+		Runtime:  RuntimeConfig{Mode: RuntimeModeHosted},
+	}, bridgeInvokeParams{
+		Tool: bridgeToolOfficeGenerate,
+		Args: bridgeInvokeArgs{
+			DocumentType:    "gif",
+			Topic:           "Token Reaction",
+			Prompt:          "一个女生眨眼说话再笑。",
+			FPS:             12,
+			ReferenceImages: []string{"reference.png"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildGenerateJobFromRequest: %v", err)
+	}
+	if job.DocumentType != engine.DocumentTypeGIF {
+		t.Fatalf("document type = %q", job.DocumentType)
+	}
+	if job.GifFPS != 12 {
+		t.Fatalf("gif fps = %d", job.GifFPS)
+	}
+	if job.Mode != "fast" || job.RuntimeMode != RuntimeModeHosted || !job.Publish {
+		t.Fatalf("job defaults = mode %q runtime %q publish %v", job.Mode, job.RuntimeMode, job.Publish)
+	}
+	if got := job.ReferenceImageSources; len(got) != 1 || got[0] != "reference.png" {
+		t.Fatalf("reference image sources = %#v", got)
+	}
+}
+
+func TestBuildGenerateJobFromRequest_IMGAcceptsImageWatermark(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	job, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+		Tool: bridgeToolOfficeGenerate,
+		Args: bridgeInvokeArgs{
+			DocumentType: "img",
+			Topic:        "Launch Visual",
+			ImageWatermark: &ImageWatermarkOptions{
+				Apply:           true,
+				PaidEntitlement: false,
+				CanDisable:      false,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildGenerateJobFromRequest: %v", err)
+	}
+	if job.ImageWatermark == nil || !job.ImageWatermark.Apply {
+		t.Fatalf("image watermark = %#v, want enabled", job.ImageWatermark)
+	}
+	if job.ImageWatermark.PaidEntitlement || job.ImageWatermark.CanDisable {
+		t.Fatalf("image watermark = %#v", job.ImageWatermark)
+	}
+}
+
+func TestBuildGenerateJobFromRequest_RejectsImageWatermarkForNonIMG(t *testing.T) {
+	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	_, err := app.buildGenerateJobFromRequest(Config{}, bridgeInvokeParams{
+		Tool: bridgeToolOfficeGenerate,
+		Args: bridgeInvokeArgs{
+			DocumentType: "gif",
+			Topic:        "Token Reaction",
+			ImageWatermark: &ImageWatermarkOptions{
+				Apply: true,
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "image_watermark is only supported for img generation") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestBuildGenerateJobFromRequest_EmitPreviewFlag(t *testing.T) {
 	app := NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 
@@ -1007,6 +1084,28 @@ func TestAgentBridgeTaskCompletedPayloadIncludesHostedCreditBalance(t *testing.T
 	}
 	if payload["credit_mode"] != "hosted" {
 		t.Fatalf("credit_mode = %#v, want hosted", payload["credit_mode"])
+	}
+}
+
+func TestAgentBridgeTaskCompletedPayloadIncludesImageWatermark(t *testing.T) {
+	payload := generateTaskCompletedPayload(GenerateResult{
+		Status:       "success",
+		FilePath:     "/tmp/demo.png",
+		DocumentType: "img",
+		DocumentName: "demo.png",
+		ImageWatermark: &ImageWatermarkResult{
+			Applied:         true,
+			PaidEntitlement: false,
+			CanDisable:      false,
+		},
+	})
+
+	watermark, ok := payload["image_watermark"].(map[string]any)
+	if !ok {
+		t.Fatalf("image_watermark = %#v", payload["image_watermark"])
+	}
+	if watermark["applied"] != true || watermark["paidEntitlement"] != false || watermark["canDisable"] != false {
+		t.Fatalf("image_watermark = %#v", watermark)
 	}
 }
 

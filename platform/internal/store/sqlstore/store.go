@@ -2601,6 +2601,36 @@ func (s *Store) UpdateUser(ctx context.Context, id uint64, values map[string]any
 	return s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(values).Error
 }
 
+func (s *Store) GetUserPaidEntitlement(ctx context.Context, userID uint64) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	var user model.User
+	if err := s.db.WithContext(ctx).Select("paid_entitlement").First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return user.PaidEntitlement, nil
+}
+
+func (s *Store) SetUserPaidEntitlement(ctx context.Context, userID uint64, paid bool, source string) error {
+	if userID == 0 {
+		return nil
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "unknown"
+	}
+	now := time.Now().UTC()
+	return s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(map[string]any{
+		"paid_entitlement":            paid,
+		"paid_entitlement_updated_at": now,
+		"paid_entitlement_source":     source,
+	}).Error
+}
+
 func (s *Store) DisableAPIKeysByOwnerUserID(ctx context.Context, userID uint64) error {
 	return s.db.WithContext(ctx).
 		Model(&model.APIKey{}).
@@ -2699,6 +2729,17 @@ func (s *Store) FinalizeOrderPayment(ctx context.Context, params billing.Finaliz
 		tx.Rollback()
 		return nil, false, err
 	}
+	if order.AmountTotal > 0 {
+		now := time.Now().UTC()
+		if err := tx.Model(&model.User{}).Where("id = ?", order.UserID).Updates(map[string]any{
+			"paid_entitlement":            true,
+			"paid_entitlement_updated_at": now,
+			"paid_entitlement_source":     "stripe",
+		}).Error; err != nil {
+			tx.Rollback()
+			return nil, false, err
+		}
+	}
 
 	if customerID := strings.TrimSpace(params.CustomerID); customerID != "" {
 		if err := upsertStripeCustomerTx(tx, order.UserID, customerID); err != nil {
@@ -2752,6 +2793,20 @@ func (s *Store) ListOrdersByUser(ctx context.Context, userID uint64) ([]model.Or
 		return nil, err
 	}
 	return orders, nil
+}
+
+func (s *Store) HasActivePaidOrderByUser(ctx context.Context, userID uint64) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&model.Order{}).
+		Where("user_id = ? AND status = ? AND amount_total > 0", userID, model.OrderStatusPaid).
+		Limit(1).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (s *Store) ListOrders(ctx context.Context) ([]model.Order, error) {

@@ -46,6 +46,41 @@
     "preferred_tool": "office.render",
     "prepare_required": false
   },
+  "gif": {
+    "agent_render_supported": false,
+    "image_generation": {
+      "fps": {
+        "default": 16,
+        "max": 24,
+        "min": 4,
+        "supported": true
+      },
+      "provider_control": "server",
+      "reference_image": {
+        "input": "local path or http/https URL; use reference_images array for multiple",
+        "invoke_field": "reference_image",
+        "invoke_field_array": "reference_images",
+        "max_count": 8,
+        "supported": true
+      },
+      "sheet": {
+        "frames": 16,
+        "grid": "4x4",
+        "size": "1024x1024"
+      }
+    },
+    "image_support": {
+      "default_enabled": true
+    },
+    "preferred_tool": "office.generate",
+    "prepare_required": false,
+    "publish_support": {
+      "config_command": "officecli config set-publish",
+      "default_publish": true,
+      "disable_flag": "--no-publish",
+      "publish_supported": true
+    }
+  },
   "img": {
     "agent_render_supported": false,
     "image_generation": {
@@ -70,6 +105,10 @@
       "templates": {
         "invoke_field": "prompt_template_id",
         "list_method": "image_templates/list",
+        "supported": true
+      },
+      "watermark": {
+        "invoke_field": "image_watermark",
         "supported": true
       }
     },

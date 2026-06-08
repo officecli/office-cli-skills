@@ -118,6 +118,9 @@ export interface User {
   name: string
   invite_code?: string
   status: 'active' | 'disabled'
+  paid_entitlement?: boolean
+  paid_entitlement_updated_at?: string
+  paid_entitlement_source?: string
   credit_balance?: number
   created_at: string
 }
@@ -228,6 +231,16 @@ export interface HostedBillingConfig {
   packs: HostedCreditPack[]
 }
 
+export interface ImagePromptSlot {
+  key: string
+  label: string
+  example?: string
+  default_value?: string
+  help_text?: string
+  required?: boolean
+  multiline?: boolean
+}
+
 export interface ImagePromptTemplate {
   id?: number
   owner_user_id?: number
@@ -239,6 +252,7 @@ export interface ImagePromptTemplate {
   thumbnail_url?: string
   sort_order: number
   enabled: boolean
+  slots?: ImagePromptSlot[]
   created_at?: string
   updated_at?: string
 }

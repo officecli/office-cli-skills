@@ -16,7 +16,7 @@ import (
 )
 
 func (a *App) executeGenerateJob(ctx context.Context, cfg Config, job GenerateJob, isTTY bool, progress progressController, prompter Prompter) (GenerateResult, error) {
-	if job.DocumentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(job.DocumentType) {
 		if job.RuntimeMode != RuntimeModeHosted {
 			return a.executeExternalImageJob(ctx, cfg, job, progress)
 		}
@@ -426,7 +426,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 
 	modeSpecified := strings.TrimSpace(req.Args.Mode) != ""
 	mode := strings.TrimSpace(req.Args.Mode)
-	if documentType == engine.DocumentTypeIMG && mode == "" {
+	if isStandaloneImageDocumentType(documentType) && mode == "" {
 		mode = "fast"
 	} else if mode == "" {
 		mode = strings.TrimSpace(cfg.Defaults.Mode)
@@ -446,12 +446,12 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if mode == "best" && !req.Interactive {
 		return GenerateJob{}, fmt.Errorf("--mode best is not supported when interactive=false")
 	}
-	if documentType == engine.DocumentTypeIMG && modeSpecified && mode == "best" {
-		return GenerateJob{}, fmt.Errorf("--mode best is not supported for img generation")
+	if isStandaloneImageDocumentType(documentType) && modeSpecified && mode == "best" {
+		return GenerateJob{}, fmt.Errorf("--mode best is not supported for %s generation", documentType)
 	}
 
 	runtimeMode := RuntimeMode(strings.ToLower(strings.TrimSpace(req.Args.RuntimeMode)))
-	if documentType == engine.DocumentTypeIMG && runtimeMode == "" {
+	if isStandaloneImageDocumentType(documentType) && runtimeMode == "" {
 		runtimeMode = cfg.RuntimeModeOrDefault()
 	} else if runtimeMode == "" {
 		runtimeMode = cfg.RuntimeModeOrDefault()
@@ -474,7 +474,7 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	}
 
 	publish := cfg.Defaults.Publish
-	if documentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(documentType) {
 		publish = true
 	}
 	if req.Args.Publish != nil {
@@ -498,9 +498,9 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		style = strings.TrimSpace(cfg.Defaults.PPTXStylePreset)
 	}
 	sourceFile := strings.TrimSpace(req.Args.FilePath)
-	if documentType == engine.DocumentTypeIMG {
+	if isStandaloneImageDocumentType(documentType) {
 		if sourceFile != "" {
-			return GenerateJob{}, fmt.Errorf("file_path is not supported for img generation")
+			return GenerateJob{}, fmt.Errorf("file_path is not supported for %s generation", documentType)
 		}
 	} else if documentType == engine.DocumentTypeReport {
 		if sourceFile == "" {
@@ -533,8 +533,8 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 			referenceImageList = append(referenceImageList, v)
 		}
 	}
-	if len(referenceImageList) > 0 && documentType != engine.DocumentTypeIMG {
-		return GenerateJob{}, fmt.Errorf("reference_image is only supported for img generation")
+	if len(referenceImageList) > 0 && !isStandaloneImageDocumentType(documentType) {
+		return GenerateJob{}, fmt.Errorf("reference_image is only supported for img or gif generation")
 	}
 	referenceScanEnabled, referenceScanRoot, referencePPTXList, err := pptxReferenceOptionsFromBridgeArgs(documentType, req.Args)
 	if err != nil {
@@ -557,6 +557,24 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if promptTemplateID != "" && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("prompt_template_id is only supported for img generation")
 	}
+	imageWatermark := req.Args.ImageWatermark
+	if imageWatermark != nil && documentType != engine.DocumentTypeIMG {
+		return GenerateJob{}, fmt.Errorf("image_watermark is only supported for img generation")
+	}
+	gifFPS := req.Args.FPS
+	if gifFPS != 0 && documentType != engine.DocumentTypeGIF {
+		return GenerateJob{}, fmt.Errorf("fps is only supported for gif generation")
+	}
+	if documentType == engine.DocumentTypeGIF {
+		if gifFPS == 0 {
+			gifFPS = 16
+		}
+		if gifFPS < 4 || gifFPS > 24 {
+			return GenerateJob{}, fmt.Errorf("fps must be between 4 and 24")
+		}
+		imageRatio = "square"
+		imageSize = "1024x1024"
+	}
 
 	localPreview := req.Args.EmitPreview != nil && *req.Args.EmitPreview
 
@@ -575,6 +593,8 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		EnableImages:          enableImages,
 		ImageRatio:            imageRatio,
 		ImageSize:             imageSize,
+		GifFPS:                gifFPS,
+		ImageWatermark:        cloneImageWatermarkOptions(imageWatermark),
 		PromptTemplateID:      promptTemplateID,
 		ReferenceImageSources: referenceImageList,
 		ReferenceScanEnabled:  referenceScanEnabled,
@@ -588,6 +608,14 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 		JSONOutput:            true,
 		Warnings:              warnings,
 	}, nil
+}
+
+func cloneImageWatermarkOptions(options *ImageWatermarkOptions) *ImageWatermarkOptions {
+	if options == nil {
+		return nil
+	}
+	clone := *options
+	return &clone
 }
 
 func pptxBackendFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (string, error) {

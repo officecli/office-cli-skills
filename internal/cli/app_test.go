@@ -1362,6 +1362,60 @@ func TestBuildGenerateJob_IMGDefaultsToHostedRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildGenerateJob_GIFDefaultsAndFPS(t *testing.T) {
+	cfg := Config{Defaults: DefaultsConfig{Publish: false, Mode: "best"}}
+
+	job, err := BuildGenerateJob([]string{
+		"gif",
+		"Token Reaction",
+		"--prompt", "一个女生先眨眼，然后说话，最后笑一下。",
+		"--fps", "12",
+		"--reference-image", "reference.png",
+	}, cfg, InputSources{IsTTY: true, CWD: t.TempDir()})
+	if err != nil {
+		t.Fatalf("BuildGenerateJob: %v", err)
+	}
+	if job.DocumentType != engine.DocumentTypeGIF {
+		t.Fatalf("document type = %q", job.DocumentType)
+	}
+	if job.RuntimeMode != RuntimeModeHosted {
+		t.Fatalf("runtime mode = %q", job.RuntimeMode)
+	}
+	if job.Mode != "fast" {
+		t.Fatalf("mode = %q", job.Mode)
+	}
+	if job.GifFPS != 12 {
+		t.Fatalf("gif fps = %d", job.GifFPS)
+	}
+	if job.ImageRatio != "square" {
+		t.Fatalf("image ratio = %q", job.ImageRatio)
+	}
+	if !job.Publish {
+		t.Fatal("gif generation should publish by default")
+	}
+	if got := job.ReferenceImageSources; len(got) != 1 || got[0] != "reference.png" {
+		t.Fatalf("reference image sources = %#v", got)
+	}
+}
+
+func TestBuildGenerateJob_GIFRejectsInvalidFPSAndNonGIFFPS(t *testing.T) {
+	if _, err := BuildGenerateJob([]string{
+		"gif",
+		"Token Reaction",
+		"--fps", "3",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "--fps must be between 4 and 24") {
+		t.Fatalf("gif low fps err = %v", err)
+	}
+
+	if _, err := BuildGenerateJob([]string{
+		"img",
+		"Launch Visual",
+		"--fps", "12",
+	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "--fps is only supported for gif generation") {
+		t.Fatalf("img fps err = %v", err)
+	}
+}
+
 func TestBuildGenerateJob_IMGUsesHostedRuntimeWhenConfigured(t *testing.T) {
 	cfg := Config{
 		Defaults: DefaultsConfig{Publish: false, Mode: "best"},
@@ -1471,7 +1525,7 @@ func TestBuildGenerateJob_ReferenceImageOnlySupportedForIMG(t *testing.T) {
 		"Demo",
 		"--reference-image", "reference.png",
 	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
-	if err == nil || !strings.Contains(err.Error(), "--reference-image is only supported for img generation") {
+	if err == nil || !strings.Contains(err.Error(), "--reference-image is only supported for img or gif generation") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -2358,8 +2412,8 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli login", "officecli set-key <api-key>", "Log in with your OfficeCLI account"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "--apply", "By default the upgrade is NOT applied"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best", "--file <path>", "--reference-root <dir>", "--reference-pptx <path>", "--pptx-backend <value>", "--no-reference-scan", "--no-images", "PPTX adds suitable images by default", "PPTX recursively scans reference .pptx files", "artifact-experimental is explicit opt-in", "reference_style metadata", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
-		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img>", "--prompt-file", "--mode fast|best"}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img|gif>", "--prompt-file", "--mode fast|best", "--file <path>", "--reference-root <dir>", "--reference-pptx <path>", "--pptx-backend <value>", "--no-reference-scan", "--no-images", "PPTX adds suitable images by default", "PPTX recursively scans reference .pptx files", "artifact-experimental is explicit opt-in", "reference_style metadata", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
+		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img|gif>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}
 	for _, tc := range cases {
@@ -3856,6 +3910,31 @@ func TestAppRun_AuthStatusShowsRemainingPaidQuota(t *testing.T) {
 
 	output := stdout.String()
 	if !strings.Contains(output, "Current access mode: paid") || !strings.Contains(output, "Reward quota remaining: 3") || !strings.Contains(output, "Paid quota on current key (cop_live_demo): 12 total / 4 used / 8 remaining") {
+		t.Fatalf("stdout = %s", output)
+	}
+}
+
+func TestAppRun_AuthStatusShowsPaidEntitlement(t *testing.T) {
+	var stdout bytes.Buffer
+	app := NewApp(&stdout, bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	app.newLicenseService = func(cfg LicenseConfig) (LicenseManager, error) {
+		return stubLicenseManager{
+			checkResult: &LicenseCheckResult{
+				Allowed:         false,
+				AccessMode:      LicenseAccessModeBlocked,
+				ReasonCode:      "hosted_credit_exhausted",
+				CreditBalance:   0,
+				PaidEntitlement: true,
+			},
+		}, nil
+	}
+
+	if err := app.Run(t.Context(), []string{"auth", "status"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Paid entitlement: true") {
 		t.Fatalf("stdout = %s", output)
 	}
 }
