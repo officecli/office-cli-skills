@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.110 - 2026-06-08
+
+### Added
+
+- Added account-level paid entitlement so watermark controls and license status reflect explicit paid-user access.
+- Added repeated diagonal image watermarking plus footer watermark for unpaid image generations.
+- Added admin controls to view and update paid-user status.
+
+### Fixed
+
+- Fixed payment and refund handling so paid access follows real payment outcomes.
+
 ## 0.2.109 - 2026-06-05
 
 ### Added
