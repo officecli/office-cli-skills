@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/officecli/officecli/platform/internal/apikey"
 	"github.com/officecli/officecli/platform/internal/auth"
@@ -951,6 +953,12 @@ func (s *Service) RecordImageGenerationProvenance(ctx context.Context, req Recor
 	if requestID == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
+	if existing, err := s.store.GetImageGenerationProvenanceByRequestID(ctx, requestID); err == nil {
+		resp := imageGenerationProvenanceResponse(*existing)
+		return &resp, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	prompt := strings.TrimSpace(req.Prompt)
 	if prompt == "" {
 		return nil, fmt.Errorf("prompt is required")
@@ -996,10 +1004,50 @@ func (s *Service) RecordImageGenerationProvenance(ctx context.Context, req Recor
 		item.SourceTemplateID = &req.SourceTemplateID
 	}
 	if err := s.store.CreateImageGenerationProvenance(ctx, &item); err != nil {
+		if existing, loadErr := s.store.GetImageGenerationProvenanceByRequestID(ctx, requestID); loadErr == nil {
+			resp := imageGenerationProvenanceResponse(*existing)
+			return &resp, nil
+		}
 		return nil, err
 	}
 	resp := imageGenerationProvenanceResponse(item)
 	return &resp, nil
+}
+
+func (s *Service) GetImageGenerationReplay(ctx context.Context, requestID string) (*ImageGenerationReplay, error) {
+	if s.imageTemplateStore == nil {
+		return nil, fmt.Errorf("image template object store unavailable")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, fmt.Errorf("request_id is required")
+	}
+	provenance, err := s.store.GetImageGenerationProvenanceByRequestID(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := s.imageTemplateStore.GetObject(ctx, provenance.ImageStorageKey)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("image generation replay object is empty")
+	}
+	contentType := strings.TrimSpace(provenance.ImageContentType)
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	return &ImageGenerationReplay{
+		RequestID:   provenance.RequestID,
+		UserID:      provenance.UserID,
+		ContentType: contentType,
+		Data:        data,
+	}, nil
 }
 
 func (s *Service) CreateImageTemplatePublishRequest(ctx context.Context, userID uint64, req CreateImageTemplatePublishRequest) (*ImageTemplatePublishRequestResponse, error) {

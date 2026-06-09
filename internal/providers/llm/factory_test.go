@@ -557,6 +557,7 @@ func TestInternalClient_GenerateImageRetriesTransientEOF(t *testing.T) {
 	imageData := base64.StdEncoding.EncodeToString([]byte("png-bytes"))
 	var attempts int
 	var requestIDs []string
+	var headerRequestIDs []string
 	client := &internalClient{
 		baseURL: "https://platform.example/api/llm",
 		apiKey:  "hosted-key",
@@ -569,6 +570,7 @@ func TestInternalClient_GenerateImageRetriesTransientEOF(t *testing.T) {
 			if r.Header.Get("Authorization") != "Bearer hosted-key" {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 			}
+			headerRequestIDs = append(headerRequestIDs, r.Header.Get("X-Request-Id"))
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Fatalf("read request body: %v", err)
@@ -610,6 +612,14 @@ func TestInternalClient_GenerateImageRetriesTransientEOF(t *testing.T) {
 	for _, requestID := range requestIDs[1:] {
 		if requestID != requestIDs[0] {
 			t.Fatalf("request ids = %#v, want same non-empty id across retry", requestIDs)
+		}
+	}
+	if len(headerRequestIDs) != len(requestIDs) {
+		t.Fatalf("header request ids = %#v, body request ids = %#v", headerRequestIDs, requestIDs)
+	}
+	for i, headerRequestID := range headerRequestIDs {
+		if headerRequestID != requestIDs[0] {
+			t.Fatalf("attempt %d header request id = %q, want body request id %q", i+1, headerRequestID, requestIDs[0])
 		}
 	}
 }
@@ -841,12 +851,15 @@ func TestInternalClient_GenerateImageSendsReferenceImage(t *testing.T) {
 	var payload struct {
 		Model          string                `json:"model"`
 		Prompt         string                `json:"prompt"`
+		RequestID      string                `json:"request_id"`
 		ReferenceImage engine.ImageReference `json:"reference_image"`
 	}
+	var headerRequestID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/image" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
+		headerRequestID = r.Header.Get("X-Request-Id")
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode payload: %v", err)
 		}
@@ -876,6 +889,12 @@ func TestInternalClient_GenerateImageSendsReferenceImage(t *testing.T) {
 	}
 	if payload.ReferenceImage.MIME != "image/png" || payload.ReferenceImage.Data != "cmVmZXJlbmNlLWJ5dGVz" {
 		t.Fatalf("reference image = %#v", payload.ReferenceImage)
+	}
+	if payload.RequestID == "" {
+		t.Fatal("request_id is empty")
+	}
+	if headerRequestID != payload.RequestID {
+		t.Fatalf("X-Request-Id = %q, want body request_id %q", headerRequestID, payload.RequestID)
 	}
 }
 

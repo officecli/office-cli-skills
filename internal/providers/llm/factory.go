@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -906,6 +907,8 @@ func llmInvalidStreamingPayloadError(payload string, err error) error {
 
 func (c *internalClient) post(ctx context.Context, url string, payload map[string]any) ([]byte, error) {
 	ensureInternalRequestID(payload)
+	requestID, _ := payload["request_id"].(string)
+	requestID = strings.TrimSpace(requestID)
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -922,6 +925,9 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if requestID != "" {
+			req.Header.Set("X-Request-Id", requestID)
+		}
 		if c.apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+c.apiKey)
 		}
@@ -932,6 +938,13 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 		if err != nil {
 			lastErr = err
 			if isRetryableInternalTransportError(err) && attempt < defaultInternalTransportRetries {
+				slog.Warn("internal_llm_request_retry",
+					"attempt", attempt+1,
+					"request_id", requestID,
+					"url", url,
+					"read_body_failed", false,
+					"err", err,
+				)
 				continue
 			}
 			return nil, err
@@ -941,6 +954,13 @@ func (c *internalClient) post(ctx context.Context, url string, payload map[strin
 		if readErr != nil {
 			lastErr = readErr
 			if isRetryableInternalTransportError(readErr) && attempt < defaultInternalTransportRetries {
+				slog.Warn("internal_llm_request_retry",
+					"attempt", attempt+1,
+					"request_id", requestID,
+					"url", url,
+					"read_body_failed", true,
+					"err", readErr,
+				)
 				continue
 			}
 			return nil, readErr

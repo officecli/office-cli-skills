@@ -27,6 +27,55 @@ describe('admin dashboard fingerprint quality', () => {
     vi.unstubAllGlobals()
   })
 
+  it('places daily new users above the 7-day usage trend', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/admin/overview') {
+        return ok({
+          total_api_keys: 0,
+          active_api_keys: 0,
+          disabled_api_keys: 0,
+          expired_api_keys: 0,
+          free_machines: 0,
+          checks_last_24h: 0,
+          consumes_last_24h: 0,
+          blocked_last_24h: 0,
+          total_users: 0,
+          paid_orders_last_24h: 0,
+          paid_quota_added_last_24h: 0,
+          remaining_paid_quota: 0,
+          daily_new_users: [
+            { date: '2026-06-03', users: 1 },
+            { date: '2026-06-04', users: 2 },
+          ],
+          usage_trend: [
+            { date: '2026-06-03', checks: 2, consumes: 1, blocked: 0, allowed: 3, total: 3 },
+            { date: '2026-06-04', checks: 4, consumes: 2, blocked: 1, allowed: 5, total: 6 },
+          ],
+          mode_breakdown: [],
+          result_breakdown: [],
+          api_key_status_breakdown: [],
+        })
+      }
+      if (url === '/api/admin/operations/funnel?range=30d') {
+        return ok({ activated_users: 0, paid_users: 0, activation_rate: 0, paid_conversion_rate: 0, machine_quality: { total_machines: 0 } })
+      }
+      if (url === '/api/admin/fingerprint-quality') {
+        return ok({ summary: [], rows: [] })
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    const dailyHeading = await screen.findByRole('heading', { name: /daily new users/i })
+    const usageHeading = await screen.findByRole('heading', { name: /7-day usage trend/i })
+    expect(dailyHeading.compareDocumentPosition(usageHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect((await screen.findAllByTestId('line-chart')).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('Users')).toBeInTheDocument()
+  })
+
   it('hides default-filtered fingerprint rows by default and keeps bucket summary visible', async () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)

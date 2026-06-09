@@ -211,6 +211,13 @@ type ImageGenerationProvenanceResponse struct {
 	CreatedAt        string `json:"created_at,omitempty"`
 }
 
+type ImageGenerationReplay struct {
+	RequestID   string
+	UserID      uint64
+	ContentType string
+	Data        []byte
+}
+
 type CreateImageTemplatePublishRequest struct {
 	PrivateTemplateID uint64 `json:"private_template_id"`
 	ProvenanceID      uint64 `json:"provenance_id"`

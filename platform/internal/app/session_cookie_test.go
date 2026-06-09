@@ -256,6 +256,10 @@ func TestAdminOverviewRouteReturnsChartData(t *testing.T) {
 				Allowed:  4,
 				Total:    5,
 			}},
+			DailyNewUsers: []model.OverviewDailyUsersPoint{{
+				Date:  "2026-05-18",
+				Users: 2,
+			}},
 			ResultBreakdown: []model.OverviewBreakdownItem{{Key: "allowed", Label: "Allowed", Value: 4}},
 			ModeBreakdown:   []model.OverviewBreakdownItem{{Key: "hosted", Label: "Hosted", Value: 2}},
 			APIKeyStatusBreakdown: []model.OverviewBreakdownItem{{
@@ -282,6 +286,9 @@ func TestAdminOverviewRouteReturnsChartData(t *testing.T) {
 	require.Len(t, body.Data.UsageTrend, 1)
 	require.Equal(t, "2026-05-18", body.Data.UsageTrend[0].Date)
 	require.EqualValues(t, 5, body.Data.UsageTrend[0].Total)
+	require.Len(t, body.Data.DailyNewUsers, 1)
+	require.Equal(t, "2026-05-18", body.Data.DailyNewUsers[0].Date)
+	require.EqualValues(t, 2, body.Data.DailyNewUsers[0].Users)
 	require.EqualValues(t, 4, body.Data.ResultBreakdown[0].Value)
 	require.EqualValues(t, 2, body.Data.ModeBreakdown[0].Value)
 	require.EqualValues(t, 7, body.Data.APIKeyStatusBreakdown[0].Value)

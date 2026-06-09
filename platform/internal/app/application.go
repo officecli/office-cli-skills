@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	ego "github.com/gotomicro/ego"
 	"github.com/gotomicro/ego/server/egin"
 	sdkoffice "github.com/officesdk/go-sdk/officesdk"
@@ -834,7 +835,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		req.RequestID = c.GetHeader("X-Request-Id")
+		req.RequestID = hostedBillingRequestID(c, req.RequestID)
 		req.Kind = "text"
 		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
@@ -850,7 +851,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		req.RequestID = c.GetHeader("X-Request-Id")
+		req.RequestID = hostedBillingRequestID(c, req.RequestID)
 		req.Kind = "json"
 		req.JSONMode = true
 		req.AuditContext = usageAuditContext(c)
@@ -867,7 +868,7 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		req.RequestID = c.GetHeader("X-Request-Id")
+		req.RequestID = hostedBillingRequestID(c, req.RequestID)
 		req.Kind = "structured"
 		req.AuditContext = usageAuditContext(c)
 		resp, err := hostedSvc.Complete(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
@@ -883,15 +884,37 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		req.RequestID = c.GetHeader("X-Request-Id")
+		req.RequestID = hostedBillingRequestID(c, req.RequestID)
 		req.AuditContext = usageAuditContext(c)
+		if adminSvc != nil {
+			replayAuth, authErr := hostedSvc.AuthorizeImageReplay(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
+			if authErr == nil {
+				replay, err := adminSvc.GetImageGenerationReplay(c.Request.Context(), req.RequestID)
+				if err == nil && replay != nil && len(replay.Data) > 0 {
+					if replay.UserID == 0 || replayAuth == nil || replayAuth.UserID != replay.UserID {
+						httpapi.Error(c, http.StatusBadRequest, "image generation replay is not available for this account")
+						return
+					}
+					c.JSON(http.StatusOK, gin.H{
+						"data":            base64.StdEncoding.EncodeToString(replay.Data),
+						"mime":            replay.ContentType,
+						"request_id":      req.RequestID,
+						"credit_balance":  replayAuth.CreditBalance,
+						"credits_charged": 0,
+					})
+					return
+				}
+			}
+		}
 		resp, err := hostedSvc.GenerateImage(c.Request.Context(), c.GetHeader("Authorization"), c.GetHeader("X-Fingerprint-Hash"), req)
 		if err != nil {
 			httpapi.Error(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		if adminSvc != nil && resp.UserID != 0 && len(resp.Data) > 0 {
-			_, _ = adminSvc.RecordImageGenerationProvenance(c.Request.Context(), admin.RecordImageGenerationProvenanceRequest{
+			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
+			defer cancel()
+			if _, err := adminSvc.RecordImageGenerationProvenance(recordCtx, admin.RecordImageGenerationProvenanceRequest{
 				RequestID:   resp.RequestID,
 				UserID:      resp.UserID,
 				Prompt:      req.Prompt,
@@ -899,7 +922,9 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 				ContentType: resp.MIME,
 				Image:       bytes.NewReader(resp.Data),
 				ImageSize:   int64(len(resp.Data)),
-			})
+			}); err != nil {
+				slog.Warn("hosted_image_provenance_record_failed", "request_id", resp.RequestID, "err", err)
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"data":                 base64.StdEncoding.EncodeToString(resp.Data),
@@ -913,6 +938,21 @@ func registerHostedLLMRoutes(api *gin.RouterGroup, hostedSvc *hostedllm.Service,
 			"paid_quota_remaining": resp.PaidQuotaRemaining,
 		})
 	})
+}
+
+func hostedBillingRequestID(c *gin.Context, bodyRequestID string) string {
+	if requestID := strings.TrimSpace(bodyRequestID); requestID != "" {
+		return requestID
+	}
+	if c != nil {
+		if requestID := strings.TrimSpace(c.GetHeader("X-Request-Id")); requestID != "" {
+			return requestID
+		}
+		if requestID := strings.TrimSpace(httpapi.RequestID(c)); requestID != "" {
+			return requestID
+		}
+	}
+	return uuid.NewString()
 }
 
 func registerOperationsRoutes(api *gin.RouterGroup, cfg Config, authSvc authRouteService, operationsSvc *operations.Service) {

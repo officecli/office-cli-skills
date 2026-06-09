@@ -517,6 +517,11 @@ func TestOverviewIncludesChartData(t *testing.T) {
 
 	expiredAt := now.Add(-time.Hour)
 	futureExpiry := now.Add(24 * time.Hour)
+	require.NoError(t, db.Create(&[]model.User{
+		{Email: "today@example.com", Name: "Today User", Status: model.UserStatusActive, InviteCode: "TODAY", CreatedAt: today},
+		{Email: "yesterday@example.com", Name: "Yesterday User", Status: model.UserStatusActive, InviteCode: "YDAY", CreatedAt: yesterday},
+		{Email: "outside@example.com", Name: "Outside User", Status: model.UserStatusActive, InviteCode: "OUTSIDE", CreatedAt: outsideWindow},
+	}).Error)
 	require.NoError(t, db.Create(&[]model.APIKey{
 		{KeyHash: "active-hash", KeyPrefix: "active", Status: model.APIKeyStatusActive, PlanName: "Active", QuotaUsed: 0},
 		{KeyHash: "disabled-hash", KeyPrefix: "disabled", Status: model.APIKeyStatusDisabled, PlanName: "Disabled", QuotaUsed: 0, ExpiresAt: &futureExpiry},
@@ -541,6 +546,12 @@ func TestOverviewIncludesChartData(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, overview.FreeMachines)
 	require.Len(t, overview.UsageTrend, 7)
+	require.Len(t, overview.DailyNewUsers, 7)
+	require.Equal(t, today.Format("2006-01-02"), overview.DailyNewUsers[6].Date)
+	require.EqualValues(t, 1, overview.DailyNewUsers[6].Users)
+	require.Equal(t, yesterday.Format("2006-01-02"), overview.DailyNewUsers[5].Date)
+	require.EqualValues(t, 1, overview.DailyNewUsers[5].Users)
+	require.EqualValues(t, 0, overview.DailyNewUsers[0].Users)
 	require.Equal(t, today.Format("2006-01-02"), overview.UsageTrend[6].Date)
 	require.EqualValues(t, 2, overview.UsageTrend[6].Total)
 	require.EqualValues(t, 1, overview.UsageTrend[6].Checks)

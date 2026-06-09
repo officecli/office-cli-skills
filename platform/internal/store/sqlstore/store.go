@@ -1541,7 +1541,21 @@ func (s *Store) DeleteImagePromptTemplate(ctx context.Context, id uint64) error 
 }
 
 func (s *Store) CreateImageGenerationProvenance(ctx context.Context, item *model.ImageGenerationProvenance) error {
-	return s.db.WithContext(ctx).Create(item).Error
+	if item == nil {
+		return fmt.Errorf("image generation provenance is required")
+	}
+	err := s.db.WithContext(ctx).Create(item).Error
+	if err == nil {
+		return nil
+	}
+	if isDuplicateConstraintError(err) && strings.TrimSpace(item.RequestID) != "" {
+		existing, loadErr := s.GetImageGenerationProvenanceByRequestID(ctx, item.RequestID)
+		if loadErr == nil {
+			*item = *existing
+			return nil
+		}
+	}
+	return err
 }
 
 func (s *Store) GetImageGenerationProvenance(ctx context.Context, id uint64) (*model.ImageGenerationProvenance, error) {
@@ -2980,6 +2994,15 @@ func (s *Store) Overview(ctx context.Context) (*model.OverviewStats, error) {
 		Find(&usageEvents).Error; err != nil {
 		return nil, err
 	}
+	var users []model.User
+	if err := s.db.WithContext(ctx).
+		Select("created_at").
+		Where("created_at >= ? AND created_at < ?", trendStart, trendEnd).
+		Order("created_at asc").
+		Find(&users).Error; err != nil {
+		return nil, err
+	}
+	stats.DailyNewUsers = buildOverviewDailyUsers(trendStart, users)
 	stats.UsageTrend = buildOverviewUsageTrend(trendStart, usageEvents)
 	stats.ModeBreakdown = buildOverviewModeBreakdown(usageEvents)
 	stats.ResultBreakdown = buildOverviewResultBreakdown(usageEvents)
@@ -3024,6 +3047,25 @@ func buildOverviewUsageTrend(start time.Time, events []model.UsageEvent) []model
 		case model.UsageResultAllowed:
 			points[index].Allowed++
 		}
+	}
+	return points
+}
+
+func buildOverviewDailyUsers(start time.Time, users []model.User) []model.OverviewDailyUsersPoint {
+	points := make([]model.OverviewDailyUsersPoint, 7)
+	indexByDate := make(map[string]int, len(points))
+	for i := range points {
+		date := start.AddDate(0, 0, i).Format("2006-01-02")
+		points[i] = model.OverviewDailyUsersPoint{Date: date}
+		indexByDate[date] = i
+	}
+	for _, user := range users {
+		date := utcDayStart(user.CreatedAt).Format("2006-01-02")
+		index, ok := indexByDate[date]
+		if !ok {
+			continue
+		}
+		points[index].Users++
 	}
 	return points
 }

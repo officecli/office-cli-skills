@@ -745,6 +745,48 @@ func TestImageTemplatePublishRequestRejectsMismatchedProvenance(t *testing.T) {
 	require.ErrorContains(t, err, "generation task does not belong to user")
 }
 
+func TestRecordImageGenerationProvenanceDuplicateRequestIDReplaysExistingImage(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:image_generation_provenance_replay?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.ImageGenerationProvenance{}))
+
+	store := sqlstore.NewWithDB(db)
+	svc := NewService(store, nil, "secret", time.Hour, "cookie", fakeCodec{}, "salt", nil, nil, nil)
+	objectStore := &fakeImageTemplateObjectStore{}
+	svc.SetImageTemplateObjectStore(objectStore)
+
+	first, err := svc.RecordImageGenerationProvenance(context.Background(), RecordImageGenerationProvenanceRequest{
+		RequestID:   "req-replay",
+		UserID:      42,
+		Prompt:      "first successful prompt",
+		ImageName:   "generated.png",
+		ContentType: "image/png",
+		Image:       bytes.NewReader([]byte("first-image")),
+		ImageSize:   int64(len("first-image")),
+	})
+	require.NoError(t, err)
+	require.NotZero(t, first.ID)
+
+	second, err := svc.RecordImageGenerationProvenance(context.Background(), RecordImageGenerationProvenanceRequest{
+		RequestID:   "req-replay",
+		UserID:      42,
+		Prompt:      "first successful prompt",
+		ImageName:   "generated.png",
+		ContentType: "image/png",
+		Image:       bytes.NewReader([]byte("second-image")),
+		ImageSize:   int64(len("second-image")),
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+	require.Equal(t, first.ImageSHA256, second.ImageSHA256)
+
+	replay, err := svc.GetImageGenerationReplay(context.Background(), "req-replay")
+	require.NoError(t, err)
+	require.Equal(t, []byte("first-image"), replay.Data)
+	require.Equal(t, "image/png", replay.ContentType)
+	require.Equal(t, uint64(42), replay.UserID)
+}
+
 func TestParseImagePromptSlotsLegacyShapes(t *testing.T) {
 	// A row predating the slots column reads back as "" → no slots, no panic.
 	require.Nil(t, parseImagePromptSlots(""))

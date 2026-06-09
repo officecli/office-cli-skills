@@ -485,6 +485,41 @@ func (s *Service) GenerateImage(ctx context.Context, bearer string, fingerprint 
 	return s.generateImageChargeOnly(ctx, subject, req, upstreamAPIKey)
 }
 
+func (s *Service) AuthorizeImageReplay(ctx context.Context, bearer string, fingerprint string, req ImageRequest) (*ImageResponse, error) {
+	if err := validateHostedProfile(req.Model, true); err != nil {
+		return nil, err
+	}
+	req.RequestID = hostedRequestID(req.RequestID, req.CommitToken)
+	if req.CommitToken != nil {
+		if s.quota == nil {
+			return nil, fmt.Errorf("generation quota service is unavailable")
+		}
+		if err := s.quota.ValidateCommitToken(imageConsumeRequest(req, bearer)); err != nil {
+			return nil, err
+		}
+		return &ImageResponse{RequestID: req.RequestID, AccessMode: req.AccessMode}, nil
+	}
+	subject, err := s.authorizeSubject(ctx, bearer, fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	balance := 0
+	if subject.Key != nil {
+		balance = creditBalance(subject.Key)
+	} else if subject.UserID == 0 && subject.FingerprintHash != "" {
+		account, err := s.store.GetHostedCreditAccountByFingerprint(ctx, subject.FingerprintHash)
+		if err != nil {
+			return nil, err
+		}
+		balance = fingerprintAccountCreditBalance(account)
+	}
+	return &ImageResponse{
+		RequestID:     req.RequestID,
+		UserID:        subject.UserID,
+		CreditBalance: balance,
+	}, nil
+}
+
 func (s *Service) generateImageChargeOnly(ctx context.Context, subject *hostedSubject, req ImageRequest, upstreamAPIKey string) (*ImageResponse, error) {
 	modelName := s.normalizeModel(ctx, req.Model, true)
 	payload := map[string]any{

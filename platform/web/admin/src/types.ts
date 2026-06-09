@@ -322,11 +322,17 @@ export interface Overview {
   paid_orders_last_24h: number
   paid_quota_added_last_24h: number
   remaining_paid_quota: number
+  daily_new_users?: OverviewDailyUsersPoint[]
   usage_trend?: OverviewUsageTrendPoint[]
   mode_breakdown?: OverviewBreakdownItem[]
   result_breakdown?: OverviewBreakdownItem[]
   api_key_status_breakdown?: OverviewBreakdownItem[]
   operations_funnel_30d?: OperationsFunnel
+}
+
+export interface OverviewDailyUsersPoint {
+  date: string
+  users: number
 }
 
 export interface OverviewUsageTrendPoint {

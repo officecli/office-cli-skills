@@ -748,11 +748,17 @@ type OverviewStats struct {
 	PaidOrdersLast24h     int64                     `json:"paid_orders_last_24h"`
 	PaidQuotaAddedLast24h int64                     `json:"paid_quota_added_last_24h"`
 	RemainingPaidQuota    int64                     `json:"remaining_paid_quota"`
+	DailyNewUsers         []OverviewDailyUsersPoint `json:"daily_new_users"`
 	UsageTrend            []OverviewUsageTrendPoint `json:"usage_trend"`
 	ModeBreakdown         []OverviewBreakdownItem   `json:"mode_breakdown"`
 	ResultBreakdown       []OverviewBreakdownItem   `json:"result_breakdown"`
 	APIKeyStatusBreakdown []OverviewBreakdownItem   `json:"api_key_status_breakdown"`
 	OperationsFunnel30d   *OperationsFunnel         `json:"operations_funnel_30d,omitempty"`
+}
+
+type OverviewDailyUsersPoint struct {
+	Date  string `json:"date"`
+	Users int64  `json:"users"`
 }
 
 type OverviewUsageTrendPoint struct {

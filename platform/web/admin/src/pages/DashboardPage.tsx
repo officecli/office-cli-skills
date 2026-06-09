@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { DataTable, LoadingState, MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
 import { buildFingerprintQualityCsv } from '../fingerprintQualityCsv'
-import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewUsageTrendPoint } from '../types'
+import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewDailyUsersPoint, OverviewUsageTrendPoint } from '../types'
 
 const guardrails = [
   'Admin sessions are issued only after company OAuth2 auth plus an exact allowlist match.',
@@ -24,6 +24,8 @@ export default function DashboardPage() {
   const overviewLoading = !overview && overviewFetching
   const funnelLoading = !funnel && funnel30dFetching
   const fingerprintQualityLoading = !fingerprintQuality && fingerprintQualityFetching
+  const dailyNewUsersData = toDailyUsersChartData(overview?.daily_new_users ?? [])
+  const hasDailyNewUsersData = dailyNewUsersData.some((item) => item.users > 0)
   const trendData = toTrendChartData(overview?.usage_trend ?? [])
   const hasTrendData = trendData.some((item) => item.value > 0)
   const resultData = positiveBreakdown(overview?.result_breakdown ?? [])
@@ -59,25 +61,45 @@ export default function DashboardPage() {
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-        <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day." legend={['Checks', 'Consumes', 'Blocked']}>
-          {overviewLoading ? (
-            <LoadingState label="Loading usage trend..." className="min-h-[280px]" />
-          ) : hasTrendData ? (
-            <Line
-              {...baseChartConfig}
-              data={trendData}
-              xField="date"
-              yField="value"
-              colorField="metric"
-              point={{ sizeField: 3 }}
-              axis={{
-                x: { labelFill: '#9aa4b2', lineStroke: '#2a3344' },
-                y: { labelFill: '#9aa4b2', gridStroke: '#1f2937' },
-              }}
-              scale={{ color: { range: ['#7dd3fc', '#8b5cf6', '#fb7185'] } }}
-            />
-          ) : <ChartEmpty />}
-        </ChartPanel>
+        <div className="grid gap-4">
+          <ChartPanel title="Daily new users" description="New platform users registered by UTC day." legend={['Users']}>
+            {overviewLoading ? (
+              <LoadingState label="Loading daily new users..." className="min-h-[280px]" />
+            ) : hasDailyNewUsersData ? (
+              <Line
+                {...baseChartConfig}
+                data={dailyNewUsersData}
+                xField="date"
+                yField="users"
+                point={{ sizeField: 3 }}
+                axis={{
+                  x: { labelFill: '#9aa4b2', lineStroke: '#2a3344' },
+                  y: { labelFill: '#9aa4b2', gridStroke: '#1f2937' },
+                }}
+                scale={{ color: { range: ['#34d399'] } }}
+              />
+            ) : <ChartEmpty />}
+          </ChartPanel>
+          <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day." legend={['Checks', 'Consumes', 'Blocked']}>
+            {overviewLoading ? (
+              <LoadingState label="Loading usage trend..." className="min-h-[280px]" />
+            ) : hasTrendData ? (
+              <Line
+                {...baseChartConfig}
+                data={trendData}
+                xField="date"
+                yField="value"
+                colorField="metric"
+                point={{ sizeField: 3 }}
+                axis={{
+                  x: { labelFill: '#9aa4b2', lineStroke: '#2a3344' },
+                  y: { labelFill: '#9aa4b2', gridStroke: '#1f2937' },
+                }}
+                scale={{ color: { range: ['#7dd3fc', '#8b5cf6', '#fb7185'] } }}
+              />
+            ) : <ChartEmpty />}
+          </ChartPanel>
+        </div>
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
           <PiePanel title="Result mix" data={resultData} colors={['#34d399', '#fb7185']} loading={overviewLoading} />
           <PiePanel title="Mode mix" data={modeData} colors={['#7dd3fc', '#fbbf24', '#a78bfa', '#2dd4bf']} loading={overviewLoading} />
@@ -258,6 +280,10 @@ function ChartEmpty({ compact = false }: { compact?: boolean }) {
       <Empty description="No chart data available" image={Empty.PRESENTED_IMAGE_SIMPLE} />
     </div>
   )
+}
+
+function toDailyUsersChartData(points: OverviewDailyUsersPoint[]) {
+  return points.map((point) => ({ date: point.date, users: point.users ?? 0 }))
 }
 
 function toTrendChartData(points: OverviewUsageTrendPoint[]) {
