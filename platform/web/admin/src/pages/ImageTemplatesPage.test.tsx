@@ -4,6 +4,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ImageTemplatesPage from './ImageTemplatesPage'
 
 const fetchMock = vi.fn()
+const messageApi = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock('antd', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('antd')>()
+  return {
+    ...actual,
+    App: {
+      ...actual.App,
+      useApp: () => ({
+        message: messageApi,
+      }),
+    },
+  }
+})
 
 function renderPage() {
   return render(
@@ -16,6 +33,8 @@ function renderPage() {
 describe('admin image templates page', () => {
   afterEach(() => {
     fetchMock.mockReset()
+    messageApi.success.mockReset()
+    messageApi.error.mockReset()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -56,6 +75,7 @@ describe('admin image templates page', () => {
     fireEvent.click(screen.getByRole('button', { name: /create template/i }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/admin/image-templates', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(messageApi.success).toHaveBeenCalledWith('Template created.'))
   })
 
   it('uploads a thumbnail with multipart form data', async () => {
@@ -91,6 +111,7 @@ describe('admin image templates page', () => {
     fireEvent.change(fileInput, { target: { files: [new File(['png'], 'thumb.png', { type: 'image/png' })] } })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/admin/image-templates/7/thumbnail', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(messageApi.success).toHaveBeenCalledWith('Thumbnail uploaded.'))
   })
 
   it('exports configured templates as importable JSON', async () => {
@@ -136,6 +157,51 @@ describe('admin image templates page', () => {
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
     expect(click).toHaveBeenCalledTimes(1)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:templates')
+    expect(messageApi.success).toHaveBeenCalledWith('Exported 1 image templates.')
+  })
+
+  it('copies configured templates JSON to the clipboard', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/image-templates' && (!init || init.method === undefined)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              {
+                id: 7,
+                slug: 'poster',
+                title: 'Poster',
+                description: 'Poster style',
+                prompt_preset: 'cinematic {{product}}',
+                sort_order: 10,
+                enabled: true,
+              },
+            ],
+          }),
+        }
+      }
+      if (url === '/api/admin/image-templates/publish-requests?status=pending' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const writeText = vi.fn(async (_text: string) => undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+
+    renderPage()
+
+    await screen.findByDisplayValue('Poster')
+    fireEvent.click(screen.getByRole('button', { name: /copy json/i }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(writeText.mock.calls[0][0])).toMatchObject({
+      version: 1,
+      templates: [{ slug: 'poster', title: 'Poster', prompt_preset: 'cinematic {{product}}' }],
+    })
+    expect(messageApi.success).toHaveBeenCalledWith('Copied 1 image templates.')
   })
 
   it('imports image template JSON and creates each template', async () => {
@@ -187,6 +253,55 @@ describe('admin image templates page', () => {
         slots: [{ key: 'university_name', label: 'University name', default_value: 'Cambridge', required: true }],
       })
     })
+    await waitFor(() => expect(messageApi.success).toHaveBeenCalledWith('Imported 1 image templates.'))
+  })
+
+  it('imports pasted image template JSON and closes the paste dialog', async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/admin/image-templates' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/admin/image-templates/publish-requests?status=pending' && (!init || init.method === undefined)) {
+        return { ok: true, status: 200, json: async () => ({ data: [] }) }
+      }
+      if (url === '/api/admin/image-templates' && init?.method === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ data: { id: 9, ...JSON.parse(String(init.body)) } }) }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    await screen.findByText(/No image templates/i)
+    fireEvent.click(screen.getByRole('button', { name: /paste json/i }))
+    fireEvent.change(await screen.findByPlaceholderText(/paste image-template json here/i), {
+      target: {
+        value: JSON.stringify({
+          templates: [
+            {
+              title: 'Pasted Poster',
+              promptPreset: 'Pasted prompt',
+              enabled: true,
+            },
+          ],
+        }),
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^import$/i }))
+
+    await waitFor(() => {
+      const createCalls = fetchMock.mock.calls.filter((call) => call[0] === '/api/admin/image-templates' && call[1]?.method === 'POST')
+      expect(createCalls).toHaveLength(1)
+      expect(JSON.parse(String(createCalls[0][1]?.body))).toMatchObject({
+        slug: 'pasted-poster',
+        title: 'Pasted Poster',
+        prompt_preset: 'Pasted prompt',
+      })
+    })
+    await waitFor(() => expect(messageApi.success).toHaveBeenCalledWith('Imported 1 image templates.'))
+    expect(screen.queryByPlaceholderText(/paste image-template json here/i)).not.toBeInTheDocument()
   })
 
   it('reviews a pending publish request', async () => {
@@ -220,5 +335,6 @@ describe('admin image templates page', () => {
     fireEvent.click(screen.getByRole('button', { name: /approve/i }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/admin/image-templates/publish-requests/3/review', expect.objectContaining({ method: 'POST' })))
+    await waitFor(() => expect(messageApi.success).toHaveBeenCalledWith('Publish request approved.'))
   })
 })

@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Download, FileInput, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
+import { App as AntApp, Input, Modal } from 'antd'
+import { CheckCircle2, ClipboardPaste, Copy, Download, FileInput, ImageUp, Save, Trash2, XCircle } from 'lucide-react'
 import { ApiError, api } from '../api'
 import { EmptyState, LoadingState, Panel, SectionHeading, StatusPill } from '../components/ui'
 import type { ImagePromptSlot, ImagePromptTemplate } from '../types'
@@ -157,6 +158,7 @@ function editableTemplate(template: ImagePromptTemplate): ImagePromptTemplate {
 }
 
 export default function ImageTemplatesPage() {
+  const { message } = AntApp.useApp()
   const queryClient = useQueryClient()
   const jsonInputRef = useRef<HTMLInputElement>(null)
   const { data: templatesData, isLoading } = useQuery({ queryKey: ['admin-image-templates'], queryFn: api.imageTemplates })
@@ -166,10 +168,17 @@ export default function ImageTemplatesPage() {
   const [draft, setDraft] = useState<ImagePromptTemplate>(blankTemplate)
   const [editDrafts, setEditDrafts] = useState<Record<number, ImagePromptTemplate>>({})
   const [error, setError] = useState('')
-  const [importMessage, setImportMessage] = useState('')
+  const [pasteModalOpen, setPasteModalOpen] = useState(false)
+  const [pasteTemplateJSON, setPasteTemplateJSON] = useState('')
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-image-templates'] })
     queryClient.invalidateQueries({ queryKey: ['admin-image-template-publish-requests'] })
+  }
+
+  function showError(err: unknown, fallback: string) {
+    const text = errorMessage(err, fallback)
+    setError(text)
+    message.error(text)
   }
 
   const sortedTemplates = useMemo(() => [...templates].sort((a, b) => (a.sort_order - b.sort_order) || String(a.title).localeCompare(String(b.title))), [templates])
@@ -179,37 +188,55 @@ export default function ImageTemplatesPage() {
     onSuccess: async () => {
       setDraft(blankTemplate)
       setError('')
+      message.success('Template created.')
       await invalidate()
     },
-    onError: (err) => setError(errorMessage(err, 'Failed to create template.')),
+    onError: (err) => showError(err, 'Failed to create template.'),
   })
   const update = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: ImagePromptTemplate }) => api.updateImageTemplate(id, normalizeTemplate(payload)),
     onSuccess: async () => {
       setError('')
+      message.success('Template saved.')
       await invalidate()
     },
-    onError: (err) => setError(errorMessage(err, 'Failed to save template.')),
+    onError: (err) => showError(err, 'Failed to save template.'),
   })
   const toggle = useMutation({
     mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => enabled ? api.enableImageTemplate(id) : api.disableImageTemplate(id),
-    onSuccess: invalidate,
-    onError: (err) => setError(errorMessage(err, 'Failed to update template status.')),
+    onSuccess: async (_, variables) => {
+      setError('')
+      message.success(variables.enabled ? 'Template enabled.' : 'Template disabled.')
+      await invalidate()
+    },
+    onError: (err) => showError(err, 'Failed to update template status.'),
   })
   const remove = useMutation({
     mutationFn: api.deleteImageTemplate,
-    onSuccess: invalidate,
-    onError: (err) => setError(errorMessage(err, 'Failed to delete template.')),
+    onSuccess: async () => {
+      setError('')
+      message.success('Template deleted.')
+      await invalidate()
+    },
+    onError: (err) => showError(err, 'Failed to delete template.'),
   })
   const upload = useMutation({
     mutationFn: ({ id, file }: { id: number; file: File }) => api.uploadImageTemplateThumbnail(id, file),
-    onSuccess: invalidate,
-    onError: (err) => setError(errorMessage(err, 'Failed to upload thumbnail.')),
+    onSuccess: async () => {
+      setError('')
+      message.success('Thumbnail uploaded.')
+      await invalidate()
+    },
+    onError: (err) => showError(err, 'Failed to upload thumbnail.'),
   })
   const review = useMutation({
     mutationFn: ({ id, action }: { id: number; action: 'approve' | 'reject' }) => api.reviewImageTemplatePublishRequest(id, { action }),
-    onSuccess: invalidate,
-    onError: (err) => setError(errorMessage(err, 'Failed to review publish request.')),
+    onSuccess: async (_, variables) => {
+      setError('')
+      message.success(`Publish request ${variables.action === 'approve' ? 'approved' : 'rejected'}.`)
+      await invalidate()
+    },
+    onError: (err) => showError(err, 'Failed to review publish request.'),
   })
   const importTemplates = useMutation({
     mutationFn: async (payloads: ImagePromptTemplate[]) => {
@@ -220,13 +247,10 @@ export default function ImageTemplatesPage() {
     },
     onSuccess: async (count) => {
       setError('')
-      setImportMessage(`Imported ${count} image templates.`)
+      message.success(`Imported ${count} image templates.`)
       await invalidate()
     },
-    onError: (err) => {
-      setImportMessage('')
-      setError(errorMessage(err, 'Failed to import template JSON.'))
-    },
+    onError: (err) => showError(err, 'Failed to import template JSON.'),
   })
 
   function submitCreate(event: FormEvent) {
@@ -245,7 +269,20 @@ export default function ImageTemplatesPage() {
 
   function exportTemplates() {
     downloadJSON('officecli-image-templates.json', exportImageTemplatesJSON(sortedTemplates))
-    setImportMessage(`Exported ${sortedTemplates.length} image templates.`)
+    setError('')
+    message.success(`Exported ${sortedTemplates.length} image templates.`)
+  }
+
+  async function copyTemplatesJSON() {
+    try {
+      await navigator.clipboard.writeText(exportImageTemplatesJSON(sortedTemplates))
+      setError('')
+      message.success(`Copied ${sortedTemplates.length} image templates.`)
+    } catch {
+      const text = 'Failed to copy image template JSON.'
+      setError(text)
+      message.error(text)
+    }
   }
 
   async function importTemplatesFile(file: File) {
@@ -253,8 +290,23 @@ export default function ImageTemplatesPage() {
       const imported = importImageTemplatesJSON(await readFileText(file))
       importTemplates.mutate(imported)
     } catch (err) {
-      setImportMessage('')
-      setError(err instanceof Error ? `Failed to import template JSON: ${err.message}` : 'Failed to import template JSON.')
+      const text = err instanceof Error ? `Failed to import template JSON: ${err.message}` : 'Failed to import template JSON.'
+      setError(text)
+      message.error(text)
+    }
+  }
+
+  async function importPastedTemplates() {
+    try {
+      const imported = importImageTemplatesJSON(pasteTemplateJSON)
+      await importTemplates.mutateAsync(imported)
+      setPasteTemplateJSON('')
+      setPasteModalOpen(false)
+    } catch (err) {
+      if (err instanceof ApiError) return
+      const text = err instanceof Error ? `Failed to import template JSON: ${err.message}` : 'Failed to import template JSON.'
+      setError(text)
+      message.error(text)
     }
   }
 
@@ -270,8 +322,14 @@ export default function ImageTemplatesPage() {
           <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={() => jsonInputRef.current?.click()} disabled={importTemplates.isPending}>
             <FileInput size={14} /> Import JSON
           </button>
+          <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={() => setPasteModalOpen(true)} disabled={importTemplates.isPending}>
+            <ClipboardPaste size={14} /> Paste JSON
+          </button>
           <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={exportTemplates}>
             <Download size={14} /> Export JSON
+          </button>
+          <button type="button" className="admin-secondary-button inline-flex items-center gap-2" onClick={() => void copyTemplatesJSON()}>
+            <Copy size={14} /> Copy JSON
           </button>
           <input
             ref={jsonInputRef}
@@ -284,7 +342,6 @@ export default function ImageTemplatesPage() {
               if (file) void importTemplatesFile(file)
             }}
           />
-          {importMessage ? <span className="text-sm text-emerald-200">{importMessage}</span> : null}
         </div>
         {error ? <div className="admin-card-muted mb-4 rounded-2xl border border-red-400/40 p-4 text-sm text-red-200">{error}</div> : null}
         <form className="admin-card-muted grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4" onSubmit={submitCreate}>
@@ -365,6 +422,24 @@ export default function ImageTemplatesPage() {
           </div>
         ) : <EmptyState title="No image templates" body="Create the first template to make it visible in OfficeDex image generation." />}
       </Panel>
+
+      <Modal
+        title="Paste image-template JSON"
+        open={pasteModalOpen}
+        okText="Import"
+        cancelText="Cancel"
+        onOk={() => void importPastedTemplates()}
+        onCancel={() => setPasteModalOpen(false)}
+        confirmLoading={importTemplates.isPending}
+        destroyOnHidden
+      >
+        <Input.TextArea
+          value={pasteTemplateJSON}
+          onChange={(event) => setPasteTemplateJSON(event.target.value)}
+          placeholder="Paste image-template JSON here..."
+          autoSize={{ minRows: 8, maxRows: 16 }}
+        />
+      </Modal>
     </div>
   )
 }
