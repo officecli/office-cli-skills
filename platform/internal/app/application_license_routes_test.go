@@ -15,11 +15,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 
 	"github.com/officecli/officecli/platform/internal/httpapi"
 	licensesvc "github.com/officecli/officecli/platform/internal/license"
 	"github.com/officecli/officecli/platform/internal/model"
 	rewardsvc "github.com/officecli/officecli/platform/internal/reward"
+	sqlstore "github.com/officecli/officecli/platform/internal/store/sqlstore"
 )
 
 type testAPIKeyStore struct{}
@@ -378,6 +381,62 @@ func TestRegisterLicenseRoutesCheckReturnsRewardResponse(t *testing.T) {
 	}
 	if response.Data.CommitToken == nil || response.Data.CommitToken.AccessMode != model.AccessModeReward {
 		t.Fatalf("commit token = %+v", response.Data.CommitToken)
+	}
+}
+
+func TestRegisterLicenseRoutesCheckReturnsPaidEntitlementFromAppRepo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dbName := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	db, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("gorm.Open() error = %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}, &model.UserHostedCreditAccount{}, &model.UsageEvent{}); err != nil {
+		t.Fatalf("AutoMigrate() error = %v", err)
+	}
+	user := &model.User{
+		Email:           "paid-route@example.com",
+		Name:            "Paid Route",
+		InviteCode:      "invite-paid-route",
+		Status:          model.UserStatusActive,
+		PaidEntitlement: true,
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("Create(user) error = %v", err)
+	}
+	if err := db.Create(&model.UserHostedCreditAccount{UserID: user.ID, CreditBalance: 12}).Error; err != nil {
+		t.Fatalf("Create(account) error = %v", err)
+	}
+	store := sqlstore.NewWithDB(db)
+	router := gin.New()
+	api := router.Group("/api")
+	lic := licensesvc.NewService(apiKeyRepo{store: store}, store, nil, usageEventRepo{store: store}, testIdemStore{}, nil, nil, "salt", time.Hour)
+	registerLicenseRoutes(api, lic)
+
+	body, _ := json.Marshal(licensesvc.CheckRequest{
+		FingerprintHash: "fp-paid-route",
+		UserID:          user.ID,
+		RuntimeMode:     string(model.AccessModeHosted),
+		RequestNonce:    "nonce-paid-route-generate",
+		Action:          string(model.UsageActionGenerate),
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/license/check", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data licensesvc.CheckResponse `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !response.Data.PaidEntitlement {
+		t.Fatalf("paid_entitlement = false, response = %+v", response.Data)
 	}
 }
 

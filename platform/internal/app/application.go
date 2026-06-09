@@ -2856,6 +2856,9 @@ func (r apiKeyRepo) ConsumePaidByHash(ctx context.Context, hash string) (*model.
 func (r apiKeyRepo) GetHostedCreditAccountByUser(ctx context.Context, userID uint64) (*model.UserHostedCreditAccount, error) {
 	return r.store.GetHostedCreditAccountByUser(ctx, userID)
 }
+func (r apiKeyRepo) GetUserPaidEntitlement(ctx context.Context, userID uint64) (bool, error) {
+	return r.store.GetUserPaidEntitlement(ctx, userID)
+}
 
 type usageEventRepo struct{ store *sqlstore.Store }
 
