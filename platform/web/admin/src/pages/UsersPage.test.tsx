@@ -166,7 +166,7 @@ describe('admin users page', () => {
     renderPage()
 
     const viewEventsLink = await screen.findByRole('link', { name: /^view events$/i })
-    expect(viewEventsLink).toHaveAttribute('href', '/usage-events?user_id=42')
+    expect(viewEventsLink).toHaveAttribute('href', '/admin/usage-events?user_id=42')
     expect(viewEventsLink).toHaveAttribute('target', '_blank')
     expect(viewEventsLink).toHaveAttribute('rel', 'noreferrer')
   })
@@ -192,7 +192,7 @@ describe('admin users page', () => {
     renderPage()
 
     const userCellLink = await screen.findByRole('link', { name: /view usage events for ops operator/i })
-    expect(userCellLink).toHaveAttribute('href', '/usage-events?user_id=7')
+    expect(userCellLink).toHaveAttribute('href', '/admin/usage-events?user_id=7')
     expect(userCellLink).toHaveAttribute('target', '_blank')
     expect(userCellLink).toHaveAttribute('rel', 'noreferrer')
   })

@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { DataTable, EmptyState, LoadingState, Panel, SectionHeading, StatusPill, formatDate, formatNumber } from '../components/ui'
 
+const adminBasePath = import.meta.env.BASE_URL.replace(/\/$/, '')
+const usageEventsHref = (userID: number) => `${adminBasePath}/usage-events?user_id=${userID}`
+
 export default function UsersPage() {
   const queryClient = useQueryClient()
   const [selectedUserID, setSelectedUserID] = useState<number | null>(null)
@@ -39,7 +42,7 @@ export default function UsersPage() {
               <code key={`uid-${user.id}`} className="font-mono text-xs text-white">{user.id}</code>,
               <a
                 key={`user-${user.id}`}
-                href={`/usage-events?user_id=${user.id}`}
+                href={usageEventsHref(user.id)}
                 target="_blank"
                 rel="noreferrer"
                 className="block w-full cursor-pointer rounded-md text-left transition-colors hover:bg-white/5 focus:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary/40"
@@ -60,7 +63,7 @@ export default function UsersPage() {
               <div key={`action-${user.id}`} className="flex flex-wrap gap-2">
                 <a
                   className="admin-secondary-button"
-                  href={`/usage-events?user_id=${user.id}`}
+                  href={usageEventsHref(user.id)}
                   target="_blank"
                   rel="noreferrer"
                 >
