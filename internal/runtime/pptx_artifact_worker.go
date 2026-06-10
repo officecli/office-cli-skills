@@ -275,7 +275,7 @@ func emitPPTXArtifactDebugMetadata(options PPTXBuildOptions, output pptxArtifact
 	previewFiles := append([]string(nil), output.PreviewFiles...)
 	options.ArtifactDebugSink(PPTXArtifactDebugMetadata{
 		Enabled:               true,
-		Backend:               PPTXBackendArtifactExperimental,
+		Backend:               PPTXBackendArtifactWorker,
 		WorkerVersion:         strings.TrimSpace(output.WorkerVersion),
 		WorkerDir:             strings.TrimSpace(output.WorkerDir),
 		WorkerScriptPath:      strings.TrimSpace(output.ScriptPath),
@@ -339,7 +339,7 @@ func buildPPTXArtifactQualitySummary(output pptxArtifactWorkerOutput, request pp
 		gate = "fail"
 	}
 	return &PPTXArtifactQualitySummary{
-		Backend:             PPTXBackendArtifactExperimental,
+		Backend:             PPTXBackendArtifactWorker,
 		WorkerVersion:       strings.TrimSpace(output.WorkerVersion),
 		SlideCount:          len(request.Slides),
 		ExpectedCharts:      expectedCharts,
@@ -370,7 +370,7 @@ func buildPPTXArtifactNarrativePlanMarkdown(request pptxArtifactWorkerRequest, o
 	b.WriteString("## Audience\n")
 	b.WriteString("Not specified by the request; optimize for a concise, reviewable presentation.\n\n")
 	b.WriteString("## Objective\n")
-	b.WriteString(fmt.Sprintf("Generate `%s` as an editable PPTX using the `%s` backend.\n\n", strings.TrimSpace(firstNonEmpty(request.Title, "Presentation")), PPTXBackendArtifactExperimental))
+	b.WriteString(fmt.Sprintf("Generate `%s` as an editable PPTX using the `%s` backend.\n\n", strings.TrimSpace(firstNonEmpty(request.Title, "Presentation")), PPTXBackendArtifactWorker))
 	b.WriteString("## Narrative Arc\n")
 	if request.DesignPlan != nil && len(request.DesignPlan.Slides) > 0 {
 		for _, slide := range request.DesignPlan.Slides {
@@ -4858,7 +4858,7 @@ func resolveArtifactWorkerNode() (string, error) {
 	}
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
-		return "", fmt.Errorf("node executable was not found; set OFFICECLI_PPTX_ARTIFACT_NODE to enable pptx backend %q", PPTXBackendArtifactExperimental)
+		return "", fmt.Errorf("node executable was not found; set OFFICECLI_PPTX_ARTIFACT_NODE to enable pptx backend %q", PPTXBackendArtifactWorker)
 	}
 	return nodePath, nil
 }

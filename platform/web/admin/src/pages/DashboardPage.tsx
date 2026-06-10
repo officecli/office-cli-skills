@@ -1,13 +1,18 @@
 import { useQuery } from '@tanstack/react-query'
-import { Line, Pie } from '@ant-design/plots'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { init, use, type EChartsType } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
 import { Button, Checkbox, Empty, Typography } from 'antd'
 import { Activity, Download, ShieldAlert, Waypoints } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { DataTable, LoadingState, MetricCard, Panel, SectionHeading, formatNumber } from '../components/ui'
 import { buildFingerprintQualityCsv } from '../fingerprintQualityCsv'
 import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewDailyUsersPoint, OverviewUsageTrendPoint } from '../types'
+
+use([LineChart, PieChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const guardrails = [
   'Admin sessions are issued only after company OAuth2 auth plus an exact allowlist match.',
@@ -24,10 +29,13 @@ export default function DashboardPage() {
   const overviewLoading = !overview && overviewFetching
   const funnelLoading = !funnel && funnel30dFetching
   const fingerprintQualityLoading = !fingerprintQuality && fingerprintQualityFetching
-  const dailyNewUsersData = toDailyUsersChartData(overview?.daily_new_users ?? [])
+  const dailyNewUsersData = useMemo(() => toDailyUsersChartData(overview?.daily_new_users ?? []), [overview?.daily_new_users])
   const hasDailyNewUsersData = dailyNewUsersData.some((item) => item.users > 0)
-  const trendData = toTrendChartData(overview?.usage_trend ?? [])
+  const usageTrendPoints = overview?.usage_trend ?? []
+  const trendData = useMemo(() => toTrendChartData(usageTrendPoints), [usageTrendPoints])
   const hasTrendData = trendData.some((item) => item.value > 0)
+  const dailyNewUsersOption = useMemo(() => buildDailyUsersLineOption(dailyNewUsersData), [dailyNewUsersData])
+  const usageTrendOption = useMemo(() => buildUsageTrendLineOption(usageTrendPoints), [usageTrendPoints])
   const resultData = positiveBreakdown(overview?.result_breakdown ?? [])
   const modeData = positiveBreakdown(overview?.mode_breakdown ?? [])
   const apiKeyStatusData = positiveBreakdown(overview?.api_key_status_breakdown ?? [])
@@ -66,37 +74,14 @@ export default function DashboardPage() {
             {overviewLoading ? (
               <LoadingState label="Loading daily new users..." className="min-h-[280px]" />
             ) : hasDailyNewUsersData ? (
-              <Line
-                {...baseChartConfig}
-                data={dailyNewUsersData}
-                xField="date"
-                yField="users"
-                point={{ sizeField: 3 }}
-                axis={{
-                  x: { labelFill: '#9aa4b2', lineStroke: '#2a3344' },
-                  y: { labelFill: '#9aa4b2', gridStroke: '#1f2937' },
-                }}
-                scale={{ color: { range: ['#34d399'] } }}
-              />
+              <EChartsLine option={dailyNewUsersOption} />
             ) : <ChartEmpty />}
           </ChartPanel>
           <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day." legend={['Checks', 'Consumes', 'Blocked']}>
             {overviewLoading ? (
               <LoadingState label="Loading usage trend..." className="min-h-[280px]" />
             ) : hasTrendData ? (
-              <Line
-                {...baseChartConfig}
-                data={trendData}
-                xField="date"
-                yField="value"
-                colorField="metric"
-                point={{ sizeField: 3 }}
-                axis={{
-                  x: { labelFill: '#9aa4b2', lineStroke: '#2a3344' },
-                  y: { labelFill: '#9aa4b2', gridStroke: '#1f2937' },
-                }}
-                scale={{ color: { range: ['#7dd3fc', '#8b5cf6', '#fb7185'] } }}
-              />
+              <EChartsLine option={usageTrendOption} />
             ) : <ChartEmpty />}
           </ChartPanel>
         </div>
@@ -225,15 +210,6 @@ export default function DashboardPage() {
   )
 }
 
-const baseChartConfig = {
-  autoFit: true,
-  height: 280,
-  padding: 'auto',
-  legend: false,
-  tooltip: true,
-  theme: 'classicDark',
-} as const
-
 function ChartPanel({ title, description, legend, children }: { title: string; description?: string; legend?: string[]; children: ReactNode }) {
   return (
     <Panel className="admin-chart-panel">
@@ -253,22 +229,87 @@ function ChartPanel({ title, description, legend, children }: { title: string; d
   )
 }
 
+type EChartsChartOption = {
+  animation: boolean
+  backgroundColor: string
+  color: string[]
+  grid?: Record<string, number | string | boolean>
+  tooltip: {
+    trigger: string
+    confine: boolean
+    transitionDuration: number
+    backgroundColor: string
+    borderColor: string
+    textStyle: { color: string }
+    axisPointer: Record<string, unknown>
+    formatter: (params: EChartsTooltipParam[] | EChartsTooltipParam) => string
+  }
+  xAxis?: Record<string, unknown> & { data: string[] }
+  yAxis?: Record<string, unknown>
+  series: Array<Record<string, unknown> & { name: string; data: unknown[] }>
+}
+
+type EChartsTooltipParam = {
+  axisValue?: string
+  marker?: string
+  seriesName: string
+  data: number
+  name?: string
+  value?: number
+}
+
+function EChartsChart({ option, testId, className }: { option: EChartsChartOption; testId: string; className: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const chartRef = useRef<EChartsType | null>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const chart = init(container, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
+
+    const resize = () => chart.resize()
+    let observer: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(resize)
+      observer.observe(container)
+    } else {
+      window.addEventListener('resize', resize)
+    }
+
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', resize)
+      chart.dispose()
+      chartRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    chartRef.current?.setOption(option, true)
+  }, [option])
+
+  return <div data-testid={testId} className={className} ref={containerRef} />
+}
+
+function EChartsLine({ option }: { option: EChartsChartOption }) {
+  return <EChartsChart option={option} testId="echarts-line-chart" className="h-[280px] w-full" />
+}
+
+function EChartsPie({ option }: { option: EChartsChartOption }) {
+  return <EChartsChart option={option} testId="echarts-pie-chart" className="h-[190px] w-full" />
+}
+
 function PiePanel({ title, data, colors, loading = false }: { title: string; data: OverviewBreakdownItem[]; colors: string[]; loading?: boolean }) {
+  const pieOption = useMemo(() => buildPieOption(title, data, colors), [colors, data, title])
+
   return (
     <ChartPanel title={title} legend={data.map((item) => item.label)}>
       {loading ? (
         <LoadingState label={`Loading ${title.toLowerCase()}...`} className="min-h-[190px]" />
       ) : data.length ? (
-        <Pie
-          {...baseChartConfig}
-          height={190}
-          data={data}
-          angleField="value"
-          colorField="label"
-          innerRadius={0.64}
-          label={false}
-          scale={{ color: { range: colors } }}
-        />
+        <EChartsPie option={pieOption} />
       ) : <ChartEmpty compact />}
     </ChartPanel>
   )
@@ -282,16 +323,130 @@ function ChartEmpty({ compact = false }: { compact?: boolean }) {
   )
 }
 
-function toDailyUsersChartData(points: OverviewDailyUsersPoint[]) {
+type DailyUsersChartDatum = { date: string; users: number }
+type TrendChartDatum = { date: string; metric: string; value: number }
+
+function toDailyUsersChartData(points: OverviewDailyUsersPoint[]): DailyUsersChartDatum[] {
   return points.map((point) => ({ date: point.date, users: point.users ?? 0 }))
 }
 
-function toTrendChartData(points: OverviewUsageTrendPoint[]) {
+function toTrendChartData(points: OverviewUsageTrendPoint[]): TrendChartDatum[] {
   return points.flatMap((point) => [
     { date: point.date, metric: 'Checks', value: point.checks ?? 0 },
     { date: point.date, metric: 'Consumes', value: point.consumes ?? 0 },
     { date: point.date, metric: 'Blocked', value: point.blocked ?? 0 },
   ])
+}
+
+function buildDailyUsersLineOption(data: DailyUsersChartDatum[]): EChartsChartOption {
+  return buildLineOption({
+    dates: data.map((point) => point.date),
+    colors: ['#2f8cff'],
+    series: [{ name: 'Users', data: data.map((point) => point.users) }],
+  })
+}
+
+function buildUsageTrendLineOption(points: OverviewUsageTrendPoint[]): EChartsChartOption {
+  return buildLineOption({
+    dates: points.map((point) => point.date),
+    colors: ['#7dd3fc', '#8b5cf6', '#fb7185'],
+    series: [
+      { name: 'Checks', data: points.map((point) => point.checks ?? 0) },
+      { name: 'Consumes', data: points.map((point) => point.consumes ?? 0) },
+      { name: 'Blocked', data: points.map((point) => point.blocked ?? 0) },
+    ],
+  })
+}
+
+function buildLineOption({ dates, colors, series }: { dates: string[]; colors: string[]; series: Array<{ name: string; data: number[] }> }): EChartsChartOption {
+  return {
+    animation: false,
+    backgroundColor: 'transparent',
+    color: colors,
+    grid: { left: 48, right: 20, top: 18, bottom: 36, containLabel: false },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      transitionDuration: 0,
+      backgroundColor: '#1f1f1f',
+      borderColor: '#2f3643',
+      textStyle: { color: '#d1d5db' },
+      axisPointer: {
+        type: 'line',
+        animation: false,
+        lineStyle: { color: '#384150', width: 1 },
+      },
+      formatter: formatLineTooltip,
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates,
+      axisLine: { lineStyle: { color: '#2a3344' } },
+      axisTick: { lineStyle: { color: '#4b5563' } },
+      axisLabel: { color: '#9aa4b2' },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: '#9aa4b2' },
+      splitLine: { lineStyle: { color: '#1f2937', type: 'dashed' } },
+    },
+    series: series.map((item) => ({
+      name: item.name,
+      type: 'line',
+      data: item.data,
+      showSymbol: true,
+      symbolSize: 6,
+      smooth: false,
+      lineStyle: { width: 1.5 },
+      emphasis: { disabled: true },
+    })),
+  }
+}
+
+function buildPieOption(title: string, data: OverviewBreakdownItem[], colors: string[]): EChartsChartOption {
+  return {
+    animation: false,
+    backgroundColor: 'transparent',
+    color: colors,
+    tooltip: {
+      trigger: 'item',
+      confine: true,
+      transitionDuration: 0,
+      backgroundColor: '#1f1f1f',
+      borderColor: '#2f3643',
+      textStyle: { color: '#d1d5db' },
+      axisPointer: {},
+      formatter: formatPieTooltip,
+    },
+    series: [{
+      name: title,
+      type: 'pie',
+      radius: ['64%', '86%'],
+      center: ['50%', '50%'],
+      stillShowZeroSum: false,
+      label: { show: false },
+      labelLine: { show: false },
+      emphasis: { disabled: true },
+      data: data.map((item) => ({ name: item.label, value: item.value })),
+    }],
+  }
+}
+
+function formatLineTooltip(params: EChartsTooltipParam[] | EChartsTooltipParam) {
+  const items = Array.isArray(params) ? params : [params]
+  const title = items[0]?.axisValue ?? ''
+  const rows = items.map((item) => {
+    const marker = item.marker ?? ''
+    return `${marker}${item.seriesName}: ${formatNumber(item.data)}`
+  })
+  return [title, ...rows].join('<br />')
+}
+
+function formatPieTooltip(param: EChartsTooltipParam[] | EChartsTooltipParam) {
+  const item = Array.isArray(param) ? param[0] : param
+  return `${item.name ?? item.seriesName}: ${formatNumber(item.value ?? item.data)}`
 }
 
 function positiveBreakdown(items: OverviewBreakdownItem[]) {

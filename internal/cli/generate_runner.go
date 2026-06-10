@@ -238,7 +238,7 @@ type pptxArtifactPreviewReviewerAdapter struct {
 }
 
 func pptxArtifactPreviewReviewerForConfig(cfg Config, job GenerateJob) runtime.PPTXArtifactPreviewReviewer {
-	if job.DocumentType != engine.DocumentTypePPTX || strings.TrimSpace(job.PPTXBackend) != runtime.PPTXBackendArtifactExperimental {
+	if job.DocumentType != engine.DocumentTypePPTX || strings.TrimSpace(job.PPTXBackend) != runtime.PPTXBackendArtifactWorker {
 		return nil
 	}
 	provider := strings.ToLower(strings.TrimSpace(cfg.LLM.Provider))
@@ -540,10 +540,11 @@ func (a *App) buildGenerateJobFromRequest(cfg Config, req bridgeInvokeParams) (G
 	if err != nil {
 		return GenerateJob{}, err
 	}
-	pptxBackend, err := pptxBackendFromBridgeArgs(documentType, req.Args)
+	pptxBackend, backendWarnings, err := pptxBackendFromBridgeArgs(documentType, req.Args)
 	if err != nil {
 		return GenerateJob{}, err
 	}
+	warnings = append(warnings, backendWarnings...)
 	imageSize := strings.TrimSpace(req.Args.Size)
 	if imageSize != "" && documentType != engine.DocumentTypeIMG {
 		return GenerateJob{}, fmt.Errorf("size is only supported for img generation")
@@ -618,15 +619,15 @@ func cloneImageWatermarkOptions(options *ImageWatermarkOptions) *ImageWatermarkO
 	return &clone
 }
 
-func pptxBackendFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (string, error) {
+func pptxBackendFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (string, []engine.GenerateIssue, error) {
 	backend := strings.TrimSpace(args.PPTXBackend)
 	if backend != "" && documentType != engine.DocumentTypePPTX {
-		return "", fmt.Errorf("pptx_backend is only supported for pptx generation")
+		return "", nil, fmt.Errorf("pptx_backend is only supported for pptx generation")
 	}
 	if documentType != engine.DocumentTypePPTX {
-		return "", nil
+		return "", nil, nil
 	}
-	return runtime.NormalizePPTXBackend(backend)
+	return runtime.NormalizePPTXBackendWithWarnings(backend)
 }
 
 func pptxReferenceOptionsFromBridgeArgs(documentType engine.DocumentType, args bridgeInvokeArgs) (bool, string, []string, error) {

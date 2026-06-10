@@ -28,8 +28,10 @@ import (
 )
 
 const (
+	PPTXBackendGoSpine              = "go-spine"
 	PPTXBackendOfficegen            = "officegen"
 	PPTXBackendArtifactExperimental = "artifact-experimental"
+	PPTXBackendArtifactWorker       = "artifact-worker"
 )
 
 var (
@@ -62,15 +64,30 @@ type GenerateParams struct {
 }
 
 func NormalizePPTXBackend(value string) (string, error) {
+	backend, _, err := NormalizePPTXBackendWithWarnings(value)
+	return backend, err
+}
+
+func NormalizePPTXBackendWithWarnings(value string) (string, []engine.GenerateIssue, error) {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
-		return PPTXBackendOfficegen, nil
+		return PPTXBackendGoSpine, nil, nil
 	}
 	switch value {
-	case PPTXBackendOfficegen, PPTXBackendArtifactExperimental:
-		return value, nil
+	case PPTXBackendGoSpine, PPTXBackendOfficegen, PPTXBackendArtifactWorker:
+		return value, nil, nil
+	case PPTXBackendArtifactExperimental:
+		return PPTXBackendGoSpine, []engine.GenerateIssue{deprecatedPPTXBackendWarning()}, nil
 	default:
-		return "", fmt.Errorf("unsupported pptx backend: %s", value)
+		return "", nil, fmt.Errorf("unsupported pptx backend: %s", value)
+	}
+}
+
+func deprecatedPPTXBackendWarning() engine.GenerateIssue {
+	return engine.GenerateIssue{
+		Code:    "WARN_PPTX_BACKEND_DEPRECATED",
+		Field:   "pptx_backend",
+		Message: "pptx backend artifact-experimental is deprecated and now aliases to go-spine; use --pptx-backend go-spine or --pptx-backend officegen.",
 	}
 }
 
@@ -608,7 +625,7 @@ func imageExtensionFromMIME(mime string) string {
 }
 
 func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target generateengine.PromptTarget, meta *generateengine.PPTXMeta, enableImages, localPreview, referenceScanEnabled bool, referenceScanRoot string, referencePPTXSources []string, pptxBackend string, debug bool) (*GeneratedArtifact, error) {
-	backend, err := NormalizePPTXBackend(pptxBackend)
+	backend, backendWarnings, err := NormalizePPTXBackendWithWarnings(pptxBackend)
 	if err != nil {
 		return nil, err
 	}
@@ -668,7 +685,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 	buildOptions.ReferenceScanRoot = referenceScanRoot
 	buildOptions.ReferenceProfile = referenceProfile
 	buildOptions.ReferenceBrief = referenceBrief
-	buildOptions.GenerateArtifactDesignPlan = backend == PPTXBackendArtifactExperimental
+	buildOptions.GenerateArtifactDesignPlan = backend == PPTXBackendArtifactWorker
 	buildOptions.ArtifactDesignPlanLLM = s.llm
 	buildOptions.ArtifactPreviewReviewer = s.artifactPreviewReviewer
 	if debug {
@@ -712,7 +729,7 @@ func (s *Service) generatePPTX(ctx context.Context, prompt, topic string, target
 		DocumentName:         fileName,
 		DocumentType:         string(engine.DocumentTypePPTX),
 		Bytes:                fileBytes,
-		Warnings:             append(append(convertIssues(meta), referenceWarnings...), warnings...),
+		Warnings:             append(append(append(convertIssues(meta), backendWarnings...), referenceWarnings...), warnings...),
 		PreviewHTML:          previewHTML,
 		PreviewJSON:          previewJSON,
 		HostedCreditBalance:  hostedCreditBalance,
@@ -1952,7 +1969,7 @@ func BuildPPTXFromJSON(ctx context.Context, llm engine.LLMClient, progress engin
 }
 
 func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, progress engine.ProgressEmitter, content, fallback, requestedStyle string, enableImages, localPreview bool, options PPTXBuildOptions) ([]byte, string, []engine.GenerateIssue, []byte, []byte, error) {
-	backend, err := NormalizePPTXBackend(options.Backend)
+	backend, backendWarnings, err := NormalizePPTXBackendWithWarnings(options.Backend)
 	if err != nil {
 		return nil, "", nil, nil, nil, err
 	}
@@ -1968,7 +1985,8 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 		emitProgress(ctx, progress, progressStepAssemble, "failed", "PPTX structure is empty")
 		return nil, "", nil, nil, nil, fmt.Errorf("document assembly failed: slides cannot be empty")
 	}
-	warnings := normalizePPTXPayloadWithOptions(&payload, fallback, requestedStyle, enableImages)
+	warnings := append([]engine.GenerateIssue(nil), backendWarnings...)
+	warnings = append(warnings, normalizePPTXPayloadWithOptions(&payload, fallback, requestedStyle, enableImages)...)
 	if !enableImages {
 		for idx := range payload.Slides {
 			payload.Slides[idx].HasImage = false
@@ -1982,7 +2000,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 	conciseFourSlideRequest := wantsConciseFourSlidePPTX(requestText, options.ReferenceBrief)
 	if conciseFourSlideRequest {
 		payload.Slides = compactExplicitFourSlidePPTX(payload.Slides, payload.Title)
-		if backend == PPTXBackendArtifactExperimental && wantsReferenceStyleLearningArtifact(strings.TrimSpace(options.UserPrompt+" "+fallback), options.ReferenceProfile, options.ReferenceBrief) {
+		if backend == PPTXBackendArtifactWorker && wantsReferenceStyleLearningArtifact(strings.TrimSpace(options.UserPrompt+" "+fallback), options.ReferenceProfile, options.ReferenceBrief) {
 			payload.Slides = polishArtifactConciseStyleLearningSlides(payload.Slides, options.ReferenceProfile, options.ReferenceBrief)
 		}
 	}
@@ -1999,7 +2017,7 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			})
 		}
 	}
-	if backend == PPTXBackendArtifactExperimental {
+	if backend == PPTXBackendArtifactWorker {
 		if !conciseFourSlideRequest {
 			payload.Slides = ensureExplicitArtifactChartSlide(payload.Slides, requestText, payload.Title)
 		}
@@ -2126,6 +2144,18 @@ func BuildPPTXFromJSONWithOptions(ctx context.Context, llm engine.LLMClient, pro
 			Message: fmt.Sprintf("PPT images used hosted image generation. %d credits remaining.", *latestCreditBalance),
 			Field:   "image_quality",
 		})
+	}
+
+	if backend == PPTXBackendGoSpine {
+		emitProgress(ctx, progress, progressStepAssemble, "running", "Finalizing PPTX layout and writing output bytes")
+		fileBytes, fileName, spineWarnings, previewHTML, previewJSON, err := buildPPTXWithGoSpine(ctx, payload, fallback, localPreview)
+		if err != nil {
+			emitProgress(ctx, progress, progressStepAssemble, "failed", "Go/spine PPTX assembly failed")
+			return nil, "", nil, nil, nil, err
+		}
+		warnings = append(warnings, spineWarnings...)
+		emitProgress(ctx, progress, progressStepAssemble, "completed", "Go/spine PPTX assembly completed")
+		return fileBytes, fileName, warnings, previewHTML, previewJSON, nil
 	}
 
 	emitProgress(ctx, progress, progressStepAssemble, "running", "Packaging the PPTX file")

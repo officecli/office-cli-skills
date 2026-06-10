@@ -32,12 +32,12 @@ func TestBuildGenerateJob_PPTXReferenceScanDefaultsToCWD(t *testing.T) {
 	if job.ReferenceScanRoot != cwd {
 		t.Fatalf("ReferenceScanRoot = %q, want %q", job.ReferenceScanRoot, cwd)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendOfficegen {
-		t.Fatalf("PPTXBackend = %q, want %q", job.PPTXBackend, appruntime.PPTXBackendOfficegen)
+	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
+		t.Fatalf("PPTXBackend = %q, want %q", job.PPTXBackend, appruntime.PPTXBackendGoSpine)
 	}
 }
 
-func TestBuildGenerateJob_PPTXBackendArtifactExperimental(t *testing.T) {
+func TestBuildGenerateJob_PPTXBackendArtifactExperimentalAliasesGoSpine(t *testing.T) {
 	job, err := BuildGenerateJob([]string{
 		"pptx",
 		"Artifact Worker Deck",
@@ -46,8 +46,11 @@ func TestBuildGenerateJob_PPTXBackendArtifactExperimental(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendArtifactExperimental {
+	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
 		t.Fatalf("PPTXBackend = %q", job.PPTXBackend)
+	}
+	if !containsGenerateIssueCode(job.Warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
+		t.Fatalf("Warnings = %#v, want deprecated backend warning", job.Warnings)
 	}
 }
 
@@ -113,8 +116,11 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 	if job.ReferenceScanRoot != "brand-assets" {
 		t.Fatalf("ReferenceScanRoot = %q", job.ReferenceScanRoot)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendArtifactExperimental {
+	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
 		t.Fatalf("PPTXBackend = %q", job.PPTXBackend)
+	}
+	if !containsGenerateIssueCode(job.Warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
+		t.Fatalf("Warnings = %#v, want deprecated backend warning", job.Warnings)
 	}
 	if !job.Debug {
 		t.Fatal("expected bridge debug=true to enable debug metadata")
@@ -128,6 +134,15 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 			t.Fatalf("ReferencePPTXSources[%d] = %q, want %q", i, job.ReferencePPTXSources[i], want)
 		}
 	}
+}
+
+func containsGenerateIssueCode(items []engine.GenerateIssue, code string) bool {
+	for _, item := range items {
+		if item.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildGenerateJobFromRequest_PPTXBackendRejectsInvalidAndNonPPTX(t *testing.T) {

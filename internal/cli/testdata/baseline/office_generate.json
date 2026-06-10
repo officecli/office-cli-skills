@@ -8,7 +8,7 @@
     "image_quality": "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
     "image_watermark": "object {apply,paidEntitlement,canDisable} (img only)",
     "mode": "fast|best",
-    "pptx_backend": "officegen|artifact-experimental (pptx only) - default officegen",
+    "pptx_backend": "go-spine|officegen|artifact-experimental (pptx only) - default go-spine; artifact-experimental is a deprecated alias",
     "prompt": "string",
     "prompt_template_id": "server-managed image prompt template id (img only)",
     "publish": "boolean",

@@ -265,6 +265,7 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 			return GenerateJob{}, err
 		}
 	}
+	var warnings []engine.GenerateIssue
 	pptxBackend = strings.TrimSpace(pptxBackend)
 	if pptxBackend != "" && documentType != engine.DocumentTypePPTX {
 		return GenerateJob{}, fmt.Errorf("--pptx-backend is only supported for pptx generation")
@@ -272,10 +273,12 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 	finalPPTXBackend := ""
 	if documentType == engine.DocumentTypePPTX {
 		var err error
-		finalPPTXBackend, err = runtime.NormalizePPTXBackend(pptxBackend)
+		var backendWarnings []engine.GenerateIssue
+		finalPPTXBackend, backendWarnings, err = runtime.NormalizePPTXBackendWithWarnings(pptxBackend)
 		if err != nil {
 			return GenerateJob{}, err
 		}
+		warnings = append(warnings, backendWarnings...)
 	}
 	finalImageSize := strings.TrimSpace(imageSize)
 	if finalImageSize != "" && documentType != engine.DocumentTypeIMG {
@@ -329,7 +332,6 @@ func BuildGenerateJob(args []string, cfg Config, src InputSources) (GenerateJob,
 			finalReferenceRoot, _ = os.Getwd()
 		}
 	}
-	var warnings []engine.GenerateIssue
 	if isStandaloneImageDocumentType(documentType) {
 		switch {
 		case sourceFile != "":

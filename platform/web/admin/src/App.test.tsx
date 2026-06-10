@@ -5,10 +5,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 import App from './App'
 
-vi.mock('@ant-design/plots', () => ({
-  Line: () => <div data-testid="overview-line-chart" />,
-  Pie: () => <div data-testid="overview-pie-chart" />,
+vi.mock('echarts/core', () => ({
+  init: () => ({
+    setOption: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn(),
+  }),
+  use: vi.fn(),
 }))
+
+vi.mock('echarts/charts', () => ({ LineChart: {}, PieChart: {} }))
+vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {} }))
+vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 
 const fetchMock = vi.fn()
 

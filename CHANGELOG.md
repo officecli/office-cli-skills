@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.113 - 2026-06-10
+
+### Changed
+
+- Made the Go/spine PPTX renderer the default local PPTX backend, with `officegen` retained as a rollback backend and the old `artifact-experimental` value mapped to the new default with a deprecation warning.
+- Replaced the admin dashboard chart dependency with ECharts to reduce the web admin bundle surface while keeping the same dashboard charts.
+
 ## 0.2.111 - 2026-06-09
 
 ### Changed

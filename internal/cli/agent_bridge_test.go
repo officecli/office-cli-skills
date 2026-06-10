@@ -190,8 +190,12 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if !ok {
 		t.Fatalf("pptx_backends capability missing: %#v", pptxCaps)
 	}
-	if backends["default"] != runtime.PPTXBackendOfficegen || backends["experimental"] != runtime.PPTXBackendArtifactExperimental {
+	if backends["default"] != runtime.PPTXBackendGoSpine || backends["deprecated_alias"] != runtime.PPTXBackendArtifactExperimental {
 		t.Fatalf("unexpected pptx_backends capability: %#v", backends)
+	}
+	values := backends["values"]
+	if !containsString(values, runtime.PPTXBackendGoSpine) || !containsString(values, runtime.PPTXBackendOfficegen) {
+		t.Fatalf("unexpected pptx_backends values: %#v", backends)
 	}
 
 	writeRPC(t, inW, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "session/open"})
@@ -375,6 +379,24 @@ func TestAgentBridgeCapabilitiesExposePrepareAndRenderTools(t *testing.T) {
 	if generateSchema["publish"] != "boolean" {
 		t.Fatalf("office.generate publish schema = %#v", generateSchema["publish"])
 	}
+}
+
+func containsString(items any, want string) bool {
+	switch typed := items.(type) {
+	case []string:
+		for _, item := range typed {
+			if item == want {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if item == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestAgentBridgePrepareReportReturnsWorkbookContext(t *testing.T) {

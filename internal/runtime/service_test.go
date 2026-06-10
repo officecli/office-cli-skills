@@ -852,7 +852,7 @@ func TestServiceGeneratePPTXArtifactDebugMetadataRequiresDebugFlag(t *testing.T)
 		DocumentType: engine.DocumentTypePPTX,
 		Prompt:       "Create a concise editable presentation.",
 		Topic:        "Artifact Debug Service",
-		PPTXBackend:  PPTXBackendArtifactExperimental,
+		PPTXBackend:  PPTXBackendArtifactWorker,
 	})
 	if err != nil {
 		t.Fatalf("Generate without debug: %v", err)
@@ -864,7 +864,7 @@ func TestServiceGeneratePPTXArtifactDebugMetadataRequiresDebugFlag(t *testing.T)
 		DocumentType: engine.DocumentTypePPTX,
 		Prompt:       "Create a concise editable presentation.",
 		Topic:        "Artifact Debug Service",
-		PPTXBackend:  PPTXBackendArtifactExperimental,
+		PPTXBackend:  PPTXBackendArtifactWorker,
 		Debug:        true,
 	})
 	if err != nil {
@@ -1003,7 +1003,7 @@ func TestBuildPPTXFromJSONWithOptionsEnforcesExplicitFiveSlideCount(t *testing.T
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Quarterly Business Review", officegen.StylePresetEditorialLight, false, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise 5-slide editable PowerPoint for a quarterly business review. Include: cover, executive summary, KPI trend chart, risks and next actions, closing decision slide.",
 	})
 	if err != nil {
@@ -2109,7 +2109,7 @@ func TestBuildPPTXFromJSON_AcceptsSemanticPayload(t *testing.T) {
 func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) {
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
-		t.Fatal("artifact worker should not run for default officegen backend")
+		t.Fatal("artifact worker should not run for default go-spine backend")
 		return nil, nil
 	}
 	defer func() { runPPTXArtifactWorker = original }()
@@ -2117,7 +2117,7 @@ func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) 
 	content := `{
 		"title":"Default Backend Demo",
 		"slides":[
-			{"title":"Default Backend Demo","layout":"title","subtitle":"Officegen remains default","isTitle":true},
+			{"title":"Default Backend Demo","layout":"title","subtitle":"Go spine is default","isTitle":true},
 			{"title":"Body","layout":"content","points":["Default path","No worker"]}
 		]
 	}`
@@ -2127,6 +2127,65 @@ func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) 
 	}
 	if len(fileBytes) == 0 || fileName == "" {
 		t.Fatalf("empty output: bytes=%d fileName=%q", len(fileBytes), fileName)
+	}
+}
+
+func TestBuildPPTXFromJSON_DefaultGoSpineUsesEditableChartFallback(t *testing.T) {
+	original := runPPTXArtifactWorker
+	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
+		t.Fatal("artifact worker should not run for default go-spine backend")
+		return nil, nil
+	}
+	defer func() { runPPTXArtifactWorker = original }()
+
+	content := `{
+		"title":"Go Spine Chart Demo",
+		"slides":[
+			{"title":"Go Spine Chart Demo","layout":"title","subtitle":"Editable chart fallback","isTitle":true},
+			{"title":"Signal","layout":"chart","chart":{"type":"bar","title":"Quality signal","categories":["Text","Chart"],"values":[4,2]},"points":["Chart remains editable as shapes"]}
+		]
+	}`
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Go Spine Chart Demo", "", false, false, PPTXBuildOptions{})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if countZipEntries(fileBytes, "ppt/charts/", ".xml") != 0 {
+		t.Fatal("go-spine default should not emit native chart XML")
+	}
+	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/", ".xml", "shape fallback") {
+		t.Fatal("go-spine chart fallback marker missing")
+	}
+	if !containsIssueCode(warnings, "WARN_PPTX_NATIVE_CHART_FALLBACK") {
+		t.Fatalf("warnings = %#v, want native chart fallback warning", warnings)
+	}
+}
+
+func TestBuildPPTXFromJSON_ArtifactExperimentalAliasesGoSpine(t *testing.T) {
+	original := runPPTXArtifactWorker
+	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
+		t.Fatal("artifact worker should not run for deprecated artifact-experimental alias")
+		return nil, nil
+	}
+	defer func() { runPPTXArtifactWorker = original }()
+
+	content := `{
+		"title":"Alias Demo",
+		"slides":[
+			{"title":"Alias Demo","layout":"title","subtitle":"Alias routes to go-spine","isTitle":true},
+			{"title":"Body","layout":"content","points":["No Node worker"]}
+		]
+	}`
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Alias Demo", "", false, false, PPTXBuildOptions{
+		Backend: PPTXBackendArtifactExperimental,
+	})
+	if err != nil {
+		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
+	}
+	if len(fileBytes) == 0 {
+		t.Fatal("empty output")
+	}
+	if !containsIssueCode(warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
+		t.Fatalf("warnings = %#v, want deprecated backend warning", warnings)
 	}
 }
 
@@ -2171,7 +2230,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesWorker(t *testing.T) {
 		]
 	}`
 	fileBytes, fileName, warnings, previewHTML, previewJSON, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Demo", officegen.StylePresetTrainingManual, false, true, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: officegen.StylePresetTrainingManual,
 		},
@@ -2231,7 +2290,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalAddsNativeChartWhenPromptRequ
 		]
 	}`
 	fileBytes, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Board Update Smoke", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise board update presentation for a product analytics team. Include a cover slide, three operating metrics, one simple chart, strategic risks, and a closing decision slide.",
 	})
 	if err != nil {
@@ -2283,7 +2342,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHonorsExplicitLightStyleOverD
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Light Style Sample", officegen.StylePresetEditorialLight, false, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable light-theme presentation. Use a clean light editorial style: white canvas, soft cards, thin borders, teal or blue accents, and generous whitespace. Include a cover slide, key observations, one simple native chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: officegen.StylePresetExecutiveDark,
@@ -2376,7 +2435,7 @@ func TestServiceGeneratePPTXArtifactExperimentalUsesStableReferencePaletteFallba
 		Topic:                "Reference Palette Demo",
 		ReferenceScanEnabled: true,
 		ReferenceScanRoot:    root,
-		PPTXBackend:          PPTXBackendArtifactExperimental,
+		PPTXBackend:          PPTXBackendArtifactWorker,
 		LocalPreview:         true,
 	})
 	if err != nil {
@@ -2465,7 +2524,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPassesVisualAssetsAndChartInt
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Visual Assets", "", true, false, PPTXBuildOptions{
-		Backend:           PPTXBackendArtifactExperimental,
+		Backend:           PPTXBackendArtifactWorker,
 		ReferenceScanRoot: root,
 	})
 	if err != nil {
@@ -2508,7 +2567,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDoesNotImportGeneratedOutputR
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Generated Output References", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 		ReferenceProfile: &pptxref.ReferenceStyleProfile{
 			SourceFiles: []pptxref.ReferencePPTXFile{
 				{Path: "/root/output/generated-a.pptx", SourceBucket: "current-output"},
@@ -2578,7 +2637,7 @@ func TestBuildPPTXFromJSON_CompactsExplicitFourSlideArtifactRequest(t *testing.T
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Explicit Four Slide Demo", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
 	if err != nil {
@@ -2645,7 +2704,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPassesDesignPlan(t *testing.T
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Explicit Four Slide Demo", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -2719,7 +2778,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDefaultsReferenceLearningToDa
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
 	if err != nil {
@@ -2775,7 +2834,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesLLMDesignPlanWhenEnabled(
 		]
 	}`}
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "LLM Design Plan Demo", "", true, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		GenerateArtifactDesignPlan: true,
 		ReferenceBrief:             &PPTXReferenceStyleBrief{StylePresetHint: "executive-dark", PaletteIntent: "dark neutral"},
@@ -2844,7 +2903,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalFallsBackWhenLLMDesignPlanInv
 	}`
 	llm := &fakeLLMClient{structuredResponse: `{"deckIntent": 123}`}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "Fallback Design Plan Demo", "", true, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		GenerateArtifactDesignPlan: true,
 		ReferenceBrief:             &PPTXReferenceStyleBrief{StylePresetHint: "executive-dark", PaletteIntent: "dark neutral"},
@@ -3288,7 +3347,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesDedicatedPlannerLLM(t *te
 		]
 	}`}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "Dedicated Planner Demo", "", true, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		GenerateArtifactDesignPlan: true,
 		ArtifactDesignPlanLLM:      textLLM,
@@ -3339,7 +3398,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishesConciseReferenceNarra
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint:  "executive-dark",
@@ -3420,7 +3479,7 @@ func TestPPTXArtifactReferenceLearningUsesFallbackTopicAsDeckTitle(t *testing.T)
 		]
 	}`
 	_, fileName, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -3738,7 +3797,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningGeneratesTextFreeVisualP
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -3880,7 +3939,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningFallsBackWhenTextFreePla
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -3966,7 +4025,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningKeepsSuccessfulTextFreeP
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4033,7 +4092,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningTimesOutSlowTextFreePlat
 
 	start := time.Now()
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4104,7 +4163,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRetriesTransientTextFree
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4197,7 +4256,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningKeepsLaterTextFreePlates
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4303,7 +4362,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRejectsTextBearingPlate(
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4374,7 +4433,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRetriesTextBearingPlate(
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), imageLLM, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -4660,7 +4719,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFails(t *testing.T) {
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Failure", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err == nil || !strings.Contains(err.Error(), "artifact experimental backend failed") || !strings.Contains(err.Error(), "node missing") {
 		t.Fatalf("err = %v", err)
@@ -4690,7 +4749,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsBelowStructuralThres
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Bad Review", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err == nil || !strings.Contains(err.Error(), "structural review score") || !strings.Contains(err.Error(), "PLACEHOLDER_RESIDUE") {
 		t.Fatalf("err = %v, want structural hard failure with issue code", err)
@@ -4778,7 +4837,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesTextDensityOnce(t *tes
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Retry Density", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
@@ -5038,7 +5097,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsWithoutPreviewDiagno
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Missing Preview", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err == nil || !strings.Contains(err.Error(), "preview images") {
 		t.Fatalf("err = %v, want preview diagnostics hard failure", err)
@@ -5099,7 +5158,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsForBlankPreview(t *t
 		]
 	}`
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Backend Blank Preview", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err == nil || !strings.Contains(err.Error(), "blank or single-color") {
 		t.Fatalf("err = %v, want blank preview hard failure", err)
@@ -5390,7 +5449,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForLayoutDia
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Layout Repair", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
@@ -5493,7 +5552,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForVisualVer
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Visual Verdict Repair", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
@@ -5607,7 +5666,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesWithLLMDesignRepair(t 
 	repairedPlan := planJSON("Fewer cards", "Keep only the strongest style signals.")
 	llm := &fakeLLMClient{structuredResponses: []string{initialPlan, repairedPlan}}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "Artifact Design Repair", "", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		GenerateArtifactDesignPlan: true,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory.",
 	})
@@ -5803,7 +5862,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRepairPromptIncludesVisualIss
 	repairedPlan := planJSON("native-shapes", "Replace the weak plate with native editable motifs.")
 	llm := &fakeLLMClient{structuredResponses: []string{initialPlan, repairedPlan}}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "Visual Repair Guidance", "", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		GenerateArtifactDesignPlan: true,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory.",
 	})
@@ -5949,7 +6008,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRepairsWeakVisualAssetBeforeD
 	}`
 	llm := &fakeLLMClient{imageResult: &engine.ImageGenerationResult{Data: mustTinyPNG(t), MIME: "image/png"}}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "PPT Reference Style Test", "", true, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ReferenceBrief: &PPTXReferenceStyleBrief{
 			StylePresetHint: "executive-dark",
@@ -6118,7 +6177,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalSkipsPolishWhenPlannerHasNoPl
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "PPT Reference Style Test", "", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		GenerateArtifactDesignPlan: true,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
@@ -6188,7 +6247,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesLLMDesignPatch(t *t
 	patchedPlan = strings.Replace(patchedPlan, `"slides":[`, `"builderPatch":{"slides":[{"slide":3,"accentRail":"top","backplate":"right-band"}]},"slides":[`, 1)
 	llm := &fakeLLMClient{structuredResponses: []string{initialPlan, patchedPlan, `{}`}}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "PPT Reference Style Test", "", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		GenerateArtifactDesignPlan: true,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
@@ -6292,7 +6351,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesSecondPreviewInform
 		}},
 	}}
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "PPT Reference Style Test", "", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		GenerateArtifactDesignPlan: true,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory. Include a cover slide, key observations, one simple chart, and a closing slide.",
 		ArtifactPreviewReviewer:    previewReviewer,
@@ -6382,7 +6441,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalEmitsDebugMetadata(t *testing
 	}`
 	var debugMeta PPTXArtifactDebugMetadata
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Debug Metadata", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 		ArtifactDebugSink: func(meta PPTXArtifactDebugMetadata) {
 			debugMeta = meta
 		},
@@ -6390,7 +6449,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalEmitsDebugMetadata(t *testing
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
 	}
-	if !debugMeta.Enabled || debugMeta.Backend != PPTXBackendArtifactExperimental {
+	if !debugMeta.Enabled || debugMeta.Backend != PPTXBackendArtifactWorker {
 		t.Fatalf("debug metadata identity = %#v", debugMeta)
 	}
 	if debugMeta.WorkerVersion != "artifact-experimental-test" || debugMeta.VisualVerdict != "pass" || debugMeta.VisualScore != 96 {
@@ -6501,7 +6560,7 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesMinimalOnSecondLayoutF
 		]
 	}`
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Artifact Minimal Repair", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 	})
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
@@ -6538,7 +6597,7 @@ func TestPPTXArtifactWorkerIntegrationOptIn(t *testing.T) {
 			]
 	}`
 	fileBytes, fileName, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Reference Builder Integration", "", false, false, PPTXBuildOptions{
-		Backend:    PPTXBackendArtifactExperimental,
+		Backend:    PPTXBackendArtifactWorker,
 		UserPrompt: "Create a concise editable presentation. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
 	if err != nil {
@@ -7400,7 +7459,7 @@ func TestPPTXArtifactWorkerIntegrationEmbedsLocalVisualAssetAndNativeChartOptIn(
 		]
 	}`
 	fileBytes, fileName, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Reference Visual Integration", "", true, false, PPTXBuildOptions{
-		Backend:           PPTXBackendArtifactExperimental,
+		Backend:           PPTXBackendArtifactWorker,
 		ReferenceScanRoot: root,
 	})
 	if err != nil {
@@ -7530,7 +7589,7 @@ func TestPPTXArtifactWorkerIntegrationEmitsQualitySummaryOptIn(t *testing.T) {
 	}`
 	var debugMeta PPTXArtifactDebugMetadata
 	fileBytes, fileName, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Quality Summary Smoke", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
+		Backend: PPTXBackendArtifactWorker,
 		ArtifactDebugSink: func(meta PPTXArtifactDebugMetadata) {
 			debugMeta = meta
 		},
@@ -7652,7 +7711,7 @@ func TestPPTXArtifactWorkerIntegrationPassesStructuralReviewOptIn(t *testing.T) 
 		]
 	}`
 	fileBytes, fileName, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Reference-Driven Presentation Style Learning", "", true, false, PPTXBuildOptions{
-		Backend:           PPTXBackendArtifactExperimental,
+		Backend:           PPTXBackendArtifactWorker,
 		ReferenceScanRoot: root,
 		UserPrompt:        "Create a concise editable presentation. Include a cover slide, key observations, one simple chart, and a closing slide.",
 	})
@@ -8270,7 +8329,16 @@ func TestBuildPPTXFromJSON_PremiumImagePromptAndCoverUseSafeLayout(t *testing.T)
 		t.Fatalf("premium cover image should not be full-slide background: %+v", cover)
 	}
 	slideXML := readZipEntry(t, fileBytes, "ppt/slides/slide1.xml")
-	if !strings.Contains(slideXML, `name="TitleSideImage"`) || strings.Contains(slideXML, `name="BackgroundImage"`) {
+	picStart := strings.Index(slideXML, "<p:pic>")
+	picEnd := -1
+	if picStart >= 0 {
+		picEnd = strings.Index(slideXML[picStart:], "</p:pic>")
+	}
+	if picStart < 0 || picEnd < 0 {
+		t.Fatalf("premium cover should render an image:\n%s", slideXML)
+	}
+	picXML := slideXML[picStart : picStart+picEnd]
+	if strings.Contains(picXML, `<a:off x="0" y="0"/>`) && strings.Contains(picXML, `cx="12192000"`) {
 		t.Fatalf("premium cover should render a side image, not a background image:\n%s", slideXML)
 	}
 	closing := preview.Slides[len(preview.Slides)-1]
@@ -8501,7 +8569,7 @@ func TestBuildPPTXArtifactExperimentalEmitsDesignPlannerHeartbeat(t *testing.T) 
 	}`
 
 	_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, collector, content, "Reference Style Test", "executive-dark", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory.",
 		GenerateArtifactDesignPlan: true,
 		ArtifactDesignPlanLLM:      llm,
@@ -8562,7 +8630,7 @@ func TestBuildPPTXArtifactExperimentalFallsBackWhenDesignPlannerTimesOut(t *test
 
 	start := time.Now()
 	_, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), llm, nil, content, "Reference Style Test", "executive-dark", false, false, PPTXBuildOptions{
-		Backend:                    PPTXBackendArtifactExperimental,
+		Backend:                    PPTXBackendArtifactWorker,
 		UserPrompt:                 "Create a concise editable presentation that learns the style from PPTX files in this directory.",
 		GenerateArtifactDesignPlan: true,
 		ArtifactDesignPlanLLM:      llm,

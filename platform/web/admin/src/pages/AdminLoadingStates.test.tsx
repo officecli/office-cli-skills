@@ -15,11 +15,6 @@ import RedemptionCodesPage from './RedemptionCodesPage'
 import RedemptionRecordsPage from './RedemptionRecordsPage'
 import UsersPage from './UsersPage'
 
-vi.mock('@ant-design/plots', () => ({
-  Line: () => <div data-testid="line-chart" />,
-  Pie: () => <div data-testid="pie-chart" />,
-}))
-
 const fetchMock = vi.fn()
 
 function renderPage(page: React.ReactNode, { router = false, antApp = false } = {}) {

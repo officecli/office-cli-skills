@@ -94,7 +94,7 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 	}
 }
 
-func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesExperimentalOpenAI(t *testing.T) {
+func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesHiddenArtifactWorker(t *testing.T) {
 	cfg := Config{LLM: LLMConfig{
 		Provider: "openai",
 		BaseURL:  "https://llm.example",
@@ -103,10 +103,20 @@ func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesExperimentalOpenAI(t *te
 	}}
 	job := GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+		PPTXBackend:  runtime.PPTXBackendGoSpine,
 	}
-	if pptxArtifactPreviewReviewerForConfig(cfg, job) == nil {
-		t.Fatal("expected preview reviewer for artifact-experimental OpenAI config")
+	if pptxArtifactPreviewReviewerForConfig(cfg, job) != nil {
+		t.Fatal("go-spine backend should not enable artifact preview reviewer")
+	}
+	aliasJob := job
+	aliasJob.PPTXBackend = runtime.PPTXBackendArtifactExperimental
+	if pptxArtifactPreviewReviewerForConfig(cfg, aliasJob) != nil {
+		t.Fatal("deprecated artifact-experimental alias should not enable artifact preview reviewer")
+	}
+	hiddenWorkerJob := job
+	hiddenWorkerJob.PPTXBackend = runtime.PPTXBackendArtifactWorker
+	if pptxArtifactPreviewReviewerForConfig(cfg, hiddenWorkerJob) == nil {
+		t.Fatal("expected preview reviewer for hidden artifact worker backend")
 	}
 	officegenJob := job
 	officegenJob.PPTXBackend = runtime.PPTXBackendOfficegen
@@ -120,12 +130,12 @@ func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesExperimentalOpenAI(t *te
 	}
 	missingCfg := cfg
 	missingCfg.LLM.APIKey = ""
-	if pptxArtifactPreviewReviewerForConfig(missingCfg, job) != nil {
+	if pptxArtifactPreviewReviewerForConfig(missingCfg, hiddenWorkerJob) != nil {
 		t.Fatal("missing LLM config should not enable artifact preview reviewer")
 	}
 	otherProvider := cfg
 	otherProvider.LLM.Provider = "anthropic"
-	if pptxArtifactPreviewReviewerForConfig(otherProvider, job) != nil {
+	if pptxArtifactPreviewReviewerForConfig(otherProvider, hiddenWorkerJob) != nil {
 		t.Fatal("non-OpenAI provider should not enable artifact preview reviewer")
 	}
 }
@@ -154,7 +164,7 @@ func TestPPTXArtifactPreviewReviewerAdapterReviewsRenderedPNGs(t *testing.T) {
 		Model:    "gpt-test",
 	}}, GenerateJob{
 		DocumentType: engine.DocumentTypePPTX,
-		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+		PPTXBackend:  runtime.PPTXBackendArtifactWorker,
 	})
 	if reviewer == nil {
 		t.Fatal("missing preview reviewer")
