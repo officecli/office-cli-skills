@@ -15,7 +15,7 @@ vi.mock('echarts/core', () => ({
 }))
 
 vi.mock('echarts/charts', () => ({ LineChart: {}, PieChart: {} }))
-vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {} }))
+vi.mock('echarts/components', () => ({ GridComponent: {}, LegendComponent: {}, TooltipComponent: {} }))
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }))
 
 const fetchMock = vi.fn()
@@ -114,6 +114,10 @@ describe('platform admin shell', () => {
               paid_orders_last_24h: 1,
               paid_quota_added_last_24h: 100,
               remaining_paid_quota: 500,
+              daily_new_users: [
+                { date: '2026-05-12', users: 1 },
+                { date: '2026-05-13', users: 2 },
+              ],
               usage_trend: [
                 { date: '2026-05-12', checks: 2, consumes: 1, blocked: 0, allowed: 3, total: 3 },
                 { date: '2026-05-13', checks: 4, consumes: 3, blocked: 1, allowed: 6, total: 7 },
@@ -154,10 +158,8 @@ describe('platform admin shell', () => {
     expect(await screen.findByRole('heading', { name: /Result mix/i })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: /Mode mix/i })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: /API key status/i })).toBeInTheDocument()
-    expect((await screen.findAllByText(/Checks/i)).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText(/Consumes/i)).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText(/Blocked/i)).length).toBeGreaterThan(0)
-    expect((await screen.findAllByText(/Hosted/i)).length).toBeGreaterThan(0)
+    expect(await screen.findAllByTestId('echarts-line-chart')).toHaveLength(2)
+    expect(await screen.findAllByTestId('echarts-pie-chart')).toHaveLength(3)
   })
 
   it('shows overview chart empty states when chart data is empty', async () => {

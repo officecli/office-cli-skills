@@ -103,7 +103,6 @@ describe('admin dashboard fingerprint quality', () => {
     const dailyHeading = await screen.findByRole('heading', { name: /daily new users/i })
     const usageHeading = await screen.findByRole('heading', { name: /7-day usage trend/i })
     expect(dailyHeading.compareDocumentPosition(usageHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('Users')).toBeInTheDocument()
 
     expect(await screen.findAllByTestId('echarts-line-chart')).toHaveLength(2)
     expect(await screen.findAllByTestId('echarts-pie-chart')).toHaveLength(3)
@@ -141,7 +140,7 @@ describe('admin dashboard fingerprint quality', () => {
       {
         name: 'Result mix',
         type: 'pie',
-        label: { show: false },
+        label: { show: true, formatter: '{c}' },
         data: [
           { name: 'Allowed', value: 9 },
           { name: 'Blocked', value: 1 },

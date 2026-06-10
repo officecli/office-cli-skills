@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { init, use, type EChartsType } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { Button, Checkbox, Empty, Typography } from 'antd'
@@ -12,7 +12,7 @@ import { DataTable, LoadingState, MetricCard, Panel, SectionHeading, formatNumbe
 import { buildFingerprintQualityCsv } from '../fingerprintQualityCsv'
 import type { FingerprintQualityRow, OverviewBreakdownItem, OverviewDailyUsersPoint, OverviewUsageTrendPoint } from '../types'
 
-use([LineChart, PieChart, GridComponent, TooltipComponent, CanvasRenderer])
+use([LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 const guardrails = [
   'Admin sessions are issued only after company OAuth2 auth plus an exact allowlist match.',
@@ -70,14 +70,14 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="grid gap-4">
-          <ChartPanel title="Daily new users" description="New platform users registered by UTC day." legend={['Users']}>
+          <ChartPanel title="Daily new users" description="New platform users registered by UTC day.">
             {overviewLoading ? (
               <LoadingState label="Loading daily new users..." className="min-h-[280px]" />
             ) : hasDailyNewUsersData ? (
               <EChartsLine option={dailyNewUsersOption} />
             ) : <ChartEmpty />}
           </ChartPanel>
-          <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day." legend={['Checks', 'Consumes', 'Blocked']}>
+          <ChartPanel title="7-day usage trend" description="Checks, consuming requests, and blocked traffic by UTC day.">
             {overviewLoading ? (
               <LoadingState label="Loading usage trend..." className="min-h-[280px]" />
             ) : hasTrendData ? (
@@ -210,19 +210,14 @@ export default function DashboardPage() {
   )
 }
 
-function ChartPanel({ title, description, legend, children }: { title: string; description?: string; legend?: string[]; children: ReactNode }) {
+function ChartPanel({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <Panel className="admin-chart-panel">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="mb-4">
         <div>
           <Typography.Title level={3} className="!mb-0 !text-lg">{title}</Typography.Title>
           {description ? <Typography.Paragraph className="!mb-0 !mt-1 text-sm" type="secondary">{description}</Typography.Paragraph> : null}
         </div>
-        {legend?.length ? (
-          <div className="admin-chart-legend">
-            {legend.map((item) => <span key={item}>{item}</span>)}
-          </div>
-        ) : null}
       </div>
       <div className="admin-chart-body">{children}</div>
     </Panel>
@@ -234,6 +229,7 @@ type EChartsChartOption = {
   backgroundColor: string
   color: string[]
   grid?: Record<string, number | string | boolean>
+  legend?: Record<string, unknown> & { show: boolean; data: string[] }
   tooltip: {
     trigger: string
     confine: boolean
@@ -298,16 +294,16 @@ function EChartsLine({ option }: { option: EChartsChartOption }) {
 }
 
 function EChartsPie({ option }: { option: EChartsChartOption }) {
-  return <EChartsChart option={option} testId="echarts-pie-chart" className="h-[190px] w-full" />
+  return <EChartsChart option={option} testId="echarts-pie-chart" className="h-[220px] w-full" />
 }
 
 function PiePanel({ title, data, colors, loading = false }: { title: string; data: OverviewBreakdownItem[]; colors: string[]; loading?: boolean }) {
   const pieOption = useMemo(() => buildPieOption(title, data, colors), [colors, data, title])
 
   return (
-    <ChartPanel title={title} legend={data.map((item) => item.label)}>
+    <ChartPanel title={title}>
       {loading ? (
-        <LoadingState label={`Loading ${title.toLowerCase()}...`} className="min-h-[190px]" />
+        <LoadingState label={`Loading ${title.toLowerCase()}...`} className="min-h-[220px]" />
       ) : data.length ? (
         <EChartsPie option={pieOption} />
       ) : <ChartEmpty compact />}
@@ -363,7 +359,17 @@ function buildLineOption({ dates, colors, series }: { dates: string[]; colors: s
     animation: false,
     backgroundColor: 'transparent',
     color: colors,
-    grid: { left: 48, right: 20, top: 18, bottom: 36, containLabel: false },
+    legend: {
+      show: true,
+      top: 0,
+      right: 8,
+      data: series.map((item) => item.name),
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      textStyle: { color: '#9aa4b2' },
+    },
+    grid: { left: 48, right: 20, top: 42, bottom: 36, containLabel: false },
     tooltip: {
       trigger: 'axis',
       confine: true,
@@ -410,6 +416,16 @@ function buildPieOption(title: string, data: OverviewBreakdownItem[], colors: st
     animation: false,
     backgroundColor: 'transparent',
     color: colors,
+    legend: {
+      show: true,
+      bottom: 0,
+      left: 'center',
+      data: data.map((item) => item.label),
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      textStyle: { color: '#9aa4b2' },
+    },
     tooltip: {
       trigger: 'item',
       confine: true,
@@ -423,10 +439,17 @@ function buildPieOption(title: string, data: OverviewBreakdownItem[], colors: st
     series: [{
       name: title,
       type: 'pie',
-      radius: ['64%', '86%'],
-      center: ['50%', '50%'],
+      radius: ['52%', '78%'],
+      center: ['50%', '42%'],
       stillShowZeroSum: false,
-      label: { show: false },
+      label: {
+        show: true,
+        position: 'inside',
+        formatter: '{c}',
+        color: '#f8fafc',
+        fontSize: 11,
+        fontWeight: 600,
+      },
       labelLine: { show: false },
       emphasis: { disabled: true },
       data: data.map((item) => ({ name: item.label, value: item.value })),

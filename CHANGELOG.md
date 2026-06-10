@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.114 - 2026-06-10
+
+### Changed
+
+- Kept admin dashboard chart legends and value labels inside the ECharts canvases so chart exports and embedded chart state remain self-contained.
+
 ## 0.2.113 - 2026-06-10
 
 ### Changed
