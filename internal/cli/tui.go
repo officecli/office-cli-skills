@@ -146,6 +146,27 @@ func (p *tuiProgressPrompter) Ask(question string, options []string, allowFreefo
 	return answer.optionID, answer.answer, answer.err
 }
 
+func (p *tuiProgressPrompter) ReviewPlan(session *engine.PlanSession) (PlanReviewResponse, error) {
+	if session == nil {
+		return PlanReviewResponse{}, fmt.Errorf("plan is unavailable")
+	}
+	optionID, answer, err := p.Ask(
+		strings.TrimSpace(session.PlanMarkdown)+"\n\nApprove this plan or type revision instructions.",
+		[]string{"Approve plan"},
+		true,
+	)
+	if err != nil {
+		return PlanReviewResponse{}, err
+	}
+	if optionID == "1" || strings.EqualFold(strings.TrimSpace(answer), "Approve plan") {
+		return PlanReviewResponse{Action: PlanReviewApprove}, nil
+	}
+	if strings.TrimSpace(answer) == "" {
+		return PlanReviewResponse{}, fmt.Errorf("plan review response is required")
+	}
+	return PlanReviewResponse{Action: PlanReviewRevise, Instruction: strings.TrimSpace(answer)}, nil
+}
+
 func (w tuiLoginWriter) Write(p []byte) (int, error) {
 	text := strings.TrimSpace(string(p))
 	if text != "" && w.events != nil {
@@ -1110,7 +1131,7 @@ func (m tuiModel) statusText() string {
 	case tuiStateLogin:
 		return "Logging in · " + runtimeMode
 	default:
-		return "Ready · " + runtimeMode + " · keep typing"
+		return "Ready · " + runtimeMode + " · current directory is workspace"
 	}
 }
 

@@ -288,6 +288,19 @@ type Publisher interface {
 
 type Prompter interface {
 	Ask(question string, options []string, allowFreeform bool) (string, string, error)
+	ReviewPlan(session *engine.PlanSession) (PlanReviewResponse, error)
+}
+
+type PlanReviewAction string
+
+const (
+	PlanReviewApprove PlanReviewAction = "approve"
+	PlanReviewRevise  PlanReviewAction = "revise"
+)
+
+type PlanReviewResponse struct {
+	Action      PlanReviewAction
+	Instruction string
 }
 
 type Output interface {

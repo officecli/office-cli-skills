@@ -1842,14 +1842,39 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 			emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Execution plan synthesized from your answers")
 		}
 	}
-	if session != nil && session.Status != "approved" {
-		emitProgress(ctx, progress, progressStepPlanConfirm, "running", "Confirming the execution plan")
-		session, err = workflow.ApproveExecutionPlan(ctx, engine.ApproveExecutionPlanRequest{PlanID: session.PlanID})
+	for session != nil && session.Status != "approved" {
+		emitProgress(ctx, progress, progressStepPlanConfirm, "running", "Waiting for execution plan approval")
+		if pauser, ok := progress.(interface{ Pause(string) }); ok {
+			pauser.Pause("Waiting for execution plan approval")
+		}
+		review, err := prompter.ReviewPlan(session)
 		if err != nil {
-			emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "Failed to confirm the execution plan")
+			emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "Failed to review the execution plan")
 			return job, err
 		}
-		emitProgress(ctx, progress, progressStepPlanConfirm, "completed", "Execution plan confirmed")
+		switch review.Action {
+		case PlanReviewApprove:
+			session, err = workflow.ApproveExecutionPlan(ctx, engine.ApproveExecutionPlanRequest{PlanID: session.PlanID})
+			if err != nil {
+				emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "Failed to confirm the execution plan")
+				return job, err
+			}
+			emitProgress(ctx, progress, progressStepPlanConfirm, "completed", "Execution plan confirmed")
+		case PlanReviewRevise:
+			emitProgress(ctx, progress, progressStepPlanPrepare, "running", "Revising the execution plan")
+			session, err = workflow.ReviseExecutionPlan(ctx, engine.ReviseExecutionPlanRequest{
+				PlanID:      session.PlanID,
+				Instruction: review.Instruction,
+			})
+			if err != nil {
+				emitProgress(ctx, progress, progressStepPlanPrepare, "failed", "Failed to revise the execution plan")
+				return job, err
+			}
+			emitProgress(ctx, progress, progressStepPlanPrepare, "completed", "Execution plan revised")
+		default:
+			emitProgress(ctx, progress, progressStepPlanConfirm, "failed", "Unsupported execution plan review response")
+			return job, fmt.Errorf("unsupported plan review action: %s", review.Action)
+		}
 	}
 	if session != nil && strings.TrimSpace(session.ExecutionPrompt) != "" {
 		job.Prompt = session.ExecutionPrompt

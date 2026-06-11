@@ -190,11 +190,11 @@ func TestAgentBridgeInitializeAndInvoke(t *testing.T) {
 	if !ok {
 		t.Fatalf("pptx_backends capability missing: %#v", pptxCaps)
 	}
-	if backends["default"] != runtime.PPTXBackendGoSpine || backends["deprecated_alias"] != runtime.PPTXBackendArtifactExperimental {
+	if backends["default"] != runtime.PPTXBackendOfficegen {
 		t.Fatalf("unexpected pptx_backends capability: %#v", backends)
 	}
 	values := backends["values"]
-	if !containsString(values, runtime.PPTXBackendGoSpine) || !containsString(values, runtime.PPTXBackendOfficegen) {
+	if !containsString(values, runtime.PPTXBackendOfficegen) || containsString(values, runtime.PPTXBackendGoSpine) || containsString(values, runtime.PPTXBackendArtifactExperimental) {
 		t.Fatalf("unexpected pptx_backends values: %#v", backends)
 	}
 
@@ -1023,6 +1023,115 @@ func TestBridgePrompterRespondsThroughTaskRespond(t *testing.T) {
 	}
 }
 
+func TestBridgePrompterReviewPlanWaitsForApprove(t *testing.T) {
+	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	task := &bridgeTask{
+		ID:        "task-1",
+		SessionID: "default",
+		RequestID: "req-1",
+		Status:    "running",
+	}
+	server.tasks[task.ID] = task
+	prompter := &bridgePrompter{
+		ctx:    context.Background(),
+		server: server,
+		task:   task,
+		answer: make(chan bridgePromptResponse, 1),
+	}
+	task.Prompt = prompter
+
+	done := make(chan PlanReviewResponse, 1)
+	go func() {
+		response, err := prompter.ReviewPlan(&engine.PlanSession{
+			PlanID:       "plan-1",
+			Revision:     2,
+			PlanMarkdown: "# Proposed Plan\n\n- Build the deck after approval.",
+		})
+		if err != nil {
+			t.Errorf("ReviewPlan returned error: %v", err)
+			return
+		}
+		done <- response
+	}()
+
+	timeout := time.After(2 * time.Second)
+	for task.CurrentPlan == nil {
+		select {
+		case <-timeout:
+			t.Fatal("timed out waiting for current plan")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if task.Status != "waiting_input" {
+		t.Fatalf("status = %q, want waiting_input", task.Status)
+	}
+	if task.CurrentPlan.ID != "plan-1" || task.CurrentPlan.Revision != 2 {
+		t.Fatalf("current plan = %#v", task.CurrentPlan)
+	}
+
+	if err := server.respondTask(bridgeRespondParams{
+		TaskID:   task.ID,
+		OptionID: "approve",
+	}); err != nil {
+		t.Fatalf("respondTask: %v", err)
+	}
+
+	select {
+	case response := <-done:
+		if response.Action != PlanReviewApprove {
+			t.Fatalf("unexpected review response: %#v", response)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for plan review response")
+	}
+}
+
+func TestBridgePrompterReviewPlanAcceptsRevisionInstruction(t *testing.T) {
+	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	task := &bridgeTask{ID: "task-1", SessionID: "default", RequestID: "req-1", Status: "running"}
+	server.tasks[task.ID] = task
+	prompter := &bridgePrompter{
+		ctx:    context.Background(),
+		server: server,
+		task:   task,
+		answer: make(chan bridgePromptResponse, 1),
+	}
+	task.Prompt = prompter
+
+	done := make(chan PlanReviewResponse, 1)
+	go func() {
+		response, err := prompter.ReviewPlan(&engine.PlanSession{PlanID: "plan-1", PlanMarkdown: "# Proposed Plan"})
+		if err != nil {
+			t.Errorf("ReviewPlan returned error: %v", err)
+			return
+		}
+		done <- response
+	}()
+
+	timeout := time.After(2 * time.Second)
+	for task.CurrentPlan == nil {
+		select {
+		case <-timeout:
+			t.Fatal("timed out waiting for current plan")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if err := server.respondTask(bridgeRespondParams{TaskID: task.ID, Answer: "Make it shorter and more executive."}); err != nil {
+		t.Fatalf("respondTask: %v", err)
+	}
+
+	select {
+	case response := <-done:
+		if response.Action != PlanReviewRevise || response.Instruction != "Make it shorter and more executive." {
+			t.Fatalf("unexpected review response: %#v", response)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for plan review response")
+	}
+}
+
 func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 	server := newAgentBridgeServer(NewApp(bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil)), Config{}, bytes.NewBuffer(nil), bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	payload := server.outputPayload("file", GenerateResult{
@@ -1044,11 +1153,11 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 		},
 		PPTXArtifactDebug: &runtime.PPTXArtifactDebugMetadata{
 			Enabled:       true,
-			Backend:       runtime.PPTXBackendArtifactExperimental,
+			Backend:       runtime.PPTXBackendOfficegen,
 			WorkerVersion: "artifact-experimental-test",
 			PreviewCount:  4,
 		},
-		PPTXBackend: runtime.PPTXBackendArtifactExperimental,
+		PPTXBackend: runtime.PPTXBackendOfficegen,
 	})
 
 	for _, key := range []string{"format", "status", "file_path", "document_type", "document_name", "warnings", "result", "result_meta"} {
@@ -1082,7 +1191,7 @@ func TestAgentBridgeOutputPayloadKeepsStableFields(t *testing.T) {
 	if _, ok := meta["pptx_artifact_debug"].(*runtime.PPTXArtifactDebugMetadata); !ok {
 		t.Fatalf("pptx_artifact_debug missing from result_meta: %#v", meta)
 	}
-	if meta["pptx_backend"] != runtime.PPTXBackendArtifactExperimental {
+	if meta["pptx_backend"] != runtime.PPTXBackendOfficegen {
 		t.Fatalf("pptx_backend missing from result_meta: %#v", meta)
 	}
 }

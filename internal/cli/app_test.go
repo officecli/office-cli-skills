@@ -199,9 +199,10 @@ func (f *sequencedAppLLMClient) GenerateImage(_ context.Context, _ engine.ImageG
 }
 
 type recordingPrompter struct {
-	events    *[]string
-	optionIDs []string
-	answers   []string
+	events          *[]string
+	optionIDs       []string
+	answers         []string
+	reviewResponses []PlanReviewResponse
 }
 
 func (p *recordingPrompter) Ask(_ string, _ []string, _ bool) (string, string, error) {
@@ -219,6 +220,18 @@ func (p *recordingPrompter) Ask(_ string, _ []string, _ bool) (string, string, e
 		p.answers = p.answers[1:]
 	}
 	return optionID, answer, nil
+}
+
+func (p *recordingPrompter) ReviewPlan(*engine.PlanSession) (PlanReviewResponse, error) {
+	if p.events != nil {
+		*p.events = append(*p.events, "review")
+	}
+	if len(p.reviewResponses) > 0 {
+		response := p.reviewResponses[0]
+		p.reviewResponses = p.reviewResponses[1:]
+		return response, nil
+	}
+	return PlanReviewResponse{Action: PlanReviewApprove}, nil
 }
 
 type orderedLicenseManager struct {
@@ -328,13 +341,28 @@ func (p errorPrompter) Ask(string, []string, bool) (string, string, error) {
 	return "", "", fmt.Errorf("prompt stopped")
 }
 
+func (p errorPrompter) ReviewPlan(*engine.PlanSession) (PlanReviewResponse, error) {
+	if p.err != nil {
+		return PlanReviewResponse{}, p.err
+	}
+	return PlanReviewResponse{}, fmt.Errorf("prompt stopped")
+}
+
 type fixedPrompter struct {
-	optionID string
-	answer   string
+	optionID       string
+	answer         string
+	reviewResponse PlanReviewResponse
 }
 
 func (p fixedPrompter) Ask(string, []string, bool) (string, string, error) {
 	return p.optionID, p.answer, nil
+}
+
+func (p fixedPrompter) ReviewPlan(*engine.PlanSession) (PlanReviewResponse, error) {
+	if p.reviewResponse.Action != "" {
+		return p.reviewResponse, nil
+	}
+	return PlanReviewResponse{Action: PlanReviewApprove}, nil
 }
 func disabledPublishConfig() publishprovider.Config {
 	return publishprovider.Config{Enabled: false}
@@ -2412,7 +2440,7 @@ func TestAppRun_SubcommandHelpOutput(t *testing.T) {
 		{args: []string{"auth", "--help"}, needles: []string{"officecli login", "officecli set-key <api-key>", "Log in with your OfficeCLI account"}},
 		{args: []string{"score", "--help"}, needles: []string{"officecli score pptx <file>", "Scoring does not run automatically after generation"}},
 		{args: []string{"upgrade", "--help"}, needles: []string{"officecli upgrade", "--apply", "By default the upgrade is NOT applied"}},
-		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img|gif>", "--prompt-file", "--mode fast|best", "--file <path>", "--reference-root <dir>", "--reference-pptx <path>", "--pptx-backend <value>", "--no-reference-scan", "--no-images", "PPTX adds suitable images by default", "PPTX recursively scans reference .pptx files", "go-spine is the default PPTX backend", "reference_style metadata", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
+		{args: []string{"new", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img|gif>", "--prompt-file", "--mode fast|best", "--file <path>", "--reference-root <dir>", "--reference-pptx <path>", "--pptx-backend <value>", "--no-reference-scan", "--no-images", "PPTX adds suitable images by default", "PPTX recursively scans reference .pptx files", "officegen is the only supported PPTX backend", "reference_style metadata", "report requires --file <xlsx-path>", "officecli new pptx \"Q3 Business Review\""}},
 		{args: []string{"new", "pptx", "--help"}, needles: []string{"officecli new <pptx|docx|xlsx|report|img|gif>", "--prompt-file", "--mode fast|best"}},
 		{args: []string{"review", "pptx", "--help"}, needles: []string{"officecli review pptx <file>", "--no-visual"}},
 	}

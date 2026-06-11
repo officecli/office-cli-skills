@@ -70,6 +70,7 @@ const (
 	bridgeEventTaskStarted   = "task.started"
 	bridgeEventTaskProgress  = "task.progress"
 	bridgeEventTaskQuestion  = "task.question"
+	bridgeEventTaskPlan      = "task.plan"
 	bridgeEventTaskOutput    = "task.output"
 	bridgeEventTaskCompleted = "task.completed"
 	bridgeEventTaskFailed    = "task.failed"
@@ -111,6 +112,7 @@ type bridgeTask struct {
 	UpdatedAt   time.Time
 	Cancel      context.CancelFunc
 	CurrentQ    *bridgeQuestionState
+	CurrentPlan *bridgePlanState
 	LastError   string
 	Result      any
 	Interactive bool
@@ -134,6 +136,13 @@ type bridgeQuestionState struct {
 type bridgeQuestionOption struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
+}
+
+type bridgePlanState struct {
+	ID       string `json:"id"`
+	PlanID   string `json:"plan_id"`
+	Markdown string `json:"markdown"`
+	Revision int    `json:"revision"`
 }
 
 type bridgePrompter struct {
@@ -248,6 +257,7 @@ type bridgeTaskStatusResult struct {
 	CreatedAt       string               `json:"created_at"`
 	UpdatedAt       string               `json:"updated_at"`
 	CurrentQuestion *bridgeQuestionState `json:"current_question,omitempty"`
+	CurrentPlan     *bridgePlanState     `json:"current_plan,omitempty"`
 	LastError       string               `json:"last_error,omitempty"`
 	Result          any                  `json:"result,omitempty"`
 	ResultMeta      map[string]any       `json:"result_meta,omitempty"`
@@ -491,6 +501,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 				bridgeEventTaskStarted,
 				bridgeEventTaskProgress,
 				bridgeEventTaskQuestion,
+				bridgeEventTaskPlan,
 				bridgeEventTaskOutput,
 				bridgeEventTaskCompleted,
 				bridgeEventTaskFailed,
@@ -1359,11 +1370,14 @@ func (s *agentBridgeServer) respondTask(params bridgeRespondParams) error {
 	if !ok {
 		return fmt.Errorf("task not found: %s", params.TaskID)
 	}
-	if task.Prompt == nil || task.CurrentQ == nil {
-		return fmt.Errorf("task %s has no pending question", params.TaskID)
+	if task.Prompt == nil || (task.CurrentQ == nil && task.CurrentPlan == nil) {
+		return fmt.Errorf("task %s has no pending input", params.TaskID)
 	}
-	if params.QuestionID != "" && task.CurrentQ.ID != params.QuestionID {
+	if task.CurrentQ != nil && params.QuestionID != "" && task.CurrentQ.ID != params.QuestionID {
 		return fmt.Errorf("question mismatch: want %s got %s", task.CurrentQ.ID, params.QuestionID)
+	}
+	if task.CurrentPlan != nil && params.QuestionID != "" && params.QuestionID != task.CurrentPlan.ID && params.QuestionID != task.CurrentPlan.PlanID {
+		return fmt.Errorf("plan mismatch: want %s got %s", task.CurrentPlan.PlanID, params.QuestionID)
 	}
 	answer := bridgePromptResponse{
 		OptionID: strings.TrimSpace(params.OptionID),
@@ -1378,6 +1392,7 @@ func (s *agentBridgeServer) respondTask(params bridgeRespondParams) error {
 			t.Status = "running"
 			t.UpdatedAt = time.Now().UTC()
 			t.CurrentQ = nil
+			t.CurrentPlan = nil
 		})
 		return nil
 	default:
@@ -1402,6 +1417,7 @@ func (s *agentBridgeServer) taskStatus(taskID string) (*bridgeTaskStatusResult, 
 		CreatedAt:       task.CreatedAt.Format(time.RFC3339Nano),
 		UpdatedAt:       task.UpdatedAt.Format(time.RFC3339Nano),
 		CurrentQuestion: task.CurrentQ,
+		CurrentPlan:     task.CurrentPlan,
 		LastError:       task.LastError,
 		Result:          task.Result,
 		ResultMeta:      buildBridgeResultMeta(task.Result),
@@ -1765,6 +1781,38 @@ func (p *bridgePrompter) Ask(question string, options []string, allowFreeform bo
 		return "", "", p.ctx.Err()
 	case response := <-p.answer:
 		return response.OptionID, response.Answer, nil
+	}
+}
+
+func (p *bridgePrompter) ReviewPlan(session *engine.PlanSession) (PlanReviewResponse, error) {
+	if session == nil {
+		return PlanReviewResponse{}, fmt.Errorf("plan is unavailable")
+	}
+	planState := &bridgePlanState{
+		ID:       strings.TrimSpace(session.PlanID),
+		PlanID:   strings.TrimSpace(session.PlanID),
+		Markdown: strings.TrimSpace(session.PlanMarkdown),
+		Revision: session.Revision,
+	}
+	p.server.updateTask(p.task.ID, func(task *bridgeTask) {
+		task.Status = "waiting_input"
+		task.UpdatedAt = time.Now().UTC()
+		task.CurrentQ = nil
+		task.CurrentPlan = planState
+	})
+	p.server.emitEvent(p.task, bridgeEventTaskPlan, planState)
+
+	select {
+	case <-p.ctx.Done():
+		return PlanReviewResponse{}, p.ctx.Err()
+	case response := <-p.answer:
+		if strings.EqualFold(strings.TrimSpace(response.OptionID), string(PlanReviewApprove)) {
+			return PlanReviewResponse{Action: PlanReviewApprove}, nil
+		}
+		if instruction := strings.TrimSpace(response.Answer); instruction != "" {
+			return PlanReviewResponse{Action: PlanReviewRevise, Instruction: instruction}, nil
+		}
+		return PlanReviewResponse{}, fmt.Errorf("plan review response is required")
 	}
 }
 

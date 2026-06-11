@@ -56,6 +56,34 @@ func (p *ConsolePrompter) Ask(question string, options []string, allowFreeform b
 	return "", line, nil
 }
 
+func (p *ConsolePrompter) ReviewPlan(session *engine.PlanSession) (PlanReviewResponse, error) {
+	if session == nil {
+		return PlanReviewResponse{}, fmt.Errorf("plan is unavailable")
+	}
+	if _, err := fmt.Fprintln(p.out, strings.TrimSpace(session.PlanMarkdown)); err != nil {
+		return PlanReviewResponse{}, err
+	}
+	if _, err := fmt.Fprintln(p.out, "Approve this plan? Enter 1 to approve, or type revision instructions:"); err != nil {
+		return PlanReviewResponse{}, err
+	}
+	if _, err := fmt.Fprintln(p.out, "1. Approve plan"); err != nil {
+		return PlanReviewResponse{}, err
+	}
+	reader := bufio.NewReader(p.in)
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return PlanReviewResponse{}, err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return PlanReviewResponse{}, fmt.Errorf("plan review response is required")
+	}
+	if line == "1" || strings.EqualFold(line, string(PlanReviewApprove)) {
+		return PlanReviewResponse{Action: PlanReviewApprove}, nil
+	}
+	return PlanReviewResponse{Action: PlanReviewRevise, Instruction: line}, nil
+}
+
 func optionLabels(question *engine.PlanQuestion) []string {
 	if question == nil {
 		return nil
