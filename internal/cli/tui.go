@@ -130,16 +130,16 @@ func newTUIProgressPrompter(events chan<- tea.Msg, generationID int) *tuiProgres
 	return &tuiProgressPrompter{events: events, generationID: generationID}
 }
 
-func (p *tuiProgressPrompter) Ask(question string, options []string, allowFreeform bool) (string, string, error) {
+func (p *tuiProgressPrompter) Ask(opts AskOptions) (string, string, error) {
 	if p.events == nil {
 		return "", "", fmt.Errorf("tui question channel is unavailable")
 	}
 	reply := make(chan tuiQuestionAnswer, 1)
 	p.events <- tuiQuestionMsg{
 		GenerationID:  p.generationID,
-		Question:      question,
-		Options:       append([]string(nil), options...),
-		AllowFreeform: allowFreeform,
+		Question:      opts.Question,
+		Options:       append([]string(nil), opts.Options...),
+		AllowFreeform: opts.AllowFreeform,
 		Reply:         reply,
 	}
 	answer := <-reply
@@ -150,11 +150,11 @@ func (p *tuiProgressPrompter) ReviewPlan(session *engine.PlanSession) (PlanRevie
 	if session == nil {
 		return PlanReviewResponse{}, fmt.Errorf("plan is unavailable")
 	}
-	optionID, answer, err := p.Ask(
-		strings.TrimSpace(session.PlanMarkdown)+"\n\nApprove this plan or type revision instructions.",
-		[]string{"Approve plan"},
-		true,
-	)
+	optionID, answer, err := p.Ask(AskOptions{
+		Question:      strings.TrimSpace(session.PlanMarkdown) + "\n\nApprove this plan or type revision instructions.",
+		Options:       []string{"Approve plan"},
+		AllowFreeform: true,
+	})
 	if err != nil {
 		return PlanReviewResponse{}, err
 	}

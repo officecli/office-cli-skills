@@ -1813,7 +1813,21 @@ func (a *App) completeBestModeWithPrompter(ctx context.Context, llm engine.LLMCl
 		if pauser, ok := progress.(interface{ Pause(string) }); ok {
 			pauser.Pause("Waiting for follow-up answers")
 		}
-		optionID, answer, err := prompter.Ask(session.CurrentQuestion.Question, optionLabels(session.CurrentQuestion), session.CurrentQuestion.AllowFreeform)
+		currentIdx := 0
+		for i := range session.Questions {
+			if session.Questions[i].ID == session.CurrentQuestion.ID {
+				currentIdx = i
+				break
+			}
+		}
+		optionID, answer, err := prompter.Ask(AskOptions{
+			Question:      session.CurrentQuestion.Question,
+			Options:       optionLabels(session.CurrentQuestion),
+			AllowFreeform: session.CurrentQuestion.AllowFreeform,
+			AllQuestions:  session.Questions,
+			CurrentIndex:  currentIdx,
+			Current:       session.CurrentQuestion,
+		})
 		if err != nil {
 			emitProgress(ctx, progress, progressStepQuestion, "failed", "Failed to capture follow-up answers")
 			return job, err

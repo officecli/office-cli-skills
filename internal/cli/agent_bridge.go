@@ -131,18 +131,23 @@ type bridgeQuestionState struct {
 	Question      string                 `json:"question"`
 	Options       []bridgeQuestionOption `json:"options,omitempty"`
 	AllowFreeform bool                   `json:"allow_freeform"`
+	Questions     []bridgeQuestionState  `json:"questions,omitempty"`
+	CurrentIndex  int                    `json:"current_index"`
 }
 
 type bridgeQuestionOption struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+	Recommended bool   `json:"recommended,omitempty"`
 }
 
 type bridgePlanState struct {
-	ID       string `json:"id"`
-	PlanID   string `json:"plan_id"`
-	Markdown string `json:"markdown"`
-	Revision int    `json:"revision"`
+	ID              string `json:"id"`
+	PlanID          string `json:"plan_id"`
+	Markdown        string `json:"markdown"`
+	Revision        int    `json:"revision"`
+	ExecutionPrompt string `json:"execution_prompt,omitempty"`
 }
 
 type bridgePrompter struct {
@@ -1754,17 +1759,52 @@ func readJSONRPCMessage(reader *bufio.Reader) (jsonRPCRequest, error) {
 	return req, nil
 }
 
-func (p *bridgePrompter) Ask(question string, options []string, allowFreeform bool) (string, string, error) {
+func (p *bridgePrompter) Ask(opts AskOptions) (string, string, error) {
+	allQuestions := make([]bridgeQuestionState, 0, len(opts.AllQuestions))
+	for _, q := range opts.AllQuestions {
+		qOpts := make([]bridgeQuestionOption, 0, len(q.Options))
+		for _, opt := range q.Options {
+			qOpts = append(qOpts, bridgeQuestionOption{
+				ID:          opt.ID,
+				Label:       opt.Label,
+				Description: opt.Description,
+				Recommended: opt.Recommended,
+			})
+		}
+		allQuestions = append(allQuestions, bridgeQuestionState{
+			ID:            q.ID,
+			Question:      q.Question,
+			Options:       qOpts,
+			AllowFreeform: q.AllowFreeform,
+		})
+	}
+
+	currentOpts := make([]bridgeQuestionOption, 0, len(opts.Options))
+	for _, label := range opts.Options {
+		currentOpts = append(currentOpts, bridgeQuestionOption{
+			ID:    "",
+			Label: label,
+		})
+	}
+	if opts.Current != nil {
+		currentOpts = make([]bridgeQuestionOption, 0, len(opts.Current.Options))
+		for _, opt := range opts.Current.Options {
+			currentOpts = append(currentOpts, bridgeQuestionOption{
+				ID:          opt.ID,
+				Label:       opt.Label,
+				Description: opt.Description,
+				Recommended: opt.Recommended,
+			})
+		}
+	}
+
 	questionState := &bridgeQuestionState{
 		ID:            p.server.nextID("question"),
-		Question:      question,
-		AllowFreeform: allowFreeform,
-	}
-	for idx, option := range options {
-		questionState.Options = append(questionState.Options, bridgeQuestionOption{
-			ID:    strconv.Itoa(idx + 1),
-			Label: option,
-		})
+		Question:      opts.Question,
+		Options:       currentOpts,
+		AllowFreeform: opts.AllowFreeform,
+		Questions:     allQuestions,
+		CurrentIndex:  opts.CurrentIndex,
 	}
 	p.server.updateTask(p.task.ID, func(task *bridgeTask) {
 		task.Status = "waiting_input"
@@ -1786,10 +1826,11 @@ func (p *bridgePrompter) ReviewPlan(session *engine.PlanSession) (PlanReviewResp
 		return PlanReviewResponse{}, fmt.Errorf("plan is unavailable")
 	}
 	planState := &bridgePlanState{
-		ID:       strings.TrimSpace(session.PlanID),
-		PlanID:   strings.TrimSpace(session.PlanID),
-		Markdown: strings.TrimSpace(session.PlanMarkdown),
-		Revision: session.Revision,
+		ID:              strings.TrimSpace(session.PlanID),
+		PlanID:          strings.TrimSpace(session.PlanID),
+		Markdown:        strings.TrimSpace(session.PlanMarkdown),
+		Revision:        session.Revision,
+		ExecutionPrompt: strings.TrimSpace(session.ExecutionPrompt),
 	}
 	p.server.updateTask(p.task.ID, func(task *bridgeTask) {
 		task.Status = "waiting_input"

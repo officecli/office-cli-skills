@@ -987,7 +987,7 @@ func TestBridgePrompterRespondsThroughTaskRespond(t *testing.T) {
 
 	done := make(chan bridgePromptResponse, 1)
 	go func() {
-		optionID, answer, err := prompter.Ask("Choose an output style", []string{"Concise", "Detailed"}, true)
+		optionID, answer, err := prompter.Ask(AskOptions{Question: "Choose an output style", Options: []string{"Concise", "Detailed"}, AllowFreeform: true})
 		if err != nil {
 			t.Errorf("Ask returned error: %v", err)
 			return

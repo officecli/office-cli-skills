@@ -205,7 +205,7 @@ type recordingPrompter struct {
 	reviewResponses []PlanReviewResponse
 }
 
-func (p *recordingPrompter) Ask(_ string, _ []string, _ bool) (string, string, error) {
+func (p *recordingPrompter) Ask(_ AskOptions) (string, string, error) {
 	if p.events != nil {
 		*p.events = append(*p.events, "prompt")
 	}
@@ -334,7 +334,7 @@ type errorPrompter struct {
 	err error
 }
 
-func (p errorPrompter) Ask(string, []string, bool) (string, string, error) {
+func (p errorPrompter) Ask(AskOptions) (string, string, error) {
 	if p.err != nil {
 		return "", "", p.err
 	}
@@ -354,7 +354,7 @@ type fixedPrompter struct {
 	reviewResponse PlanReviewResponse
 }
 
-func (p fixedPrompter) Ask(string, []string, bool) (string, string, error) {
+func (p fixedPrompter) Ask(AskOptions) (string, string, error) {
 	return p.optionID, p.answer, nil
 }
 

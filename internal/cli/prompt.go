@@ -19,16 +19,16 @@ func NewConsolePrompter(in io.Reader, out io.Writer) *ConsolePrompter {
 	return &ConsolePrompter{in: in, out: out}
 }
 
-func (p *ConsolePrompter) Ask(question string, options []string, allowFreeform bool) (string, string, error) {
-	if _, err := fmt.Fprintln(p.out, question); err != nil {
+func (p *ConsolePrompter) Ask(opts AskOptions) (string, string, error) {
+	if _, err := fmt.Fprintln(p.out, opts.Question); err != nil {
 		return "", "", err
 	}
-	for idx, option := range options {
+	for idx, option := range opts.Options {
 		if _, err := fmt.Fprintf(p.out, "%d. %s\n", idx+1, option); err != nil {
 			return "", "", err
 		}
 	}
-	if allowFreeform {
+	if opts.AllowFreeform {
 		if _, err := fmt.Fprintln(p.out, "Enter an option number or type your answer directly:"); err != nil {
 			return "", "", err
 		}
@@ -47,10 +47,10 @@ func (p *ConsolePrompter) Ask(question string, options []string, allowFreeform b
 		return "", "", fmt.Errorf("answer is required")
 	}
 	index, err := strconv.Atoi(line)
-	if err == nil && index >= 1 && index <= len(options) {
-		return line, options[index-1], nil
+	if err == nil && index >= 1 && index <= len(opts.Options) {
+		return line, opts.Options[index-1], nil
 	}
-	if !allowFreeform {
+	if !opts.AllowFreeform {
 		return "", "", fmt.Errorf("invalid option: %s", line)
 	}
 	return "", line, nil

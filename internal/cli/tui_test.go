@@ -460,7 +460,7 @@ func TestTUIProgressPrompterSendsQuestionsAndReceivesAnswer(t *testing.T) {
 	done := make(chan tuiQuestionAnswer, 1)
 
 	go func() {
-		optionID, answer, err := prompter.Ask("Who is the audience?", []string{"Leadership", "Team"}, false)
+		optionID, answer, err := prompter.Ask(AskOptions{Question: "Who is the audience?", Options: []string{"Leadership", "Team"}, AllowFreeform: false})
 		done <- tuiQuestionAnswer{optionID: optionID, answer: answer, err: err}
 	}()
 	msg := (<-events).(tuiQuestionMsg)

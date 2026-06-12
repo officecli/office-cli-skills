@@ -286,8 +286,17 @@ type Publisher interface {
 	Publish(ctx context.Context, req PublishRequest) (*PublishResult, error)
 }
 
+type AskOptions struct {
+	Question      string
+	Options       []string
+	AllowFreeform bool
+	AllQuestions  []engine.PlanQuestion
+	CurrentIndex  int
+	Current       *engine.PlanQuestion
+}
+
 type Prompter interface {
-	Ask(question string, options []string, allowFreeform bool) (string, string, error)
+	Ask(opts AskOptions) (string, string, error)
 	ReviewPlan(session *engine.PlanSession) (PlanReviewResponse, error)
 }
 

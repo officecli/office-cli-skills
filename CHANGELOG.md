@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.116 - 2026-06-12
+
+### Changed
+
+- Exposed richer follow-up question metadata and reviewed execution prompts through the agent bridge.
+
 ## 0.2.115 - 2026-06-12
 
 ### Changed
