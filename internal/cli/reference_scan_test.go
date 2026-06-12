@@ -32,25 +32,25 @@ func TestBuildGenerateJob_PPTXReferenceScanDefaultsToCWD(t *testing.T) {
 	if job.ReferenceScanRoot != cwd {
 		t.Fatalf("ReferenceScanRoot = %q, want %q", job.ReferenceScanRoot, cwd)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
-		t.Fatalf("PPTXBackend = %q, want %q", job.PPTXBackend, appruntime.PPTXBackendGoSpine)
+	if job.PPTXBackend != appruntime.PPTXBackendOfficegen {
+		t.Fatalf("PPTXBackend = %q, want %q", job.PPTXBackend, appruntime.PPTXBackendOfficegen)
 	}
 }
 
-func TestBuildGenerateJob_PPTXBackendArtifactExperimentalAliasesGoSpine(t *testing.T) {
+func TestBuildGenerateJob_DefaultOutputDirUsesCWDWorkspace(t *testing.T) {
+	cwd := t.TempDir()
+
 	job, err := BuildGenerateJob([]string{
-		"pptx",
-		"Artifact Worker Deck",
-		"--pptx-backend", "artifact-experimental",
-	}, Config{}, InputSources{IsTTY: true, CWD: t.TempDir()})
+		"docx",
+		"Workspace Memo",
+	}, Config{}, InputSources{IsTTY: true, CWD: cwd})
 	if err != nil {
 		t.Fatalf("BuildGenerateJob: %v", err)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
-		t.Fatalf("PPTXBackend = %q", job.PPTXBackend)
-	}
-	if !containsGenerateIssueCode(job.Warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
-		t.Fatalf("Warnings = %#v, want deprecated backend warning", job.Warnings)
+
+	want := filepath.Join(cwd, "output")
+	if job.OutputDir != want {
+		t.Fatalf("OutputDir = %q, want current workspace output %q", job.OutputDir, want)
 	}
 }
 
@@ -66,8 +66,18 @@ func TestBuildGenerateJob_PPTXBackendRejectsInvalidAndNonPPTX(t *testing.T) {
 			want: "unsupported pptx backend",
 		},
 		{
+			name: "go spine backend",
+			args: []string{"pptx", "Deck", "--pptx-backend", "go-spine"},
+			want: "unsupported pptx backend",
+		},
+		{
+			name: "artifact experimental backend",
+			args: []string{"pptx", "Deck", "--pptx-backend", "artifact-experimental"},
+			want: "unsupported pptx backend",
+		},
+		{
 			name: "non pptx",
-			args: []string{"docx", "Memo", "--pptx-backend", "artifact-experimental"},
+			args: []string{"docx", "Memo", "--pptx-backend", "officegen"},
 			want: "--pptx-backend is only supported for pptx generation",
 		},
 	}
@@ -100,7 +110,7 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 			Topic:                "Brand Reuse Deck",
 			Prompt:               "Explain the business value",
 			ReferenceRoot:        "brand-assets",
-			PPTXBackend:          "artifact-experimental",
+			PPTXBackend:          "officegen",
 			EnableReferenceScan:  boolPtr(false),
 			ReferencePPTX:        first,
 			ReferencePPTXSources: []string{second},
@@ -116,11 +126,8 @@ func TestBuildGenerateJobFromRequest_PPTXReferenceOptions(t *testing.T) {
 	if job.ReferenceScanRoot != "brand-assets" {
 		t.Fatalf("ReferenceScanRoot = %q", job.ReferenceScanRoot)
 	}
-	if job.PPTXBackend != appruntime.PPTXBackendGoSpine {
+	if job.PPTXBackend != appruntime.PPTXBackendOfficegen {
 		t.Fatalf("PPTXBackend = %q", job.PPTXBackend)
-	}
-	if !containsGenerateIssueCode(job.Warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
-		t.Fatalf("Warnings = %#v, want deprecated backend warning", job.Warnings)
 	}
 	if !job.Debug {
 		t.Fatal("expected bridge debug=true to enable debug metadata")
@@ -158,8 +165,18 @@ func TestBuildGenerateJobFromRequest_PPTXBackendRejectsInvalidAndNonPPTX(t *test
 			want: "unsupported pptx backend",
 		},
 		{
+			name: "go spine",
+			args: bridgeInvokeArgs{DocumentType: "pptx", Topic: "Deck", Prompt: "Build", PPTXBackend: "go-spine"},
+			want: "unsupported pptx backend",
+		},
+		{
+			name: "artifact experimental",
+			args: bridgeInvokeArgs{DocumentType: "pptx", Topic: "Deck", Prompt: "Build", PPTXBackend: "artifact-experimental"},
+			want: "unsupported pptx backend",
+		},
+		{
 			name: "non pptx",
-			args: bridgeInvokeArgs{DocumentType: "docx", Topic: "Memo", Prompt: "Write", PPTXBackend: "artifact-experimental"},
+			args: bridgeInvokeArgs{DocumentType: "docx", Topic: "Memo", Prompt: "Write", PPTXBackend: "officegen"},
 			want: "pptx_backend is only supported for pptx generation",
 		},
 	}

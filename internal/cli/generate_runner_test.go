@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/officecli/officecli/engine"
+	reviewprovider "github.com/officecli/officecli/internal/review"
 	"github.com/officecli/officecli/internal/runtime"
 )
 
@@ -94,7 +95,7 @@ func TestExecuteGenerateJob_HostedAnonymousSendsCommitTokenToTextLLM(t *testing.
 	}
 }
 
-func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesHiddenArtifactWorker(t *testing.T) {
+func TestPPTXArtifactPreviewReviewerForConfigNeverEnablesPPTXRendererReviewer(t *testing.T) {
 	cfg := Config{LLM: LLMConfig{
 		Provider: "openai",
 		BaseURL:  "https://llm.example",
@@ -115,8 +116,8 @@ func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesHiddenArtifactWorker(t *
 	}
 	hiddenWorkerJob := job
 	hiddenWorkerJob.PPTXBackend = runtime.PPTXBackendArtifactWorker
-	if pptxArtifactPreviewReviewerForConfig(cfg, hiddenWorkerJob) == nil {
-		t.Fatal("expected preview reviewer for hidden artifact worker backend")
+	if pptxArtifactPreviewReviewerForConfig(cfg, hiddenWorkerJob) != nil {
+		t.Fatal("artifact-worker backend should not enable artifact preview reviewer")
 	}
 	officegenJob := job
 	officegenJob.PPTXBackend = runtime.PPTXBackendOfficegen
@@ -127,16 +128,6 @@ func TestPPTXArtifactPreviewReviewerForConfigOnlyEnablesHiddenArtifactWorker(t *
 	nonPPTX.DocumentType = engine.DocumentTypeDOCX
 	if pptxArtifactPreviewReviewerForConfig(cfg, nonPPTX) != nil {
 		t.Fatal("non-PPTX generation should not enable artifact preview reviewer")
-	}
-	missingCfg := cfg
-	missingCfg.LLM.APIKey = ""
-	if pptxArtifactPreviewReviewerForConfig(missingCfg, hiddenWorkerJob) != nil {
-		t.Fatal("missing LLM config should not enable artifact preview reviewer")
-	}
-	otherProvider := cfg
-	otherProvider.LLM.Provider = "anthropic"
-	if pptxArtifactPreviewReviewerForConfig(otherProvider, hiddenWorkerJob) != nil {
-		t.Fatal("non-OpenAI provider should not enable artifact preview reviewer")
 	}
 }
 
@@ -157,17 +148,8 @@ func TestPPTXArtifactPreviewReviewerAdapterReviewsRenderedPNGs(t *testing.T) {
 	if err := os.WriteFile(previewPath, []byte("png-bytes"), 0o644); err != nil {
 		t.Fatalf("write preview: %v", err)
 	}
-	reviewer := pptxArtifactPreviewReviewerForConfig(Config{LLM: LLMConfig{
-		Provider: "openai",
-		BaseURL:  server.URL,
-		APIKey:   "key",
-		Model:    "gpt-test",
-	}}, GenerateJob{
-		DocumentType: engine.DocumentTypePPTX,
-		PPTXBackend:  runtime.PPTXBackendArtifactWorker,
-	})
-	if reviewer == nil {
-		t.Fatal("missing preview reviewer")
+	reviewer := pptxArtifactPreviewReviewerAdapter{
+		reviewer: reviewprovider.NewOpenAIReviewer(server.URL, "key", "gpt-test", 0),
 	}
 	result, err := reviewer.ReviewPPTXArtifactPreviews(context.Background(), runtime.PPTXArtifactPreviewReviewRequest{
 		PreviewFiles: []string{previewPath},

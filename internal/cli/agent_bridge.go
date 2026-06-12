@@ -608,7 +608,7 @@ func (s *agentBridgeServer) initializeResult(ctx context.Context) bridgeInitiali
 					"reference_root":        "directory root for recursive PPTX reference style scanning (pptx only)",
 					"reference_pptx":        "explicit reference PPTX path (pptx only)",
 					"reference_pptxs":       "array of explicit reference PPTX paths (pptx only)",
-					"pptx_backend":          "go-spine|officegen|artifact-experimental (pptx only) - default go-spine; artifact-experimental is a deprecated alias",
+					"pptx_backend":          "officegen (pptx only) - the only supported PPTX renderer backend",
 					"image_quality":         "deprecated; accepted for backward compat and ignored — PPT images always use the hosted image route",
 					"publish":               "boolean",
 					"emit_preview":          "boolean - emit <basename>.preview.html sidecar next to the artifact for pptx|docx|xlsx",
@@ -768,15 +768,12 @@ func (s *agentBridgeServer) documentGenerationCapability(documentType engine.Doc
 			},
 		}
 		capability["pptx_backends"] = map[string]any{
-			"supported":        true,
-			"default":          runtime.PPTXBackendGoSpine,
-			"invoke_field":     "pptx_backend",
-			"values":           []string{runtime.PPTXBackendGoSpine, runtime.PPTXBackendOfficegen, runtime.PPTXBackendArtifactExperimental},
-			"legacy":           runtime.PPTXBackendOfficegen,
-			"deprecated_alias": runtime.PPTXBackendArtifactExperimental,
-			"failure_mode":     "go-spine is the default local PPTX renderer; officegen remains available as a legacy rollback backend.",
-			"render_tool":      bridgeToolOfficeGenerate,
-			"render_notes":     "office.render rejects pptx_backend; use office.generate for reference-aware generation with backend selection.",
+			"supported":    true,
+			"default":      runtime.PPTXBackendOfficegen,
+			"invoke_field": "pptx_backend",
+			"values":       []string{runtime.PPTXBackendOfficegen},
+			"render_tool":  bridgeToolOfficeGenerate,
+			"render_notes": "officegen is the only supported PPTX renderer backend. office.render rejects pptx_backend because it always uses the same renderer.",
 		}
 		capability["image_support"] = map[string]any{
 			"default_enabled": true,

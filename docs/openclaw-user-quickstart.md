@@ -40,10 +40,10 @@ officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --no-images
 ```bash
 officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --reference-root ./brand-assets --reference-pptx ./templates/company.pptx --out output
 officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --no-reference-scan --out output
-officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --pptx-backend artifact-experimental --no-images --out output
+officecli new pptx "Product Introduction" --prompt-file ./prompt.txt --pptx-backend officegen --no-images --out output
 ```
 
-When `--json` is used, PPTX results may include `reference_style`, `pptx_review`, and `pptx_backend` metadata. `reference_style` contains aggregate counts and safe style intent, not raw PPTX XML or copied source slides. `pptx_review` reports the structural review score produced after generation. The default PPTX backend is `officegen`; `artifact-experimental` is explicit opt-in and fails if the local Node/artifact-tool worker is unavailable.
+When `--json` is used, PPTX results may include `reference_style`, `pptx_review`, and `pptx_backend` metadata. `reference_style` contains aggregate counts and safe style intent, not raw PPTX XML or copied source slides. `pptx_review` reports the structural review score produced after generation. The only supported PPTX backend is `officegen`.
 
 6. Generate a standalone image:
 
@@ -58,6 +58,6 @@ officecli new img "Product Launch Visual" --prompt "Create a polished launch ima
 - External Mode standalone `img` generation uses the local `config set-generation` image provider. Hosted Mode standalone `img` uses the OfficeCLI-managed runtime and hosted credits.
 - Standalone `img` supports one `--reference-image <path-or-url>` for local or remote reference images.
 - PPTX reference style learning is separate from `--reference-image`: use `--reference-root`, `--reference-pptx`, and `--no-reference-scan` only with `document_type=pptx`.
-- PPTX `--pptx-backend artifact-experimental` is experimental and local-only. It does not change the default `officegen` path.
+- PPTX `--pptx-backend` only accepts `officegen`.
 - Standalone `img` publishes online by default when publishing is configured; pass `--no-publish` for local-only output.
 - If the platform returns preview links, passwords, or quota warnings, that output should already be normalized by the binary.

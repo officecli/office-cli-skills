@@ -415,7 +415,7 @@ func TestExecutorAddsPPTXArtifactDebugMetadata(t *testing.T) {
 		OutputDir:    tmpDir,
 		Publish:      false,
 		Debug:        true,
-		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+		PPTXBackend:  runtime.PPTXBackendOfficegen,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -456,10 +456,10 @@ func (debugPPTXGenerator) Generate(_ context.Context, _ GenerateParams) (*Genera
 		DocumentName: "debug-artifact.pptx",
 		DocumentType: string(engine.DocumentTypePPTX),
 		Bytes:        data,
-		PPTXBackend:  runtime.PPTXBackendArtifactExperimental,
+		PPTXBackend:  runtime.PPTXBackendOfficegen,
 		PPTXArtifactDebug: &runtime.PPTXArtifactDebugMetadata{
 			Enabled:               true,
-			Backend:               runtime.PPTXBackendArtifactExperimental,
+			Backend:               runtime.PPTXBackendOfficegen,
 			WorkerVersion:         "artifact-experimental-test",
 			PreviewCount:          2,
 			InspectPath:           "/tmp/inspect.json",

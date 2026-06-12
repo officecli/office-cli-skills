@@ -237,20 +237,8 @@ type pptxArtifactPreviewReviewerAdapter struct {
 	reviewer *reviewprovider.OpenAIReviewer
 }
 
-func pptxArtifactPreviewReviewerForConfig(cfg Config, job GenerateJob) runtime.PPTXArtifactPreviewReviewer {
-	if job.DocumentType != engine.DocumentTypePPTX || strings.TrimSpace(job.PPTXBackend) != runtime.PPTXBackendArtifactWorker {
-		return nil
-	}
-	provider := strings.ToLower(strings.TrimSpace(cfg.LLM.Provider))
-	if provider != "" && provider != "openai" {
-		return nil
-	}
-	if missingLLMConfig(cfg) != "" {
-		return nil
-	}
-	return pptxArtifactPreviewReviewerAdapter{
-		reviewer: reviewprovider.NewOpenAIReviewer(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.ReviewModel, cfg.LLM.TimeoutSec),
-	}
+func pptxArtifactPreviewReviewerForConfig(_ Config, _ GenerateJob) runtime.PPTXArtifactPreviewReviewer {
+	return nil
 }
 
 func (r pptxArtifactPreviewReviewerAdapter) ReviewPPTXArtifactPreviews(ctx context.Context, req runtime.PPTXArtifactPreviewReviewRequest) (*runtime.PPTXArtifactPreviewReviewResult, error) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.115 - 2026-06-12
+
+### Changed
+
+- Restricted PPTX generation to the `officegen` renderer backend; `go-spine`, `artifact-experimental`, and `artifact-worker` backend values are no longer accepted.
+
 ## 0.2.114 - 2026-06-10
 
 ### Changed

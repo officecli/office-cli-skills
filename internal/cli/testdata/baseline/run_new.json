@@ -412,18 +412,13 @@
       "type": "object"
     },
     "pptx_backends": {
-      "default": "go-spine",
-      "deprecated_alias": "artifact-experimental",
-      "failure_mode": "go-spine is the default local PPTX renderer; officegen remains available as a legacy rollback backend.",
+      "default": "officegen",
       "invoke_field": "pptx_backend",
-      "legacy": "officegen",
-      "render_notes": "office.render rejects pptx_backend; use office.generate for reference-aware generation with backend selection.",
+      "render_notes": "officegen is the only supported PPTX renderer backend. office.render rejects pptx_backend because it always uses the same renderer.",
       "render_tool": "office.generate",
       "supported": true,
       "values": [
-        "go-spine",
-        "officegen",
-        "artifact-experimental"
+        "officegen"
       ]
     },
     "preferred_tool": "office.render",

@@ -50,7 +50,7 @@ It is intended for developer self-testing, QA regression, integration sign-off, 
 - `CLI-NEW-022`: explicit `--reference-pptx` inputs reject missing files, non-`.pptx` files, directories, and oversized files before runtime generation starts
 - `CLI-NEW-023`: reference-enabled PPTX generation returns safe `reference_style` metadata and `pptx_review` structural score metadata without exposing raw source XML
 - `CLI-NEW-024`: semantic PPTX payloads may use `referenceStyleSummary`, `styleIntent`, `density`, and `visualTreatment`; these map only to existing renderer controls such as `stylePreset`, `layout`, `variant`, and image position
-- `CLI-NEW-025`: `new pptx --pptx-backend artifact-experimental` explicitly selects the local artifact worker backend; default remains `officegen`, invalid backend values fail, and non-PPTX document types reject the option
+- `CLI-NEW-025`: `new pptx --pptx-backend officegen` explicitly selects the only supported PPTX renderer backend; invalid backend values fail, and non-PPTX document types reject the option
 - `CLI-NEW-026`: `office.generate` accepts `pptx_backend` only for PPTX and includes `pptx_backend` in result metadata; `office.render` rejects `pptx_backend`
 - `CLI-NEW-027`: when `OFFICECLI_RUN_ARTIFACT_WORKER_TEST=1` and local Node/artifact-tool dependencies are available, the artifact worker exports a PPTX with editable text plus preview/inspect sidecars; missing worker dependencies hard-fail instead of falling back
 - `CLI-REVIEW-001`: structural review succeeds for a valid local deck

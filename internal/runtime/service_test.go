@@ -28,6 +28,11 @@ import (
 	"github.com/officecli/officecli/pkg/ooxmledit"
 )
 
+func skipUnsupportedPPTXArtifactBackend(t *testing.T) {
+	t.Helper()
+	t.Skip("artifact-worker renderer is no longer supported; PPTX generation is restricted to officegen")
+}
+
 type fakeLLMClient struct {
 	textResponse        string
 	jsonResponse        string
@@ -816,6 +821,8 @@ func TestServiceGeneratePPTXWithFakeLLM(t *testing.T) {
 }
 
 func TestServiceGeneratePPTXArtifactDebugMetadataRequiresDebugFlag(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, workDir string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
@@ -966,6 +973,8 @@ func TestDetectExplicitPPTXSlideCount(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSONWithOptionsEnforcesExplicitFiveSlideCount(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2109,7 +2118,7 @@ func TestBuildPPTXFromJSON_AcceptsSemanticPayload(t *testing.T) {
 func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) {
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
-		t.Fatal("artifact worker should not run for default go-spine backend")
+		t.Fatal("artifact worker should not run for default officegen backend")
 		return nil, nil
 	}
 	defer func() { runPPTXArtifactWorker = original }()
@@ -2117,7 +2126,7 @@ func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) 
 	content := `{
 		"title":"Default Backend Demo",
 		"slides":[
-			{"title":"Default Backend Demo","layout":"title","subtitle":"Go spine is default","isTitle":true},
+			{"title":"Default Backend Demo","layout":"title","subtitle":"Officegen is default","isTitle":true},
 			{"title":"Body","layout":"content","points":["Default path","No worker"]}
 		]
 	}`
@@ -2130,66 +2139,55 @@ func TestBuildPPTXFromJSON_DefaultBackendDoesNotUseArtifactWorker(t *testing.T) 
 	}
 }
 
-func TestBuildPPTXFromJSON_DefaultGoSpineUsesEditableChartFallback(t *testing.T) {
+func TestBuildPPTXFromJSON_DefaultOfficegenUsesNativeChart(t *testing.T) {
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
-		t.Fatal("artifact worker should not run for default go-spine backend")
+		t.Fatal("artifact worker should not run for default officegen backend")
 		return nil, nil
 	}
 	defer func() { runPPTXArtifactWorker = original }()
 
 	content := `{
-		"title":"Go Spine Chart Demo",
+		"title":"Officegen Chart Demo",
 		"slides":[
-			{"title":"Go Spine Chart Demo","layout":"title","subtitle":"Editable chart fallback","isTitle":true},
-			{"title":"Signal","layout":"chart","chart":{"type":"bar","title":"Quality signal","categories":["Text","Chart"],"values":[4,2]},"points":["Chart remains editable as shapes"]}
+			{"title":"Officegen Chart Demo","layout":"title","subtitle":"Native chart output","isTitle":true},
+			{"title":"Signal","layout":"chart","chart":{"type":"bar","title":"Quality signal","categories":["Text","Chart"],"values":[4,2]},"points":["Chart remains editable as a native chart"]}
 		]
 	}`
-	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Go Spine Chart Demo", "", false, false, PPTXBuildOptions{})
+	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Officegen Chart Demo", "", false, false, PPTXBuildOptions{})
 	if err != nil {
 		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
 	}
-	if countZipEntries(fileBytes, "ppt/charts/", ".xml") != 0 {
-		t.Fatal("go-spine default should not emit native chart XML")
+	if countZipEntries(fileBytes, "ppt/charts/", ".xml") == 0 {
+		t.Fatal("officegen default should emit native chart XML")
 	}
-	if !archiveContainsEntryWithSubstring(t, fileBytes, "ppt/slides/", ".xml", "shape fallback") {
-		t.Fatal("go-spine chart fallback marker missing")
-	}
-	if !containsIssueCode(warnings, "WARN_PPTX_NATIVE_CHART_FALLBACK") {
-		t.Fatalf("warnings = %#v, want native chart fallback warning", warnings)
+	if containsIssueCode(warnings, "WARN_PPTX_NATIVE_CHART_FALLBACK") {
+		t.Fatalf("warnings = %#v, did not expect native chart fallback warning", warnings)
 	}
 }
 
-func TestBuildPPTXFromJSON_ArtifactExperimentalAliasesGoSpine(t *testing.T) {
-	original := runPPTXArtifactWorker
-	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
-		t.Fatal("artifact worker should not run for deprecated artifact-experimental alias")
-		return nil, nil
-	}
-	defer func() { runPPTXArtifactWorker = original }()
-
+func TestBuildPPTXFromJSON_RejectsNonOfficegenBackend(t *testing.T) {
 	content := `{
-		"title":"Alias Demo",
+		"title":"Backend Demo",
 		"slides":[
-			{"title":"Alias Demo","layout":"title","subtitle":"Alias routes to go-spine","isTitle":true},
-			{"title":"Body","layout":"content","points":["No Node worker"]}
+			{"title":"Backend Demo","layout":"title","subtitle":"Only officegen is supported","isTitle":true}
 		]
 	}`
-	fileBytes, _, warnings, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Alias Demo", "", false, false, PPTXBuildOptions{
-		Backend: PPTXBackendArtifactExperimental,
-	})
-	if err != nil {
-		t.Fatalf("BuildPPTXFromJSONWithOptions: %v", err)
-	}
-	if len(fileBytes) == 0 {
-		t.Fatal("empty output")
-	}
-	if !containsIssueCode(warnings, "WARN_PPTX_BACKEND_DEPRECATED") {
-		t.Fatalf("warnings = %#v, want deprecated backend warning", warnings)
+	for _, backend := range []string{PPTXBackendGoSpine, PPTXBackendArtifactExperimental, PPTXBackendArtifactWorker} {
+		t.Run(backend, func(t *testing.T) {
+			_, _, _, _, _, err := BuildPPTXFromJSONWithOptions(context.Background(), &fakeLLMClient{}, nil, content, "Backend Demo", "", false, false, PPTXBuildOptions{
+				Backend: backend,
+			})
+			if err == nil || !strings.Contains(err.Error(), "unsupported pptx backend") {
+				t.Fatalf("err = %v, want unsupported pptx backend", err)
+			}
+		})
 	}
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesWorker(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	workerCalled := false
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2253,6 +2251,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesWorker(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalAddsNativeChartWhenPromptRequiresOne(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2311,6 +2311,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalAddsNativeChartWhenPromptRequ
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHonorsExplicitLightStyleOverDarkReferenceBrief(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2366,6 +2368,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHonorsExplicitLightStyleOverD
 }
 
 func TestServiceGeneratePPTXArtifactExperimentalUsesStableReferencePaletteFallback(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2462,6 +2466,8 @@ func TestServiceGeneratePPTXArtifactExperimentalUsesStableReferencePaletteFallba
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPassesVisualAssetsAndChartIntent(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	root := t.TempDir()
 	assetPath := filepath.Join(root, "reference-visual.png")
 	if err := os.WriteFile(assetPath, []byte{
@@ -2536,6 +2542,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPassesVisualAssetsAndChartInt
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDoesNotImportGeneratedOutputReferences(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	workerCalled := false
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2584,6 +2592,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDoesNotImportGeneratedOutputR
 }
 
 func TestBuildPPTXFromJSON_CompactsExplicitFourSlideArtifactRequest(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		if len(req.Slides) != 4 {
@@ -2646,6 +2656,8 @@ func TestBuildPPTXFromJSON_CompactsExplicitFourSlideArtifactRequest(t *testing.T
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPassesDesignPlan(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		if req.DesignPlan == nil {
@@ -2744,6 +2756,8 @@ func containsPPTXArtifactImplementationNarrative(text string) bool {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDefaultsReferenceLearningToDarkPreset(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		if req.DesignPlan == nil || req.DesignPlan.DeckIntent != "concise-reference-style-learning" {
@@ -2787,6 +2801,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalDefaultsReferenceLearningToDa
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesLLMDesignPlanWhenEnabled(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -2872,6 +2888,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesLLMDesignPlanWhenEnabled(
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalFallsBackWhenLLMDesignPlanInvalid(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -3308,6 +3326,8 @@ func designPlanSlideTextRunes(slide pptxArtifactSlideDesignPlan) int {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesDedicatedPlannerLLM(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
@@ -3368,6 +3388,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalUsesDedicatedPlannerLLM(t *te
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishesConciseReferenceNarrative(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -3449,6 +3471,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishesConciseReferenceNarra
 }
 
 func TestPPTXArtifactReferenceLearningUsesFallbackTopicAsDeckTitle(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -3726,6 +3750,8 @@ func TestRepresentativeVisualAssetsBindsLocalFallbacksForReferenceLearningDeck(t
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningGeneratesTextFreeVisualPlate(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	originalDetector := detectPPTXArtifactImageText
 	var captured pptxArtifactWorkerRequest
@@ -3905,6 +3931,8 @@ func TestPPTXArtifactTextFreePlateParallelismRequiresProgressAndAllowsEnvOverrid
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningFallsBackWhenTextFreePlateFails(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -3962,6 +3990,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningFallsBackWhenTextFreePla
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningKeepsSuccessfulTextFreePlatesWhenLaterPlateFails(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -4050,6 +4080,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningKeepsSuccessfulTextFreeP
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningTimesOutSlowTextFreePlate(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	restoreTimeout := SetPPTXArtifactTextFreePlateTimeoutForTesting(30 * time.Millisecond)
 	defer restoreTimeout()
 
@@ -4121,6 +4153,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningTimesOutSlowTextFreePlat
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRetriesTransientTextFreePlateFailure(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -4204,6 +4238,8 @@ func TestPPTXArtifactWorkerFallbackMotifUsesIllustrativeNativeShapes(t *testing.
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningKeepsLaterTextFreePlatesWhenFirstPlateFails(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var captured pptxArtifactWorkerRequest
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
@@ -4321,6 +4357,8 @@ func TestPPTXArtifactWorkerScriptLetsExplicitLightStyleOverrideDarkReferenceBrie
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRejectsTextBearingPlate(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	originalDetector := detectPPTXArtifactImageText
 	var captured pptxArtifactWorkerRequest
@@ -4385,6 +4423,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRejectsTextBearingPlate(
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactReferenceLearningRetriesTextBearingPlate(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	originalDetector := detectPPTXArtifactImageText
 	var captured pptxArtifactWorkerRequest
@@ -4705,6 +4745,8 @@ func writePNGFixture(t *testing.T, path string, img image.Image) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFails(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(context.Context, pptxArtifactWorkerRequest, string) (*pptxArtifactWorkerOutput, error) {
 		return nil, errors.New("node missing")
@@ -4727,6 +4769,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFails(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsBelowStructuralThreshold(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate([]officegen.Slide{
@@ -4757,6 +4801,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsBelowStructuralThres
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesTextDensityOnce(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	attempts := 0
 	var firstSlideRuneCounts []int
@@ -5063,6 +5109,8 @@ func TestPPTXArtifactVisibleTextAllowsCompleteClearPhrases(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsWithoutPreviewDiagnostics(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
@@ -5105,6 +5153,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsWithoutPreviewDiagno
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalHardFailsForBlankPreview(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, _ string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
@@ -5376,6 +5426,8 @@ func TestPPTXArtifactEditableTextLayoutAllowsCleanRecords(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForLayoutDiagnostics(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var retryRequest pptxArtifactWorkerRequest
@@ -5469,6 +5521,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForLayoutDia
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForVisualVerdict(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var retryRequest pptxArtifactWorkerRequest
@@ -5569,6 +5623,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesSimplifiedForVisualVer
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesWithLLMDesignRepair(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var repairedRequest pptxArtifactWorkerRequest
@@ -5700,6 +5756,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesWithLLMDesignRepair(t 
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRepairPromptIncludesVisualIssueGuidance(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	originalStructureReview := runPPTXArtifactStructureReview
 	var calls int
@@ -5892,6 +5950,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRepairPromptIncludesVisualIss
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRepairsWeakVisualAssetBeforeDesignRepair(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	originalDetector := detectPPTXArtifactImageText
 	var calls int
@@ -6143,6 +6203,8 @@ func TestPPTXArtifactQualitySummaryFailsOnVisualAndPreviewIssues(t *testing.T) {
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalSkipsPolishWhenPlannerHasNoPlan(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var polishRequest pptxArtifactWorkerRequest
@@ -6196,6 +6258,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalSkipsPolishWhenPlannerHasNoPl
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesLLMDesignPatch(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var polishRequest pptxArtifactWorkerRequest
@@ -6284,6 +6348,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesLLMDesignPatch(t *t
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesSecondPreviewInformedPass(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var finalPolishRequest pptxArtifactWorkerRequest
@@ -6406,6 +6472,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalPolishUsesSecondPreviewInform
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalEmitsDebugMetadata(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	runPPTXArtifactWorker = func(_ context.Context, req pptxArtifactWorkerRequest, workDir string) (*pptxArtifactWorkerOutput, error) {
 		data, err := officegen.NewPPTXGenerator().Generate(req.Slides, officegen.PPTXOptions{
@@ -6490,6 +6558,8 @@ func TestBuildPPTXFromJSON_PPTXArtifactExperimentalEmitsDebugMetadata(t *testing
 }
 
 func TestBuildPPTXFromJSON_PPTXArtifactExperimentalRetriesMinimalOnSecondLayoutFailure(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	original := runPPTXArtifactWorker
 	var calls int
 	var minimalRequest pptxArtifactWorkerRequest
@@ -8533,6 +8603,8 @@ func TestBuildPPTXFromJSON_EmitsFailedPerAssetWhenImageProviderErrors(t *testing
 }
 
 func TestBuildPPTXArtifactExperimentalEmitsDesignPlannerHeartbeat(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	restore := SetStructuredLLMHeartbeatIntervalForTesting(20 * time.Millisecond)
 	defer restore()
 
@@ -8592,6 +8664,8 @@ func TestBuildPPTXArtifactExperimentalEmitsDesignPlannerHeartbeat(t *testing.T) 
 }
 
 func TestBuildPPTXArtifactExperimentalFallsBackWhenDesignPlannerTimesOut(t *testing.T) {
+	skipUnsupportedPPTXArtifactBackend(t)
+
 	restoreTimeout := SetPPTXArtifactDesignPlanTimeoutForTesting(30 * time.Millisecond)
 	defer restoreTimeout()
 

@@ -80,6 +80,22 @@ func TestBuildTUIGenerateJobForTypeUsesExplicitDocumentType(t *testing.T) {
 	}
 }
 
+func TestBuildTUIGenerateJobUsesCWDAsWorkspace(t *testing.T) {
+	cwd := t.TempDir()
+
+	job, err := BuildTUIGenerateJob("做一个季度复盘 PPT", Config{}, InputSources{IsTTY: true, CWD: cwd})
+	if err != nil {
+		t.Fatalf("BuildTUIGenerateJob: %v", err)
+	}
+
+	if job.OutputDir != filepath.Join(cwd, "output") {
+		t.Fatalf("OutputDir = %q, want cwd output", job.OutputDir)
+	}
+	if job.ReferenceScanRoot != cwd {
+		t.Fatalf("ReferenceScanRoot = %q, want cwd workspace %q", job.ReferenceScanRoot, cwd)
+	}
+}
+
 func TestTUIModelRenderShowsResultAndReturnsIdleText(t *testing.T) {
 	model := newTUIModel(&App{}, Config{}, TUIOptions{}, "", io.Discard)
 	model.state = tuiStateIdle

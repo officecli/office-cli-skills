@@ -479,11 +479,11 @@ Common options:
   --lang <value>          Set the output language
   --style <value>         Set the style
   --audience <value>      Set the audience
-  --out <dir>             Set the output directory
+  --out <dir>             Override the output directory
   --file <path>           Provide the input workbook file (report only)
   --reference-root <dir>  Override the PPTX reference scan root (pptx only)
   --reference-pptx <path> Add an explicit PPTX reference deck (pptx only, repeatable)
-  --pptx-backend <value>  Select PPTX backend: go-spine, officegen, or artifact-experimental
+  --pptx-backend <value>  Select PPTX backend: officegen
   --local-preview         Generate local HTML/JSON preview sidecars
   --publish               Force online preview publishing
   --no-publish            Disable online preview publishing
@@ -500,10 +500,12 @@ Copy-paste examples:
   officecli new report "Q2 Business Review" --file ./data/q2_metrics.xlsx --prompt "Summarize revenue shifts, efficiency signals, and board-level decisions from this workbook."
 
 Description:
+  - The current directory is the workspace for officecli and officecli-tui.
+  - When no --out or configured output directory is set, generated files are written to <workspace>/output.
   - Hosted credits are the default when no local generation config exists; every new device starts with 100 free credits.
   - PPTX adds suitable images by default; pass ` + "`--no-images`" + ` for a text-only deck.
-  - PPTX recursively scans reference .pptx files from the current directory by default; use ` + "`--no-reference-scan`" + ` to disable it.
-  - go-spine is the default PPTX backend; officegen is a legacy rollback backend; artifact-experimental is a deprecated alias for go-spine.
+  - PPTX recursively scans reference .pptx files from the workspace by default; use ` + "`--no-reference-scan`" + ` to disable it.
+  - officegen is the only supported PPTX backend.
   - PPTX ` + "`--json`" + ` output may include safe reference_style metadata and structural pptx_review scoring.
   - report requires --file <xlsx-path> and creates an HTML report from workbook data.
   - Use ` + "`officecli config --help`" + ` for External Mode, publishing, and advanced defaults.
@@ -751,6 +753,11 @@ func (a *App) runConfigStatus(cfg Config) error {
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Online preview publishing enabled: %t\n", cfg.Publish.Enabled); err != nil {
 		return err
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if _, err := fmt.Fprintf(a.Stdout, "Workspace directory: %s\n", cwd); err != nil {
+			return err
+		}
 	}
 	if _, err := fmt.Fprintf(a.Stdout, "Default output directory: %s\n", fallbackString(cfg.Defaults.OutputDir, "./output")); err != nil {
 		return err

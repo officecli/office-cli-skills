@@ -90,7 +90,7 @@ officecli "Create a Q3 business review deck"
 
 The default `officecli` command opens a persistent Codex-style TUI: the latest conversation and visible generation progress stay near the bottom input, which remains available for the next document request. Use `--no-alt-screen` when you want the TUI to preserve terminal scrollback instead of using a full-screen alternate buffer.
 
-Generated files are written to `./output` by default. For `PPTX`, OfficeCLI generates and embeds suitable images by default; add `--no-images` when you want a text-only deck.
+OfficeCLI and the TUI treat the current execution directory as the workspace. Generated files are written to `<workspace>/output` by default, and PPTX reference scanning also starts from that workspace unless you override it. For `PPTX`, OfficeCLI generates and embeds suitable images by default; add `--no-images` when you want a text-only deck.
 
 For scripts and automation, use `officecli new ...`.
 
