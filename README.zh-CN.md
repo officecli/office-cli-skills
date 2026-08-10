@@ -10,7 +10,7 @@
 
 OfficeCLI 是一款命令行工具，可以把自然语言 prompt 生成可编辑的 Office 文件和独立图片。你可以在终端、脚本、CI 或本地自动化流程中直接使用一个 `officecli` 二进制生成 `PPTX`、`DOCX`、`XLSX`、基于工作簿的 `Report` 和 `img` 输出。首次运行默认可用 hosted trial；如果要接入自己的模型 endpoint，可以切换到 External Mode。
 
-- 官网：[officecli.io/officecli](https://officecli.io/officecli)
+- 官网：[officecli.io/officecli](https://officecli.io/officecli) · [officedex.ai](https://officedex.ai)
 - 桌面端：[OfficeDex — AI 原生文档工作台](https://officedex.ai)
 - 英文 README：[README.md](./README.md)
 - 生成示例：[demos/README.md](./demos/README.md)

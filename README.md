@@ -15,7 +15,7 @@ for first runs and External Mode when you want to bring your own LLM endpoint.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
-- Website: [officecli.io/officecli](https://officecli.io/officecli)
+- Websites: [officecli.io/officecli](https://officecli.io/officecli) · [officedex.ai](https://officedex.ai)
 - Desktop app: [OfficeDex — the AI-native document workspace](https://officedex.ai)
 - Demo gallery: [demos/README.md](./demos/README.md)
 - Optional agent skills: [Claude Code](./claude-code/README.md), [Codex](./codex/README.md), [OpenClaw](./openclaw/README.md)
