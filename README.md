@@ -1,12 +1,14 @@
-# OfficeCLI is an AI document generation CLI for PPTX, DOCX, XLSX, reports, and images
+# OfficeDex is the AI-native document workspace, powered by OfficeCLI
 
+[![OfficeDex](https://img.shields.io/badge/try-OfficeDex.ai-5645d4)](https://officedex.ai)
 [![GitHub Release](https://img.shields.io/github/v/release/officecli/officecli-dist?label=release)](https://github.com/officecli/officecli-dist/releases)
 [![npm](https://img.shields.io/npm/v/officecli?label=npm)](https://www.npmjs.com/package/officecli)
 [![License](https://img.shields.io/github/license/officecli/officecli)](./LICENSE)
-[![Website](https://img.shields.io/badge/website-officecli.io-0f766e)](https://officecli.io/officecli)
-[![OfficeDex](https://img.shields.io/badge/desktop-OfficeDex.ai-5645d4)](https://officedex.ai)
 [![Discord](https://img.shields.io/badge/community-Discord-5865F2)](https://discord.gg/ezAHMkdG)
 [![X](https://img.shields.io/badge/follow-%40officecli-000000?logo=x)](https://x.com/officecli)
+
+Create, edit, and manage AI-generated `PPTX`, `DOCX`, `XLSX`, reports, and images with
+[OfficeDex](https://officedex.ai) — the easiest way to experience everything OfficeCLI can do.
 
 OfficeCLI is a command-line tool that turns natural-language prompts into editable Office files and
 standalone images from a terminal, script, CI job, or local automation flow. Use one `officecli` binary
@@ -15,10 +17,10 @@ for first runs and External Mode when you want to bring your own LLM endpoint.
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
-- Websites: [officecli.io/officecli](https://officecli.io/officecli) · [officedex.ai](https://officedex.ai)
-- Desktop app: [OfficeDex — the AI-native document workspace](https://officedex.ai)
+- Get OfficeDex: [officedex.ai](https://officedex.ai)
 - Demo gallery: [demos/README.md](./demos/README.md)
 - Optional agent skills: [Claude Code](./claude-code/README.md), [Codex](./codex/README.md), [OpenClaw](./openclaw/README.md)
+- OfficeCLI website: [officecli.io/officecli](https://officecli.io/officecli)
 - Community: [Discord](https://discord.gg/ezAHMkdG)
 
 ## Install in one command
